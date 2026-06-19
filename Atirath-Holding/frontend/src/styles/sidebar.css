@@ -1,0 +1,274 @@
+.sidebar {
+    width: 260px;
+    height: 100vh;
+    background: linear-gradient(180deg, #02153f 0%, #002a7a 100%);
+    color: #fff;
+    display: flex;
+    flex-direction: column;
+    padding: 22px 16px;
+    position: fixed;
+    left: 0;
+    top: 0;
+    overflow-y: auto;
+}
+
+/* ========== Logo Section ========== */
+.logo-section {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 35px;
+    padding: 0 4px;
+}
+
+.company-logo {
+    width: 48px;
+    height: 48px;
+    object-fit: contain;
+    flex-shrink: 0;
+}
+
+.company-text {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.3;
+}
+
+.company-text h3 {
+    margin: 0;
+    color: #ffffff;
+    font-size: 20px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+}
+
+/* టెక్స్ట్ వెడల్పు పెరిగినందున రీడబిలిటీ పెంచడానికి స్టైల్స్ */
+.company-text span {
+    margin-top: 2px;
+    color: rgba(255, 255, 255, 0.8);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    word-break: break-word;
+}
+
+/* ========== Role Badge ========== */
+.role-badge {
+    padding: 0;
+    margin: 0 4px 20px 4px;
+    text-align: center;
+}
+
+.role-admin {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: block;
+    text-align: center;
+}
+
+.role-manager {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: block;
+    text-align: center;
+}
+
+.role-user {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    display: block;
+    text-align: center;
+}
+
+/* ========== Menu Styles ========== */
+.menu-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    flex: 1;
+}
+
+.menu-list li {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    border-radius: 18px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.menu-list li:hover {
+    background: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+.menu-list li.active {
+    background: linear-gradient(135deg, #1677ff, #4285f4);
+    color: #ffffff;
+    box-shadow: 0px 4px 12px rgba(22, 119, 255, 0.3);
+}
+
+/* ========== Logout Button ========== */
+.logout-button {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 18px;
+    margin: 16px 4px;
+    border-radius: 8px;
+    color: #e74c3c;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-weight: 500;
+}
+
+.logout-button:hover {
+    background: rgba(231, 76, 60, 0.1);
+}
+
+/* ========== Help Card ========== */
+.help-card {
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 16px;
+    padding: 20px 16px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    margin-top: 10px;
+}
+
+.help-card h5 {
+    margin-top: 12px;
+    margin-bottom: 6px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #ffffff;
+}
+
+.help-card p {
+    color: rgba(255, 255, 255, 0.65);
+    font-size: 13px;
+    margin-bottom: 16px;
+}
+
+.help-card button {
+    width: 100%;
+    border: none;
+    border-radius: 10px;
+    padding: 10px;
+    background: #0d6efd;
+    color: white;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    transition: background 0.2s ease;
+}
+
+.help-card button:hover {
+    background: #0b5ed7;
+}
+
+/* ========== Scrollbar ========== */
+.sidebar::-webkit-scrollbar {
+    width: 4px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+    background: rgba(255, 255, 255, 0.05);
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 4px;
+}
+
+/* ========== Responsive ========== */
+@media (max-width: 768px) {
+    .sidebar {
+        width: 240px;
+        padding: 18px 12px;
+    }
+
+    .company-logo {
+        width: 40px;
+        height: 40px;
+    }
+
+    .company-text h3 {
+        font-size: 18px;
+    }
+
+    .company-text span {
+        font-size: 10px;
+    }
+
+    .menu-list li {
+        padding: 10px 12px;
+        font-size: 14px;
+        gap: 12px;
+    }
+
+    .help-card {
+        padding: 16px 12px;
+    }
+
+    .help-card h5 {
+        font-size: 16px;
+    }
+}
+
+@media (max-width: 480px) {
+    .sidebar {
+        width: 70px;
+        padding: 16px 8px;
+    }
+
+    .logo-section {
+        justify-content: center;
+        padding: 0;
+    }
+
+    .company-text {
+        display: none;
+    }
+
+    .company-logo {
+        width: 40px;
+        height: 40px;
+        margin: 0 auto;
+    }
+
+    .menu-list li {
+        justify-content: center;
+        padding: 12px;
+    }
+
+    .menu-list li span {
+        display: none;
+    }
+
+    .menu-list li svg {
+        margin: 0;
+    }
+
+    .help-card {
+        display: none;
+    }
+}
