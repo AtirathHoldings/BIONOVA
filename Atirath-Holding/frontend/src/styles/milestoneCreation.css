@@ -424,9 +424,17 @@ body {
 
 @media (max-width: 1024px) {
   .ms-shell-container > aside, .ms-shell-container .sidebar { display: none; }
-  .ms-shell { margin-left: 0; }
+  .ms-shell { /* removed margin-left: 0 to respect sidebar width */ }
   .ms-footer { left: 0; }
   .ms-flex-row-panels { flex-direction: column; }
   .ms-details-grid { grid-template-columns: 1fr; }
   .ms-dependency-grid { grid-template-columns: 1fr; }
+}
+
+/* Added globally via script for responsive sidebar */
+@media (max-width: 768px) {
+  .ms-shell { margin-left: 240px; } /* matches sidebar.css */
+}
+@media (max-width: 480px) {
+  .ms-shell { margin-left: 70px; } /* matches sidebar.css */
 }

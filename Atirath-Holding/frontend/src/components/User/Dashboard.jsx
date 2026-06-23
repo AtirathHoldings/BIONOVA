@@ -121,8 +121,8 @@ const Dashboard = ({ onLogout, userRole }) => {
                 {/* Top Header */}
                 <div className="top-header">
                     <div className="header-left">
-                        <button className="menu-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>
-                            <Menu size={20} />
+                        <button className="mobile-menu-btn" onClick={() => { setSidebarOpen(!sidebarOpen); window.dispatchEvent(new CustomEvent('toggleSidebar')); }}>
+                            <Menu size={24} />
                         </button>
                         <div className="search-box">
                             <Search size={16} className="search-icon" />

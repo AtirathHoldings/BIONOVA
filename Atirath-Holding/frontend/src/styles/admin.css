@@ -1,20 +1,15 @@
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  background: #f8fafc;
-  font-family: Inter, "Segoe UI", sans-serif;
-  overflow-x: hidden;
-}
-
+/* Admin Dashboard Layout - Fully Scoped to prevent conflicts */
 .db-shell-container {
   display: flex;
   width: 100vw;
   min-height: 100vh;
   background: #f8fafc;
+  font-family: Inter, "Segoe UI", sans-serif;
+  overflow-x: hidden;
+}
+
+.db-shell-container * {
+  box-sizing: border-box;
 }
 
 .db-shell-container > aside,
@@ -27,7 +22,7 @@ body {
   z-index: 99;
 }
 
-.db-shell {
+.db-shell-container .db-shell {
   flex: 1;
   margin-left: 260px;
   display: flex;
@@ -36,7 +31,7 @@ body {
   position: relative;
 }
 
-.db-main { 
+.db-shell-container .db-main { 
   padding: 24px; 
   display: flex; 
   flex-direction: column; 
@@ -44,7 +39,7 @@ body {
 }
 
 /* ===== SLIDE-IN ANIMATED WELCOME TOAST ===== */
-.erp-welcome-toast {
+.db-shell-container .erp-welcome-toast {
   position: fixed;
   top: 80px;
   right: 24px;
@@ -63,35 +58,35 @@ body {
   min-width: 320px;
 }
 
-.erp-welcome-toast.show {
+.db-shell-container .erp-welcome-toast.show {
   transform: translateX(0);
   opacity: 1;
 }
 
-.toast-icon {
+.db-shell-container .toast-icon {
   font-size: 24px;
   animation: waveAnimation 2s infinite;
   transform-origin: 70% 70%;
 }
 
-.toast-content {
+.db-shell-container .toast-content {
   flex: 1;
 }
 
-.toast-content h4 {
+.db-shell-container .toast-content h4 {
   font-size: 15px;
   font-weight: 700;
   color: #0f172a;
   margin-bottom: 4px;
 }
 
-.toast-content p {
+.db-shell-container .toast-content p {
   font-size: 12px;
   color: #64748b;
   font-weight: 500;
 }
 
-.toast-close {
+.db-shell-container .toast-close {
   background: none;
   border: none;
   color: #94a3b8;
@@ -103,7 +98,7 @@ body {
   transition: color 0.2s;
 }
 
-.toast-close:hover {
+.db-shell-container .toast-close:hover {
   color: #0f172a;
 }
 
@@ -118,13 +113,13 @@ body {
 }
 
 /* ===== ERP ENTERPRISE KPI CARDS ===== */
-.erp-kpi-grid {
+.db-shell-container .erp-kpi-grid {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
   gap: 20px;
 }
 
-.erp-kpi-card {
+.db-shell-container .erp-kpi-card {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
@@ -136,18 +131,18 @@ body {
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
 }
 
-.erp-kpi-card:hover {
+.db-shell-container .erp-kpi-card:hover {
   box-shadow: 0 8px 24px rgba(0,0,0,0.06);
   border-color: #cbd5e1;
 }
 
-.kpi-header {
+.db-shell-container .kpi-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.kpi-title {
+.db-shell-container .kpi-title {
   font-size: 13px;
   font-weight: 600;
   color: #64748b;
@@ -155,7 +150,7 @@ body {
   letter-spacing: 0.5px;
 }
 
-.kpi-icon-box {
+.db-shell-container .kpi-icon-box {
   width: 32px;
   height: 32px;
   border-radius: 8px;
@@ -164,19 +159,19 @@ body {
   justify-content: center;
 }
 
-.bg-blue-light { background: #eff6ff; }
-.bg-purple-light { background: #f5f3ff; }
-.bg-green-light { background: #ecfdf5; }
-.bg-red-light { background: #fef2f2; }
-.bg-orange-light { background: #fffbeb; }
+.db-shell-container .bg-blue-light { background: #eff6ff; }
+.db-shell-container .bg-purple-light { background: #f5f3ff; }
+.db-shell-container .bg-green-light { background: #ecfdf5; }
+.db-shell-container .bg-red-light { background: #fef2f2; }
+.db-shell-container .bg-orange-light { background: #fffbeb; }
 
-.text-blue { color: #3b82f6; }
-.text-purple { color: #8b5cf6; }
-.text-green { color: #10b981; }
-.text-red { color: #ef4444; }
-.text-orange { color: #f59e0b; }
+.db-shell-container .text-blue { color: #3b82f6; }
+.db-shell-container .text-purple { color: #8b5cf6; }
+.db-shell-container .text-green { color: #10b981; }
+.db-shell-container .text-red { color: #ef4444; }
+.db-shell-container .text-orange { color: #f59e0b; }
 
-.kpi-body h2 {
+.db-shell-container .kpi-body h2 {
   font-size: 28px;
   font-weight: 800;
   color: #0f172a;
@@ -184,31 +179,31 @@ body {
   line-height: 1;
 }
 
-.kpi-footer {
+.db-shell-container .kpi-footer {
   display: flex;
   align-items: center;
   gap: 8px;
   font-size: 12px;
 }
 
-.kpi-trend {
+.db-shell-container .kpi-trend {
   display: flex;
   align-items: center;
   gap: 4px;
   font-weight: 600;
 }
 
-.kpi-trend.up { color: #10b981; }
-.kpi-trend.down { color: #ef4444; }
-.kpi-trend.neutral { color: #64748b; }
+.db-shell-container .kpi-trend.up { color: #10b981; }
+.db-shell-container .kpi-trend.down { color: #ef4444; }
+.db-shell-container .kpi-trend.neutral { color: #64748b; }
 
-.kpi-subtitle {
+.db-shell-container .kpi-subtitle {
   color: #94a3b8;
   font-weight: 500;
 }
 
 /* ===== GENERAL CARD & CHART LAYOUT ===== */
-.db-card {
+.db-shell-container .db-card {
   background: #ffffff;
   border-radius: 12px;
   border: 1px solid #e2e8f0;
@@ -218,11 +213,11 @@ body {
   transition: box-shadow 0.3s ease;
 }
 
-.db-card:hover {
+.db-shell-container .db-card:hover {
   box-shadow: 0 8px 24px rgba(0,0,0,0.04);
 }
 
-.db-card-header {
+.db-shell-container .db-card-header {
   padding: 16px 20px;
   border-bottom: 1px solid #f8fafc;
   display: flex;
@@ -230,7 +225,7 @@ body {
   align-items: center;
 }
 
-.db-card-header h3 {
+.db-shell-container .db-card-header h3 {
   font-size: 14px;
   font-weight: 700;
   color: #1e293b;
@@ -238,7 +233,7 @@ body {
   letter-spacing: 0.5px;
 }
 
-.db-select {
+.db-shell-container .db-select {
   border: 1px solid #e2e8f0;
   border-radius: 6px;
   padding: 4px 10px;
@@ -250,21 +245,21 @@ body {
   font-weight: 500;
 }
 
-.view-all {
+.db-shell-container .view-all {
   font-size: 12px;
   color: #3b82f6;
   text-decoration: none;
   font-weight: 600;
 }
-.view-all:hover { text-decoration: underline; }
+.db-shell-container .view-all:hover { text-decoration: underline; }
 
-.db-charts-grid {
+.db-shell-container .db-charts-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
-.db-chart-content {
+.db-shell-container .db-chart-content {
   padding: 24px 20px;
   display: flex;
   align-items: center;
@@ -273,7 +268,7 @@ body {
   flex: 1;
 }
 
-.db-donut-chart {
+.db-shell-container .db-donut-chart {
   width: 120px;
   height: 120px;
   border-radius: 50%;
@@ -284,11 +279,11 @@ body {
   transition: transform 0.3s ease;
 }
 
-.db-donut-chart:hover {
+.db-shell-container .db-donut-chart:hover {
   transform: scale(1.05);
 }
 
-.donut-inner {
+.db-shell-container .donut-inner {
   width: 86px;
   height: 86px;
   background: #ffffff;
@@ -300,17 +295,17 @@ body {
   box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
 }
 
-.donut-inner h3 { font-size: 18px; font-weight: 800; color: #0f172a; line-height: 1; }
-.donut-inner p { font-size: 10px; color: #64748b; font-weight: 600; margin-top: 4px;}
+.db-shell-container .donut-inner h3 { font-size: 18px; font-weight: 800; color: #0f172a; line-height: 1; }
+.db-shell-container .donut-inner p { font-size: 10px; color: #64748b; font-weight: 600; margin-top: 4px;}
 
-.db-chart-legend {
+.db-shell-container .db-chart-legend {
   display: flex;
   flex-direction: column;
   gap: 10px;
   flex: 1;
 }
 
-.legend-item {
+.db-shell-container .legend-item {
   display: flex;
   align-items: center;
   font-size: 12px;
@@ -318,7 +313,7 @@ body {
   font-weight: 500;
 }
 
-.legend-item .dot {
+.db-shell-container .legend-item .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
@@ -326,17 +321,17 @@ body {
   flex-shrink: 0;
 }
 
-.legend-item b {
+.db-shell-container .legend-item b {
   margin-left: auto;
   color: #0f172a;
 }
 
-.dot-green { background: #10b981; }
-.dot-blue { background: #3b82f6; }
-.dot-orange { background: #f59e0b; }
-.dot-red { background: #ef4444; }
+.db-shell-container .dot-green { background: #10b981; }
+.db-shell-container .dot-blue { background: #3b82f6; }
+.db-shell-container .dot-orange { background: #f59e0b; }
+.db-shell-container .dot-red { background: #ef4444; }
 
-.milestone-legend .legend-row {
+.db-shell-container .milestone-legend .legend-row {
   display: flex;
   justify-content: space-between;
   font-size: 12px;
@@ -345,23 +340,23 @@ body {
   padding-bottom: 6px;
   border-bottom: 1px dashed #e2e8f0;
 }
-.milestone-legend .legend-row:last-child { border: none; padding-bottom: 0; }
+.db-shell-container .milestone-legend .legend-row:last-child { border: none; padding-bottom: 0; }
 
 /* ===== LISTS GRID ===== */
-.db-lists-grid {
+.db-shell-container .db-lists-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 20px;
 }
 
-.list-card .db-list {
+.db-shell-container .list-card .db-list {
   padding: 16px 20px;
   display: flex;
   flex-direction: column;
   gap: 12px;
 }
 
-.list-item {
+.db-shell-container .list-item {
   display: flex;
   align-items: flex-start;
   gap: 12px;
@@ -370,12 +365,12 @@ body {
   transition: background 0.2s;
   border: 1px solid transparent;
 }
-.list-item:hover {
+.db-shell-container .list-item:hover {
   background: #f8fafc;
   border-color: #f1f5f9;
 }
 
-.list-icon {
+.db-shell-container .list-icon {
   width: 32px;
   height: 32px;
   border-radius: 8px;
@@ -385,43 +380,43 @@ body {
   flex-shrink: 0;
 }
 
-.list-text p {
+.db-shell-container .list-text p {
   font-size: 13px;
   font-weight: 600;
   color: #1e293b;
   margin-bottom: 4px;
 }
-.list-text span { font-size: 11px; color: #64748b; font-weight: 500; }
+.db-shell-container .list-text span { font-size: 11px; color: #64748b; font-weight: 500; }
 
 /* Upcoming Deadlines */
-.deadline-item { align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; border-radius: 0; }
-.deadline-item:hover { background: none; border-color: #f1f5f9; }
-.deadline-item:last-child { border: none; }
-.list-icon-clear { width: 24px; display: flex; align-items: center; justify-content: center; }
-.deadline-date { display: flex; flex-direction: column; align-items: flex-end; margin-left: auto; text-align: right; }
-.deadline-date strong { font-size: 12px; color: #0f172a; margin-bottom: 2px;}
-.deadline-date span { font-size: 11px; font-weight: 600; }
+.db-shell-container .deadline-item { align-items: center; padding: 10px 0; border-bottom: 1px solid #f1f5f9; border-radius: 0; }
+.db-shell-container .deadline-item:hover { background: none; border-color: #f1f5f9; }
+.db-shell-container .deadline-item:last-child { border: none; }
+.db-shell-container .list-icon-clear { width: 24px; display: flex; align-items: center; justify-content: center; }
+.db-shell-container .deadline-date { display: flex; flex-direction: column; align-items: flex-end; margin-left: auto; text-align: right; }
+.db-shell-container .deadline-date strong { font-size: 12px; color: #0f172a; margin-bottom: 2px;}
+.db-shell-container .deadline-date span { font-size: 11px; font-weight: 600; }
 
 /* Progress Bars */
-.project-progress-list { gap: 16px !important; }
-.progress-item { display: flex; flex-direction: column; gap: 8px; }
-.progress-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: #1e293b; }
-.progress-bar-bg { width: 100%; height: 6px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
-.progress-fill { height: 100%; background: #3b82f6; border-radius: 4px; transition: width 1s ease-in-out; }
+.db-shell-container .project-progress-list { gap: 16px !important; }
+.db-shell-container .progress-item { display: flex; flex-direction: column; gap: 8px; }
+.db-shell-container .progress-header { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; color: #1e293b; }
+.db-shell-container .progress-bar-bg { width: 100%; height: 6px; background: #e2e8f0; border-radius: 4px; overflow: hidden; }
+.db-shell-container .progress-fill { height: 100%; background: #3b82f6; border-radius: 4px; transition: width 1s ease-in-out; }
 
 /* Responsive Adjustments */
 @media (max-width: 1280px) {
-  .erp-kpi-grid { grid-template-columns: repeat(2, 1fr); }
-  .db-charts-grid, .db-lists-grid { grid-template-columns: repeat(2, 1fr); }
+  .db-shell-container .erp-kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .db-shell-container .db-charts-grid, .db-shell-container .db-lists-grid { grid-template-columns: repeat(2, 1fr); }
 }
 
 @media (max-width: 1024px) {
   .db-shell-container > aside { display: none; }
-  .db-shell { margin-left: 0; }
-  .db-charts-grid, .db-lists-grid { grid-template-columns: 1fr; }
-  .erp-welcome-toast { right: 10px; top: 70px; min-width: 280px; }
+  .db-shell-container .db-shell { margin-left: 0; }
+  .db-shell-container .db-charts-grid, .db-shell-container .db-lists-grid { grid-template-columns: 1fr; }
+  .db-shell-container .erp-welcome-toast { right: 10px; top: 70px; min-width: 280px; }
 }
 
 @media (max-width: 640px) {
-  .erp-kpi-grid { grid-template-columns: 1fr; }
+  .db-shell-container .erp-kpi-grid { grid-template-columns: 1fr; }
 }

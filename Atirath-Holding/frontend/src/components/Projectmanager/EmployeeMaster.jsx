@@ -32,20 +32,23 @@ import {
 } from "lucide-react";
 import Sidebar from "../Sidebar";
 import Header from "../Header";
-import "../../styles/employeeCreation.css";
+import AlertModal from "../AlertModal";
+import "../../styles/EmployeeMaster.css";
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+
+const getAuthHeaders = () => ({
+  "Content-Type": "application/json",
+  "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+});
 
 const EmployeeCreation = ({ userRole, onLogout }) => {
-  // Employees State
-  const [employees, setEmployees] = useState(() => {
-    const saved = localStorage.getItem("employeesData");
-    return saved ? JSON.parse(saved) : [];
-  });
-
-  // Departments State (Shared with DepartmentCreation via localStorage)
-  const [departments, setDepartments] = useState(() => {
-    const saved = localStorage.getItem("departments_user_data");
-    return saved ? JSON.parse(saved) : [];
-  });
+  // API States
+  const [employees, setEmployees] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [plants, setPlants] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   // Views & UI States
   const [view, setView] = useState("list");
@@ -56,6 +59,17 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activeActionsMenu, setActiveActionsMenu] = useState(null);
 
+  const [alertConfig, setAlertConfig] = useState({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: ""
+  });
+
+  const triggerAlert = (type, title, message) => {
+    setAlertConfig({ isOpen: true, type, title, message });
+  };
+
   // Department Modal State
   const [showDeptModal, setShowDeptModal] = useState(false);
   const [deptForm, setDeptForm] = useState({
@@ -64,25 +78,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     description: "",
     status: "Active"
   });
-
-  // Filters State for List Page
-  const [filters, setFilters] = useState({
-    employeeCode: "",
-    employeeName: "",
-    company: "",
-    plant: "",
-    department: "",
-    status: ""
-  });
-  const [searchTriggeredFilters, setSearchTriggeredFilters] = useState({
-    employeeCode: "",
-    employeeName: "",
-    company: "",
-    plant: "",
-    department: "",
-    status: ""
-  });
-
   // Employee Form State
   const [form, setForm] = useState({
     employeeCode: "",
@@ -96,7 +91,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     address: "",
     photoPath: "",
     joiningDate: "",
-    role: "",
+    designation: "",
     company: "",
     plant: "",
     department: "",
@@ -108,26 +103,99 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     status: ""
   });
 
-  // Sync states to local storage
-  useEffect(() => {
-    localStorage.setItem("employeesData", JSON.stringify(employees));
-  }, [employees]);
+  const fetchAllData = async () => {
+    setLoading(true);
+    try {
+      const [empRes, coyRes, pltRes, deptRes] = await Promise.all([
+        fetch(`${apiBaseUrl}/api/employees`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/companies`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/plants`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() })
+      ]);
+
+      const coyData = coyRes.ok ? await coyRes.json() : [];
+      const pltData = pltRes.ok ? await pltRes.json() : [];
+      const deptData = deptRes.ok ? await deptRes.json() : [];
+
+      if (empRes.ok) {
+        const data = await empRes.json();
+        const mappedEmps = data.map(emp => {
+          const coyNm = coyData.find(c => String(c.coyId || c.id) === String(emp.coyId))?.coyNm || emp.company || "N/A";
+          const pltNm = pltData.find(p => String(p.pltId || p.id) === String(emp.pltId))?.pltNm || emp.plant || "N/A";
+          const deptNm = deptData.find(d => String(d.deptId || d.id) === String(emp.deptId))?.deptNm || emp.department || "N/A";
+
+          return {
+            ...emp,
+            id: emp.empId || emp.id,
+            employeeCode: emp.empCode || emp.employeeCode || "",
+            employeeName: `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
+            gender: emp.gender ? (emp.gender.charAt(0) + emp.gender.slice(1).toLowerCase()) : "",
+            dateOfBirth: emp.dob || emp.dateOfBirth || "",
+            mobile: emp.mobNum || emp.mobile || "",
+            bloodGroup: emp.bldGrp || emp.bloodGroup || "",
+            photoPath: emp.photoUrl || emp.photoPath || "",
+            joiningDate: emp.doj || emp.joiningDate || "",
+            workLocation: emp.wloc || emp.wLoc || emp.workLocation || "",
+            status: emp.status === true || emp.status === "Active" ? "Active" : "Inactive",
+            company: coyNm,
+            plant: pltNm,
+            department: deptNm
+          };
+        });
+        setEmployees(mappedEmps);
+      }
+      
+      setCompanies(coyData);
+      setPlants(pltData);
+      setDepartments(deptData);
+    } catch (err) {
+      console.error("Error fetching data:", err);
+      // alertConfig might not be available right away, so we just log
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem("departments_user_data", JSON.stringify(departments));
-  }, [departments]);
+    fetchAllData();
+  }, []);
 
   // Handle Input Change for Employee Form
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
+
     // Check if user clicked "+ Create Department"
     if (name === "department" && value === "CREATE_NEW") {
       setShowDeptModal(true);
       return;
     }
 
-    setForm((prev) => ({ ...prev, [name]: value }));
+    let newValue = value;
+    if (name === "employeeCode") {
+      newValue = value.slice(0, 10);
+    } else if (name === "firstName" || name === "lastName") {
+      newValue = value.slice(0, 50);
+    } else if (name === "gender") {
+      newValue = value.slice(0, 10);
+    } else if (name === "email" || name === "username") {
+      newValue = value.slice(0, 50);
+    } else if (name === "mobile") {
+      newValue = value.replace(/[^0-9]/g, '').slice(0, 10);
+    } else if (name === "bloodGroup") {
+      newValue = value.slice(0, 5);
+    } else if (name === "address") {
+      newValue = value.slice(0, 255);
+    } else if (name === "workLocation") {
+      newValue = value.slice(0, 100);
+    } else if (name === "password" || name === "confirmPassword") {
+      newValue = value.slice(0, 10); // <--- changed to 10
+    }
+
+    if (name === "email") {
+      setForm((prev) => ({ ...prev, email: newValue, username: newValue }));
+    } else {
+      setForm((prev) => ({ ...prev, [name]: newValue }));
+    }
   };
 
   // Handle Profile Photo Upload
@@ -149,41 +217,43 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   };
 
   // Save New Department from Modal
-  const handleSaveNewDepartment = () => {
+  const handleSaveNewDepartment = async () => {
     if (!deptForm.code.trim() || !deptForm.name.trim()) {
-      alert("Department code and name are required.");
+      triggerAlert("error", "Validation Error", "Department code and name are required.");
       return;
     }
 
-    const codeToCheck = deptForm.code.trim().toUpperCase();
-    const isDuplicate = departments.some((dept) => dept.code.toUpperCase() === codeToCheck);
-
-    if (isDuplicate) {
-      alert("Department code already exists.");
-      return;
-    }
-
-    const nextId = departments.length ? Math.max(...departments.map((d) => d.id)) + 1 : 1;
-    const newDept = {
-      id: nextId,
-      code: codeToCheck,
-      name: deptForm.name.trim(),
-      company: form.company || "Atirath Bio Energy Private Limited", // Associates with selected company
-      head: "Admin User",
-      employeesCount: 0,
-      status: deptForm.status,
-      description: deptForm.description.trim()
+    const payload = {
+      deptCd: deptForm.code.trim().toUpperCase(),
+      deptNm: deptForm.name.trim(),
+      descr: deptForm.description.trim(),
+      sts: deptForm.status === "Active"
     };
 
-    setDepartments((prev) => [...prev, newDept]);
-    
-    // Auto-select newly created department in the employee form
-    setForm((prev) => ({ ...prev, department: newDept.name }));
-    
-    // Reset and close modal
-    setDeptForm({ code: "", name: "", description: "", status: "Active" });
-    setShowDeptModal(false);
-    alert("Department created successfully!");
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/departments`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const newDept = await response.json();
+        triggerAlert("success", "Success", "Department created successfully!");
+        setDeptForm({ code: "", name: "", description: "", status: "Active" });
+        setShowDeptModal(false);
+        const deptRes = await fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() });
+        if (deptRes.ok) {
+          setDepartments(await deptRes.json());
+        }
+        setForm((prev) => ({ ...prev, department: String(newDept.deptId || newDept.id) }));
+      } else {
+        triggerAlert("error", "Error", "Failed to save department. Ensure department code is unique.");
+      }
+    } catch (err) {
+      console.error("Error saving department:", err);
+      triggerAlert("error", "Error", "Server error occurred.");
+    }
   };
 
   // Reset Employee Form
@@ -200,7 +270,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       address: "",
       photoPath: "",
       joiningDate: "",
-      role: "",
+      designation: "",
       company: "",
       plant: "",
       department: "",
@@ -217,173 +287,329 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   };
 
   // Save / Submit Employee
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     if (e) e.preventDefault();
 
-    const required = [
-      "employeeCode", "firstName", "lastName", "gender", "dateOfBirth",
-      "email", "mobile", "address", "joiningDate", "role", "company",
-      "plant", "department", "workLocation", "reportingManager",
-      "username", "password", "confirmPassword", "status"
-    ];
-
-    const missing = required.filter(field => !form[field] || form[field].trim() === "");
-    if (missing.length > 0) {
-      alert("Please fill all required fields marked with *");
+    // 1. Employee Code check
+    if (!form.employeeCode.trim()) {
+      triggerAlert("error", "Validation Error", "Employee Code is required.");
+      return;
+    }
+    if (form.employeeCode.length > 10) {
+      triggerAlert("error", "Validation Error", "Employee Code cannot exceed 10 characters.");
       return;
     }
 
+    // 2. First Name check
+    if (!form.firstName.trim()) {
+      triggerAlert("error", "Validation Error", "First Name is required.");
+      return;
+    }
+    if (form.firstName.length > 50) {
+      triggerAlert("error", "Validation Error", "First Name cannot exceed 50 characters.");
+      return;
+    }
+
+    // 3. Last Name check
+    if (!form.lastName.trim()) {
+      triggerAlert("error", "Validation Error", "Last Name is required.");
+      return;
+    }
+    if (form.lastName.length > 50) {
+      triggerAlert("error", "Validation Error", "Last Name cannot exceed 50 characters.");
+      return;
+    }
+
+    // 4. Gender check
+    if (!form.gender) {
+      triggerAlert("error", "Validation Error", "Gender selection is required.");
+      return;
+    }
+    if (form.gender.length > 10) {
+      triggerAlert("error", "Validation Error", "Gender cannot exceed 10 characters.");
+      return;
+    }
+
+    // 5. Date of Birth check
+    if (!form.dateOfBirth) {
+      triggerAlert("error", "Validation Error", "Date of Birth is required.");
+      return;
+    }
+
+    // 6. Employee Email check
+    if (!form.email.trim()) {
+      triggerAlert("error", "Validation Error", "Employee Email is required.");
+      return;
+    }
+    if (form.email.length > 50) {
+      triggerAlert("error", "Validation Error", "Employee Email cannot exceed 50 characters.");
+      return;
+    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(form.email.trim())) {
+      triggerAlert("error", "Validation Error", "Please enter a valid Employee Email address.");
+      return;
+    }
+
+    // 7. Mobile Number check
+    if (!form.mobile.trim()) {
+      triggerAlert("error", "Validation Error", "Mobile Number is required.");
+      return;
+    }
+    const mobileRegex = /^\d{10}$/;
+    if (!mobileRegex.test(form.mobile.trim())) {
+      triggerAlert("error", "Validation Error", "Mobile Number must be exactly 10 digits.");
+      return;
+    }
+
+    // 8. Blood Group check
+    if (form.bloodGroup && form.bloodGroup.length > 5) {
+      triggerAlert("error", "Validation Error", "Blood Group cannot exceed 5 characters.");
+      return;
+    }
+
+    // 9. Employee Address check
+    if (!form.address.trim()) {
+      triggerAlert("error", "Validation Error", "Employee Address is required.");
+      return;
+    }
+    if (form.address.length > 255) {
+      triggerAlert("error", "Validation Error", "Employee Address cannot exceed 255 characters.");
+      return;
+    }
+
+    // 10. Joining Date check
+    if (!form.joiningDate) {
+      triggerAlert("error", "Validation Error", "Joining Date is required.");
+      return;
+    }
+
+    // 11. Designation check
+    if (!form.designation.trim()) {
+      triggerAlert("error", "Validation Error", "Designation is required.");
+      return;
+    }
+
+    // 12. Company check
+    if (!form.company) {
+      triggerAlert("error", "Validation Error", "Company selection is required.");
+      return;
+    }
+
+    // 13. Plant check
+    if (!form.plant) {
+      triggerAlert("error", "Validation Error", "Plant selection is required.");
+      return;
+    }
+
+    // 14. Department check
+    if (!form.department) {
+      triggerAlert("error", "Validation Error", "Department selection is required.");
+      return;
+    }
+
+    // 15. Work Location check
+    if (!form.workLocation.trim()) {
+      triggerAlert("error", "Validation Error", "Work Location is required.");
+      return;
+    }
+    if (form.workLocation.length > 100) {
+      triggerAlert("error", "Validation Error", "Work Location cannot exceed 100 characters.");
+      return;
+    }
+
+    // 16. Reporting Manager check
+    if (!form.reportingManager) {
+      triggerAlert("error", "Validation Error", "Reporting Manager is required.");
+      return;
+    }
+
+    // 17. Username check
+    if (!form.username.trim()) {
+      triggerAlert("error", "Validation Error", "Username (Email) is required.");
+      return;
+    }
+    if (form.username.length > 50) {
+      triggerAlert("error", "Validation Error", "Username cannot exceed 50 characters.");
+      return;
+    }
+
+    // 18. Password check with complexity rules (EXACTLY 10 characters, 1 upper, 1 lower, 1 special)
+    if (!form.password) {
+      triggerAlert("error", "Validation Error", "Password is required.");
+      return;
+    }
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{10}$/;
+    if (!passwordRegex.test(form.password)) {
+      triggerAlert(
+        "error",
+        "Validation Error",
+        "Password must be exactly 10 characters long and include at least one uppercase letter, one lowercase letter, and one special character."
+      );
+      return;
+    }
     if (form.password !== form.confirmPassword) {
-      alert("Password and Confirm Password do not match!");
+      triggerAlert("error", "Validation Error", "Password and Confirm Password do not match!");
       return;
     }
 
-    const employeeFullName = `${form.firstName.trim()} ${form.lastName.trim()}`;
-    const employeeData = {
-      id: isEditing ? editId : Date.now(),
-      employeeCode: form.employeeCode.trim(),
-      employeeName: employeeFullName,
-      gender: form.gender,
-      mobile: form.mobile.trim(),
+    // 19. Status check
+    if (!form.status) {
+      triggerAlert("error", "Validation Error", "Employee Status is required.");
+      return;
+    }
+
+    // Unique Employee Code check is handled by backend, but we can do a quick local check
+    const isDuplicate = employees.some(
+      emp => emp.employeeCode.toLowerCase().trim() === form.employeeCode.toLowerCase().trim() && emp.id !== editId
+    );
+
+    if (isDuplicate) {
+      triggerAlert("error", "Duplicate Error", "Employee code must be unique. This code already exists.");
+      return;
+    }
+
+    const payload = {
+      empCode: form.employeeCode.trim(),
+      firstName: form.firstName.trim(),
+      lastName: form.lastName.trim(),
+      gender: form.gender.toUpperCase(),
+      dob: form.dateOfBirth,
       email: form.email.trim(),
-      company: form.company,
-      plant: form.plant,
-      department: form.department,
-      role: form.role.trim(),
-      reportingManager: form.reportingManager,
-      status: form.status,
-      dateOfBirth: form.dateOfBirth,
-      bloodGroup: form.bloodGroup,
+      mobNum: form.mobile.trim(),
+      bldGrp: form.bloodGroup || null,
       address: form.address.trim(),
-      photoPath: form.photoPath.trim(),
-      joiningDate: form.joiningDate,
-      workLocation: form.workLocation.trim(),
-      username: form.username.trim(),
-      password: form.password,
-      confirmPassword: form.confirmPassword
+      photoUrl: form.photoPath || null,
+      doj: form.joiningDate,
+      desigId: 1, // Default or map if designation table exists
+      coyId: parseInt(form.company),
+      pltId: parseInt(form.plant),
+      deptId: parseInt(form.department),
+      wloc: form.workLocation.trim(),
+      repManId: form.reportingManager ? parseInt(form.reportingManager) : null,
+      status: form.status === "Active",
+      role: form.role || "user",
+      password: form.password || null
     };
 
-    if (isEditing) {
-      setEmployees((prev) => prev.map((emp) => (emp.id === editId ? employeeData : emp)));
-      alert("Employee updated successfully!");
-    } else {
-      setEmployees((prev) => [...prev, employeeData]);
-      alert("Employee created successfully!");
-    }
+    setLoading(true);
+    try {
+      let url = `${apiBaseUrl}/api/employees`;
+      let method = "POST";
+      if (isEditing) {
+        url = `${apiBaseUrl}/api/employees/${editId}`;
+        method = "PUT";
+      }
 
-    setIsEditing(false);
-    setEditId(null);
-    handleReset();
-    setView("list");
+      const response = await fetch(url, {
+        method: method,
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        triggerAlert("success", "Success", isEditing ? "Employee updated successfully!" : "Employee created successfully!");
+        setIsEditing(false);
+        setEditId(null);
+        handleReset();
+        setView("list");
+        fetchAllData();
+      } else {
+        const errorText = await response.text();
+        triggerAlert("error", "Error", "Failed to save employee: " + (errorText || "Ensure Unique constraints are met."));
+      }
+    } catch (err) {
+      console.error("Error saving employee:", err);
+      triggerAlert("error", "Error", "Server error: " + err.message);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // Edit Action
   const handleEdit = (emp) => {
-    const names = emp.employeeName.split(" ");
-    const fName = names[0] || "";
-    const lName = names.slice(1).join(" ") || "";
-
     setForm({
-      employeeCode: emp.employeeCode || "",
-      firstName: fName,
-      lastName: lName,
-      gender: emp.gender || "",
-      dateOfBirth: emp.dateOfBirth || "",
+      employeeCode: emp.empCode || emp.employeeCode || "",
+      firstName: emp.firstName || "",
+      lastName: emp.lastName || "",
+      gender: emp.gender ? (emp.gender.charAt(0) + emp.gender.slice(1).toLowerCase()) : "",
+      dateOfBirth: emp.dob || emp.dateOfBirth || "",
       email: emp.email || "",
-      mobile: emp.mobile || "",
-      bloodGroup: emp.bloodGroup || "",
+      mobile: emp.mobNum || emp.mobile || "",
+      bloodGroup: emp.bldGrp || emp.bloodGroup || "",
       address: emp.address || "",
-      photoPath: emp.photoPath || "",
-      joiningDate: emp.joiningDate || "",
-      role: emp.role || "",
-      company: emp.company || "",
-      plant: emp.plant || "",
-      department: emp.department || "",
-      workLocation: emp.workLocation || "",
-      reportingManager: emp.reportingManager || "",
-      username: emp.username || emp.email || "",
-      password: emp.password || "",
-      confirmPassword: emp.confirmPassword || emp.password || "",
-      status: emp.status || "Active"
+      photoPath: emp.photoUrl || emp.photoPath || "",
+      joiningDate: emp.doj || emp.joiningDate || "",
+      designation: String(emp.desigId || emp.designation || ""),
+      company: String(emp.coyId || emp.company || ""),
+      plant: String(emp.pltId || emp.plant || ""),
+      department: String(emp.deptId || emp.department || ""),
+      workLocation: emp.wloc || emp.wLoc || emp.workLocation || "",
+      reportingManager: String(emp.repManId || emp.reportingManager || ""),
+      username: emp.email || emp.username || "",
+      password: "",
+      confirmPassword: "",
+      status: emp.status === true || emp.status === "Active" ? "Active" : "Inactive"
     });
 
-    setPhoto(emp.photoPath && emp.photoPath.startsWith("data:") ? emp.photoPath : null);
+    setPhoto(emp.photoUrl && emp.photoUrl.startsWith("data:") ? emp.photoUrl : (emp.photoPath && emp.photoPath.startsWith("data:") ? emp.photoPath : null));
     setIsEditing(true);
-    setEditId(emp.id);
+    setEditId(emp.empId || emp.id);
     setView("form");
     setActiveActionsMenu(null);
   };
 
   // Toggle Status Action
-  const handleToggleStatus = (empId) => {
-    setEmployees((prev) =>
-      prev.map((emp) => {
-        if (emp.id === empId) {
-          const nextStatus = emp.status === "Active" ? "Inactive" : "Active";
-          alert(`Employee is now ${nextStatus}!`);
-          return { ...emp, status: nextStatus };
-        }
-        return emp;
-      })
-    );
+  const handleToggleStatus = async (empId) => {
+    const emp = employees.find(e => (e.empId || e.id) === empId);
+    if (!emp) return;
+
+    const nextStatus = emp.status === "Active" ? false : true;
+    const payload = {
+      ...emp,
+      status: nextStatus
+    };
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/employees/${empId}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        triggerAlert("success", "Status Update", `Employee is now ${nextStatus ? "Active" : "Inactive"}!`);
+        fetchAllData();
+      } else {
+        triggerAlert("error", "Error", "Failed to toggle employee status.");
+      }
+    } catch (err) {
+      console.error("Error toggling employee status:", err);
+      triggerAlert("error", "Error", "Server error occurred while toggling status.");
+    }
     setActiveActionsMenu(null);
   };
-
-  // Search filter handlers
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setFilters((prev) => ({ ...prev, [name]: value }));
-  };
-
-  const applySearch = () => {
-    setSearchTriggeredFilters({ ...filters });
-  };
-
-  const resetFilters = () => {
-    const cleared = {
-      employeeCode: "", employeeName: "", company: "", plant: "", department: "", status: ""
-    };
-    setFilters(cleared);
-    setSearchTriggeredFilters(cleared);
-  };
-
-  // Filter logic
-  const filteredEmployees = employees.filter((emp) => {
-    const fCode = searchTriggeredFilters.employeeCode.trim().toLowerCase();
-    const fName = searchTriggeredFilters.employeeName.trim().toLowerCase();
-    const fComp = searchTriggeredFilters.company;
-    const fPlant = searchTriggeredFilters.plant;
-    const fDept = searchTriggeredFilters.department;
-    const fStat = searchTriggeredFilters.status;
-
-    if (fCode && !emp.employeeCode.toLowerCase().includes(fCode)) return false;
-    if (fName && !emp.employeeName.toLowerCase().includes(fName)) return false;
-    if (fComp && emp.company !== fComp) return false;
-    if (fPlant && emp.plant !== fPlant) return false;
-    if (fDept && emp.department !== fDept) return false;
-    if (fStat && emp.status !== fStat) return false;
-    return true;
-  });
+  const filteredEmployees = employees;
 
   return (
     <div className="emp-shell-container">
       <Sidebar userRole={userRole} onLogout={onLogout} />
 
       <div className="emp-shell">
-        <Header 
-          title="Employee Master" 
-          showSearch={false} 
-          userName="Syed Mohammad Johny Basha" 
-          userRole="Web Developer" 
-          initials="SB" 
+        <Header
+          title="Employee Master"
+          showSearch={false}
+          userName="Syed Mohammad Johny Basha"
+          userRole="Web Developer"
+          initials="SB"
         />
 
         <main className="emp-main" style={{ padding: '24px', position: 'relative' }}>
-          
+
           {view === "form" ? (
             /* ================= VIEW: ADD NEW EMPLOYEE FORM ================= */
             <div className="emp-content" style={{ paddingBottom: '80px', maxWidth: '1280px', margin: '0 auto' }}>
-              
+
               <div className="emp-form-card" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
                   <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
@@ -407,23 +633,26 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Employee Code <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
-                          <input type="text" name="employeeCode" value={form.employeeCode} onChange={handleChange} placeholder="Enter employee code" required />
+                          <input type="text" name="employeeCode" value={form.employeeCode} onChange={handleChange} placeholder="Enter employee code" maxLength="10" required />
                         </div>
                       </div>
                       <div className="emp-form-item">
                         <label>First Name <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
-                          <input type="text" name="firstName" value={form.firstName} onChange={handleChange} placeholder="Enter first name" required />
+                          <input type="text" name="firstName" value={form.firstName} onChange={handleChange} placeholder="Enter first name" maxLength="50" required />
                         </div>
                       </div>
                       <div className="emp-form-item">
                         <label>Last Name <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
-                          <input type="text" name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" required />
+                          <input type="text" name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" maxLength="50" required />
                         </div>
                       </div>
+                    </div>
+
+                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Gender <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
@@ -435,9 +664,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           </select>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Date of Birth <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
@@ -449,7 +675,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Email <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Mail size={16} /></span>
-                          <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="Enter email id" required />
+                          <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="Enter email id" maxLength="50" required />
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -459,6 +685,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <input type="text" name="mobile" value={form.mobile} onChange={handleChange} placeholder="Enter mobile number" maxLength="10" required />
                         </div>
                       </div>
+                    </div>
+
+                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Blood Group</label>
                         <div className="emp-input-icon-wrap">
@@ -472,6 +701,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             <option value="AB-">AB-</option>
                             <option value="O+">O+</option>
                             <option value="O-">O-</option>
+                            <option value="Bombay">Bombay</option>
+                            <option value="Rh Null">Rh Null</option>
                           </select>
                         </div>
                       </div>
@@ -482,27 +713,24 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Address <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon" style={{ alignSelf: "flex-start", marginTop: "14px" }}><MapPin size={16} /></span>
-                          <textarea name="address" value={form.address} onChange={handleChange} placeholder="Enter full address" required />
+                          <textarea name="address" value={form.address} onChange={handleChange} placeholder="Enter full address" maxLength="255" required />
                         </div>
                       </div>
                       <div className="emp-form-item">
-                        <label>Photo (URL) / Path</label>
-                        <div className="emp-input-icon-wrap">
-                          <span className="emp-input-prefix-icon" style={{ alignSelf: "flex-start", marginTop: "14px" }}><Image size={16} /></span>
-                          <textarea name="photoPath" value={form.photoPath} onChange={handleChange} placeholder="Enter photo URL or path" />
-                        </div>
-                        <div className="emp-photo-row-container">
-                          <div className="emp-photo-row-preview">
-                            {form.photoPath || photo ? (
-                              <img src={form.photoPath || photo} alt="" />
-                            ) : (
-                              <User size={20} />
-                            )}
-                          </div>
+                        <label>Upload Image</label>
+                        {/* PHOTO SECTION – upload button on left, preview on right with equal height to Address textarea and correct alignment */}
+                        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', height: '96px' }}>
                           <input id="empPhotoUpload" type="file" accept="image/*" onChange={handlePhotoChange} hidden />
-                          <button type="button" className="emp-photo-row-upload-btn" onClick={() => document.getElementById("empPhotoUpload").click()}>
+                          <button type="button" className="emp-photo-row-upload-btn" onClick={() => document.getElementById("empPhotoUpload").click()} style={{ padding: '0 16px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#334155', flexShrink: 0, height: '38px' }}>
                             <Upload size={14} /> Upload File instead
                           </button>
+                          <div className="emp-photo-row-preview" style={{ flex: 1, height: '96px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' }}>
+                            {form.photoPath || photo ? (
+                              <img src={form.photoPath || photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            ) : (
+                              <User size={48} style={{ color: '#94a3b8' }} />
+                            )}
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -522,10 +750,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         </div>
                       </div>
                       <div className="emp-form-item">
-                        <label>Role <span className="emp-req-star">*</span></label>
+                        <label>Designation <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
-                          <input type="text" name="role" value={form.role} onChange={handleChange} placeholder="Enter role" required />
+                          <input type="text" name="designation" value={form.designation} onChange={handleChange} placeholder="Enter designation" required />
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -534,9 +762,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><Building size={16} /></span>
                           <select name="company" value={form.company} onChange={handleChange} required>
                             <option value="">Select company</option>
-                            <option value="Atirath Holdings">Atirath Holdings</option>
-                            <option value="Atirath Bio Energy Pvt. Ltd.">Atirath Bio Energy Pvt. Ltd.</option>
-                            <option value="Exclusive Traders">Exclusive Traders</option>
+                            {companies.map((coy) => (
+                              <option key={coy.coyId || coy.id} value={coy.coyId || coy.id}>{coy.coyNm || coy.name}</option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -546,10 +774,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><Factory size={16} /></span>
                           <select name="plant" value={form.plant} onChange={handleChange} required>
                             <option value="">Select plant</option>
-                            <option value="Hyderabad Plant">Hyderabad Plant</option>
-                            <option value="Bangalore Plant">Bangalore Plant</option>
-                            <option value="Pune Plant">Pune Plant</option>
-                            <option value="Chennai Plant">Chennai Plant</option>
+                            {plants.map((plt) => (
+                              <option key={plt.pltId || plt.id} value={plt.pltId || plt.id}>{plt.pltNm || plt.name}</option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -562,9 +789,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><Users size={16} /></span>
                           <select name="department" value={form.department} onChange={handleChange} required>
                             <option value="">Select department</option>
-                            {/* DYNAMIC DEPARTMENTS FROM STATE/LOCALSTORAGE */}
                             {departments.map((dept) => (
-                              <option key={dept.id} value={dept.name}>{dept.name}</option>
+                              <option key={dept.deptId || dept.id} value={dept.deptId || dept.id}>{dept.deptNm || dept.name}</option>
                             ))}
                             <option value="CREATE_NEW" style={{ fontWeight: 'bold', color: '#2563eb' }}>
                               + Create Department
@@ -576,7 +802,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Work Location <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><MapPin size={16} /></span>
-                          <input type="text" name="workLocation" value={form.workLocation} onChange={handleChange} placeholder="Enter work location" required />
+                          <input type="text" name="workLocation" value={form.workLocation} onChange={handleChange} placeholder="Enter work location" maxLength="100" required />
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -585,12 +811,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
                           <select name="reportingManager" value={form.reportingManager} onChange={handleChange} required>
                             <option value="">Select reporting manager</option>
-                            {/* DYNAMIC REPORTING MANAGERS */}
-                            {employees.length > 0 ? employees.map((emp) => (
-                               <option key={emp.id} value={emp.employeeName}>{emp.employeeName}</option>
-                            )) : (
-                               <option value="Admin User">Admin User</option>
-                            )}
+                            {employees.map((emp) => (
+                              <option key={emp.empId || emp.id} value={emp.empId || emp.id}>{emp.employeeName || `${emp.firstName} ${emp.lastName}`}</option>
+                            ))}
                           </select>
                         </div>
                       </div>
@@ -607,14 +830,22 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Username (Email) <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Mail size={16} /></span>
-                          <input type="email" name="username" value={form.username} onChange={handleChange} placeholder="Enter email id" required />
+                          <input type="email" name="username" value={form.username} onChange={handleChange} placeholder="Enter email id" maxLength="50" required />
                         </div>
                       </div>
                       <div className="emp-form-item">
                         <label>Password <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Lock size={16} /></span>
-                          <input type={showPassword ? "text" : "password"} name="password" value={form.password} onChange={handleChange} placeholder="Enter password" required />
+                          <input 
+                            type={showPassword ? "text" : "password"} 
+                            name="password" 
+                            value={form.password} 
+                            onChange={handleChange} 
+                            placeholder="Enter Password" 
+                            maxLength="10" 
+                            required 
+                          />
                           <button type="button" className="emp-input-suffix-btn" onClick={() => setShowPassword(!showPassword)}>
                             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>
@@ -624,7 +855,15 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Confirm Password <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Lock size={16} /></span>
-                          <input type={showConfirmPassword ? "text" : "password"} name="confirmPassword" value={form.confirmPassword} onChange={handleChange} placeholder="Confirm password" required />
+                          <input 
+                            type={showConfirmPassword ? "text" : "password"} 
+                            name="confirmPassword" 
+                            value={form.confirmPassword} 
+                            onChange={handleChange} 
+                            placeholder="Confirm password" 
+                            maxLength="10" 
+                            required 
+                          />
                           <button type="button" className="emp-input-suffix-btn" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
                             {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>
@@ -681,73 +920,59 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                   </button>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'flex-end', gap: '16px', flexWrap: 'wrap', padding: '20px 24px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
-                  <div style={{ flex: 1, minWidth: '180px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Employee Code</label>
-                    <input type="text" name="employeeCode" value={filters.employeeCode} onChange={handleFilterChange} placeholder="Filter by code" style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', height: '40px' }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: '180px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Employee Name</label>
-                    <input type="text" name="employeeName" value={filters.employeeName} onChange={handleFilterChange} placeholder="Filter by name" style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', height: '40px' }} />
-                  </div>
-                  <div style={{ flex: 1, minWidth: '180px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Company</label>
-                    <select name="company" value={filters.company} onChange={handleFilterChange} style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer', height: '40px' }}>
-                      <option value="">Select company</option>
-                      <option value="Atirath Holdings">Atirath Holdings</option>
-                      <option value="Atirath Bio Energy Pvt. Ltd.">Atirath Bio Energy Pvt. Ltd.</option>
-                      <option value="Exclusive Traders">Exclusive Traders</option>
-                    </select>
-                  </div>
-                  <div style={{ flex: 1, minWidth: '180px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Status</label>
-                    <select name="status" value={filters.status} onChange={handleFilterChange} style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer', height: '40px' }}>
-                      <option value="">Select status</option>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
-                  <div style={{ display: 'flex', gap: '10px', height: '40px' }}>
-                    <button type="button" className="emp-filter-btn search" onClick={applySearch}><Search size={15} /> Search</button>
-                    <button type="button" className="emp-filter-btn reset" onClick={resetFilters}><RefreshCcw size={15} /> Reset</button>
-                  </div>
-                </div>
-
                 <div className="emp-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="emp-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1200px' }}>
+                  <table className="emp-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
                         <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Code</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Name</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gender</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mobile</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date of Birth</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mobile</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Blood Group</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Address</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Joining Date</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Company</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Plant</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Work Location</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Reporting Manager</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Username</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
                         <th style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredEmployees.length === 0 ? (
-                        <tr><td colSpan="10" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No employee records found. Add a new employee using the button above.</td></tr>
+                        <tr><td colSpan="20" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No employee records found. Add a new employee using the button above.</td></tr>
                       ) : (
                         filteredEmployees.map((emp, index) => (
                           <tr key={emp.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{index + 1}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{emp.employeeCode}</span></td>
+                              <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{emp.employeeCode}</span></td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                                {emp.photoPath ? ( <img src={emp.photoPath} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #e2e8f0' }} /> ) : ( <div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600', color: '#475569' }}>{emp.employeeName.charAt(0)}</div> )}
+                                {emp.photoPath ? (<img src={emp.photoPath} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #e2e8f0' }} />) : (<div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600', color: '#475569' }}>{emp.employeeName ? emp.employeeName.charAt(0) : ''}</div>)}
                                 <strong>{emp.employeeName}</strong>
                               </div>
                             </td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.gender}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.mobile}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.dateOfBirth}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.email}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.mobile}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.bloodGroup || "-"}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={emp.address}>{emp.address}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.joiningDate}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.designation}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.company}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.plant}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.department}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.workLocation}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.reportingManager}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.username}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: emp.status === 'Active' ? '#dcfce7' : '#fee2e2', color: emp.status === 'Active' ? '#166534' : '#991b1b' }}>{emp.status}</span>
                             </td>
@@ -759,9 +984,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                                 <>
                                   <div className="emp-actions-dropdown-backdrop" onClick={() => setActiveActionsMenu(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }} />
                                   <div className="emp-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
-                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { alert(`Employee Details:\nName: ${emp.employeeName}\nCode: ${emp.employeeCode}\nDepartment: ${emp.department}\nLocation: ${emp.workLocation || "N/A"}`); setActiveActionsMenu(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
+                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("info", "Employee Details", `Employee Details:\nName: ${emp.employeeName}\nCode: ${emp.employeeCode}\nDepartment: ${emp.department}\nLocation: ${emp.workLocation || "N/A"}`); setActiveActionsMenu(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleEdit(emp)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Edit size={15} /> Edit </button>
-                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleToggleStatus(emp.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Trash2 size={15} /> {emp.status === "Active" ? "Deactivate" : "Activate"} </button>
+                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("success", "Saved", `${emp.employeeName}'s record saved successfully.`); setActiveActionsMenu(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Save size={15} /> Save </button>
                                   </div>
                                 </>
                               )}
@@ -773,14 +998,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                   </table>
                 </div>
 
-                <div className="emp-table-pagination-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
-                  <span className="emp-pagination-info" style={{ fontSize: '14px', color: '#64748b' }}>Showing 1 to {filteredEmployees.length} of {filteredEmployees.length} records</span>
-                  <div className="emp-pagination-controls" style={{ display: 'flex', gap: '4px' }}>
-                    <button className="emp-pag-btn" disabled style={{ padding: '6px 10px', border: '1px solid #cbd5e1', backgroundColor: 'white', borderRadius: '4px', cursor: 'not-allowed', color: '#94a3b8' }}>{"<"}</button>
-                    <button className="emp-pag-btn active" style={{ padding: '6px 14px', border: '1px solid #2563eb', backgroundColor: '#2563eb', color: 'white', borderRadius: '4px', cursor: 'pointer', fontSize: '14px', fontWeight: '600' }}>1</button>
-                    <button className="emp-pag-btn" disabled style={{ padding: '6px 10px', border: '1px solid #cbd5e1', backgroundColor: 'white', borderRadius: '4px', cursor: 'not-allowed', color: '#94a3b8' }}>{">"}</button>
-                  </div>
-                </div>
               </div>
             </div>
           )}
@@ -795,7 +1012,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                     <X size={18} />
                   </button>
                 </div>
-                
+
                 <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
                   <div className="emp-form-item">
                     <label>Department Code <span className="emp-req-star">*</span></label>
@@ -842,6 +1059,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
           )}
         </main>
       </div>
+      <AlertModal
+        isOpen={alertConfig.isOpen}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

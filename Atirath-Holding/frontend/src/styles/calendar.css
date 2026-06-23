@@ -542,7 +542,7 @@
 
 @media (max-width: 768px) {
   .calendar-main {
-    margin-left: 0;
+    /* removed margin-left: 0 to respect sidebar width */
     padding: 16px;
   }
   
@@ -579,4 +579,12 @@
   .form-row {
     grid-template-columns: 1fr;
   }
+}
+
+/* Added globally via script for responsive sidebar */
+@media (max-width: 768px) {
+  .cal-shell { margin-left: 240px; } /* matches sidebar.css */
+}
+@media (max-width: 480px) {
+  .cal-shell { margin-left: 70px; } /* matches sidebar.css */
 }

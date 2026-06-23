@@ -825,7 +825,7 @@ body {
   }
   
   .proj-shell {
-    margin-left: 0;
+    /* removed margin-left: 0 to respect sidebar width */
   }
   
   .proj-footer {
@@ -925,4 +925,12 @@ body {
     height: 12px;
     font-size: 8px;
   }
+}
+
+/* Added globally via script for responsive sidebar */
+@media (max-width: 768px) {
+  .projects-shell { margin-left: 240px; } /* matches sidebar.css */
+}
+@media (max-width: 480px) {
+  .projects-shell { margin-left: 70px; } /* matches sidebar.css */
 }

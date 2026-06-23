@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import { 
   Building2, Factory, FolderOpen, Users, 
   ClipboardList, Hourglass, Flag, CheckSquare, 
-  FileText, Briefcase, X, Activity, TrendingUp, AlertCircle,
+  FileText, Briefcase, Activity, TrendingUp, AlertCircle,
   ChevronRight
 } from "lucide-react";
 import Sidebar from "../Sidebar"; 
@@ -20,8 +20,7 @@ const AdminDashboard = ({ userRole, onLogout }) => {
   const [employeeCount, setEmployeeCount] = useState(0);
   const [departmentCount, setDepartmentCount] = useState(0);
   
-  // Welcome Toast State
-  const [showWelcome, setShowWelcome] = useState(false);
+  // User Name State
   const [userName, setUserName] = useState("Syed Mohammad Johny Basha");
 
   useEffect(() => {
@@ -38,16 +37,6 @@ const AdminDashboard = ({ userRole, onLogout }) => {
       }
     }
 
-    // Trigger side welcome animation
-    setTimeout(() => {
-      setShowWelcome(true);
-    }, 100);
-
-    // Auto-hide welcome toast after 5 seconds
-    const hideTimer = setTimeout(() => {
-      setShowWelcome(false);
-    }, 5000);
-
     // 2. Fetch real-time metrics from localStorage
     const savedEmps = JSON.parse(localStorage.getItem("employeesData") || "[]");
     const savedDepts = JSON.parse(localStorage.getItem("departments_user_data") || "[]");
@@ -55,7 +44,6 @@ const AdminDashboard = ({ userRole, onLogout }) => {
     setEmployeeCount(savedEmps.length > 0 ? savedEmps.length : 248);
     setDepartmentCount(savedDepts.length > 0 ? savedDepts.length : 12);
 
-    return () => clearTimeout(hideTimer);
   }, []);
 
   // Maps for Charts (ERP Data Simulation)
@@ -108,27 +96,14 @@ const AdminDashboard = ({ userRole, onLogout }) => {
 
       <div className="db-shell">
         
-        {/* ===== INTEGRATED HEADER COMPONENT (Like CompanyCreation) ===== */}
+        {/* ===== INTEGRATED HEADER COMPONENT ===== */}
         <Header 
           title="Dashboard" 
           showSearch={false} 
-          userName="Syed Mohammad Johny Basha" 
+          userName={userName} 
           userRole="Web Developer" 
           initials="SB" 
         />
-
-        
-        {/* ===== SIDE WELCOME ANIMATION TOAST ===== */}
-        <div className={`erp-welcome-toast ${showWelcome ? "show" : ""}`}>
-          <div className="toast-icon">👋</div>
-          <div className="toast-content">
-            <h4>Welcome back, {userName}!</h4>
-            <p>Your ERP workspace is fully synced and ready.</p>
-          </div>
-          <button className="toast-close" onClick={() => setShowWelcome(false)}>
-            <X size={16} />
-          </button>
-        </div>
 
         <main className="db-main">
           

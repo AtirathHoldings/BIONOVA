@@ -19,7 +19,23 @@ import {
 } from "lucide-react";
 import Sidebar from "../Sidebar";
 import Header from "../Header";
+import AlertModal from "../AlertModal";
 import "../../styles/projectCreation.css";
+
+const getLoggedInUser = () => {
+  const storedName = sessionStorage.getItem("userName");
+  if (storedName) return storedName;
+  
+  const email = sessionStorage.getItem("userEmail") || "";
+  if (email) {
+    const namePart = email.split("@")[0];
+    return namePart
+      .split(/[._]/)
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+  }
+  return "Syed Mohammad Johny Basha";
+};
 
 const ProjectCreation = ({ userRole, onLogout }) => {
   // ─── Local storage ──────────────────────────────────────────────────────────
@@ -37,6 +53,17 @@ const ProjectCreation = ({ userRole, onLogout }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
+  const [alertConfig, setAlertConfig] = useState({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: ""
+  });
+
+  const triggerAlert = (type, title, message) => {
+    setAlertConfig({ isOpen: true, type, title, message });
+  };
+
   // Form state
   const [form, setForm] = useState({
     projectCode: "",
@@ -49,7 +76,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     companyName: "",
     plantName: "",
     department: "",
-    createdBy: "Syed Mohammad Johny Basha",
+    createdBy: getLoggedInUser(),
     startDate: "",
     endDate: "",
     totalProjectDays: "",
@@ -59,7 +86,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     uploadImage: null
   });
 
-  const [formError, setFormError] = useState("");
   const [imagePreview, setImagePreview] = useState(null);
   const [isDragging, setIsDragging] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -126,13 +152,10 @@ const ProjectCreation = ({ userRole, onLogout }) => {
 
       return nextForm;
     });
-    
-    if (formError) setFormError("");
   };
 
   const handleToggleStatus = (e) => {
     setForm(prev => ({ ...prev, status: e.target.checked ? "Live" : "Draft" }));
-    setFormError("");
   };
 
   const handleImageChange = (e) => {
@@ -221,7 +244,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       companyName: "",
       plantName: "",
       department: "",
-      createdBy: "Syed Mohammad Johny Basha",
+      createdBy: getLoggedInUser(),
       startDate: "",
       endDate: "",
       totalProjectDays: "",
@@ -231,7 +254,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       uploadImage: null
     });
     setImagePreview(null);
-    setFormError("");
   };
 
   const handleSave = () => {
@@ -245,7 +267,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       !form.plantName.trim() ||
       !form.department.trim()
     ) {
-      setFormError("Please fill in all required fields marked with *");
+      triggerAlert("error", "Validation Error", "Please fill in all required fields marked with *");
       return;
     }
 
@@ -255,7 +277,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     );
 
     if (isDuplicate) {
-      setFormError("Project code must be unique. This code already exists.");
+      triggerAlert("error", "Duplicate Error", "Project code must be unique. This code already exists.");
       return;
     }
 
@@ -291,7 +313,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     }
 
     setSuccess(true);
-    setFormError("");
     setTimeout(() => setSuccess(false), 3000);
     handleResetForm();
     setView("list");
@@ -450,8 +471,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                         <span>Project configured and saved successfully!</span>
                       </div>
                     )}
-
-                    {formError && <div className="proj-form-error" style={{ color: '#dc2626', marginBottom: '20px', padding: '12px 16px', backgroundColor: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '6px', fontWeight: '500' }}>{formError}</div>}
 
                     {/* 1. Project Information */}
                     <section className="proj-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
@@ -666,79 +685,9 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                   </button>
                 </div>
 
-                {/* Filters Section Inside the Card */}
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'flex-end', 
-                  gap: '16px', 
-                  flexWrap: 'wrap', 
-                  padding: '20px 24px',
-                  borderBottom: '1px solid #e2e8f0',
-                  backgroundColor: '#fafbfc'
-                }}>
-                  
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Project Name</label>
-                    <input
-                      type="text"
-                      name="projectName"
-                      value={searchInputs.projectName}
-                      onChange={handleFilterChange}
-                      placeholder="Filter by project name"
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', height: '40px' }}
-                    />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Project Code</label>
-                    <input
-                      type="text"
-                      name="projectCode"
-                      value={searchInputs.projectCode}
-                      onChange={handleFilterChange}
-                      placeholder="Filter by project code"
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', height: '40px' }}
-                    />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Status</label>
-                    <select
-                      name="status"
-                      value={searchInputs.status}
-                      onChange={handleFilterChange}
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer', height: '40px' }}
-                    >
-                      <option value="">Select status</option>
-                      <option value="Draft">Draft</option>
-                      <option value="Hold">Hold</option>
-                      <option value="Closed">Closed</option>
-                      <option value="Live">Live</option>
-                    </select>
-                  </div>
-
-                  {/* Filter & Reset Buttons */}
-                  <div style={{ display: 'flex', gap: '10px', height: '40px' }}>
-                    <button
-                      type="button"
-                      className="proj-filter-btn search"
-                      onClick={applySearch}
-                    >
-                      <Search size={15} /> Search
-                    </button>
-                    <button
-                      type="button"
-                      className="proj-filter-btn reset"
-                      onClick={resetFilters}
-                    >
-                      <RefreshCcw size={15} /> Reset
-                    </button>
-                  </div>
-                </div>
-
                 {/* Data Table Section Inside the Card */}
                 <div className="proj-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="proj-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
+                  <table className="proj-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2800px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
                         <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
@@ -761,9 +710,18 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                           {sortConfig.key === "projectName" &&
                             (sortConfig.direction === "asc" ? "▲" : "▼")}
                         </th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>COMPANY</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PLANT</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DEPARTMENT</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DESCRIPTION</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OBJECTIVE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DELIVERABLES</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PRIORITY</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DATES</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>START DATE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>END DATE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TOTAL DAYS</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>REMARKS</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CREATED BY</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
                         <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           ACTIONS
@@ -774,8 +732,8 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       {currentItems.length > 0 ? (
                         currentItems.map((project, index) => (
                           <tr key={project.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
-                            <td style={{ padding: '14px 20px' }}>
+                            <td data-label="#" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
+                            <td data-label="LOGO" style={{ padding: '14px 20px' }}>
                               {project.logo ? (
                                 <img src={project.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
                               ) : (
@@ -784,14 +742,19 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                 </div>
                               )}
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="PROJECT CODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {project.projectCode}
                               </span>
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{project.projectName}</strong></td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.department || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="PROJECT NAME" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{project.projectName}</strong></td>
+                            <td data-label="COMPANY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.companyName || "N/A"}</td>
+                            <td data-label="PLANT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.plantName || "N/A"}</td>
+                            <td data-label="DEPARTMENT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.department || "N/A"}</td>
+                            <td data-label="DESCRIPTION" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.projectDescription || "N/A"}</td>
+                            <td data-label="OBJECTIVE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.projectObjective || "N/A"}</td>
+                            <td data-label="DELIVERABLES" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.expectedDeliverables || "N/A"}</td>
+                            <td data-label="PRIORITY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ 
                                 padding: '4px 10px', 
                                 borderRadius: '4px', 
@@ -808,13 +771,12 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                 {project.priority}
                               </span>
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '13px', color: '#475569' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span style={{ fontSize: '12px' }}>Start: {project.startDate}</span>
-                                <span style={{ fontSize: '12px', color: '#94a3b8' }}>End: {project.endDate}</span>
-                              </div>
-                            </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="START DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.startDate || "N/A"}</td>
+                            <td data-label="END DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.endDate || "N/A"}</td>
+                            <td data-label="TOTAL DAYS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.totalProjectDays || "N/A"}</td>
+                            <td data-label="REMARKS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.remarks || "N/A"}</td>
+                            <td data-label="CREATED BY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.createdBy || "N/A"}</td>
+                            <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span
                                 style={{ 
                                   padding: '4px 12px', 
@@ -833,7 +795,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                 {project.status}
                               </span>
                             </td>
-                            <td style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
+                            <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
                               <button
                                 type="button"
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
@@ -857,8 +819,10 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
                                       onClick={() => {
-                                        alert(
-                                          `Project Details:\nCode: ${project.projectCode}\nName: ${project.projectName}\nDepartment: ${project.department || 'N/A'}\nPriority: ${project.priority}\nStatus: ${project.status}\nStart: ${project.startDate}\nEnd: ${project.endDate}`
+                                        triggerAlert(
+                                          "info",
+                                          "Project Details",
+                                          `Project Details:\nCode: ${project.projectCode}\nName: ${project.projectName}\nDepartment: ${project.department || 'N/A'}\nCreated By: ${project.createdBy || 'N/A'}\nPriority: ${project.priority}\nStatus: ${project.status}\nStart: ${project.startDate}\nEnd: ${project.endDate}`
                                         );
                                         setActiveDropdown(null);
                                       }}
@@ -902,7 +866,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="9" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="18" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             No project records found. Add a new project using the button above.
                           </td>
                         </tr>
@@ -994,6 +958,14 @@ const ProjectCreation = ({ userRole, onLogout }) => {
           </div>
         </div>
       )}
+
+      <AlertModal
+        isOpen={alertConfig.isOpen}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

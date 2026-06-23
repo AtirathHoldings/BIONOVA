@@ -21,7 +21,7 @@ const Login = ({ onLogin }) => {
     setError('');
   };
 
-  const handleLoginSubmit = (e) => {
+  const handleLoginSubmit = async (e) => {
     e.preventDefault();
     setError('');
 
@@ -36,34 +36,53 @@ const Login = ({ onLogin }) => {
 
     setLoading(true);
 
-    setTimeout(() => {
-      // List of active credentials
-      const users = [
-        { email: "admin@example.com", password: "admin123", role: "admin" },
-        { email: "manager@example.com", password: "manager123", role: "manager" },
-        { email: "user@example.com", password: "user123", role: "user" },
-        { email: "admin@atirath.com", password: "admin", role: "admin" },
-        { email: "manager@atirath.com", password: "manager", role: "manager" }
-      ];
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+      const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          email: formData.email.trim(),
+          password: formData.password
+        })
+      });
 
-      const foundUser = users.find(
-        (user) => user.email === formData.email && user.password === formData.password
-      );
-
-      if (foundUser) {
-        // ఇక్కడ లాగిన్ డీటెయిల్స్ స్టోర్ చేస్తున్నాం
-        sessionStorage.setItem("isLoggedIn", "true");
-        sessionStorage.setItem("userEmail", foundUser.email);
-        sessionStorage.setItem("userRole", foundUser.role);
-        
-        // సక్సెస్ అయితే App.jsx కి డేటా పంపుతుంది
-        onLogin(true, foundUser.role);
-      } else {
-        setError("Invalid Email or Password");
+      if (!response.ok) {
+        throw new Error("Server responded with an error status: " + response.status);
       }
 
+      const data = await response.json();
+      if (data.success) {
+        sessionStorage.setItem("isLoggedIn", "true");
+        sessionStorage.setItem("userEmail", formData.email.trim());
+        sessionStorage.setItem("userRole", data.role || "user");
+        // Store JWT token for authenticated API calls
+        if (data.token) {
+          sessionStorage.setItem("authToken", data.token);
+        }
+        
+        // Extract and format userName from email
+        const email = formData.email.trim();
+        const namePart = email.split("@")[0];
+        const formattedName = namePart
+          .split(/[._]/)
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(" ");
+        sessionStorage.setItem("userName", formattedName);
+        
+        onLogin(true, data.role || "user");
+      } else {
+        setError(data.message || "Invalid Email or Password");
+      }
+    } catch (err) {
+      console.error("Login failed:", err);
+      setError("Could not connect to server. Please ensure the backend is running.");
+    } finally {
       setLoading(false);
-    }, 800);
+    }
   };
 
   const handleForgotSubmit = (e) => {

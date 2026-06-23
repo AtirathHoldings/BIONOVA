@@ -22,13 +22,22 @@ import {
   Upload,
   Image as ImageIcon
 } from "lucide-react";
-import '../../styles/AgriLandAllocation.css';
+import '../../styles/LandMaster.css';
+import AlertModal from "../AlertModal";
 
 const AgriLandAllocation = ({ userRole, onLogout }) => {
   const navigate = useNavigate();
 
-  // ─── No static dropdown data ──────────────────────────────────────────────
-  // All fields are text inputs; you can later fetch lists from an API.
+  const [alertConfig, setAlertConfig] = useState({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: ""
+  });
+
+  const triggerAlert = (type, title, message) => {
+    setAlertConfig({ isOpen: true, type, title, message });
+  };
 
   // Local storage – starts with an empty array
   const [allocations, setAllocations] = useState(() => {
@@ -52,7 +61,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     allocationType: '',
     surveyNo: [],
     surveyInput: '',
-    landOwnerName: '',
+    landOwnerName: [],
+    ownerInput: '',
     mobileNo: '',
     state: '',
     zone: '',
@@ -67,21 +77,6 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     logo: null
   });
 
-  const [formError, setFormError] = useState("");
-
-  // Search Filter state – text inputs for plant and state
-  const [searchInputs, setSearchInputs] = useState({
-    plant: '',
-    state: '',
-    status: ''
-  });
-
-  const [activeFilters, setActiveFilters] = useState({
-    plant: '',
-    state: '',
-    status: ''
-  });
-
   // Table action dropdown trigger state
   const [activeDropdown, setActiveDropdown] = useState(null);
 
@@ -91,10 +86,6 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
 
   // Handle standard input changes
   const handleChange = (e) => {
@@ -118,7 +109,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       newValue = value.slice(0, 10);
     } else if (name === 'surveyInput') {
       newValue = value.slice(0, 50);
-    } else if (name === 'landOwnerName') {
+    } else if (name === 'ownerInput') {
       newValue = value.slice(0, 100);
     } else if (name === 'village') {
       newValue = value.slice(0, 50);
@@ -144,12 +135,10 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       else if (northEastStates.includes(newValue)) zoneValue = 'North East Zone';
 
       setForm(prev => ({ ...prev, state: newValue, zone: zoneValue }));
-      setFormError("");
       return;
     }
 
     setForm(prev => ({ ...prev, [name]: newValue }));
-    setFormError("");
   };
 
   const handleSurveyKeyDown = (e) => {
@@ -173,9 +162,29 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     }));
   };
 
+  const handleOwnerKeyDown = (e) => {
+    if (e.key === 'Enter' || e.key === ',') {
+      e.preventDefault();
+      const val = form.ownerInput?.trim();
+      if (val && !form.landOwnerName.includes(val)) {
+        setForm(prev => ({
+          ...prev,
+          landOwnerName: [...(prev.landOwnerName || []), val],
+          ownerInput: ''
+        }));
+      }
+    }
+  };
+
+  const removeOwnerTag = (tagToRemove) => {
+    setForm(prev => ({
+      ...prev,
+      landOwnerName: (prev.landOwnerName || []).filter(tag => tag !== tagToRemove)
+    }));
+  };
+
   const handleToggleStatus = (e) => {
     setForm(prev => ({ ...prev, status: e.target.checked ? "Active" : "Inactive" }));
-    setFormError("");
   };
 
   const handleLogoChange = (e) => {
@@ -186,24 +195,6 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     reader.readAsDataURL(file);
   };
 
-  // Filter input change handler
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setSearchInputs(prev => ({ ...prev, [name]: value }));
-  };
-
-  const applySearch = () => {
-    setActiveFilters({ ...searchInputs });
-    setCurrentPage(1);
-  };
-
-  const resetFilters = () => {
-    const cleared = { plant: '', state: '', status: '' };
-    setSearchInputs(cleared);
-    setActiveFilters(cleared);
-    setCurrentPage(1);
-  };
-
   const handleResetForm = () => {
     setForm({
       landCode: '',
@@ -211,7 +202,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       allocationType: '',
       surveyNo: [],
       surveyInput: '',
-      landOwnerName: '',
+      landOwnerName: [],
+      ownerInput: '',
       mobileNo: '',
       state: '',
       zone: '',
@@ -225,19 +217,18 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       status: 'Active',
       logo: null
     });
-    setFormError("");
   };
 
   const handleSave = (e) => {
     e.preventDefault();
 
-    // Required fields check – all string fields now require non‑empty values
+    // Required fields check
     if (
       !form.landCode.trim() ||
       !form.plant.trim() ||
       !form.allocationType.trim() ||
       (!form.surveyNo || form.surveyNo.length === 0) ||
-      !form.landOwnerName.trim() ||
+      (!form.landOwnerName || form.landOwnerName.length === 0) ||
       !form.mobileNo.trim() ||
       !form.state.trim() ||
       !form.district.trim() ||
@@ -249,7 +240,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       !form.longitude.trim() ||
       !form.status
     ) {
-      setFormError("Please fill in all required fields marked with *");
+      triggerAlert("error", "Validation Error", "Please fill in all required fields marked with *");
       return;
     }
 
@@ -259,7 +250,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     );
 
     if (isDuplicate) {
-      setFormError("Land code must be unique. This land code already exists.");
+      triggerAlert("error", "Duplicate Error", "Land code must be unique. This land code already exists.");
       return;
     }
 
@@ -285,7 +276,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     setForm({ 
       ...land,
       surveyNo: Array.isArray(land.surveyNo) ? land.surveyNo : (land.surveyNo ? [land.surveyNo] : []),
-      surveyInput: ''
+      surveyInput: '',
+      landOwnerName: Array.isArray(land.landOwnerName) ? land.landOwnerName : (land.landOwnerName ? [land.landOwnerName] : []),
+      ownerInput: ''
     });
     setIsEditing(true);
     setEditingId(land.id);
@@ -341,25 +334,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     return sortable;
   }, [allocations, sortConfig]);
 
-  // Filter calculations – now using simple string inclusion
-  const filteredAllocations = sortedAllocations.filter(a => {
-    const matchPlant = !activeFilters.plant || 
-      a.plant?.toLowerCase().includes(activeFilters.plant.toLowerCase());
-    const matchState = !activeFilters.state || 
-      a.state?.toLowerCase().includes(activeFilters.state.toLowerCase());
-    const matchStatus = !activeFilters.status || a.status === activeFilters.status;
-    return matchPlant && matchState && matchStatus;
-  });
-
-  // Pagination calculations
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredAllocations.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredAllocations.length / itemsPerPage);
-
-  const paginate = (pageNumber) => setCurrentPage(pageNumber);
-
-  const vibrantBlue = "#2563eb";
+  const currentItems = sortedAllocations;
 
   return (
     <div className="al-shell-container">
@@ -371,7 +346,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
         
         {/* ======================= DYNAMIC HEADER ======================= */}
         <Header 
-          title="Land Creation" 
+          title="Land Master" 
           showSearch={false} 
           userName="Syed Mohammad Johny Basha" 
           userRole="Web Developer" 
@@ -380,8 +355,6 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
         <main className="al-main" style={{ padding: '24px' }}>
           
-          
-
           {view === "form" ? (
             /* ================= VIEW: ADD NEW LAND FORM ================= */
             <>
@@ -429,7 +402,6 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
                   {/* Form Body */}
                   <div style={{ padding: '24px' }}>
-                    {formError && <div className="al-form-error" style={{ color: '#dc2626', marginBottom: '20px', padding: '12px 16px', backgroundColor: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '6px', fontWeight: '500' }}>{formError}</div>}
 
                     {/* 1. Basic Information */}
                     <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
@@ -481,38 +453,42 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         </label>
                         <label className="al-field-item">
                           <span>Plant <b style={{color: '#ef4444'}}>*</b></span>
-                          <input type="text" name="plant" value={form.plant} onChange={handleChange} placeholder="Enter plant name" />
+                          <select
+                            name="plant"
+                            value={form.plant}
+                            onChange={handleChange}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              backgroundColor: 'white',
+                              boxSizing: 'border-box',
+                              outline: 'none',
+                              cursor: 'pointer',
+                              height: '40px'
+                            }}
+                          >
+                            <option value="">Select Plant</option>
+                            {form.plant && <option value={form.plant}>{form.plant}</option>}
+                          </select>
                         </label>
                         <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
-                          <span>Land Logo</span>
+                          <span>Land Image</span>
                           <div className="al-logo-row">
                             <div className="al-logo-box" style={{ width: '48px', height: '48px', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', overflow: 'hidden' }}>
                               {form.logo ? <img src={form.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={22} style={{ color: '#94a3b8' }} />}
                             </div>
                             <input id="logoUploadHidden" type="file" accept="image/*" onChange={handleLogoChange} hidden />
                             <button type="button" onClick={() => document.getElementById("logoUploadHidden").click()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', color: '#0f172a', cursor: 'pointer' }}>
-                              <Upload size={14} /> Upload Logo
+                              <Upload size={14} /> Upload Image
                             </button>
                           </div>
                         </label>
                       </div>
                     </section>
-
-                    {/* 2. Mapping Section */}
-                    <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
-                      <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Mapping Section</h3>
-                      <div className="al-form-layout-row columns-4">
-                        <label className="al-field-item">
-                          <span>Allocation Type <b style={{color: '#ef4444'}}>*</b></span>
-                          <select name="allocationType" value={form.allocationType} onChange={handleChange} style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer', height: '40px' }}>
-                            <option value="">Select Type</option>
-                            <option value="AGL">AGL</option>
-                            <option value="PLT">PLT</option>
-                          </select>
-                        </label>
-                      </div>
-                    </section>
-
+                    
                     {/* 3. Land Details */}
                     <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
                       <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Land Details</h3>
@@ -541,9 +517,25 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                             />
                           </div>
                         </label>
-                        <label className="al-field-item">
+                        <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
                           <span>Land Owner Name <b style={{color: '#ef4444'}}>*</b></span>
-                          <input type="text" name="landOwnerName" value={form.landOwnerName} onChange={handleChange} placeholder="Enter land owner name" maxLength={100} />
+                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', minHeight: '40px', boxSizing: 'border-box', backgroundColor: 'white' }}>
+                            {Array.isArray(form.landOwnerName) && form.landOwnerName.map((tag, idx) => (
+                              <span key={idx} style={{ backgroundColor: '#f1f5f9', color: '#0f172a', padding: '4px 8px', borderRadius: '4px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #e2e8f0' }}>
+                                {tag}
+                                <X size={14} style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => removeOwnerTag(tag)} />
+                              </span>
+                            ))}
+                            <input 
+                              type="text" 
+                              name="ownerInput" 
+                              value={form.ownerInput || ''} 
+                              onChange={handleChange} 
+                              onKeyDown={handleOwnerKeyDown}
+                              placeholder={(!form.landOwnerName || form.landOwnerName.length === 0) ? "Type and press Enter" : ""} 
+                              style={{ border: 'none', outline: 'none', flex: 1, minWidth: '150px', fontSize: '14px', background: 'transparent' }} 
+                            />
+                          </div>
                         </label>
                       </div>
                       <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
@@ -594,12 +586,36 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                       <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Geo Location</h3>
                       <div className="al-form-layout-row columns-4">
                         <label className="al-field-item">
-                          <span>Latitude <b style={{color: '#ef4444'}}>*</b></span>
+                          <span>Latitude <span style={{ color: '#94a3b8', fontWeight: 'normal' }}>(17.438574)</span> <b style={{color: '#ef4444'}}>*</b></span>
                           <input type="text" name="latitude" value={form.latitude} onChange={handleChange} placeholder="Enter latitude" />
                         </label>
                         <label className="al-field-item">
-                          <span>Longitude <b style={{color: '#ef4444'}}>*</b></span>
+                          <span>Longitude <span style={{ color: '#94a3b8', fontWeight: 'normal' }}>(78.421012)</span> <b style={{color: '#ef4444'}}>*</b></span>
                           <input type="text" name="longitude" value={form.longitude} onChange={handleChange} placeholder="Enter longitude" />
+                        </label>
+                        <label className="al-field-item">
+                          <span>Allocation Type <b style={{color: '#ef4444'}}>*</b></span>
+                          <select
+                            name="allocationType"
+                            value={form.allocationType}
+                            onChange={handleChange}
+                            style={{
+                              width: '100%',
+                              padding: '8px 12px',
+                              border: '1px solid #cbd5e1',
+                              borderRadius: '6px',
+                              fontSize: '14px',
+                              backgroundColor: 'white',
+                              boxSizing: 'border-box',
+                              outline: 'none',
+                              cursor: 'pointer',
+                              height: '40px'
+                            }}
+                          >
+                            <option value="" disabled hidden>Select Allocation Type</option>
+                            <option value="AGL">AGL</option>
+                            <option value="PLT">PLT</option>
+                          </select>
                         </label>
                       </div>
                     </section>
@@ -668,77 +684,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                   </button>
                 </div>
 
-                {/* Filters Section Inside the Card */}
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'flex-end', 
-                  gap: '16px', 
-                  flexWrap: 'wrap', 
-                  padding: '20px 24px',
-                  borderBottom: '1px solid #e2e8f0',
-                  backgroundColor: '#fafbfc'
-                }}>
-                  
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Plant</label>
-                    <input
-                      type="text"
-                      name="plant"
-                      value={searchInputs.plant}
-                      onChange={handleFilterChange}
-                      placeholder="Filter by plant"
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', height: '40px' }}
-                    />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>State</label>
-                    <input
-                      type="text"
-                      name="state"
-                      value={searchInputs.state}
-                      onChange={handleFilterChange}
-                      placeholder="Filter by state"
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', height: '40px' }}
-                    />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Status</label>
-                    <select
-                      name="status"
-                      value={searchInputs.status}
-                      onChange={handleFilterChange}
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer', height: '40px' }}
-                    >
-                      <option value="">Select status</option>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
-
-                  {/* Filter & Reset Buttons */}
-                  <div style={{ display: 'flex', gap: '10px', height: '40px' }}>
-                    <button
-                      type="button"
-                      className="al-filter-btn search"
-                      onClick={applySearch}
-                    >
-                      <Search size={15} /> Search
-                    </button>
-                    <button
-                      type="button"
-                      className="al-filter-btn reset"
-                      onClick={resetFilters}
-                    >
-                      <RefreshCcw size={15} /> Reset
-                    </button>
-                  </div>
-                </div>
-
                 {/* Data Table Section Inside the Card */}
                 <div className="al-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="al-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
+                  <table className="al-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
                         <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
@@ -750,7 +698,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         >
                           LAND CODE{" "}
                           {sortConfig.key === "landCode" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                             (sortConfig.direction === "asc" ? "▲" : "▼")}
                         </th>
                         <th
                           className="sortable"
@@ -759,12 +707,21 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         >
                           PLANT{" "}
                           {sortConfig.key === "plant" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                             (sortConfig.direction === "asc" ? "▲" : "▼")}
                         </th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ALLOCATION TYPE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OWNER NAME</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MOBILE NO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SURVEY NO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOCATION</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AREA</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ZONE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DISTRICT</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MANDAL</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>VILLAGE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PINCODE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AREA (Acres)</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LATITUDE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LONGITUDE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ALLOCATION TYPE</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
                         <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           ACTIONS
@@ -775,8 +732,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                       {currentItems.length > 0 ? (
                         currentItems.map((land, index) => (
                           <tr key={land.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
-                            <td style={{ padding: '14px 20px' }}>
+                            <td data-label="#" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{index + 1}</td>
+                            <td data-label="LOGO" style={{ padding: '14px 20px' }}>
                               {land.logo ? (
                                 <img src={land.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
                               ) : (
@@ -785,28 +742,34 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                 </div>
                               )}
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="LAND CODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {land.landCode}
                               </span>
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{land.plant}</strong></td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
-                              <span style={{ backgroundColor: '#dbeafe', padding: '4px 10px', borderRadius: '4px', fontWeight: '500', color: '#1d4ed8', fontSize: '12px' }}>
+                            <td data-label="PLANT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{land.plant}</strong></td>
+                            <td data-label="OWNER NAME" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                              {Array.isArray(land.landOwnerName) ? land.landOwnerName.join(', ') : land.landOwnerName}
+                            </td>
+                            <td data-label="MOBILE NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.mobileNo}</td>
+                            <td data-label="SURVEY NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{Array.isArray(land.surveyNo) ? land.surveyNo.join(', ') : land.surveyNo}</td>
+                            <td data-label="STATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.state}</td>
+                            <td data-label="ZONE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.zone || "N/A"}</td>
+                            <td data-label="DISTRICT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.district}</td>
+                            <td data-label="MANDAL" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.mandal}</td>
+                            <td data-label="VILLAGE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.village}</td>
+                            <td data-label="PINCODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.pincode}</td>
+                            <td data-label="AREA (Acres)" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                              <span style={{ fontWeight: '600' }}>{land.landArea}</span>
+                            </td>
+                            <td data-label="LATITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.latitude}</td>
+                            <td data-label="LONGITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.longitude}</td>
+                            <td data-label="ALLOCATION TYPE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                              <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {land.allocationType}
                               </span>
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{Array.isArray(land.surveyNo) ? land.surveyNo.join(', ') : land.surveyNo}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span>{land.village}</span>
-                                <span style={{ color: '#2563eb', fontWeight: '500', fontSize: '13px' }}>{land.district}, {land.state}</span>
-                              </div>
-                            </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
-                              <span style={{ fontWeight: '600' }}>{land.landArea}</span>
-                            </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span
                                 style={{ 
                                   padding: '4px 12px', 
@@ -821,7 +784,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                 {land.status}
                               </span>
                             </td>
-                            <td style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
+                            <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
                               <button
                                 type="button"
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
@@ -845,8 +808,10 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
                                       onClick={() => {
-                                        alert(
-                                          `Land Details:\nCode: ${land.landCode}\nPlant: ${land.plant}\nType: ${land.allocationType}\nOwner: ${land.landOwnerName}\nArea: ${land.landArea} Acres\nLocation: ${land.village}, ${land.mandal}, ${land.state}\nSurvey No: ${Array.isArray(land.surveyNo) ? land.surveyNo.join(', ') : land.surveyNo}`
+                                        triggerAlert(
+                                          "info",
+                                          "Land Details",
+                                          `Land Details:\nCode: ${land.landCode}\nPlant: ${land.plant}\nAllocation Type: ${land.allocationType || 'N/A'}\nOwner: ${Array.isArray(land.landOwnerName) ? land.landOwnerName.join(', ') : land.landOwnerName}\nArea: ${land.landArea} Acres\nLocation: ${land.village}, ${land.mandal}, ${land.state}\nSurvey No: ${Array.isArray(land.surveyNo) ? land.surveyNo.join(', ') : land.surveyNo}`
                                         );
                                         setActiveDropdown(null);
                                       }}
@@ -866,21 +831,15 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                     </button>
                                     <button
                                       type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => triggerDeactivate(land.id)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
+                                      onClick={() => {
+                                        triggerAlert("success", "Saved", `Land record ${land.landCode} saved successfully.`);
+                                        setActiveDropdown(null);
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
-                                      <Trash2 size={15} /> Deactivate
-                                    </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleDelete(land.id)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Trash2 size={15} /> Delete
+                                      <Save size={15} /> Save
                                     </button>
                                   </div>
                                 </>
@@ -890,7 +849,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="10" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             No land records found. Add a new land using the button above.
                           </td>
                         </tr>
@@ -899,43 +858,6 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                   </table>
                 </div>
 
-                {/* Pagination bar */}
-                {totalPages > 0 && (
-                  <div className="al-table-pagination-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
-                    <span className="al-pagination-info" style={{ fontSize: '14px', color: '#64748b' }}>
-                      Showing {filteredAllocations.length > 0 ? indexOfFirstItem + 1 : 0} to{" "}
-                      {Math.min(indexOfLastItem, filteredAllocations.length)} of{" "}
-                      {filteredAllocations.length} entries
-                    </span>
-                    <div className="al-pagination-controls" style={{ display: 'flex', gap: '4px' }}>
-                      <button
-                        type="button"
-                        className="al-pag-btn"
-                        onClick={() => paginate(currentPage - 1)}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      {Array.from({ length: totalPages }, (_, i) => (
-                        <button
-                          key={i + 1}
-                          className={`al-pag-btn ${currentPage === i + 1 ? 'active' : ''}`}
-                          onClick={() => paginate(i + 1)}
-                        >
-                          {i + 1}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        className="al-pag-btn"
-                        onClick={() => paginate(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           )}
@@ -982,6 +904,14 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
           </div>
         </div>
       )}
+
+      <AlertModal
+        isOpen={alertConfig.isOpen}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

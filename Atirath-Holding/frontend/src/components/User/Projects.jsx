@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import Sidebar from "../Sidebar";
 import Header from "../Header"; // <--- Imported Header component
+import AlertModal from "../AlertModal";
 import "../../styles/projects.css";
 
 const Projects = ({ userRole, onLogout }) => {
@@ -32,6 +33,17 @@ const Projects = ({ userRole, onLogout }) => {
   const [showSortDropdown, setShowSortDropdown] = useState(false);
   const [openMenuId, setOpenMenuId] = useState(null);
   const itemsPerPage = 5;
+
+  const [alertConfig, setAlertConfig] = useState({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: ""
+  });
+
+  const triggerAlert = (type, title, message) => {
+    setAlertConfig({ isOpen: true, type, title, message });
+  };
 
   const projects = [
     { id: 1, name: "ERP Management System", client: "Infosys Technologies", status: "In Progress", progress: 72, startDate: "2026-06-02", dueDate: "2026-07-20", priority: "High", category: "My Projects", description: "Enterprise resource planning system integration" },
@@ -246,7 +258,7 @@ const Projects = ({ userRole, onLogout }) => {
         {/* ===== FIXED FOOTER ACTIONS BAR ===== */}
         <div className="pjs-footer">
           <button type="button" className="pjs-btn secondary" onClick={() => setSearchQuery("")}>Clear Search</button>
-          <button type="button" className="pjs-btn tertiary" onClick={() => alert("Exporting report...")}><Download size={14} /> Export Report</button>
+          <button type="button" className="pjs-btn tertiary" onClick={() => triggerAlert("success", "Export Report", "Exporting report...")}><Download size={14} /> Export Report</button>
           <button type="button" className="pjs-btn primary" onClick={() => setShowModal(true)}><Plus size={14} /> Create New Project</button>
         </div>
 
@@ -285,6 +297,14 @@ const Projects = ({ userRole, onLogout }) => {
             </div>
           </div>
         )}
+
+        <AlertModal
+          isOpen={alertConfig.isOpen}
+          type={alertConfig.type}
+          title={alertConfig.title}
+          message={alertConfig.message}
+          onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+        />
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
 /* ==========================================================================
-   MODERN DEPARTMENT CREATION DESIGN SYSTEM - BLUE THEME
+   MODERN EMPLOYEE CREATION DESIGN SYSTEM - BLUE THEME
    ========================================================================== */
 :root {
   --first-color: #2563eb;
   --first-color-hover: #1d4ed8;
+  --second-color: #0a2540;
+  --second-color-hover: #001f3f;
   --bg-page: #f8fafc;
   --bg-white: #ffffff;
   --border-light: #e2e8f0;
@@ -30,13 +32,13 @@ body {
 }
 
 /* Page Shell Layout */
-.dept-shell-container {
+.emp-shell-container {
   display: flex;
   min-height: 100vh;
   background: var(--bg-page);
 }
 
-.dept-shell {
+.emp-shell {
   flex: 1;
   margin-left: 260px;
   display: flex;
@@ -48,12 +50,12 @@ body {
 /* ==========================================================================
    MAIN MAIN BODY
    ========================================================================== */
-.dept-main {
+.emp-main {
   padding: 28px;
   flex: 1;
 }
 
-.dept-content {
+.emp-content {
   max-width: 1280px;
   margin: 0 auto;
   display: flex;
@@ -62,7 +64,7 @@ body {
 }
 
 /* Breadcrumb */
-.dept-breadcrumb {
+.emp-breadcrumb {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -72,13 +74,13 @@ body {
   justify-content: flex-end;
 }
 
-.dept-breadcrumb span { cursor: pointer; }
-.dept-breadcrumb strong { color: #1e293b; font-weight: 600; }
+.emp-breadcrumb span { cursor: pointer; }
+.emp-breadcrumb strong { color: #1e293b; font-weight: 600; }
 
 /* ==========================================================================
    NAV VIEW BUTTON - BLUE
    ========================================================================== */
-.dept-nav-view-btn {
+.emp-nav-view-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -93,14 +95,14 @@ body {
   transition: background 0.2s;
 }
 
-.dept-nav-view-btn:hover {
+.emp-nav-view-btn:hover {
   background: #1d4ed8;
 }
 
 /* ==========================================================================
    ADD NEW BUTTON - BLUE
    ========================================================================== */
-.dept-btn-add-new {
+.emp-btn-add-new {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -116,14 +118,14 @@ body {
   white-space: nowrap;
 }
 
-.dept-btn-add-new:hover {
+.emp-btn-add-new:hover {
   background: #1d4ed8;
 }
 
 /* ==========================================================================
-   FORM CONTAINER & FIELDS
+   FORM CONTAINER & GRID SYSTEMS
    ========================================================================== */
-.dept-form-card {
+.emp-form-card {
   background: #ffffff;
   border: 1px solid var(--border-light);
   border-radius: 8px;
@@ -131,19 +133,48 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.dept-form-section {
+.emp-form-section {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
-.dept-form-item {
+.emp-form-section-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 20px;
+  border-bottom: 1px solid #e2e8f0;
+  padding-bottom: 12px;
+}
+
+/* Form Grid Rows */
+.emp-form-row-4 {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+.emp-form-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.emp-form-row-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 16px;
+}
+
+/* Form Item styling */
+.emp-form-item {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-.dept-form-item label {
+.emp-form-item label {
   font-size: 13px;
   font-weight: 500;
   color: #0f172a;
@@ -151,21 +182,22 @@ body {
   align-items: center;
 }
 
-.dept-req-star {
+.emp-req-star {
   color: #ef4444;
   margin-left: 4px;
 }
 
 /* Input Icon Wrap */
-.dept-input-icon-wrap {
+.emp-input-icon-wrap {
   position: relative;
   display: flex;
   align-items: center;
   width: 100%;
 }
 
-.dept-input-icon-wrap input,
-.dept-input-icon-wrap textarea {
+.emp-input-icon-wrap input,
+.emp-input-icon-wrap select,
+.emp-input-icon-wrap textarea {
   width: 100%;
   height: 38px;
   padding: 8px 12px 8px 38px;
@@ -175,106 +207,119 @@ body {
   color: #1e293b;
   font-size: 13px;
   outline: none;
-  transition: border-color 0.2s, box-shadow 0.2s;
+  transition: all 0.2s;
 }
 
-.dept-input-icon-wrap input:focus,
-.dept-input-icon-wrap textarea:focus {
+.emp-input-icon-wrap input:focus,
+.emp-input-icon-wrap select:focus,
+.emp-input-icon-wrap textarea:focus {
   border-color: #2563eb;
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
 }
 
-.dept-input-icon-wrap textarea {
-  height: 90px;
-  resize: none;
+.emp-input-icon-wrap select {
+  cursor: pointer;
+  appearance: none;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23475569' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6 9 12 15 18 9'%3e%3c/polyline%3e%3c/svg%3e");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  background-size: 14px;
+  padding-right: 32px;
+}
+
+.emp-input-icon-wrap textarea {
+  height: 96px;
+  padding-top: 12px;
+  resize: vertical;
+  line-height: 1.5;
   font-family: inherit;
 }
 
-.dept-input-icon-wrap input:disabled {
-  background: #f1f5f9;
-  cursor: not-allowed;
-}
-
-.dept-input-prefix-icon {
+/* Input Icon Prefix */
+.emp-input-prefix-icon {
   position: absolute;
   left: 12px;
   color: #94a3b8;
+  pointer-events: none;
   display: flex;
   align-items: center;
   justify-content: center;
-  pointer-events: none;
 }
 
-.dept-input-helper-text {
-  font-size: 12px;
-  color: #64748b;
-  margin-top: 4px;
-}
-
-/* Radio buttons choice */
-.dept-radio-group {
-  display: flex;
-  align-items: center;
-  gap: 24px;
-  margin-top: 4px;
-}
-
-.dept-radio-label {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  font-weight: 500;
-  color: #0f172a;
-  cursor: pointer;
-}
-
-.dept-radio-label input[type="radio"] {
-  display: none;
-}
-
-.dept-radio-circle {
-  width: 18px;
-  height: 18px;
-  border: 2px solid #d8e2dc;
-  border-radius: 50%;
-  display: inline-block;
-  position: relative;
-  transition: all 0.2s;
-  background: #ffffff;
-}
-
-.dept-radio-label input[type="radio"]:checked + .dept-radio-circle {
-  border-color: #2563eb;
-  background: #2563eb;
-}
-
-.dept-radio-label input[type="radio"]:checked + .dept-radio-circle::after {
-  content: "";
+/* Password eye suffix */
+.emp-input-suffix-btn {
   position: absolute;
-  width: 6px;
-  height: 6px;
-  background: #ffffff;
-  border-radius: 50%;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -50%);
+  right: 12px;
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
 }
 
-/* Form Error */
-.dept-form-error {
-  color: #dc2626;
-  padding: 12px 16px;
-  background: #fee2e2;
+.emp-input-suffix-btn:hover {
+  color: #475569;
+}
+
+/* Special Spanning Rules */
+.emp-span-2 {
+  grid-column: span 2;
+}
+
+/* Photo Upload Picker inside form layout */
+.emp-photo-row-container {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 6px;
+}
+
+.emp-photo-row-preview {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: #94a3b8;
+}
+
+.emp-photo-row-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.emp-photo-row-upload-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
   border-radius: 6px;
-  border: 1px solid #fecaca;
-  margin-bottom: 20px;
+  height: 34px;
+  padding: 0 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.emp-photo-row-upload-btn:hover {
+  background: #f8fafc;
 }
 
 /* ==========================================================================
    BUTTONS BAR & FOOTER ACTION - BLUE
    ========================================================================== */
-.dept-form-footer {
+.emp-form-footer {
   display: flex;
   justify-content: flex-end;
   gap: 12px;
@@ -283,7 +328,7 @@ body {
   border-top: 1px solid #e2e8f0;
 }
 
-.dept-btn {
+.emp-btn {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -296,37 +341,37 @@ body {
   transition: all 0.2s;
 }
 
-.dept-btn.primary {
+.emp-btn.primary {
   background: #2563eb;
   color: white;
 }
 
-.dept-btn.primary:hover {
+.emp-btn.primary:hover {
   background: #1d4ed8;
 }
 
-.dept-btn.secondary {
+.emp-btn.secondary {
   background: #f1f5f9;
   color: #475569;
 }
 
-.dept-btn.secondary:hover {
+.emp-btn.secondary:hover {
   background: #e2e8f0;
 }
 
-.dept-btn.tertiary {
+.emp-btn.tertiary {
   background: none;
   color: #475569;
 }
 
-.dept-btn.tertiary:hover {
+.emp-btn.tertiary:hover {
   background: #f1f5f9;
 }
 
 /* ==========================================================================
    FILTER CARD - BLUE
    ========================================================================== */
-.dept-filter-btn.search {
+.emp-filter-btn.search {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -341,11 +386,11 @@ body {
   color: white;
 }
 
-.dept-filter-btn.search:hover {
+.emp-filter-btn.search:hover {
   background: #1d4ed8;
 }
 
-.dept-filter-btn.reset {
+.emp-filter-btn.reset {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -360,14 +405,14 @@ body {
   color: #475569;
 }
 
-.dept-filter-btn.reset:hover {
+.emp-filter-btn.reset:hover {
   background: #e2e8f0;
 }
 
 /* ==========================================================================
    DATA TABLE CONTAINER
    ========================================================================== */
-.dept-table-panel {
+.emp-table-panel {
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 8px;
@@ -375,11 +420,11 @@ body {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
-.dept-table-container {
+.emp-table-container {
   overflow-x: auto;
 }
 
-.dept-list-table {
+.emp-list-table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
@@ -387,7 +432,7 @@ body {
   white-space: nowrap;
 }
 
-.dept-list-table th {
+.emp-list-table th {
   background: #f8fafc;
   color: #64748b;
   font-weight: 600;
@@ -398,44 +443,25 @@ body {
   letter-spacing: 0.5px;
 }
 
-.dept-list-table th.sortable {
-  cursor: pointer;
-  user-select: none;
-}
-
-.dept-list-table th.sortable:hover {
-  color: #2563eb;
-}
-
-.dept-list-table td {
+.emp-list-table td {
   padding: 12px 16px;
   border-bottom: 1px solid #f1f5f9;
   color: #1e293b;
   vertical-align: middle;
 }
 
-.dept-list-table tbody tr:hover {
+.emp-list-table tbody tr:hover {
   background: #f8fafc;
 }
 
-.dept-list-table tbody tr:last-child td {
+.emp-list-table tbody tr:last-child td {
   border-bottom: none;
-}
-
-.dept-code-badge {
-  display: inline-block;
-  padding: 2px 8px;
-  background: #f1f5f9;
-  color: #0f172a;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: 500;
 }
 
 /* ==========================================================================
    ACTIONS DROPDOWN
    ========================================================================== */
-.dept-actions-dropdown-backdrop {
+.emp-actions-dropdown-backdrop {
   position: fixed;
   top: 0;
   left: 0;
@@ -444,7 +470,7 @@ body {
   z-index: 9;
 }
 
-.dept-actions-dropdown-menu {
+.emp-actions-dropdown-menu {
   position: absolute;
   right: 0;
   top: 28px;
@@ -457,7 +483,7 @@ body {
   padding: 4px;
 }
 
-.dept-actions-dropdown-menu button {
+.emp-actions-dropdown-menu button {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -472,22 +498,22 @@ body {
   border-radius: 4px;
 }
 
-.dept-actions-dropdown-menu button:hover {
+.emp-actions-dropdown-menu button:hover {
   background: #f1f5f9;
 }
 
-.dept-actions-dropdown-menu button.deactivate-btn {
+.emp-actions-dropdown-menu button.deactivate-btn {
   color: #dc2626;
 }
 
-.dept-actions-dropdown-menu button.deactivate-btn:hover {
+.emp-actions-dropdown-menu button.deactivate-btn:hover {
   background: #fee2e2;
 }
 
 /* ==========================================================================
    PAGINATION - BLUE ACTIVE
    ========================================================================== */
-.dept-table-pagination-bar {
+.emp-table-pagination-bar {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -495,17 +521,17 @@ body {
   border-top: 1px solid #e2e8f0;
 }
 
-.dept-pagination-info {
+.emp-pagination-info {
   font-size: 13px;
   color: #64748b;
 }
 
-.dept-pagination-controls {
+.emp-pagination-controls {
   display: flex;
   gap: 4px;
 }
 
-.dept-pag-btn {
+.emp-pag-btn {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -520,158 +546,90 @@ body {
   transition: all 0.2s;
 }
 
-.dept-pag-btn:hover:not(:disabled) {
+.emp-pag-btn:hover:not(:disabled) {
   background: #f1f5f9;
   border-color: #94a3b8;
 }
 
-.dept-pag-btn.active {
+.emp-pag-btn.active {
   background: #2563eb;
   color: white;
   border-color: #2563eb;
 }
 
-.dept-pag-btn:disabled {
+.emp-pag-btn:disabled {
   opacity: 0.5;
   cursor: not-allowed;
-}
-
-/* ==========================================================================
-   CONFIRMATION MODAL
-   ========================================================================== */
-.dept-modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 100;
-}
-
-.dept-modal {
-  background: white;
-  border-radius: 8px;
-  max-width: 400px;
-  width: 90%;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
-}
-
-.dept-modal-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 16px 20px;
-  border-bottom: 1px solid #e2e8f0;
-}
-
-.dept-modal-header h3 {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
-}
-
-.dept-modal-close {
-  background: none;
-  border: none;
-  cursor: pointer;
-  color: #64748b;
-  padding: 4px;
-}
-
-.dept-modal-body {
-  padding: 20px;
-}
-
-.dept-modal-warning {
-  color: #dc2626;
-  font-size: 13px;
-  margin-top: 8px;
-}
-
-.dept-modal-footer {
-  padding: 16px 20px;
-  border-top: 1px solid #e2e8f0;
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-}
-
-.dept-btn-cancel-modal {
-  padding: 6px 16px;
-  background: #f1f5f9;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  color: #475569;
-}
-
-.dept-btn-cancel-modal:hover {
-  background: #e2e8f0;
-}
-
-.dept-btn-delete-modal {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 16px;
-  background: #dc2626;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-}
-
-.dept-btn-delete-modal:hover {
-  background: #b91c1c;
 }
 
 /* ==========================================================================
    RESPONSIVE LAYOUT DESIGN RULES
    ========================================================================== */
 @media (max-width: 1024px) {
-  .dept-shell {
-    margin-left: 0;
+  .emp-shell {
+    /* removed margin-left: 0 to respect sidebar width */
+  }
+  .emp-form-row-4 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .emp-form-row-3 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .emp-form-row-2 {
+    grid-template-columns: 1fr;
+  }
+  .emp-span-2 {
+    grid-column: span 1;
   }
 }
 
 @media (max-width: 768px) {
-  .dept-view-header {
+  .emp-form-row-4,
+  .emp-form-row-3 {
+    grid-template-columns: 1fr;
+  }
+  .emp-view-header {
     flex-direction: column;
     align-items: flex-start;
     gap: 12px;
   }
-  .dept-btn-add-new {
+  .emp-btn-add-new {
     width: 100%;
     justify-content: center;
   }
-  .dept-table-pagination-bar {
+  .emp-table-pagination-bar {
     flex-direction: column;
     gap: 12px;
   }
-  .dept-form-footer {
+  .emp-form-footer {
     flex-wrap: wrap;
     justify-content: center;
   }
-  .dept-form-footer .dept-btn {
+  .emp-form-footer .emp-btn {
     flex: 1;
     justify-content: center;
     min-width: 80px;
   }
-  .dept-main {
+  .emp-main {
     padding: 12px;
   }
 }
 
 @media (max-width: 480px) {
-  .dept-filter-btn {
+  .emp-filter-btn {
     font-size: 12px;
     padding: 4px 10px;
   }
-  .dept-btn {
+  .emp-btn {
     font-size: 12px;
     padding: 6px 14px;
   }
+}
+
+/* Added globally via script for responsive sidebar */
+@media (max-width: 768px) {
+  .emp-shell { margin-left: 240px; } /* matches sidebar.css */
+}
+@media (max-width: 480px) {
+  .emp-shell { margin-left: 70px; } /* matches sidebar.css */
 }

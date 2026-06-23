@@ -102,7 +102,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       <div className="ms-shell">
         <header className="ms-topbar">
           <div className="ms-title-wrap">
-            <button className="ms-toggle-btn"><Menu size={20} /></button>
+            <button className="mobile-menu-btn" onClick={() => window.dispatchEvent(new CustomEvent('toggleSidebar'))}><Menu size={24} /></button>
             <h1>Create Milestone & Tasks</h1>
           </div>
           <div className="ms-userbar">

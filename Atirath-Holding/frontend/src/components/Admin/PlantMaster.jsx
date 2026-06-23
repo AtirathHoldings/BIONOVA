@@ -23,20 +23,79 @@ import {
   Upload,
   Image as ImageIcon
 } from "lucide-react";
-import '../../styles/PlantCreation.css';
+import '../../styles/PlantMaster.css';
+import AlertModal from "../AlertModal";
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+
+const getAuthHeaders = () => ({
+  "Content-Type": "application/json",
+  "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+});
 
 const PlantCreation = ({ userRole, onLogout }) => {
   const navigate = useNavigate();
 
-  // Local storage – starts with an empty array (no dummy data)
-  const [plants, setPlants] = useState(() => {
-    const saved = localStorage.getItem("plants_user_data");
-    return saved ? JSON.parse(saved) : [];
+  const [alertConfig, setAlertConfig] = useState({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: ""
   });
 
+  const triggerAlert = (type, title, message) => {
+    setAlertConfig({ isOpen: true, type, title, message });
+  };
+
+  const [plants, setPlants] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [states, setStates] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  const fetchPlants = async () => {
+    setLoading(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/plants`, { headers: getAuthHeaders() });
+      if (response.ok) {
+        const data = await response.json();
+        setPlants(data);
+      }
+    } catch (err) {
+      console.error("Error fetching plants:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchCompanies = async () => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/companies`, { headers: getAuthHeaders() });
+      if (response.ok) {
+        const data = await response.json();
+        setCompanies(data);
+      }
+    } catch (err) {
+      console.error("Error fetching companies:", err);
+    }
+  };
+
+  const fetchStates = async () => {
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/states`, { headers: getAuthHeaders() });
+      if (response.ok) {
+        const data = await response.json();
+        setStates(data);
+      }
+    } catch (err) {
+      console.error("Error fetching states:", err);
+    }
+  };
+
   useEffect(() => {
-    localStorage.setItem("plants_user_data", JSON.stringify(plants));
-  }, [plants]);
+    fetchPlants();
+    fetchCompanies();
+    fetchStates();
+  }, []);
 
   // View toggle: list is the default
   const [view, setView] = useState("list");
@@ -62,21 +121,6 @@ const PlantCreation = ({ userRole, onLogout }) => {
     logo: null
   });
 
-  const [formError, setFormError] = useState("");
-
-  // Search Filter state
-  const [searchInputs, setSearchInputs] = useState({
-    searchQuery: '',
-    company: '',
-    status: ''
-  });
-
-  const [activeFilters, setActiveFilters] = useState({
-    searchQuery: '',
-    company: '',
-    status: ''
-  });
-
   // Table action dropdown trigger state
   const [activeDropdown, setActiveDropdown] = useState(null);
 
@@ -86,10 +130,6 @@ const PlantCreation = ({ userRole, onLogout }) => {
 
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
-
-  // Pagination state
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -116,33 +156,17 @@ const PlantCreation = ({ userRole, onLogout }) => {
       newValue = value.slice(0, 250);
     } else if (name === 'state') {
       newValue = value;
-      let zoneValue = '';
-      const southStates = ['Andhra Pradesh', 'Telangana', 'Karnataka', 'Tamil Nadu', 'Kerala'];
-      const northStates = ['Delhi', 'Punjab', 'Haryana', 'Uttar Pradesh'];
-      const westStates = ['Maharashtra', 'Gujarat', 'Rajasthan'];
-      const eastStates = ['West Bengal', 'Odisha', 'Bihar', 'Jharkhand'];
-      const centralStates = ['Madhya Pradesh', 'Chhattisgarh'];
-      const northEastStates = ['Assam', 'Meghalaya', 'Tripura', 'Arunachal Pradesh', 'Mizoram', 'Manipur', 'Nagaland', 'Sikkim'];
-      
-      if (southStates.includes(newValue)) zoneValue = 'South Zone';
-      else if (northStates.includes(newValue)) zoneValue = 'North Zone';
-      else if (westStates.includes(newValue)) zoneValue = 'West Zone';
-      else if (eastStates.includes(newValue)) zoneValue = 'East Zone';
-      else if (centralStates.includes(newValue)) zoneValue = 'Central Zone';
-      else if (northEastStates.includes(newValue)) zoneValue = 'North East Zone';
-
+      const selectedStateObj = states.find(s => s.stId.toString() === newValue.toString());
+      const zoneValue = selectedStateObj ? selectedStateObj.znNm : '';
       setForm(prev => ({ ...prev, state: newValue, zone: zoneValue }));
-      setFormError("");
       return;
     }
 
     setForm(prev => ({ ...prev, [name]: newValue }));
-    setFormError("");
   };
 
   const handleToggleStatus = (e) => {
     setForm(prev => ({ ...prev, status: e.target.checked ? "Active" : "Inactive" }));
-    setFormError("");
   };
 
   const handleLogoChange = (e) => {
@@ -151,24 +175,6 @@ const PlantCreation = ({ userRole, onLogout }) => {
     const reader = new FileReader();
     reader.onloadend = () => setForm((prev) => ({ ...prev, logo: reader.result }));
     reader.readAsDataURL(file);
-  };
-
-  // Filter input change handler
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setSearchInputs(prev => ({ ...prev, [name]: value }));
-  };
-
-  const applySearch = () => {
-    setActiveFilters({ ...searchInputs });
-    setCurrentPage(1);
-  };
-
-  const resetFilters = () => {
-    const cleared = { searchQuery: '', company: '', status: '' };
-    setSearchInputs(cleared);
-    setActiveFilters(cleared);
-    setCurrentPage(1);
   };
 
   const handleResetForm = () => {
@@ -189,62 +195,122 @@ const PlantCreation = ({ userRole, onLogout }) => {
       status: 'Active',
       logo: null
     });
-    setFormError("");
   };
 
-  const handleSave = (e) => {
+  const handleSave = async (e) => {
     e.preventDefault();
 
     // Required fields check
     if (
       !form.plantCode.trim() ||
       !form.plantName.trim() ||
-      !form.company.trim() ||
+      !form.company ||
       !form.email.trim() ||
-      !form.capacity.trim() ||
+      !form.capacity ||
       !form.addressLine1.trim() ||
-      !form.state.trim() ||
+      !form.state ||
       !form.district.trim() ||
-      !form.latitude.trim() ||
-      !form.longitude.trim() ||
+      !form.latitude ||
+      !form.longitude ||
       !form.status
     ) {
-      setFormError("Please fill in all required fields marked with *");
+      triggerAlert("error", "Validation Error", "Please fill in all required fields marked with *");
       return;
     }
 
     // Unique Plant Code check
     const isDuplicate = plants.some(
-      p => p.plantCode.toLowerCase().trim() === form.plantCode.toLowerCase().trim() && p.id !== editingId
+      p => p.pltCd?.toLowerCase().trim() === form.plantCode.toLowerCase().trim() && p.pltId !== editingId
     );
 
     if (isDuplicate) {
-      setFormError("Plant code must be unique. This plant code already exists.");
+      triggerAlert("error", "Duplicate Error", "Plant code must be unique. This plant code already exists.");
       return;
     }
 
-    if (isEditing) {
-      setPlants(prev =>
-        prev.map(p => (p.id === editingId ? { ...p, ...form } : p))
-      );
+    const plantPayload = {
+      pltCd: form.plantCode.trim(),
+      pltNm: form.plantName.trim(),
+      coyId: Number(form.company),
+      email: form.email.trim(),
+      cap: Number(form.capacity),
+      addr: form.addressLine1.trim(),
+      dist: form.district.trim(),
+      stId: Number(form.state),
+      znNm: form.zone,
+      pin: form.pincode.trim(),
+      lat: Number(form.latitude),
+      longt: Number(form.longitude),
+      addlRem: form.additionalRemarks ? form.additionalRemarks.trim() : null,
+      sts: form.status === "Active"
+    };
+
+    setLoading(true);
+    try {
+      let response;
+      if (isEditing) {
+        response = await fetch(`${apiBaseUrl}/api/plants/${editingId}`, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(plantPayload)
+        });
+      } else {
+        response = await fetch(`${apiBaseUrl}/api/plants`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(plantPayload)
+        });
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMsg = "Failed to save plant";
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed.message) errorMsg = parsed.message;
+          else if (parsed.error && parsed.status) {
+            errorMsg = `Server Error (${parsed.status}): ${parsed.error}. Please check the data constraints.`;
+          }
+        } catch(e) {
+          errorMsg = errorText || errorMsg;
+        }
+        throw new Error(errorMsg);
+      }
+
+      triggerAlert("success", "Success", isEditing ? "Plant updated successfully!" : "Plant created successfully!");
+      fetchPlants();
+      handleResetForm();
       setIsEditing(false);
       setEditingId(null);
-    } else {
-      const newPlant = {
-        id: Date.now(),
-        ...form
-      };
-      setPlants(prev => [...prev, newPlant]);
+      setView("list");
+    } catch (err) {
+      console.error("Save plant failed:", err);
+      triggerAlert("error", "Error", err.message || "Could not connect to server or save plant.");
+    } finally {
+      setLoading(false);
     }
-
-    handleResetForm();
-    setView("list");
   };
 
   const handleEdit = (plant) => {
-    setForm({ ...plant });
+    setForm({
+      plantCode: plant.pltCd || "",
+      plantName: plant.pltNm || "",
+      company: plant.coyId ? plant.coyId.toString() : "",
+      email: plant.email || "",
+      capacity: plant.cap ? plant.cap.toString() : "",
+      additionalRemarks: plant.addlRem || "",
+      addressLine1: plant.addr || "",
+      state: plant.stId ? plant.stId.toString() : "",
+      district: plant.dist || "",
+      pincode: plant.pin || "",
+      zone: plant.znNm || "",
+      latitude: plant.lat ? plant.lat.toString() : "",
+      longitude: plant.longt ? plant.longt.toString() : "",
+      status: plant.sts ? "Active" : "Inactive",
+      logo: null
+    });
     setIsEditing(true);
-    setEditingId(plant.id);
+    setEditingId(plant.pltId);
     setActiveDropdown(null);
     setView("form");
   };
@@ -259,17 +325,70 @@ const PlantCreation = ({ userRole, onLogout }) => {
     setActiveDropdown(null);
   };
 
-  const confirmDeactivate = () => {
-    setPlants(prev =>
-      prev.map(p => (p.id === deactivateTargetId ? { ...p, status: "Inactive" } : p))
-    );
+  const confirmDeactivate = async () => {
+    const plant = plants.find(p => p.pltId === deactivateTargetId);
+    if (!plant) return;
+
+    const plantPayload = {
+      ...plant,
+      sts: false
+    };
+
+    setLoading(true);
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/plants/${deactivateTargetId}`, {
+        method: "PUT",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(plantPayload)
+      });
+      if (!response.ok) {
+        throw new Error("Failed to deactivate plant");
+      }
+      triggerAlert("success", "Success", "Plant deactivated successfully!");
+      fetchPlants();
+    } catch (err) {
+      console.error("Deactivate plant failed:", err);
+      triggerAlert("error", "Error", "Could not deactivate plant.");
+    } finally {
+      setLoading(false);
+    }
+
     setShowDeactivateModal(false);
     setDeactivateTargetId(null);
   };
 
-  const handleDelete = (id) => {
+  const handleDelete = async (id) => {
     if (window.confirm("Are you sure you want to delete this plant?")) {
-      setPlants(prev => prev.filter(p => p.id !== id));
+      setLoading(true);
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/plants/${id}`, {
+          method: "DELETE",
+          headers: getAuthHeaders()
+        });
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorMsg = "Could not delete plant.";
+          try {
+            const parsed = JSON.parse(errorText);
+            if (parsed.message) errorMsg = parsed.message;
+            else if (parsed.error && parsed.status === 500) {
+              errorMsg = "Cannot delete this plant because it is currently linked to other records. Please remove those links first or deactivate the plant instead.";
+            } else if (parsed.error) {
+              errorMsg = parsed.error;
+            }
+          } catch(e) {
+            errorMsg = errorText || errorMsg;
+          }
+          throw new Error(errorMsg);
+        }
+        triggerAlert("success", "Success", "Plant deleted successfully!");
+        fetchPlants();
+      } catch (err) {
+        console.error("Delete plant failed:", err);
+        triggerAlert("error", "Error", err.message || "Could not delete plant.");
+      } finally {
+        setLoading(false);
+      }
       setActiveDropdown(null);
     }
   };
@@ -287,35 +406,32 @@ const PlantCreation = ({ userRole, onLogout }) => {
     let sortable = [...plants];
     if (sortConfig.key !== null) {
       sortable.sort((a, b) => {
-        const valA = (a[sortConfig.key] || "").toString().toLowerCase();
-        const valB = (b[sortConfig.key] || "").toString().toLowerCase();
+        let valA = "";
+        let valB = "";
+        if (sortConfig.key === "plantCode") {
+          valA = (a.pltCd || "").toString().toLowerCase();
+          valB = (b.pltCd || "").toString().toLowerCase();
+        } else if (sortConfig.key === "plantName") {
+          valA = (a.pltNm || "").toString().toLowerCase();
+          valB = (b.pltNm || "").toString().toLowerCase();
+        } else if (sortConfig.key === "company") {
+          const coyAObj = companies.find(c => Number(c.coyId) === Number(a.coyId));
+          const coyBObj = companies.find(c => Number(c.coyId) === Number(b.coyId));
+          valA = (coyAObj ? coyAObj.coyNm : "").toString().toLowerCase();
+          valB = (coyBObj ? coyBObj.coyNm : "").toString().toLowerCase();
+        } else {
+          valA = (a[sortConfig.key] || "").toString().toLowerCase();
+          valB = (b[sortConfig.key] || "").toString().toLowerCase();
+        }
         if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
     }
     return sortable;
-  }, [plants, sortConfig]);
+  }, [plants, sortConfig, companies]);
 
-  // Filter calculations
-  const filteredPlants = sortedPlants.filter(p => {
-    const searchLower = activeFilters.searchQuery.toLowerCase();
-    const matchSearch = !searchLower || 
-      p.plantCode?.toLowerCase().includes(searchLower) ||
-      p.plantName?.toLowerCase().includes(searchLower) ||
-      p.company?.toLowerCase().includes(searchLower);
-    const matchCompany = !activeFilters.company || p.company?.toLowerCase().includes(activeFilters.company.toLowerCase());
-    const matchStatus = !activeFilters.status || p.status === activeFilters.status;
-    return matchSearch && matchCompany && matchStatus;
-  });
-
-  // Pagination calculations
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredPlants.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredPlants.length / itemsPerPage);
-
-  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+  const currentItems = sortedPlants;
 
   // Reusable vibrant blue color matching the sidebar active state
   const vibrantBlue = "#2563eb"; 
@@ -330,7 +446,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
         
         {/* ======================= DYNAMIC HEADER ======================= */}
         <Header 
-          title="Plant Creation" 
+          title="Plant Master" 
           showSearch={false} 
           userName="Syed Mohammad Johny Basha" 
           userRole="Web Developer" 
@@ -388,7 +504,6 @@ const PlantCreation = ({ userRole, onLogout }) => {
 
                   {/* Form Body */}
                   <div style={{ padding: '24px' }}>
-                    {formError && <div className="pc-form-error" style={{ color: '#dc2626', marginBottom: '20px', padding: '12px 16px', backgroundColor: '#fef2f2', borderLeft: '4px solid #dc2626', borderRadius: '6px', fontWeight: '500' }}>{formError}</div>}
 
                     {/* 1. Plant Information */}
                     <section className="pc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
@@ -446,6 +561,9 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           <span>Company <b style={{color: '#ef4444'}}>*</b></span>
                           <select name="company" value={form.company} onChange={handleChange}>
                             <option value="">Select Company</option>
+                            {companies.map(c => (
+                              <option key={c.coyId} value={c.coyId}>{c.coyNm}</option>
+                            ))}
                           </select>
                         </label>
                         <label className="pc-field-item">
@@ -460,14 +578,14 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           <input type="text" name="capacity" value={form.capacity} onChange={handleChange} placeholder="Enter capacity" />
                         </label>
                         <label className="pc-field-item">
-                          <span>Plant Logo</span>
+                          <span>Plant Image</span>
                           <div className="pc-logo-row">
                             <div className="pc-logo-box" style={{ width: '48px', height: '48px', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', overflow: 'hidden' }}>
                               {form.logo ? <img src={form.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={22} style={{ color: '#94a3b8' }} />}
                             </div>
                             <input id="logoUploadHidden" type="file" accept="image/*" onChange={handleLogoChange} hidden />
                             <button type="button" onClick={() => document.getElementById("logoUploadHidden").click()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', color: '#0f172a', cursor: 'pointer' }}>
-                              <Upload size={14} /> Upload Logo
+                              <Upload size={14} /> Upload Image
                             </button>
                           </div>
                         </label>
@@ -486,6 +604,9 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           <span>State <b style={{color: '#ef4444'}}>*</b></span>
                           <select name="state" value={form.state} onChange={handleChange}>
                             <option value="">Select State</option>
+                            {states.map(s => (
+                              <option key={s.stId} value={s.stId}>{s.stNm}</option>
+                            ))}
                           </select>
                         </label>
                         <label className="pc-field-item">
@@ -596,80 +717,9 @@ const PlantCreation = ({ userRole, onLogout }) => {
                   </button>
                 </div>
 
-                {/* Filters Section Inside the Card */}
-                <div style={{ 
-                  display: 'flex', 
-                  alignItems: 'flex-end', 
-                  gap: '16px', 
-                  flexWrap: 'wrap', 
-                  padding: '20px 24px',
-                  borderBottom: '1px solid #e2e8f0',
-                  backgroundColor: '#fafbfc'
-                }}>
-                  
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Search</label>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                      <input
-                        type="text"
-                        name="searchQuery"
-                        value={searchInputs.searchQuery}
-                        onChange={handleFilterChange}
-                        placeholder="Search by code, name..."
-                        style={{ width: '100%', padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', height: '40px' }}
-                      />
-                    </div>
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Company</label>
-                    <input
-                      type="text"
-                      name="company"
-                      value={searchInputs.company}
-                      onChange={handleFilterChange}
-                      placeholder="Filter by company"
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', boxSizing: 'border-box', outline: 'none', height: '40px' }}
-                    />
-                  </div>
-
-                  <div style={{ flex: 1, minWidth: '200px' }}>
-                    <label style={{ display: 'block', marginBottom: '6px', fontSize: '13px', fontWeight: '600', color: '#475569' }}>Status</label>
-                    <select
-                      name="status"
-                      value={searchInputs.status}
-                      onChange={handleFilterChange}
-                      style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', backgroundColor: 'white', boxSizing: 'border-box', outline: 'none', cursor: 'pointer', height: '40px' }}
-                    >
-                      <option value="">All Status</option>
-                      <option value="Active">Active</option>
-                      <option value="Inactive">Inactive</option>
-                    </select>
-                  </div>
-
-                  {/* Filter & Reset Buttons */}
-                  <div style={{ display: 'flex', gap: '10px', height: '40px' }}>
-                    <button
-                      type="button"
-                      className="pc-filter-btn search"
-                      onClick={applySearch}
-                    >
-                      <Search size={15} /> Search
-                    </button>
-                    <button
-                      type="button"
-                      className="pc-filter-btn reset"
-                      onClick={resetFilters}
-                    >
-                      <RefreshCcw size={15} /> Reset
-                    </button>
-                  </div>
-                </div>
-
                 {/* Data Table Section Inside the Card */}
                 <div className="pc-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="pc-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '900px' }}>
+                  <table className="pc-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
                         <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
@@ -701,7 +751,16 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           {sortConfig.key === "company" &&
                             (sortConfig.direction === "asc" ? "▲" : "▼")}
                         </th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOCATION</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>EMAIL</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CAPACITY (TPD)</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ADDRESS</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ZONE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DISTRICT</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PINCODE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LATITUDE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LONGITUDE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ADDITIONAL REMARKS</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
                         <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           ACTIONS
@@ -711,9 +770,9 @@ const PlantCreation = ({ userRole, onLogout }) => {
                     <tbody>
                       {currentItems.length > 0 ? (
                         currentItems.map((plant, index) => (
-                          <tr key={plant.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
-                            <td style={{ padding: '14px 20px' }}>
+                          <tr key={plant.pltId} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td data-label="#" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{index + 1}</td>
+                            <td data-label="LOGO" style={{ padding: '14px 20px' }}>
                               {plant.logo ? (
                                 <img src={plant.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
                               ) : (
@@ -722,20 +781,28 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                 </div>
                               )}
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="PLANT CODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
-                                {plant.plantCode}
+                                {plant.pltCd}
                               </span>
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{plant.plantName}</strong></td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.company}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <span>{plant.district}</span>
-                                <span style={{ color: '#2563eb', fontWeight: '500', fontSize: '13px' }}>{plant.state}</span>
-                              </div>
+                            <td data-label="PLANT NAME" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{plant.pltNm}</strong></td>
+                            <td data-label="COMPANY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                              {companies.find(c => Number(c.coyId) === Number(plant.coyId))?.coyNm || "N/A"}
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="EMAIL" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.email}</td>
+                            <td data-label="CAPACITY (TPD)" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.cap}</td>
+                            <td data-label="ADDRESS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.addr}</td>
+                            <td data-label="STATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                              {states.find(s => Number(s.stId) === Number(plant.stId))?.stNm || "N/A"}
+                            </td>
+                            <td data-label="ZONE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.znNm || "N/A"}</td>
+                            <td data-label="DISTRICT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.dist}</td>
+                            <td data-label="PINCODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.pin}</td>
+                            <td data-label="LATITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.lat}</td>
+                            <td data-label="LONGITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.longt}</td>
+                            <td data-label="ADDITIONAL REMARKS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.addlRem || "N/A"}</td>
+                            <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span
                                 style={{ 
                                   padding: '4px 12px', 
@@ -743,18 +810,18 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                   fontSize: '12px', 
                                   fontWeight: '600',
                                   display: 'inline-block',
-                                  backgroundColor: plant.status === 'Active' ? '#dcfce7' : '#fee2e2',
-                                  color: plant.status === 'Active' ? '#166534' : '#991b1b'
+                                  backgroundColor: plant.sts ? '#dcfce7' : '#fee2e2',
+                                  color: plant.sts ? '#166534' : '#991b1b'
                                 }}
                               >
-                                {plant.status}
+                                {plant.sts ? 'Active' : 'Inactive'}
                               </span>
                             </td>
-                            <td style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
+                            <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
                               <button
                                 type="button"
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
-                                onClick={() => toggleDropdown(plant.id)}
+                                onClick={() => toggleDropdown(plant.pltId)}
                                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
@@ -762,7 +829,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                               </button>
 
                               {/* Actions Dropdown menu */}
-                              {activeDropdown === plant.id && (
+                              {activeDropdown === plant.pltId && (
                                 <>
                                   <div
                                     className="pc-actions-dropdown-backdrop"
@@ -774,8 +841,10 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
                                       onClick={() => {
-                                        alert(
-                                          `Plant Details:\nCode: ${plant.plantCode}\nName: ${plant.plantName}\nCompany: ${plant.company}\nCapacity: ${plant.capacity} TPD\nLocation: ${plant.district}, ${plant.state}`
+                                        triggerAlert(
+                                          "info",
+                                          "Plant Details",
+                                          `Plant Details:\nCode: ${plant.pltCd}\nName: ${plant.pltNm}\nCompany: ${companies.find(c => Number(c.coyId) === Number(plant.coyId))?.coyNm || 'N/A'}\nCapacity: ${plant.cap} TPD\nLocation: ${plant.dist}, ${states.find(s => Number(s.stId) === Number(plant.stId))?.stNm || 'N/A'}`
                                         );
                                         setActiveDropdown(null);
                                       }}
@@ -796,7 +865,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                     <button
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => triggerDeactivate(plant.id)}
+                                      onClick={() => triggerDeactivate(plant.pltId)}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
@@ -805,7 +874,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                     <button
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleDelete(plant.id)}
+                                      onClick={() => handleDelete(plant.pltId)}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
@@ -828,43 +897,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                   </table>
                 </div>
 
-                {/* Pagination bar */}
-                {totalPages > 0 && (
-                  <div className="pc-table-pagination-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
-                    <span className="pc-pagination-info" style={{ fontSize: '14px', color: '#64748b' }}>
-                      Showing {filteredPlants.length > 0 ? indexOfFirstItem + 1 : 0} to{" "}
-                      {Math.min(indexOfLastItem, filteredPlants.length)} of{" "}
-                      {filteredPlants.length} entries
-                    </span>
-                    <div className="pc-pagination-controls" style={{ display: 'flex', gap: '4px' }}>
-                      <button
-                        type="button"
-                        className="pc-pag-btn"
-                        onClick={() => paginate(currentPage - 1)}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      {Array.from({ length: totalPages }, (_, i) => (
-                        <button
-                          key={i + 1}
-                          className={`pc-pag-btn ${currentPage === i + 1 ? 'active' : ''}`}
-                          onClick={() => paginate(i + 1)}
-                        >
-                          {i + 1}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        className="pc-pag-btn"
-                        onClick={() => paginate(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
+
               </div>
             </div>
           )}
@@ -911,6 +944,14 @@ const PlantCreation = ({ userRole, onLogout }) => {
           </div>
         </div>
       )}
+
+      <AlertModal
+        isOpen={alertConfig.isOpen}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+      />
     </div>
   );
 };

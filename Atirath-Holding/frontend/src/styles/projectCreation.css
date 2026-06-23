@@ -40,6 +40,7 @@ body {
   min-height: 100vh;
   padding-bottom: 90px;
   background: #f4f7fc;
+  min-width: 0;
 }
 
 /* ===== TOP BAR HEADER ===== */
@@ -444,6 +445,7 @@ body {
   padding: 10px 12px;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .proj-list-table tbody tr:hover {
@@ -713,7 +715,7 @@ body {
     display: none;
   }
   .proj-shell {
-    margin-left: 0;
+    /* removed margin-left: 0 to respect sidebar width */
   }
   .proj-form-layout-row.columns-4 {
     grid-template-columns: 1fr 1fr;
@@ -791,4 +793,12 @@ body {
     font-size: 12px;
     padding: 6px 14px;
   }
+}
+
+/* Added globally via script for responsive sidebar */
+@media (max-width: 768px) {
+  .pc-shell { margin-left: 240px; } /* matches sidebar.css */
+}
+@media (max-width: 480px) {
+  .pc-shell { margin-left: 70px; } /* matches sidebar.css */
 }

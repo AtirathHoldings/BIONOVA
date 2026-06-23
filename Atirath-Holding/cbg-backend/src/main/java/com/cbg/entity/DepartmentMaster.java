@@ -11,9 +11,19 @@ import lombok.Setter;
 public class DepartmentMaster {
 
     @Id
-    @Column(name = "dept_id")
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    @Column(name = "dept_id", columnDefinition = "smallserial")
     private Long deptId;
 
-    @Column(name = "dept_nm")
+    @Column(name = "dept_nm", unique = true, nullable = false, length = 100)
     private String deptNm;
+
+    @Column(name = "dept_code", unique = true, nullable = false, length = 10)
+    private String deptCode;
+
+    @Column(name = "descr", length = 255)
+    private String descr;
+
+    @Column(name = "sts", nullable = false)
+    private Boolean sts;
 }

@@ -19,7 +19,8 @@ import {
   Edit,
   Trash2,
   X,
-  Check
+  Check,
+  Menu
 } from "lucide-react";
 
 const Calendar = ({ userRole, onLogout }) => {
@@ -169,9 +170,14 @@ const Calendar = ({ userRole, onLogout }) => {
       <main className="calendar-main">
         {/* Top Bar */}
         <div className="calendar-top-bar">
-          <div className="calendar-page-title">
-            <h1>Calendar</h1>
-            <p>Manage your schedule and events</p>
+          <div className="calendar-page-title" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <button className="mobile-menu-btn" onClick={() => window.dispatchEvent(new CustomEvent('toggleSidebar'))}>
+              <Menu size={24} />
+            </button>
+            <div>
+              <h1>Calendar</h1>
+              <p>Manage your schedule and events</p>
+            </div>
           </div>
 
           <div className="calendar-top-actions">

@@ -16,7 +16,7 @@ public class CompanyMaster {
     @Column(name = "coy_id")
     private Long coyId;
 
-    @Column(name = "coy_cd", unique = true, length = 5)
+    @Column(name = "coy_cd", unique = true, length = 10)
     private String coyCd;
 
     @Column(name = "coy_nm", nullable = false, length = 100)
@@ -40,10 +40,13 @@ public class CompanyMaster {
     @Column(name = "inc_dt")
     private LocalDate incDt;
 
+    @Column(name = "cin", unique = true, length = 25)
+    private String cin;
+
     @Column(name = "web_url", length = 100)
     private String webUrl;
 
-    @Column(name = "logo", columnDefinition = "TEXT")
+    @Column(name = "logo", length = 255)
     private String logo;
 
     @Column(name = "str", length = 50)
@@ -58,9 +61,15 @@ public class CompanyMaster {
     @Column(name = "st_id")
     private Long stId;
 
+    @Column(name = "zn_nm", nullable = false, length = 20)
+    private String znNm;
+
     @Column(name = "pin", length = 6)
     private String pin;
 
     @Column(name = "addl_rem", length = 255)
     private String addlRem;
+
+    @Column(name = "sts")
+    private Boolean sts;
 }

@@ -1,0 +1,273 @@
+/* Mobile Responsive Overrides - Premium UI Edition */
+
+/* Mobile & Tablet Styles */
+@media screen and (max-width: 1024px) {
+  /* Main Container Adjustments */
+  .cc-shell, .db-shell, .dashboard-main, .pf-shell, .pjs-shell, .ms-shell, .calendar-layout, .calendar-main,
+  .pc-shell, .al-shell, .proj-shell, .tb-shell, .emp-shell, .dept-shell, .ts-shell, .task-shell {
+    margin-left: 0 !important;
+    padding-bottom: 24px;
+  }
+  
+  .cc-main, .dashboard-main, .pf-main, .pjs-main, .ms-main, .calendar-main,
+  .pc-main, .al-main, .proj-main, .tb-main, .emp-main, .dept-main, .ts-main, .task-main {
+    padding: 16px !important;
+  }
+  
+  .cc-footer, .pjs-footer, .ms-footer {
+    left: 0 !important;
+    padding: 12px 16px !important;
+    box-shadow: 0 -4px 15px rgba(0,0,0,0.05) !important;
+  }
+  
+  /* Sticky Premium Header */
+  header, .top-header, .ms-topbar, .calendar-top-bar {
+    position: sticky !important;
+    top: 0;
+    background: rgba(255, 255, 255, 0.85) !important;
+    backdrop-filter: blur(10px) !important;
+    -webkit-backdrop-filter: blur(10px) !important;
+    z-index: 50;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.03) !important;
+    padding: 12px 16px !important;
+  }
+  
+  /* Sidebar Animation & Overlay */
+  .sidebar {
+    display: flex !important;
+    transform: translateX(-100%);
+    transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 999 !important;
+    border-right: none !important;
+  }
+  
+  .sidebar.mobile-open {
+    transform: translateX(0);
+    box-shadow: 10px 0 30px rgba(0, 0, 0, 0.15);
+    width: 260px !important;
+    padding: 22px 16px !important;
+  }
+  
+  /* Force text and normal layout when mobile sidebar is open */
+  .sidebar.mobile-open .company-text,
+  .sidebar.mobile-open .menu-list li span,
+  .sidebar.mobile-open .dropdown-header span,
+  .sidebar.mobile-open .dropdown-header svg:last-child {
+    display: flex !important;
+  }
+
+  .sidebar.mobile-open .menu-list > li,
+  .sidebar.mobile-open .dropdown-header {
+    justify-content: flex-start !important;
+  }
+  
+  .sidebar.mobile-open .logo-section {
+    justify-content: flex-start !important;
+  }
+  
+  .sidebar.mobile-open .submenu-list li {
+    padding-left: 50px !important;
+    text-align: left !important;
+  }
+  
+  .sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(15, 23, 42, 0.5);
+    backdrop-filter: blur(3px);
+    z-index: 998;
+    animation: fadeIn 0.3s ease-out forwards;
+  }
+  
+  @keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+  /* Make Grid Layouts Stack Vertically */
+  .db-charts-grid, 
+  .db-lists-grid, 
+  .erp-kpi-grid, 
+  .dashboard-grid, 
+  .analytics-grid, 
+  .upcoming-grid,
+  .cc-filter-row,
+  .pf-content,
+  .pjs-stats-grid,
+  .tb-metrics-grid {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* Make Profile Info Stack Vertically */
+  .pf-info-layout {
+    flex-direction: column !important;
+    align-items: center;
+    gap: 24px !important;
+  }
+  
+  .pf-details-list {
+    width: 100% !important;
+  }
+  
+  .pf-detail-label {
+    width: 150px !important;
+    font-size: 13px !important;
+  }
+
+  /* Make Forms Single Column */
+  .cc-form-layout-row.columns-2,
+  .cc-form-layout-row.columns-3,
+  .cc-form-layout-row.columns-4,
+  .form-row,
+  .pjs-form-row,
+  .ms-form-grid.two,
+  .ms-form-grid.three {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  /* Header Overrides */
+  .db-shell-container .erp-welcome-toast {
+    top: 70px;
+    right: 16px;
+    left: 16px;
+    min-width: auto;
+  }
+  
+  .header-desktop-items {
+    display: none !important;
+  }
+  
+  .mobile-menu-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: #f8fafc !important;
+    padding: 8px !important;
+    transition: background 0.2s;
+  }
+  
+  .mobile-menu-btn:active {
+    background: #e2e8f0 !important;
+  }
+
+  /* Touch Target Enhancements */
+  button, input, select {
+    min-height: 44px; /* Apple Human Interface Guidelines minimum touch target */
+  }
+
+  /* Premium Table to Card Transformation */
+  .cc-table-container, .table-container, .pjs-table-wrap, .ms-table-wrap {
+    border: none !important;
+    overflow-x: hidden;
+    background: transparent !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+  }
+  
+  .cc-list-table, .custom-table, .pjs-data-table, .ms-task-table {
+    display: flex !important;
+    flex-direction: column;
+    gap: 16px;
+    width: 100%;
+    min-width: unset !important;
+  }
+
+  .cc-list-table thead, .custom-table thead, .pjs-data-table thead, .ms-task-table thead {
+    display: none;
+  }
+
+  .cc-list-table tbody, .custom-table tbody, .pjs-data-table tbody, .ms-task-table tbody {
+    display: contents;
+  }
+
+  .cc-list-table tr, .custom-table tr, .pjs-data-table tr, .ms-task-table tr {
+    display: flex;
+    flex-direction: column;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.04);
+    transition: transform 0.2s, box-shadow 0.2s;
+  }
+  
+  .cc-list-table tr:active, .custom-table tr:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  }
+
+  .cc-list-table td, .custom-table td, .pjs-data-table td, .ms-task-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 10px 0;
+    border-bottom: 1px solid #f8fafc;
+    text-align: right;
+    width: 100%;
+    word-break: break-word;
+    white-space: normal !important;
+    font-size: 14px;
+    color: #0f172a;
+  }
+
+  .cc-list-table td:last-child, .custom-table td:last-child, .pjs-data-table td:last-child {
+    border-bottom: none;
+    justify-content: center;
+    padding-top: 16px;
+    margin-top: 8px;
+    border-top: 1px dashed #e2e8f0;
+  }
+
+  /* The data-label injects the column header text */
+  .cc-list-table td::before, .custom-table td::before, .pjs-data-table td::before, .ms-task-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    font-size: 13px;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    text-align: left;
+    margin-right: 16px;
+    min-width: 100px;
+    flex-shrink: 0;
+  }
+  
+  /* Buttons inside Cards */
+  .cc-list-table td .btn, .custom-table td button, .pjs-action-dropdown button {
+    flex: 1;
+    justify-content: center;
+    padding: 10px;
+    border-radius: 8px;
+  }
+  
+  /* Filter Card Adjustments */
+  .cc-filter-buttons-row {
+    width: 100%;
+    justify-content: flex-start;
+    flex-direction: column;
+    margin-top: 16px;
+    gap: 12px;
+  }
+  
+  .cc-filter-btn {
+    width: 100%;
+    justify-content: center;
+    border-radius: 10px;
+  }
+}
+
+/* Desktop Styles */
+@media screen and (min-width: 1025px) {
+  .mobile-menu-btn {
+    display: none !important;
+  }
+  .sidebar-overlay {
+    display: none !important;
+  }
+}

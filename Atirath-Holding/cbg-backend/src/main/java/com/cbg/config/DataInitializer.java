@@ -43,23 +43,31 @@ public class DataInitializer implements CommandLineRunner {
             System.out.println("Admin user siva@atirath.com not found. Creating...");
             // Insert into employee_master
             jdbcTemplate.update(
-                "INSERT INTO employee_master (emp_code, fst_nm, lst_nm, email, mob_num, bld_grp, role, sts, w_loc) " +
-                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                "EMP01", "Siva", "Kumar", "siva@atirath.com", "9999999999", "O+", "admin", true, "Office"
+                "INSERT INTO employee_master (emp_code, fst_nm, lst_nm, gender, dob, email, mob_num, bld_grp, address, w_loc, sts, role) " +
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "EMP01", "Siva", "Kumar", "MALE", java.sql.Date.valueOf("1990-01-01"), "siva@atirath.com", "9999999999", "O+", "Atirath Office", "Office", true, "admin"
             );
 
             // Get generated emp_id
             Long empId = jdbcTemplate.queryForObject(
                 "SELECT emp_id FROM employee_master WHERE email = ?", Long.class, "siva@atirath.com");
 
+            String hashedPassword = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode("Siva@123");
             // Insert into employee_password_master
             jdbcTemplate.update(
                 "INSERT INTO employee_password_master (emp_id, emp_password) VALUES (?, ?)",
-                empId, "Siva@123"
+                empId, hashedPassword
             );
             System.out.println("Admin user siva@atirath.com created successfully with emp_id = " + empId);
         } else {
             System.out.println("Admin user siva@atirath.com already exists.");
+            // Always re-hash the password on startup to ensure it matches "Siva@123"
+            String hashed = new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder().encode("Siva@123");
+            jdbcTemplate.update(
+                "UPDATE employee_password_master SET emp_password = ? WHERE emp_id = (SELECT emp_id FROM employee_master WHERE email = ?)",
+                hashed, "siva@atirath.com"
+            );
+            System.out.println("Admin password refreshed successfully.");
         }
     }
 }
