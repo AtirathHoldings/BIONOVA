@@ -24,6 +24,6 @@ public class DepartmentMaster {
     @Column(name = "descr", length = 255)
     private String descr;
 
-    @Column(name = "sts", nullable = false)
+    @Column(name = "sts")
     private Boolean sts;
 }

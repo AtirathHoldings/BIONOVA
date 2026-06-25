@@ -3,7 +3,6 @@ package com.bionova.entity;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
-import java.math.BigDecimal;
 
 @Entity
 @Table(name = "plant_master")
@@ -25,8 +24,8 @@ public class PlantMaster {
     @Column(name = "plt_nm", nullable = false, length = 100)
     private String pltNm;
 
-    @Column(name = "cap", precision = 10, scale = 2)
-    private BigDecimal cap;
+    @Column(name = "cap")
+    private Double cap;
 
     @Column(name = "email", length = 100)
     private String email;
@@ -49,11 +48,11 @@ public class PlantMaster {
     @Column(name = "wrk_days_per_wk")
     private Integer wrkDaysPerWk;
 
-    @Column(name = "lat", precision = 10, scale = 8)
-    private BigDecimal lat;
+    @Column(name = "lat")
+    private Double lat;
 
-    @Column(name = "longt", precision = 11, scale = 8)
-    private BigDecimal longt;
+    @Column(name = "longt")
+    private Double longt;
 
     @Column(name = "addl_rem", length = 255)
     private String addlRem;

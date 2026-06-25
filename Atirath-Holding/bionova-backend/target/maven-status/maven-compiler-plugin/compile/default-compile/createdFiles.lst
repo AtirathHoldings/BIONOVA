@@ -1,0 +1,7 @@
+com\bionova\service\CalendarService.class
+com\bionova\repository\MilestoneLiveRepository.class
+com\bionova\repository\TaskLiveRepository.class
+com\bionova\service\CalendarService$HolidaySummary.class
+com\bionova\entity\MilestoneLive.class
+com\bionova\entity\TaskLive.class
+com\bionova\service\ProjectPromotionService.class

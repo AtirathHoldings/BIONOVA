@@ -8,7 +8,8 @@ import java.time.LocalDate;
 
 @Entity
 @Table(name = "calendar_master")
-@org.hibernate.annotations.Check(constraints = "hol_typ IN ('MANDATORY','OPTIONAL')")
+@org.hibernate.annotations.Check(constraints =
+    "hol_typ IN ('MANDATORY','OPTIONAL') AND cal_type IN ('COMPANY','PLANT','EXTERNAL')")
 @Getter
 @Setter
 public class CalendarMaster {
@@ -33,6 +34,20 @@ public class CalendarMaster {
     @Column(name = "plt_id")
     private Integer pltId;
 
+    /**
+     * Calendar scope:
+     *   COMPANY  = company-wide holiday (all plants under this company)
+     *   PLANT    = plant-specific holiday
+     *   EXTERNAL = external business calendar
+     * Null means it's a public/national holiday (MANDATORY), applies to all.
+     */
+    @Column(name = "cal_type", length = 10)
+    private String calType;  // 'COMPANY' | 'PLANT' | 'EXTERNAL' | null
+
+    /**
+     * MANDATORY = Public holiday (applies to all, regardless of cal_type)
+     * OPTIONAL  = Optional holiday (company/plant/external specific)
+     */
     @Column(name = "hol_typ", length = 10)
     private String holTyp;
 
