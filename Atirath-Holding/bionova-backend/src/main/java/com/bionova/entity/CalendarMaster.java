@@ -51,9 +51,7 @@ public class CalendarMaster {
     @Column(name = "hol_typ", length = 10)
     private String holTyp;
 
-    @Column(name = "addl_rem", length = 255)
-    private String addlRem;
-
-    @Column(name = "sts")
-    private Boolean sts = true;
+    /** FK → employee_master.emp_id — who added this holiday record */
+    @Column(name = "added_by")
+    private Integer addedBy;
 }

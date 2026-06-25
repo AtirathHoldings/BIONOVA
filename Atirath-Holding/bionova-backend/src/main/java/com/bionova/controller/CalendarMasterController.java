@@ -100,9 +100,6 @@ public class CalendarMasterController {
         if (holiday.getCalDt() != null && holiday.getCalYr() == null) {
             holiday.setCalYr(holiday.getCalDt().getYear());
         }
-        if (holiday.getSts() == null) {
-            holiday.setSts(true);
-        }
         return ResponseEntity.ok(calendarMasterRepository.save(holiday));
     }
 
@@ -119,23 +116,14 @@ public class CalendarMasterController {
         holiday.setHolidayNm(details.getHolidayNm());
         holiday.setCoyId(details.getCoyId());
         holiday.setPltId(details.getPltId());
+        holiday.setCalType(details.getCalType());
         holiday.setHolTyp(details.getHolTyp());
-        holiday.setAddlRem(details.getAddlRem());
-        holiday.setSts(details.getSts());
+        holiday.setAddedBy(details.getAddedBy());
 
         if (details.getCalDt() != null) {
             holiday.setCalYr(details.getCalDt().getYear());
         }
 
-        return ResponseEntity.ok(calendarMasterRepository.save(holiday));
-    }
-
-    /** PATCH – toggle active/inactive */
-    @PatchMapping("/{id}/toggle-status")
-    public ResponseEntity<CalendarMaster> toggleStatus(@PathVariable Long id) {
-        CalendarMaster holiday = calendarMasterRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Holiday not found: " + id));
-        holiday.setSts(!Boolean.TRUE.equals(holiday.getSts()));
         return ResponseEntity.ok(calendarMasterRepository.save(holiday));
     }
 

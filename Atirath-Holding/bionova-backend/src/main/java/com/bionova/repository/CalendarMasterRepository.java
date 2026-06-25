@@ -28,7 +28,7 @@ public interface CalendarMasterRepository extends JpaRepository<CalendarMaster, 
      * Public/National holidays (MANDATORY, no coy/plt scope) — applies to everyone.
      */
     @Query("SELECT c FROM CalendarMaster c WHERE c.holTyp = 'MANDATORY' " +
-           "AND c.calDt BETWEEN :startDate AND :endDate AND c.sts = true")
+           "AND c.calDt BETWEEN :startDate AND :endDate")
     List<CalendarMaster> findMandatoryHolidaysBetween(
             @Param("startDate") LocalDate startDate,
             @Param("endDate") LocalDate endDate);
@@ -38,7 +38,7 @@ public interface CalendarMasterRepository extends JpaRepository<CalendarMaster, 
      */
     @Query("SELECT c FROM CalendarMaster c WHERE c.coyId = :coyId " +
            "AND (c.calType = 'COMPANY' OR c.calType IS NULL) " +
-           "AND c.calDt BETWEEN :startDate AND :endDate AND c.sts = true")
+           "AND c.calDt BETWEEN :startDate AND :endDate")
     List<CalendarMaster> findCompanyHolidaysBetween(
             @Param("coyId") Integer coyId,
             @Param("startDate") LocalDate startDate,
@@ -49,7 +49,7 @@ public interface CalendarMasterRepository extends JpaRepository<CalendarMaster, 
      */
     @Query("SELECT c FROM CalendarMaster c WHERE c.pltId = :pltId " +
            "AND c.calType = 'PLANT' " +
-           "AND c.calDt BETWEEN :startDate AND :endDate AND c.sts = true")
+           "AND c.calDt BETWEEN :startDate AND :endDate")
     List<CalendarMaster> findPlantHolidaysBetween(
             @Param("pltId") Integer pltId,
             @Param("startDate") LocalDate startDate,
@@ -61,7 +61,7 @@ public interface CalendarMasterRepository extends JpaRepository<CalendarMaster, 
      */
     @Query("SELECT c FROM CalendarMaster c WHERE c.calType = 'EXTERNAL' " +
            "AND c.coyId = :coyId " +
-           "AND c.calDt BETWEEN :startDate AND :endDate AND c.sts = true")
+           "AND c.calDt BETWEEN :startDate AND :endDate")
     List<CalendarMaster> findExternalHolidaysBetween(
             @Param("coyId") Integer coyId,
             @Param("startDate") LocalDate startDate,
@@ -73,7 +73,7 @@ public interface CalendarMasterRepository extends JpaRepository<CalendarMaster, 
      */
     @Query("SELECT c FROM CalendarMaster c WHERE " +
            "(c.holTyp = 'MANDATORY' OR c.coyId = :coyId OR c.pltId = :pltId) " +
-           "AND c.calDt BETWEEN :startDate AND :endDate AND c.sts = true")
+           "AND c.calDt BETWEEN :startDate AND :endDate")
     List<CalendarMaster> findAllApplicableHolidaysBetween(
             @Param("coyId") Integer coyId,
             @Param("pltId") Integer pltId,
