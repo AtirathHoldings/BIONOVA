@@ -32,6 +32,7 @@ com\bionova\dto\LoginRequest.class
 com\bionova\service\CalendarService$HolidaySummary.class
 com\bionova\entity\DepartmentMaster.class
 com\bionova\controller\TaskLiveController.class
+com\bionova\dto\CalendarEventDto.class
 com\bionova\repository\PlantRepository.class
 com\bionova\repository\AppNotificationRepository.class
 com\bionova\entity\Landmaster.class
@@ -99,6 +100,7 @@ com\bionova\dto\ProjectDashboardResponse.class
 com\bionova\dto\GanttTaskDto.class
 com\bionova\entity\CompanyMaster.class
 com\bionova\repository\ProjectDraftRepository.class
+com\bionova\controller\CalendarViewController.class
 com\bionova\controller\ProcessController.class
 com\bionova\entity\ActivityLog.class
 com\bionova\repository\ReviewerMasterRepository.class

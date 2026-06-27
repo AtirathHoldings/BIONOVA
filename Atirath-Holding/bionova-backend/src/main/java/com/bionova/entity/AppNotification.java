@@ -30,4 +30,10 @@ public class AppNotification {
 
     @Column(name = "is_read", nullable = false, columnDefinition = "boolean default false")
     private Boolean isRead = false;
+
+    @Column(name = "entity_typ", length = 20)
+    private String entityTyp;
+
+    @Column(name = "entity_id")
+    private Long entityId;
 }
