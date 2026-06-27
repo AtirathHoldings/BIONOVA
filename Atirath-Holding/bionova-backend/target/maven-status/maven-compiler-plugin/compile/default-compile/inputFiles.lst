@@ -30,6 +30,7 @@ D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\control
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\TaskDraftController.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\TaskLiveController.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\TestController.java
+D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\UserDashboardController.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\AdminDashboardResponse.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\CalendarEventDto.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ForgotPasswordRequest.java
@@ -39,6 +40,7 @@ D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\Log
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ProjectDashboardResponse.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ProjectRequest.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ResetPasswordRequest.java
+D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\UserDashboardResponseDto.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\ActivityLog.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\AppNotification.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\AttachmentMaster.java

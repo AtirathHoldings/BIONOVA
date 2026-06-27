@@ -19,7 +19,7 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/calendar")
+@RequestMapping("/api/calendar/user-feed")
 public class CalendarViewController {
 
     @Autowired

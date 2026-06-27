@@ -17,6 +17,7 @@ com\bionova\controller\CalendarMasterController.class
 com\bionova\entity\StateMaster.class
 com\bionova\dto\ProjectRequest.class
 com\bionova\dto\AdminDashboardResponse$ActivityDto$ActivityDtoBuilder.class
+com\bionova\controller\UserDashboardController.class
 com\bionova\repository\CalendarMasterRepository.class
 com\bionova\repository\EmployeeRepository.class
 com\bionova\BionovaBackendApplication.class
@@ -37,6 +38,7 @@ com\bionova\repository\PlantRepository.class
 com\bionova\repository\AppNotificationRepository.class
 com\bionova\entity\Landmaster.class
 com\bionova\controller\AdminDashboardController.class
+com\bionova\dto\UserDashboardResponseDto.class
 com\bionova\entity\EmployeeIndividualTask.class
 com\bionova\repository\CompanyRepository.class
 com\bionova\repository\ExternalEmployeeRepository.class
@@ -69,9 +71,11 @@ com\bionova\repository\TaskDraftRepository.class
 com\bionova\service\NotificationService.class
 com\bionova\controller\AttachmentController.class
 com\bionova\dto\LoginResponse.class
+com\bionova\dto\UserDashboardResponseDto$TodoTaskDto.class
 com\bionova\controller\ReviewerMasterController.class
 com\bionova\repository\TaskLiveRepository.class
 com\bionova\dto\AdminDashboardResponse$AdminDashboardResponseBuilder.class
+com\bionova\dto\UserDashboardResponseDto$UserProjectDto.class
 com\bionova\dto\ProjectDashboardResponse$MilestoneStatus.class
 com\bionova\entity\CalendarMaster.class
 com\bionova\repository\ActivityLogRepository.class
@@ -86,6 +90,7 @@ com\bionova\repository\ProjectLiveRepository.class
 com\bionova\repository\ProcessMasterRepository.class
 com\bionova\controller\GanttChartController.class
 com\bionova\dto\AdminDashboardResponse$DeadlineDto.class
+com\bionova\dto\UserDashboardResponseDto$UpcomingTaskDto.class
 com\bionova\entity\MilestoneLive.class
 com\bionova\dto\ProjectDashboardResponse$TaskStatusOverview.class
 com\bionova\dto\ProjectDashboardResponse$ForecastSummary.class
