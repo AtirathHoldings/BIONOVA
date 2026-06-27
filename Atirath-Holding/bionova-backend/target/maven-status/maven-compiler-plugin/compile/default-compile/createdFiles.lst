@@ -83,6 +83,7 @@ com\bionova\controller\LandmasterController.class
 com\bionova\repository\ChecklistMasterRepository.class
 com\bionova\repository\ProjectLiveRepository.class
 com\bionova\repository\ProcessMasterRepository.class
+com\bionova\controller\GanttChartController.class
 com\bionova\dto\AdminDashboardResponse$DeadlineDto.class
 com\bionova\entity\MilestoneLive.class
 com\bionova\dto\ProjectDashboardResponse$TaskStatusOverview.class
@@ -95,6 +96,7 @@ com\bionova\entity\TaskLive.class
 com\bionova\service\ProjectPromotionService.class
 com\bionova\dto\AdminDashboardResponse$DeadlineDto$DeadlineDtoBuilder.class
 com\bionova\dto\ProjectDashboardResponse.class
+com\bionova\dto\GanttTaskDto.class
 com\bionova\entity\CompanyMaster.class
 com\bionova\repository\ProjectDraftRepository.class
 com\bionova\controller\ProcessController.class
