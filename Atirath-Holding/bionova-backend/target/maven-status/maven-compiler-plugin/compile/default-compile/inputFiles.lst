@@ -18,6 +18,7 @@ D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\control
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\PlantController.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\ProcessConfigController.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\ProcessController.java
+D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\ProjectDashboardController.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\ProjectDraftController.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\ProjectLiveController.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\controller\ReviewerMasterController.java
@@ -28,6 +29,7 @@ D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\Adm
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ForgotPasswordRequest.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\LoginRequest.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\LoginResponse.java
+D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ProjectDashboardResponse.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ProjectRequest.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ResetPasswordRequest.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\AttachmentMaster.java
@@ -78,4 +80,5 @@ D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\service
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\service\AuthService.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\service\CalendarService.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\service\PasswordResetService.java
+D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\service\ProjectDashboardService.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\service\ProjectPromotionService.java

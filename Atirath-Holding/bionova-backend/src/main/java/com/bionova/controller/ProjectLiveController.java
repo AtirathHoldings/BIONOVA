@@ -1,14 +1,18 @@
 package com.bionova.controller;
 
+import com.bionova.entity.Employee;
 import com.bionova.entity.MilestoneLive;
 import com.bionova.entity.ProjectLive;
 import com.bionova.entity.TaskLive;
+import com.bionova.repository.EmployeeRepository;
 import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
 import com.bionova.service.ProjectPromotionService;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -22,12 +26,39 @@ public class ProjectLiveController {
     @Autowired private MilestoneLiveRepository milestoneLiveRepository;
     @Autowired private TaskLiveRepository      taskLiveRepository;
     @Autowired private ProjectPromotionService promotionService;
+    @Autowired private EmployeeRepository      employeeRepository;
 
     // ── GET ────────────────────────────────────────────────────────────────
 
     @GetMapping
     public List<ProjectLive> getAll() {
-        return projectLiveRepository.findAll();
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return employeeRepository.findByEmail(email)
+                .map(employee -> {
+                    if ("admin".equalsIgnoreCase(employee.getRole()) || "manager".equalsIgnoreCase(employee.getRole())) {
+                        return projectLiveRepository.findAll();
+                    } else {
+                        return projectLiveRepository.findProjectsByEmpId(employee.getEmpId());
+                    }
+                })
+                .orElse(List.of());
+    }
+
+    @GetMapping("/by-employee/{empId}")
+    public ResponseEntity<?> getProjectsByEmployee(@PathVariable Long empId) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Employee employee = employeeRepository.findByEmail(email).orElse(null);
+        if (employee == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Unauthorized"));
+        }
+
+        if ("admin".equalsIgnoreCase(employee.getRole()) || 
+            "manager".equalsIgnoreCase(employee.getRole()) || 
+            employee.getEmpId().equals(empId)) {
+            return ResponseEntity.ok(projectLiveRepository.findProjectsByEmpId(empId));
+        } else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied"));
+        }
     }
 
     @GetMapping("/{id}")

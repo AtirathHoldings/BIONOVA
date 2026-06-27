@@ -20,6 +20,25 @@ public class EmployeeController {
         return employeeRepository.findAll();
     }
 
+    @GetMapping("/employees/{id}")
+    public ResponseEntity<Employee> getEmployeeById(@PathVariable Long id) {
+        return employeeRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    /**
+     * Exposes the profile of the currently authenticated employee.
+     * Extracts email from SecurityContextHolder.
+     */
+    @GetMapping("/profile")
+    public ResponseEntity<?> getProfile() {
+        String email = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        return employeeRepository.findByEmail(email)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/employees")
     public ResponseEntity<?> saveEmployee(@RequestBody Employee employee) {
 

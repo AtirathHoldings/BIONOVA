@@ -1,13 +1,17 @@
 package com.bionova.controller;
 
+import com.bionova.entity.Employee;
 import com.bionova.entity.MilestoneLive;
 import com.bionova.entity.ProjectLive;
 import com.bionova.entity.TaskLive;
+import com.bionova.repository.EmployeeRepository;
 import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -27,21 +31,73 @@ public class TaskLiveController {
     @Autowired
     private ProjectLiveRepository projectLiveRepository;
 
+    @Autowired
+    private EmployeeRepository employeeRepository;
+
     @GetMapping
     public List<TaskLive> getAll() {
-        return taskLiveRepository.findAll();
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return employeeRepository.findByEmail(email)
+                .map(employee -> {
+                    if ("admin".equalsIgnoreCase(employee.getRole()) || "manager".equalsIgnoreCase(employee.getRole())) {
+                        return taskLiveRepository.findAll();
+                    } else {
+                        return taskLiveRepository.findByEmpId(employee.getEmpId());
+                    }
+                })
+                .orElse(List.of());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<TaskLive> getById(@PathVariable Long id) {
+    public ResponseEntity<?> getById(@PathVariable Long id) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Employee employee = employeeRepository.findByEmail(email).orElse(null);
+        if (employee == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Unauthorized"));
+        }
+
         return taskLiveRepository.findById(id)
-                .map(ResponseEntity::ok)
+                .map(task -> {
+                    if ("admin".equalsIgnoreCase(employee.getRole()) || 
+                        "manager".equalsIgnoreCase(employee.getRole()) || 
+                        employee.getEmpId().equals(task.getEmpId())) {
+                        return ResponseEntity.ok(task);
+                    } else {
+                        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied to this task"));
+                    }
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 
     @GetMapping("/by-milestone/{mId}")
     public List<TaskLive> getByMilestone(@PathVariable Long mId) {
-        return taskLiveRepository.findByMilestoneId(mId);
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return employeeRepository.findByEmail(email)
+                .map(employee -> {
+                    if ("admin".equalsIgnoreCase(employee.getRole()) || "manager".equalsIgnoreCase(employee.getRole())) {
+                        return taskLiveRepository.findByMilestoneId(mId);
+                    } else {
+                        return taskLiveRepository.findByMilestoneIdAndEmpId(mId, employee.getEmpId());
+                    }
+                })
+                .orElse(List.of());
+    }
+
+    @GetMapping("/by-employee/{empId}")
+    public ResponseEntity<?> getByEmployee(@PathVariable Long empId) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Employee employee = employeeRepository.findByEmail(email).orElse(null);
+        if (employee == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Unauthorized"));
+        }
+
+        if ("admin".equalsIgnoreCase(employee.getRole()) || 
+            "manager".equalsIgnoreCase(employee.getRole()) || 
+            employee.getEmpId().equals(empId)) {
+            return ResponseEntity.ok(taskLiveRepository.findByEmpId(empId));
+        } else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied"));
+        }
     }
 
     @PostMapping
