@@ -27,9 +27,62 @@ public class MilestoneDraftController {
     @Autowired
     private TaskDraftRepository taskDraftRepository;
 
+    @Autowired
+    private com.bionova.repository.ChecklistMasterRepository checklistMasterRepository;
+
+    @Autowired
+    private com.bionova.repository.AttachmentMasterRepository attachmentMasterRepository;
+
+    @Autowired
+    private com.bionova.repository.ProcessConfigRepository processConfigRepository;
+
     @GetMapping
+    @org.springframework.transaction.annotation.Transactional
     public List<MilestoneDraft> getAll() {
-        return milestoneDraftRepository.findAll();
+        List<MilestoneDraft> milestones = milestoneDraftRepository.findAll();
+        boolean updatedAny = false;
+        for (MilestoneDraft milestone : milestones) {
+            ProjectDraft project = projectDraftRepository.findById(milestone.getDrftPrjId()).orElse(null);
+            if (project != null && project.getTentStDt() != null) {
+                long finalMilestoneShift = 0;
+                if (milestone.getTentStDt() != null && milestone.getTentStDt().isBefore(project.getTentStDt())) {
+                    finalMilestoneShift = java.time.temporal.ChronoUnit.DAYS.between(milestone.getTentStDt(), project.getTentStDt());
+                }
+                
+                if (finalMilestoneShift != 0) {
+                    if (milestone.getTentStDt() != null) {
+                        milestone.setTentStDt(milestone.getTentStDt().plusDays(finalMilestoneShift));
+                    }
+                    if (milestone.getTentEndDt() != null) {
+                        milestone.setTentEndDt(milestone.getTentEndDt().plusDays(finalMilestoneShift));
+                    }
+                    milestoneDraftRepository.save(milestone);
+                    updatedAny = true;
+                }
+                
+                List<TaskDraft> tasks = taskDraftRepository.findByDrftMId(milestone.getDrftMId());
+                for (TaskDraft task : tasks) {
+                    long finalTaskShift = finalMilestoneShift;
+                    if (task.getTentStDt() != null && milestone.getTentStDt() != null && task.getTentStDt().isBefore(milestone.getTentStDt())) {
+                        finalTaskShift = java.time.temporal.ChronoUnit.DAYS.between(task.getTentStDt(), milestone.getTentStDt());
+                    }
+                    
+                    if (finalTaskShift != 0) {
+                        if (task.getTentStDt() != null) {
+                            task.setTentStDt(task.getTentStDt().plusDays(finalTaskShift));
+                        }
+                        if (task.getTentEndDt() != null) {
+                            task.setTentEndDt(task.getTentEndDt().plusDays(finalTaskShift));
+                        }
+                        taskDraftRepository.save(task);
+                    }
+                }
+            }
+        }
+        if (updatedAny) {
+            milestones = milestoneDraftRepository.findAll();
+        }
+        return milestones;
     }
 
     @GetMapping("/{id}")
@@ -40,8 +93,52 @@ public class MilestoneDraftController {
     }
 
     @GetMapping("/by-project/{prjId}")
+    @org.springframework.transaction.annotation.Transactional
     public List<MilestoneDraft> getByProject(@PathVariable Long prjId) {
-        return milestoneDraftRepository.findByDrftPrjId(prjId);
+        ProjectDraft project = projectDraftRepository.findById(prjId).orElse(null);
+        List<MilestoneDraft> milestones = milestoneDraftRepository.findByDrftPrjId(prjId);
+        if (project != null && project.getTentStDt() != null) {
+            boolean updatedAny = false;
+            for (MilestoneDraft milestone : milestones) {
+                long finalMilestoneShift = 0;
+                if (milestone.getTentStDt() != null && milestone.getTentStDt().isBefore(project.getTentStDt())) {
+                    finalMilestoneShift = java.time.temporal.ChronoUnit.DAYS.between(milestone.getTentStDt(), project.getTentStDt());
+                }
+                
+                if (finalMilestoneShift != 0) {
+                    if (milestone.getTentStDt() != null) {
+                        milestone.setTentStDt(milestone.getTentStDt().plusDays(finalMilestoneShift));
+                    }
+                    if (milestone.getTentEndDt() != null) {
+                        milestone.setTentEndDt(milestone.getTentEndDt().plusDays(finalMilestoneShift));
+                    }
+                    milestoneDraftRepository.save(milestone);
+                    updatedAny = true;
+                }
+                
+                List<TaskDraft> tasks = taskDraftRepository.findByDrftMId(milestone.getDrftMId());
+                for (TaskDraft task : tasks) {
+                    long finalTaskShift = finalMilestoneShift;
+                    if (task.getTentStDt() != null && milestone.getTentStDt() != null && task.getTentStDt().isBefore(milestone.getTentStDt())) {
+                        finalTaskShift = java.time.temporal.ChronoUnit.DAYS.between(task.getTentStDt(), milestone.getTentStDt());
+                    }
+                    
+                    if (finalTaskShift != 0) {
+                        if (task.getTentStDt() != null) {
+                            task.setTentStDt(task.getTentStDt().plusDays(finalTaskShift));
+                        }
+                        if (task.getTentEndDt() != null) {
+                            task.setTentEndDt(task.getTentEndDt().plusDays(finalTaskShift));
+                        }
+                        taskDraftRepository.save(task);
+                    }
+                }
+            }
+            if (updatedAny) {
+                milestones = milestoneDraftRepository.findByDrftPrjId(prjId);
+            }
+        }
+        return milestones;
     }
 
     @PostMapping
@@ -164,7 +261,21 @@ public class MilestoneDraftController {
     }
 
     @DeleteMapping("/{id}")
+    @org.springframework.transaction.annotation.Transactional
     public ResponseEntity<Void> delete(@PathVariable Long id) {
+        List<TaskDraft> tasks = taskDraftRepository.findByDrftMId(id);
+        for (TaskDraft task : tasks) {
+            List<com.bionova.entity.ChecklistMaster> checklists = checklistMasterRepository.findByTaskIdAndIsLive(task.getDrftTaskId(), false);
+            checklistMasterRepository.deleteAll(checklists);
+
+            List<com.bionova.entity.AttachmentMaster> attachments = attachmentMasterRepository.findByTIdAndIsLive(task.getDrftTaskId(), false);
+            attachmentMasterRepository.deleteAll(attachments);
+
+            List<com.bionova.entity.ProcessConfig> processConfigs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getDrftTaskId(), false);
+            processConfigRepository.deleteAll(processConfigs);
+
+            taskDraftRepository.delete(task);
+        }
         milestoneDraftRepository.deleteById(id);
         return ResponseEntity.ok().build();
     }

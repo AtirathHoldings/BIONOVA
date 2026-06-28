@@ -9,6 +9,7 @@ import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
 import com.bionova.service.ActivityLogService;
+import com.bionova.service.ProjectStatusCascadeService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -37,6 +38,9 @@ public class TaskLiveController {
 
     @Autowired
     private ActivityLogService activityLogService;
+
+    @Autowired
+    private ProjectStatusCascadeService projectStatusCascadeService;
 
     private boolean isAdminOrManager(Employee employee) {
         if (employee == null) {
@@ -214,6 +218,7 @@ public class TaskLiveController {
         }
 
         TaskLive saved = taskLiveRepository.save(task);
+        projectStatusCascadeService.cascadeStatusFromTask(id);
 
         MilestoneLive milestone = milestoneLiveRepository.findById(saved.getMId())
                 .orElseThrow(() -> new RuntimeException("Milestone not found with ID: " + saved.getMId()));
@@ -257,7 +262,9 @@ public class TaskLiveController {
                     .body(Map.of("message", "Invalid status. Allowed: OPEN, WIP, SUBMIT_REVIEW, UNDER_REVIEW, COMPLETED, REWORK"));
         }
         task.setTaskSts(newStatus);
-        return ResponseEntity.ok(taskLiveRepository.save(task));
+        TaskLive saved = taskLiveRepository.save(task);
+        projectStatusCascadeService.cascadeStatusFromTask(id);
+        return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/{id}")

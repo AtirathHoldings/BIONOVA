@@ -127,5 +127,30 @@ public class DataInitializer implements CommandLineRunner {
         } catch (Exception e) {
             System.err.println("Failed to create status change database triggers: " + e.getMessage());
         }
+
+        // 4. Migrate data from old table dept_coy_plt_map to new table dept_company_plt_map if empty
+        try {
+            Integer oldTableExists = jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM information_schema.tables WHERE table_name='dept_coy_plt_map' AND table_schema='public'", Integer.class);
+            if (oldTableExists != null && oldTableExists > 0) {
+                Integer newCount = jdbcTemplate.queryForObject("SELECT count(*) FROM dept_company_plt_map", Integer.class);
+                if (newCount == null || newCount == 0) {
+                    System.out.println("Copying mapping records from dept_coy_plt_map to dept_company_plt_map...");
+                    jdbcTemplate.execute(
+                        "INSERT INTO dept_company_plt_map (map_id, dept_id, coy_id, plt_id, sts) " +
+                        "SELECT map_id, dept_id, coy_id, plt_id, sts FROM dept_coy_plt_map " +
+                        "ON CONFLICT (map_id) DO NOTHING"
+                    );
+                    try {
+                        jdbcTemplate.execute("SELECT setval(pg_get_serial_sequence('dept_company_plt_map', 'map_id'), COALESCE(MAX(map_id), 1)) FROM dept_company_plt_map;");
+                    } catch (Exception seqEx) {
+                        System.err.println("Could not reset mapId sequence: " + seqEx.getMessage());
+                    }
+                    System.out.println("Mappings copied successfully.");
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Could not copy mappings from old table to new table: " + e.getMessage());
+        }
     }
 }

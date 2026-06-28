@@ -43,6 +43,7 @@ public class ProjectPromotionService {
      * @param includeMandatory include public/national holidays
      * @param coyHolidays     include company-specific holidays
      * @param pltHolidays     include plant-specific holidays
+     * @param extHolidays     include external-specific holidays
      */
     @Transactional
     public Map<String, Object> promoteToLive(
@@ -51,7 +52,8 @@ public class ProjectPromotionService {
             boolean excludeSun,
             boolean includeMandatory,
             boolean coyHolidays,
-            boolean pltHolidays) {
+            boolean pltHolidays,
+            boolean extHolidays) {
 
         // ── 1. Load draft project ──────────────────────────────────────────
         ProjectDraft draft = projectDraftRepository.findById(drftPrjId)
@@ -84,9 +86,9 @@ public class ProjectPromotionService {
         live.setAddlRem(draft.getAddlRem());
 
         // Compute working days for the project range
-        int prjWrkDays = calendarService.countWorkingDays(
+        int prjWrkDays = calendarService.countWorkingDaysWithExternal(
                 draft.getTentStDt(), draft.getTentEndDt(),
-                excludeSat, excludeSun, includeMandatory, coyId, pltId);
+                excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
         live.setWrkDays(prjWrkDays);
 
         ProjectLive savedProject = projectLiveRepository.save(live);
@@ -119,9 +121,9 @@ public class ProjectPromotionService {
 
             // Compute milestone working days
             if (md.getTentStDt() != null && md.getTentEndDt() != null) {
-                int msWrkDays = calendarService.countWorkingDays(
+                int msWrkDays = calendarService.countWorkingDaysWithExternal(
                         md.getTentStDt(), md.getTentEndDt(),
-                        excludeSat, excludeSun, includeMandatory, coyId, pltId);
+                        excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
                 ml.setWrkDays(msWrkDays);
             }
 
@@ -156,9 +158,9 @@ public class ProjectPromotionService {
 
                 // Compute task working days
                 if (td.getTentStDt() != null && td.getTentEndDt() != null) {
-                    int taskWrkDays = calendarService.countWorkingDays(
+                    int taskWrkDays = calendarService.countWorkingDaysWithExternal(
                             td.getTentStDt(), td.getTentEndDt(),
-                            excludeSat, excludeSun, includeMandatory, coyId, pltId);
+                            excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
                     tl.setWrkDays(taskWrkDays);
                 }
 

@@ -5,7 +5,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 @Entity
-@Table(name = "dept_coy_plt_map")
+@Table(name = "dept_company_plt_map")
 @Getter
 @Setter
 public class DeptCoyPltMap {

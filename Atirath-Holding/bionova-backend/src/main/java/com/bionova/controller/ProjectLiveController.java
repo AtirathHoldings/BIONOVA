@@ -29,6 +29,10 @@ public class ProjectLiveController {
     @Autowired private ProjectPromotionService promotionService;
     @Autowired private EmployeeRepository      employeeRepository;
     @Autowired private ActivityLogService      activityLogService;
+    @Autowired private com.bionova.repository.ChecklistMasterRepository checklistMasterRepository;
+    @Autowired private com.bionova.repository.AttachmentMasterRepository attachmentMasterRepository;
+    @Autowired private com.bionova.repository.ProcessConfigRepository processConfigRepository;
+    @Autowired private com.bionova.service.ProjectStatusCascadeService projectStatusCascadeService;
 
     private boolean isAdminOrManager(Employee employee) {
         if (employee == null) {
@@ -98,7 +102,8 @@ public class ProjectLiveController {
      *   "excludeSun": true,        -- exclude Sundays
      *   "includeMandatory": true,  -- include public/national holidays
      *   "coyHolidays": true,       -- include company-specific holidays
-     *   "pltHolidays": true        -- include plant-specific holidays
+     *   "pltHolidays": true,       -- include plant-specific holidays
+     *   "extHolidays": true        -- include external-specific holidays
      * }
      */
     @PostMapping("/promote/{drftPrjId}")
@@ -111,10 +116,11 @@ public class ProjectLiveController {
         boolean includeMandatory = getBool(options, "includeMandatory", true);
         boolean coyHolidays      = getBool(options, "coyHolidays",      true);
         boolean pltHolidays      = getBool(options, "pltHolidays",      true);
+        boolean extHolidays      = getBool(options, "extHolidays",      false);
 
         try {
             Map<String, Object> result = promotionService.promoteToLive(
-                    drftPrjId, excludeSat, excludeSun, includeMandatory, coyHolidays, pltHolidays);
+                    drftPrjId, excludeSat, excludeSun, includeMandatory, coyHolidays, pltHolidays, extHolidays);
             return ResponseEntity.ok(result);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
@@ -174,7 +180,40 @@ public class ProjectLiveController {
                     .body(Map.of("message", "Invalid status. Allowed: OPEN, WIP, SUBMIT_REVIEW, UNDER_REVIEW, COMPLETED, REWORK"));
         }
         task.setTaskSts(newStatus);
-        return ResponseEntity.ok(taskLiveRepository.save(task));
+        TaskLive saved = taskLiveRepository.save(task);
+        projectStatusCascadeService.cascadeStatusFromTask(taskId);
+        return ResponseEntity.ok(saved);
+    }
+
+    /** DELETE /api/project-live/{id} */
+    @DeleteMapping("/{id}")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        List<com.bionova.entity.MilestoneLive> milestones = milestoneLiveRepository.findByPrjId(id);
+        for (com.bionova.entity.MilestoneLive milestone : milestones) {
+            List<com.bionova.entity.TaskLive> tasks = taskLiveRepository.findByMilestoneId(milestone.getMId());
+            for (com.bionova.entity.TaskLive task : tasks) {
+                // Delete task checklists
+                List<com.bionova.entity.ChecklistMaster> checklists = checklistMasterRepository.findByTaskIdAndIsLive(task.getTaskId(), true);
+                checklistMasterRepository.deleteAll(checklists);
+
+                // Delete task attachments
+                List<com.bionova.entity.AttachmentMaster> attachments = attachmentMasterRepository.findByTIdAndIsLive(task.getTaskId(), true);
+                attachmentMasterRepository.deleteAll(attachments);
+
+                // Delete task process configs
+                List<com.bionova.entity.ProcessConfig> processConfigs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
+                processConfigRepository.deleteAll(processConfigs);
+
+                // Delete task
+                taskLiveRepository.delete(task);
+            }
+            // Delete milestone
+            milestoneLiveRepository.delete(milestone);
+        }
+        // Delete project itself
+        projectLiveRepository.deleteById(id);
+        return ResponseEntity.ok().build();
     }
 
     // ── helper ─────────────────────────────────────────────────────────────

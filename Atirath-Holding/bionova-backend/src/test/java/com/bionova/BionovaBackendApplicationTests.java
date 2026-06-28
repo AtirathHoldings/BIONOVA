@@ -30,6 +30,23 @@ class BionovaBackendApplicationTests {
 	private ObjectMapper objectMapper;
 
 	@Test
+	void testPrintDbInfo() throws Exception {
+		System.out.println("--- LISTING ALL PUBLIC TABLES ---");
+		jdbcTemplate.query("SELECT table_name FROM information_schema.tables WHERE table_schema='public'", rs -> {
+			System.out.println("Table: " + rs.getString(1));
+		});
+
+		System.out.println("--- LISTING ROWS IN dept_company_plt_map ---");
+		jdbcTemplate.query("SELECT * FROM dept_company_plt_map", rs -> {
+			int cols = rs.getMetaData().getColumnCount();
+			for (int i = 1; i <= cols; i++) {
+				System.out.print(rs.getMetaData().getColumnName(i) + ": " + rs.getObject(i) + " | ");
+			}
+			System.out.println();
+		});
+	}
+
+	@Test
 	void testProjectMilestoneTaskFlow() throws Exception {
 		// Insert master records if not present
 		jdbcTemplate.update("INSERT INTO company_master (coy_id, coy_cd, coy_nm, zn_nm) VALUES (1, 'C1', 'Company 1', 'SOUTH') ON CONFLICT (coy_id) DO NOTHING");
