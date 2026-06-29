@@ -157,8 +157,9 @@ public class AdminDashboardService {
                 .collect(Collectors.toList());
 
         for (ProjectLive prj : sortedProjects) {
+            String suffix = prj.getPrjCd() != null ? " (" + prj.getPrjCd() + ")" : "";
             systemActivities.add(AdminDashboardResponse.ActivityDto.builder()
-                    .description("Project \"" + prj.getPrjNm() + "\" initiated in Live status")
+                    .description("Project \"" + prj.getPrjNm() + suffix + "\" initiated in Live status")
                     .actor("System Admin")
                     .timestamp("Recent")
                     .build());
@@ -224,12 +225,15 @@ public class AdminDashboardService {
                         .filter(p -> p.getPrjId().equals(prjId))
                         .findFirst();
                 if (prjOpt.isPresent()) {
-                    prjName = prjOpt.get().getPrjNm();
+                    ProjectLive prj = prjOpt.get();
+                    String suffix = prj.getPrjCd() != null ? " (" + prj.getPrjCd() + ")" : "";
+                    prjName = prj.getPrjNm() + suffix;
                 }
             }
 
+            String taskSuffix = t.getTaskCd() != null ? " (" + t.getTaskCd() + ")" : "";
             upcomingDeadlines.add(AdminDashboardResponse.DeadlineDto.builder()
-                    .title(t.getTaskNm())
+                    .title(t.getTaskNm() + taskSuffix)
                     .projectName(prjName)
                     .dueDate(t.getEndDt())
                     .timeLeft(timeLeftText)
@@ -284,12 +288,13 @@ public class AdminDashboardService {
             } else if ("CLOSED".equalsIgnoreCase(prj.getPrjSts())) {
                 progressPercent = 100.0;
             } else {
-                progressPercent = 45.0; // fallback default for demonstration
+                progressPercent = 0.0; // fallback default of 0.0 instead of 45.0
             }
 
             topProjects.add(AdminDashboardResponse.ProjectProgressDto.builder()
                     .projectId(prj.getPrjId())
                     .projectName(prj.getPrjNm())
+                    .projectCode(prj.getPrjCd())
                     .progressPercent(progressPercent)
                     .build());
         }

@@ -54,6 +54,7 @@ public class AdminDashboardResponse {
     public static class ProjectProgressDto {
         private Long projectId;
         private String projectName;
+        private String projectCode;
         private double progressPercent;
     }
 }

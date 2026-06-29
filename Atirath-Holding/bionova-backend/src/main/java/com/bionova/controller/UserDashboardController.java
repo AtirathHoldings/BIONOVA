@@ -82,6 +82,7 @@ public class UserDashboardController {
         // 4. To-Do List (Pending/Due Today/Overdue tasks, limit 5)
         List<TodoTaskDto> todoList = allMyTasks.stream()
                 .filter(t -> !"COMPLETED".equalsIgnoreCase(t.getTaskSts()))
+                .filter(t -> t.getStDt() != null && !t.getStDt().isAfter(today))
                 .sorted(Comparator.comparing(TaskLive::getEndDt, Comparator.nullsLast(Comparator.naturalOrder())))
                 .limit(5)
                 .map(t -> {
@@ -105,7 +106,7 @@ public class UserDashboardController {
         // 5. Upcoming Tasks (Active tasks due in the future, limit 5)
         List<UpcomingTaskDto> upcomingTasks = allMyTasks.stream()
                 .filter(t -> !"COMPLETED".equalsIgnoreCase(t.getTaskSts()))
-                .filter(t -> t.getEndDt() != null && t.getEndDt().isAfter(today))
+                .filter(t -> t.getStDt() != null && t.getStDt().isAfter(today))
                 .sorted(Comparator.comparing(TaskLive::getEndDt))
                 .limit(5)
                 .map(t -> {
