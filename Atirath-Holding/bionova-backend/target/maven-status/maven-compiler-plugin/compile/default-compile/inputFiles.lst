@@ -60,6 +60,7 @@ D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\CompanyMaster.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\DepartmentMaster.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\DeptCoyPltMap.java
+D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\DesignationMaster.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\Employee.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\EmployeeIndividualTask.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\entity\EmployeeLoginActivity.java
@@ -90,6 +91,7 @@ D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\reposit
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\repository\CompanyRepository.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\repository\DepartmentRepository.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\repository\DeptCoyPltMapRepository.java
+D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\repository\DesignationRepository.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\repository\EmployeeIndividualTaskRepository.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\repository\EmployeeLoginActivityRepository.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\repository\EmployeeRepository.java

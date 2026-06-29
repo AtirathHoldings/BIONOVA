@@ -38,6 +38,9 @@ public class UserDashboardController {
     @Autowired
     private DepartmentRepository departmentRepository;
 
+    @Autowired
+    private com.bionova.repository.DesignationRepository designationRepository;
+
     @GetMapping
     public ResponseEntity<?> getDashboardData() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
@@ -221,13 +224,9 @@ public class UserDashboardController {
 
     private String getRoleName(Integer desigId) {
         if (desigId == null) return "Site Engineer";
-        switch (desigId) {
-            case 1: return "Site Engineer";
-            case 2: return "QA Engineer";
-            case 3: return "Reviewer";
-            case 4: return "Project Manager";
-            default: return "Engineer";
-        }
+        return designationRepository.findById(desigId)
+                .map(com.bionova.entity.DesignationMaster::getDesigNm)
+                .orElse("Site Engineer");
     }
 
     private String calculatePriority(TaskLive t) {

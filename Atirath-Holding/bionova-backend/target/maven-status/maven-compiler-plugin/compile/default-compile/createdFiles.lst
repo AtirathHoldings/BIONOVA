@@ -19,6 +19,7 @@ com\bionova\entity\MilestoneDraft.class
 com\bionova\repository\StateRepository.class
 com\bionova\controller\CalendarMasterController.class
 com\bionova\entity\StateMaster.class
+com\bionova\repository\DesignationRepository.class
 com\bionova\dto\ProjectRequest.class
 com\bionova\dto\AdminDashboardResponse$ActivityDto$ActivityDtoBuilder.class
 com\bionova\controller\UserDashboardController.class
@@ -27,6 +28,7 @@ com\bionova\repository\CalendarMasterRepository.class
 com\bionova\repository\EmployeeRepository.class
 com\bionova\BionovaBackendApplication.class
 com\bionova\entity\PlantMaster.class
+com\bionova\entity\DesignationMaster.class
 com\bionova\entity\AttachmentMaster.class
 com\bionova\controller\DeptCoyPltMapController.class
 com\bionova\service\ActivityLogService.class

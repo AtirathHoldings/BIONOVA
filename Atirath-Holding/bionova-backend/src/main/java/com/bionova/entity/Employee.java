@@ -89,4 +89,10 @@ public class Employee {
     @JsonProperty(access = JsonProperty.Access.WRITE_ONLY)
     @Column(name = "emp_password", table = "employee_password_master", nullable = false, length = 100)
     private String password;
+
+    @Transient
+    private String designation;
+
+    @Transient
+    private String role;
 }

@@ -16,15 +16,52 @@ public class EmployeeController {
     @Autowired
     private EmployeeRepository employeeRepository;
 
+    @Autowired
+    private com.bionova.repository.DesignationRepository designationRepository;
+
+    private void populateDesignation(Employee employee) {
+        if (employee.getDesigId() != null) {
+            designationRepository.findById(employee.getDesigId())
+                .ifPresent(d -> {
+                    employee.setDesignation(d.getDesigNm());
+                    employee.setRole(d.getDesigNm());
+                });
+        }
+    }
+
+    private void populateDesignations(List<Employee> employees) {
+        List<com.bionova.entity.DesignationMaster> designations = designationRepository.findAll();
+        Map<Integer, String> desigMap = designations.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                com.bionova.entity.DesignationMaster::getDesigId,
+                com.bionova.entity.DesignationMaster::getDesigNm,
+                (v1, v2) -> v1
+            ));
+        for (Employee emp : employees) {
+            if (emp.getDesigId() != null) {
+                String name = desigMap.get(emp.getDesigId());
+                if (name != null) {
+                    emp.setDesignation(name);
+                    emp.setRole(name);
+                }
+            }
+        }
+    }
+
     @GetMapping("/employees")
     public List<Employee> getEmployees() {
-        return employeeRepository.findAll();
+        List<Employee> list = employeeRepository.findAll();
+        populateDesignations(list);
+        return list;
     }
 
     @GetMapping("/employees/{id}")
     public ResponseEntity<Employee> getEmployeeById(@PathVariable Long id) {
         return employeeRepository.findById(id)
-                .map(ResponseEntity::ok)
+                .map(emp -> {
+                    populateDesignation(emp);
+                    return ResponseEntity.ok(emp);
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -36,7 +73,10 @@ public class EmployeeController {
     public ResponseEntity<?> getProfile() {
         String email = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
         return employeeRepository.findByEmail(email)
-                .map(ResponseEntity::ok)
+                .map(emp -> {
+                    populateDesignation(emp);
+                    return ResponseEntity.ok(emp);
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -72,6 +112,20 @@ public class EmployeeController {
         }
 
 
+        if (employee.getDesignation() != null && !employee.getDesignation().trim().isEmpty()) {
+            String desigName = employee.getDesignation().trim();
+            com.bionova.entity.DesignationMaster desig = designationRepository.findAll().stream()
+                .filter(d -> d.getDesigNm().equalsIgnoreCase(desigName))
+                .findFirst()
+                .orElseGet(() -> {
+                    com.bionova.entity.DesignationMaster newDesig = new com.bionova.entity.DesignationMaster();
+                    newDesig.setDesigNm(desigName);
+                    newDesig.setSts(true);
+                    return designationRepository.save(newDesig);
+                });
+            employee.setDesigId(desig.getDesigId());
+        }
+
         if (employee.getPassword() != null && !employee.getPassword().isEmpty()) {
             employee.setPassword(
                     new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
@@ -80,6 +134,7 @@ public class EmployeeController {
         }
 
         Employee saved = employeeRepository.save(employee);
+        populateDesignation(saved);
         return ResponseEntity.ok(saved);
     }
     @PutMapping("/employees/{id}")
@@ -109,7 +164,23 @@ public class EmployeeController {
         employee.setPhotoUrl(employeeDetails.getPhotoUrl());
         employee.setDoj(employeeDetails.getDoj());
         employee.setEmpTyp(employeeDetails.getEmpTyp());
-        employee.setDesigId(employeeDetails.getDesigId());
+        
+        if (employeeDetails.getDesignation() != null && !employeeDetails.getDesignation().trim().isEmpty()) {
+            String desigName = employeeDetails.getDesignation().trim();
+            com.bionova.entity.DesignationMaster desig = designationRepository.findAll().stream()
+                .filter(d -> d.getDesigNm().equalsIgnoreCase(desigName))
+                .findFirst()
+                .orElseGet(() -> {
+                    com.bionova.entity.DesignationMaster newDesig = new com.bionova.entity.DesignationMaster();
+                    newDesig.setDesigNm(desigName);
+                    newDesig.setSts(true);
+                    return designationRepository.save(newDesig);
+                });
+            employee.setDesigId(desig.getDesigId());
+        } else {
+            employee.setDesigId(employeeDetails.getDesigId());
+        }
+        
         employee.setCoyId(employeeDetails.getCoyId());
         employee.setPltId(employeeDetails.getPltId());
         employee.setDeptId(employeeDetails.getDeptId());
@@ -127,6 +198,7 @@ public class EmployeeController {
         }
 
         Employee updated = employeeRepository.save(employee);
+        populateDesignation(updated);
         return ResponseEntity.ok(updated);
     }
 
