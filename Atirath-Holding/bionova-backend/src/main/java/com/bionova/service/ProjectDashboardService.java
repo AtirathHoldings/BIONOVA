@@ -197,13 +197,43 @@ public class ProjectDashboardService {
         response.setUpcomingMilestones(upcomingMilestonesList.subList(0, Math.min(upcomingMilestonesList.size(), 5)));
         response.setHighPriorityTasks(highPriorityTasksList);
 
-        // Forecast Summary
+        // Forecast Summary — all values calculated from real project data
         ProjectDashboardResponse.ForecastSummary forecast = new ProjectDashboardResponse.ForecastSummary();
         forecast.setCurrentProgress(overallProgress);
-        forecast.setPlannedProgress(50.0);
-        forecast.setVariance(overallProgress - 50.0);
-        forecast.setExpectedCompletionDate(now.plusDays(90).format(DATE_FORMATTER));
-        forecast.setDaysAhead(90);
+
+        // Planned progress = % of time elapsed from earliest project start to latest project end
+        LocalDate earliestStart = projects.stream()
+                .map(ProjectLive::getStDt)
+                .filter(Objects::nonNull)
+                .min(LocalDate::compareTo)
+                .orElse(null);
+        LocalDate latestEnd = projects.stream()
+                .map(ProjectLive::getEndDt)
+                .filter(Objects::nonNull)
+                .max(LocalDate::compareTo)
+                .orElse(null);
+
+        double plannedProgress = 0.0;
+        if (earliestStart != null && latestEnd != null && !latestEnd.isBefore(earliestStart)) {
+            long totalDays = ChronoUnit.DAYS.between(earliestStart, latestEnd);
+            long elapsedDays = ChronoUnit.DAYS.between(earliestStart, now);
+            if (totalDays > 0) {
+                plannedProgress = Math.min(100.0, Math.max(0.0, (elapsedDays * 100.0) / totalDays));
+            }
+        }
+
+        forecast.setPlannedProgress(plannedProgress);
+        forecast.setVariance(overallProgress - plannedProgress);
+
+        // Expected completion = latest project end date (or blank if no projects)
+        if (latestEnd != null) {
+            forecast.setExpectedCompletionDate(latestEnd.format(DATE_FORMATTER));
+            forecast.setDaysAhead((int) ChronoUnit.DAYS.between(now, latestEnd));
+        } else {
+            forecast.setExpectedCompletionDate(null);
+            forecast.setDaysAhead(0);
+        }
+
         forecast.setProjectsAtRiskCount(delayedProjectsCount);
         forecast.setProjectsAtRiskPercentage(totalProjectsCount > 0 ? ((double) delayedProjectsCount / totalProjectsCount) * 100 : 0.0);
         
