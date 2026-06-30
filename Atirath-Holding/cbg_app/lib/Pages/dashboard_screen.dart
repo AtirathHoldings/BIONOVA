@@ -7,6 +7,7 @@ import '../models/task_item.dart';
 import '../models/project_model.dart';
 import 'main_screen.dart';
 import 'notification_screen.dart';
+import '../services/api_service.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -16,6 +17,155 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
+  List<ProjectModel> _projects = [];
+  List<TaskItem> _tasks = [];
+  List<TaskItem> _todoTasks = [];
+  List<TaskItem> _upcomingTasks = [];
+  bool _isLoading = true;
+  String? _error;
+  String _userName = 'Welcome!';
+  String _userRole = '';
+  int _unreadNotificationCount = 0;
+
+  int _myTasksCount = 0;
+  int _dueTodayCount = 0;
+  int _overdueTasksCount = 0;
+  int _completedTasksCount = 0;
+  double _overallCompletionPercentage = 0.0;
+  int _wipCount = 0;
+  int _underReviewCount = 0;
+  int _pendingCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDashboardData();
+  }
+
+  Future<void> _fetchDashboardData() async {
+    try {
+      // Fetch user dashboard data, tasks list and unread notifications in parallel
+      final results = await Future.wait([
+        ApiService.getUserDashboardData(),
+        ApiService.getLiveTasks(),
+        ApiService.getUnreadNotifications(),
+      ]);
+
+      final dashboardData = results[0] as Map<String, dynamic>?;
+      final liveTasks = results[1] as List<TaskItem>;
+      final unreadNotifications = results[2] as List<dynamic>;
+
+      if (dashboardData == null) {
+        throw Exception('Failed to load dashboard data');
+      }
+
+      final fullName = dashboardData['fullName']?.toString() ?? '';
+      final role = dashboardData['role']?.toString() ?? '';
+
+      // Map Projects from backend dashboard data
+      final List<ProjectModel> mappedProjects = [];
+      final List<dynamic> myProjectsData = dashboardData['myProjects'] as List<dynamic>? ?? [];
+      for (final p in myProjectsData) {
+        final double progressDouble = (p['progress'] as num?)?.toDouble() ?? 0.0;
+        final double progressVal = progressDouble / 100.0;
+        final progressTxt = '${progressDouble.round()}%';
+        final barColor = progressVal >= 0.7 ? const Color(0xFF16A34A) : const Color(0xFF2563EB);
+
+        mappedProjects.add(ProjectModel(
+          prjId: (p['projectId'] as num?)?.toInt() ?? 0,
+          prjCd: p['projectCode']?.toString() ?? '',
+          prjNm: p['projectName']?.toString() ?? '',
+          prjDesc: p['projectName']?.toString() ?? '',
+          prjPrty: 'Medium',
+          prjSts: p['status']?.toString() ?? '',
+          name: p['projectName']?.toString(),
+          details: p['clientName']?.toString() ?? p['projectName']?.toString(),
+          role: p['role']?.toString() ?? 'Assignee',
+          assigned: (p['tasksAssigned'] as num?)?.toInt() ?? 0,
+          open: (p['openTasks'] as num?)?.toInt() ?? 0,
+          progressValue: progressVal,
+          progressText: progressTxt,
+          barColor: barColor,
+        ));
+      }
+
+      // Map To-Do List tasks matching the backend order & IDs
+      final List<dynamic> todoListData = dashboardData['todoList'] as List<dynamic>? ?? [];
+      final List<TaskItem> mappedTodoTasks = [];
+      for (final t in todoListData) {
+        final String tId = t['taskId']?.toString() ?? '';
+        final match = liveTasks.firstWhere(
+          (item) => item.id == tId,
+          orElse: () => const TaskItem(id: '', title: '', subtitle: '', date: '', tag: '', tagColor: Colors.transparent, tagBg: Colors.transparent, icon: Icons.error, iconColor: Colors.transparent, iconBg: Colors.transparent, status: '', priority: ''),
+        );
+        if (match.id.isNotEmpty) {
+          mappedTodoTasks.add(match);
+        }
+      }
+
+      // Map Upcoming tasks matching the backend order & IDs
+      final List<dynamic> upcomingListData = dashboardData['upcomingTasks'] as List<dynamic>? ?? [];
+      final List<TaskItem> mappedUpcomingTasks = [];
+      for (final t in upcomingListData) {
+        final String tId = t['taskId']?.toString() ?? '';
+        final match = liveTasks.firstWhere(
+          (item) => item.id == tId,
+          orElse: () => const TaskItem(id: '', title: '', subtitle: '', date: '', tag: '', tagColor: Colors.transparent, tagBg: Colors.transparent, icon: Icons.error, iconColor: Colors.transparent, iconBg: Colors.transparent, status: '', priority: ''),
+        );
+        if (match.id.isNotEmpty) {
+          mappedUpcomingTasks.add(match);
+        }
+      }
+
+      // Fallback to client-side logic if backend returns empty lists
+      if (mappedTodoTasks.isEmpty) {
+        mappedTodoTasks.addAll(liveTasks.where((task) => task.hasStarted).take(4));
+      }
+      if (mappedUpcomingTasks.isEmpty) {
+        mappedUpcomingTasks.addAll(liveTasks.where((task) => !task.hasStarted).take(4));
+      }
+
+      final int myTasksVal = (dashboardData['myTasksCount'] as num?)?.toInt() ?? 0;
+      final int completedCountVal = (dashboardData['completedTasksCount'] as num?)?.toInt() ?? 0;
+      final int dueTodayVal = (dashboardData['dueTodayCount'] as num?)?.toInt() ?? 0;
+      final int overdueCountVal = (dashboardData['overdueTasksCount'] as num?)?.toInt() ?? 0;
+      final double overallPctVal = (dashboardData['overallCompletionPercentage'] as num?)?.toDouble() ?? 0.0;
+
+      final Map<String, dynamic> statusCounts = dashboardData['taskStatusCounts'] as Map<String, dynamic>? ?? {};
+      final int wipVal = (statusCounts['In Progress'] as num?)?.toInt() ?? 0;
+      final int underReviewVal = (statusCounts['Under Review'] as num?)?.toInt() ?? 0;
+      final int pendingVal = (statusCounts['Pending'] as num?)?.toInt() ?? 0;
+
+      if (mounted) {
+        setState(() {
+          _userName = fullName.isEmpty ? 'Welcome!' : fullName;
+          _userRole = role;
+          _projects = mappedProjects;
+          _tasks = liveTasks;
+          _todoTasks = mappedTodoTasks;
+          _upcomingTasks = mappedUpcomingTasks;
+          _myTasksCount = myTasksVal;
+          _completedTasksCount = completedCountVal;
+          _dueTodayCount = dueTodayVal;
+          _overdueTasksCount = overdueCountVal;
+          _overallCompletionPercentage = overallPctVal;
+          _wipCount = wipVal;
+          _underReviewCount = underReviewVal;
+          _pendingCount = pendingVal;
+          _unreadNotificationCount = unreadNotifications.length;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   void _navigateToTaskDetails(TaskItem task) {
     Navigator.pushNamed(
       context,
@@ -42,17 +192,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final screenWidth = MediaQuery.of(context).size.width;
     final isSmallScreen = screenWidth < 360;
 
-    final todoTasks = globalTasks.take(4).toList();
-    final upcomingTasks = globalTasks.where((task) => task.date != 'Today').toList();
+    final todoTasks = _todoTasks;
+    final upcomingTasks = _upcomingTasks;
     final String currentDynamicDate = DateFormat('dd MMMM yyyy').format(DateTime.now());
+
+    final total = _myTasksCount;
+    final completedCount = _completedTasksCount;
+    final inProgressCount = _wipCount;
+    final underReviewCount = _underReviewCount;
+    final pendingCount = _pendingCount;
+    final overdueCount = _overdueTasksCount;
+
+    final completedPct = total == 0 ? 0.0 : (completedCount / total * 100);
+    final inProgressPct = total == 0 ? 0.0 : (inProgressCount / total * 100);
+    final underReviewPct = total == 0 ? 0.0 : (underReviewCount / total * 100);
+    final pendingPct = total == 0 ? 0.0 : (pendingCount / total * 100);
+    final overduePct = total == 0 ? 0.0 : (overdueCount / total * 100);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: CustomHeader(
         title: "Home",
         automaticallyImplyLeading: false,
-        onNotificationTap: () {
-          Navigator.pushNamed(context, '/notifications');
+        notificationCount: _unreadNotificationCount,
+        onNotificationTap: () async {
+          await Navigator.pushNamed(context, '/notifications');
+          _fetchDashboardData();
         },
       ),
       drawer: Drawer(
@@ -95,173 +260,198 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ],
         ),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.only(left: 14.0, right: 14.0, top: 16.0, bottom: 24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Welcome back, Ravi Kumar! 👋',
-              style: GoogleFonts.inter(fontSize: isSmallScreen ? 18 : 20, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'Site Engineer  |  Projects Department',
-                    style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: isSmallScreen ? 11 : 12, fontWeight: FontWeight.w500),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+      body: _isLoading
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 80.0),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 80.0),
+                    child: Text(
+                      'Error: $_error',
+                      style: const TextStyle(color: Colors.red),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 8),
-                const Icon(Icons.calendar_today, size: 12, color: Colors.grey),
-                const SizedBox(width: 4),
-                Text(
-                  currentDynamicDate,
-                  style: GoogleFonts.inter(color: Colors.grey, fontSize: isSmallScreen ? 11 : 12, fontWeight: FontWeight.bold),
-                ),
-              ],
-            ),
-            const SizedBox(height: 20),
-            _buildTodoSectionCard(
-              title: 'To-Do List',
-              trailingText: 'View All',
-              onTrailingTap: () {
-                _navigateToTab(2); // ✅ Tasks tab
-              },
-              child: Column(
-                children: todoTasks.map((task) {
-                  return _buildImageStyleTodoItem(task, isSmallScreen);
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: 'UPCOMING TASKS',
-              trailingText: 'View all',
-              headerIcon: Icons.calendar_month_outlined,
-              onTrailingTap: () {
-                _navigateToTab(2); // ✅ Tasks tab
-              },
-              child: Column(
-                children: [
-                  _buildUpcomingTaskRow(null, 'Task Name', 'Project', 'Due Date', 'Priority', isHeader: true),
-                  const Divider(color: Color(0xFFE2E8F0)),
-                  if (upcomingTasks.isEmpty)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 16.0),
-                      child: Center(child: Text('No upcoming tasks found', style: GoogleFonts.inter(fontSize: 12, color: Colors.grey))),
-                    )
-                  else
-                    ...upcomingTasks.map((task) {
-                      return _buildUpcomingTaskRow(
-                        task,
-                        task.title,
-                        task.subtitle.split('•').first.trim(),
-                        task.date,
-                        task.priority.isEmpty ? task.tag : task.priority,
-                        pColor: task.tagColor,
-                      );
-                    }),
-                ],
-              ),
-              footerText: 'View all upcoming tasks →',
-            ),
-            const SizedBox(height: 20),
-            _buildProjectSectionCard(
-              title: 'My Projects',
-              trailingText: 'View All',
-              onTrailingTap: () {
-                _navigateToTab(1); // ✅ Projects tab
-              },
-              child: Column(
-                children: [
-                  _buildImageStyleProjectItem(ProjectModel(name: '50 TPD CBG Plant Construction', details: 'Atirath Bio Energy Pvt. Ltd. | Nalgonda Plant', role: 'Site Engineer', assigned: 8, open: 3, progressValue: 0.65, progressText: '65%', barColor: const Color(0xFF16A34A))),
-                  _buildImageStyleProjectItem(ProjectModel(name: 'Bio Fertilizer Unit', details: 'Atirath Bio Energy Pvt. Ltd. | Nalgonda Plant', role: 'QA Engineer', assigned: 4, open: 2, progressValue: 0.40, progressText: '40%', barColor: const Color(0xFF16A34A))),
-                  _buildImageStyleProjectItem(ProjectModel(name: 'CBG Expansion Phase-II', details: 'Atirath Bio Energy Pvt. Ltd. | Nalgonda Plant', role: 'Reviewer', assigned: 5, open: 1, progressValue: 0.25, progressText: '25%', barColor: const Color(0xFF2563EB))),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-            _buildSectionCard(
-              title: 'TASK COMPLETION OVERVIEW',
-              trailingText: 'This Month 🔽',
-              child: LayoutBuilder(
-                builder: (context, constraints) {
-                  bool useVerticalLayout = constraints.maxWidth < 280;
-
-                  Widget chartWidget = SizedBox(
-                    height: 130,
-                    width: 130,
-                    child: PieChart(
-                      PieChartData(
-                        sectionsSpace: 2,
-                        centerSpaceRadius: 35,
-                        startDegreeOffset: 270,
-                        sections: [
-                          PieChartSectionData(color: const Color(0xFF00A65A), value: 64, showTitle: false, radius: 15),
-                          PieChartSectionData(color: const Color(0xFF0073B7), value: 24, showTitle: false, radius: 15),
-                          PieChartSectionData(color: const Color(0xFFF39C12), value: 8, showTitle: false, radius: 15),
-                          PieChartSectionData(color: const Color(0xFF605CA8), value: 4, showTitle: false, radius: 15),
-                          PieChartSectionData(color: const Color(0xFFDD4B39), value: 4, showTitle: false, radius: 15),
+                )
+              : SingleChildScrollView(
+                  padding: const EdgeInsets.only(left: 14.0, right: 14.0, top: 16.0, bottom: 24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Welcome back, $_userName! 👋',
+                        style: GoogleFonts.inter(fontSize: isSmallScreen ? 18 : 20, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A)),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              _userRole.isNotEmpty ? '$_userRole  |  Projects Department' : 'Projects Department',
+                              style: GoogleFonts.inter(color: const Color(0xFF64748B), fontSize: isSmallScreen ? 11 : 12, fontWeight: FontWeight.w500),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          const Icon(Icons.calendar_today, size: 12, color: Colors.grey),
+                          const SizedBox(width: 4),
+                          Text(
+                            currentDynamicDate,
+                            style: GoogleFonts.inter(color: Colors.grey, fontSize: isSmallScreen ? 11 : 12, fontWeight: FontWeight.bold),
+                          ),
                         ],
                       ),
-                    ),
-                  );
+                      const SizedBox(height: 20),
+                      _buildTodoSectionCard(
+                        title: 'To-Do List',
+                        trailingText: 'View All',
+                        onTrailingTap: () {
+                          _navigateToTab(2); // ✅ Tasks tab
+                        },
+                        child: todoTasks.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                                child: Center(child: Text('No to-do tasks found', style: GoogleFonts.inter(fontSize: 12, color: Colors.grey))),
+                              )
+                            : Column(
+                                children: todoTasks.map((task) {
+                                  return _buildImageStyleTodoItem(task, isSmallScreen);
+                                }).toList(),
+                              ),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildSectionCard(
+                        title: 'UPCOMING TASKS',
+                        trailingText: 'View all',
+                        headerIcon: Icons.calendar_month_outlined,
+                        onTrailingTap: () {
+                          _navigateToTab(2); // ✅ Tasks tab
+                        },
+                        child: Column(
+                          children: [
+                            _buildUpcomingTaskRow(null, 'Task Name', 'Project', 'Due Date', 'Priority', isHeader: true),
+                            const Divider(color: Color(0xFFE2E8F0)),
+                            if (upcomingTasks.isEmpty)
+                              Padding(
+                                padding: const EdgeInsets.symmetric(vertical: 16.0),
+                                child: Center(child: Text('No upcoming tasks found', style: GoogleFonts.inter(fontSize: 12, color: Colors.grey))),
+                              )
+                            else
+                              ...upcomingTasks.map((task) {
+                                return _buildUpcomingTaskRow(
+                                  task,
+                                  task.title,
+                                  task.subtitle.split('•').first.trim(),
+                                  task.date,
+                                  task.priority.isEmpty ? task.tag : task.priority,
+                                  pColor: task.tagColor,
+                                );
+                              }),
+                          ],
+                        ),
+                        footerText: 'View all upcoming tasks →',
+                      ),
+                      const SizedBox(height: 20),
+                      _buildProjectSectionCard(
+                        title: 'My Projects',
+                        trailingText: 'View All',
+                        onTrailingTap: () {
+                          _navigateToTab(1); // ✅ Projects tab
+                        },
+                        child: Column(
+                          children: _projects.isEmpty
+                              ? [
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 16.0),
+                                    child: Center(child: Text('No projects found', style: GoogleFonts.inter(fontSize: 12, color: Colors.grey))),
+                                  )
+                                ]
+                              : _projects.take(3).map((p) => _buildImageStyleProjectItem(p)).toList(),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+                      _buildSectionCard(
+                        title: 'TASK COMPLETION OVERVIEW',
+                        trailingText: 'This Month 🔽',
+                        child: LayoutBuilder(
+                          builder: (context, constraints) {
+                            bool useVerticalLayout = constraints.maxWidth < 280;
 
-                  Widget legendWidget = Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      _buildChartLegend(const Color(0xFF00A65A), 'Completed', '32 (64%)'),
-                      _buildChartLegend(const Color(0xFF0073B7), 'In Progress', '12 (24%)'),
-                      _buildChartLegend(const Color(0xFFF39C12), 'Under Review', '4 (8%)'),
-                      _buildChartLegend(const Color(0xFF605CA8), 'Pending', '2 (4%)'),
-                      _buildChartLegend(const Color(0xFFDD4B39), 'Overdue', '2 (4%)'),
-                    ],
-                  );
+                            Widget chartWidget = SizedBox(
+                              height: 130,
+                              width: 130,
+                              child: PieChart(
+                                PieChartData(
+                                  sectionsSpace: 2,
+                                  centerSpaceRadius: 35,
+                                  startDegreeOffset: 270,
+                                  sections: [
+                                    PieChartSectionData(color: const Color(0xFF00A65A), value: completedPct == 0 && inProgressPct == 0 && underReviewPct == 0 && pendingPct == 0 && overduePct == 0 ? 1 : completedPct, showTitle: false, radius: 15),
+                                    PieChartSectionData(color: const Color(0xFF0073B7), value: inProgressPct, showTitle: false, radius: 15),
+                                    PieChartSectionData(color: const Color(0xFFF39C12), value: underReviewPct, showTitle: false, radius: 15),
+                                    PieChartSectionData(color: const Color(0xFF605CA8), value: pendingPct, showTitle: false, radius: 15),
+                                    PieChartSectionData(color: const Color(0xFFDD4B39), value: overduePct, showTitle: false, radius: 15),
+                                  ],
+                                ),
+                              ),
+                            );
 
-                  return Column(
-                    children: [
-                      useVerticalLayout
-                        ? Column(children: [chartWidget, const SizedBox(height: 10), legendWidget])
-                        : Row(
-                            children: [
-                              Expanded(flex: 4, child: chartWidget),
-                              const SizedBox(width: 10),
-                              Expanded(flex: 5, child: legendWidget),
-                            ],
-                          ),
-                      const SizedBox(height: 15),
-                      Center(
-                        child: Text('64%\nOverall Completion', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
-                      )
+                            Widget legendWidget = Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                _buildChartLegend(const Color(0xFF00A65A), 'Completed', '$completedCount (${completedPct.round()}%)'),
+                                _buildChartLegend(const Color(0xFF0073B7), 'In Progress', '$inProgressCount (${inProgressPct.round()}%)'),
+                                _buildChartLegend(const Color(0xFFF39C12), 'Under Review', '$underReviewCount (${underReviewPct.round()}%)'),
+                                _buildChartLegend(const Color(0xFF605CA8), 'Pending', '$pendingCount (${pendingPct.round()}%)'),
+                                _buildChartLegend(const Color(0xFFDD4B39), 'Overdue', '$overdueCount (${overduePct.round()}%)'),
+                              ],
+                            );
+
+                            return Column(
+                              children: [
+                                useVerticalLayout
+                                  ? Column(children: [chartWidget, const SizedBox(height: 10), legendWidget])
+                                  : Row(
+                                      children: [
+                                        Expanded(flex: 4, child: chartWidget),
+                                        const SizedBox(width: 10),
+                                        Expanded(flex: 5, child: legendWidget),
+                                      ],
+                                    ),
+                                const SizedBox(height: 15),
+                                Center(
+                                  child: Text('${completedPct.round()}%\nOverall Completion', textAlign: TextAlign.center, style: GoogleFonts.inter(fontSize: 13, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+                                )
+                              ],
+                            );
+                          }
+                        ),
+                        footerText: 'View detailed report →',
+                      ),
+                      const SizedBox(height: 20),
+                      const SpacerSection(),
+                      SizedBox(
+                        height: 95,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          physics: const BouncingScrollPhysics(),
+                          children: [
+                            _buildBottomStatCard('${_projects.length}', 'My Projects', 'View projects', Icons.business, const Color(0xFFECFDF5), const Color(0xFF10B981), 1),
+                            _buildBottomStatCard('$_myTasksCount', 'My Tasks', 'View tasks', Icons.assignment_turned_in_outlined, const Color(0xFFEFF6FF), const Color(0xFF2563EB), 2),
+                            _buildBottomStatCard('$_dueTodayCount', 'Due Today', 'View today\'s tasks', Icons.calendar_today, const Color(0xFFFFF7ED), const Color(0xFFF59E0B), 2),
+                            _buildBottomStatCard('$_overdueTasksCount', 'Overdue Tasks', 'View overdue', Icons.error_outline_rounded, const Color(0xFFFEF2F2), const Color(0xFFEF4444), 2),
+                            _buildBottomStatCard('$_completedTasksCount', 'Completed Tasks', 'View completed', Icons.check_circle_outline, const Color(0xFFF5F3FF), const Color(0xFF8B5CF6), 2),
+                          ],
+                        ),
+                      ),
                     ],
-                  );
-                }
-              ),
-              footerText: 'View detailed report →',
-            ),
-            const SizedBox(height: 20),
-            const SpacerSection(),
-            SizedBox(
-              height: 95,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                physics: const BouncingScrollPhysics(),
-                children: [
-                  _buildBottomStatCard('3', 'My Projects', 'View projects', Icons.business, const Color(0xFFECFDF5), const Color(0xFF10B981), 1), // ✅ Projects tab
-                  _buildBottomStatCard('14', 'My Tasks', 'View tasks', Icons.assignment_turned_in_outlined, const Color(0xFFEFF6FF), const Color(0xFF2563EB), 2), // ✅ Tasks tab
-                  _buildBottomStatCard('2', 'Due Today', 'View today\'s tasks', Icons.calendar_today, const Color(0xFFFFF7ED), const Color(0xFFF59E0B), 2), // ✅ Tasks tab
-                  _buildBottomStatCard('1', 'Overdue Tasks', 'View overdue', Icons.error_outline_rounded, const Color(0xFFFEF2F2), const Color(0xFFEF4444), 2), // ✅ Tasks tab
-                  _buildBottomStatCard('32', 'Completed Tasks', 'View completed', Icons.check_circle_outline, const Color(0xFFF5F3FF), const Color(0xFF8B5CF6), 2), // ✅ Tasks tab
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
+                  ),
+                ),
     );
   }
 

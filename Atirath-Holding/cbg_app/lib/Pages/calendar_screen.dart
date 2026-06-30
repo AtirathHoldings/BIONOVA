@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../widgets/header.dart';
 import 'main_screen.dart';
+import '../services/api_service.dart';
 
 class CalendarScreen extends StatefulWidget {
   const CalendarScreen({super.key});
@@ -34,169 +35,126 @@ class CalendarTaskItem {
 }
 
 class _CalendarScreenState extends State<CalendarScreen> {
-  DateTime _currentMonth = DateTime(2025, 5, 1);
-  DateTime _selectedDate = DateTime(2025, 5, 29);
+  DateTime _currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
+  DateTime _selectedDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   String _selectedTab = 'Month'; // 'Month', 'Week', 'Day'
   String _selectedFilter = 'All'; // Filter state
+  bool _isLoading = false;
+  String? _error;
 
   // Draggable Scrollable Controller to expand bottom panel on date clicks
   final DraggableScrollableController _sheetController = DraggableScrollableController();
 
-  // Mock events data matching the screenshot and adding a few extra for interactivity
-  final Map<String, List<CalendarTaskItem>> _eventsMap = {
-    '2025-05-29': [
-      CalendarTaskItem(
-        title: 'Daily Progress Report',
-        projectCode: 'PRJ-001',
-        category: 'Daily Reporting',
-        timeRange: '09:00 AM - 10:00 AM',
-        priority: 'Medium',
-        priorityBgColor: const Color(0xFFE8F5E9),
-        priorityTextColor: const Color(0xFF2E7D32),
-        themeColor: const Color(0xFF2563EB), // Blue
-      ),
-      CalendarTaskItem(
-        title: 'Material Inspection',
-        projectCode: 'PRJ-005',
-        category: 'Quality Check',
-        timeRange: '02:00 PM - 03:00 PM',
-        priority: 'High',
-        priorityBgColor: const Color(0xFFFFEBEE),
-        priorityTextColor: const Color(0xFFC62828),
-        themeColor: const Color(0xFF8B5CF6), // Purple
-      ),
-      CalendarTaskItem(
-        title: 'Site Meeting',
-        projectCode: 'PRJ-001',
-        category: 'Project Meeting',
-        timeRange: '04:00 PM - 05:00 PM',
-        priority: 'Medium',
-        priorityBgColor: const Color(0xFFFFF3E0),
-        priorityTextColor: const Color(0xFFEF6C00),
-        themeColor: const Color(0xFF10B981), // Green
-      ),
-    ],
-    '2025-05-01': [
-      CalendarTaskItem(
-        title: 'Milestone Kickoff',
-        projectCode: 'PRJ-001',
-        category: 'Kickoff',
-        timeRange: '10:00 AM - 11:30 AM',
-        priority: 'Medium',
-        priorityBgColor: const Color(0xFFE8F5E9),
-        priorityTextColor: const Color(0xFF2E7D32),
-        themeColor: const Color(0xFF10B981),
-      ),
-    ],
-    '2025-05-05': [
-      CalendarTaskItem(
-        title: 'Safety Training',
-        projectCode: 'PRJ-003',
-        category: 'HSE',
-        timeRange: '09:00 AM - 11:00 AM',
-        priority: 'High',
-        priorityBgColor: const Color(0xFFFFEBEE),
-        priorityTextColor: const Color(0xFFC62828),
-        themeColor: const Color(0xFFEF4444),
-      ),
-    ],
-    '2025-05-07': [
-      CalendarTaskItem(
-        title: 'Design Team Sync',
-        projectCode: 'PRJ-002',
-        category: 'Sync',
-        timeRange: '03:00 PM - 04:00 PM',
-        priority: 'High',
-        priorityBgColor: const Color(0xFFFFEBEE),
-        priorityTextColor: const Color(0xFFC62828),
-        themeColor: const Color(0xFF8B5CF6),
-      ),
-    ],
-    '2025-05-10': [
-      CalendarTaskItem(
-        title: 'Procurement Alignment',
-        projectCode: 'PRJ-003',
-        category: 'Logistics',
-        timeRange: '10:00 AM - 11:30 AM',
-        priority: 'Medium',
-        priorityBgColor: const Color(0xFFFFF3E0),
-        priorityTextColor: const Color(0xFFEF6C00),
-        themeColor: const Color(0xFFF59E0B),
-      ),
-    ],
-    '2025-05-13': [
-      CalendarTaskItem(
-        title: 'Site Safety Audit',
-        projectCode: 'PRJ-001',
-        category: 'HSE Audit',
-        timeRange: '09:00 AM - 11:00 AM',
-        priority: 'Medium',
-        priorityBgColor: const Color(0xFFE8F5E9),
-        priorityTextColor: const Color(0xFF2E7D32),
-        themeColor: const Color(0xFF3B82F6),
-      ),
-    ],
-    '2025-05-20': [
-      CalendarTaskItem(
-        title: 'Project Status Review',
-        projectCode: 'PRJ-004',
-        category: 'Review',
-        timeRange: '02:00 PM - 03:30 PM',
-        priority: 'Medium',
-        priorityBgColor: const Color(0xFFFFF3E0),
-        priorityTextColor: const Color(0xFFEF6C00),
-        themeColor: const Color(0xFF10B981),
-      ),
-    ],
-    '2025-05-22': [
-      CalendarTaskItem(
-        title: 'Drawing Sign-off',
-        projectCode: 'PRJ-004',
-        category: 'Design Approval',
-        timeRange: '03:00 PM - 04:30 PM',
-        priority: 'High',
-        priorityBgColor: const Color(0xFFFFEBEE),
-        priorityTextColor: const Color(0xFFC62828),
-        themeColor: const Color(0xFFEF4444),
-      ),
-    ],
-    '2025-05-26': [
-      CalendarTaskItem(
-        title: 'Milestone 2 Review',
-        projectCode: 'PRJ-005',
-        category: 'Milestone Review',
-        timeRange: '01:00 PM - 02:00 PM',
-        priority: 'High',
-        priorityBgColor: const Color(0xFFFFEBEE),
-        priorityTextColor: const Color(0xFFC62828),
-        themeColor: const Color(0xFF8B5CF6),
-      ),
-    ],
-    '2025-05-28': [
-      CalendarTaskItem(
-        title: 'Pre-Pour QC Inspection',
-        projectCode: 'PRJ-002',
-        category: 'Civil QC',
-        timeRange: '09:00 AM - 10:30 AM',
-        priority: 'Medium',
-        priorityBgColor: const Color(0xFFFFF3E0),
-        priorityTextColor: const Color(0xFFEF6C00),
-        themeColor: const Color(0xFFF59E0B),
-      ),
-    ],
-    '2025-05-31': [
-      CalendarTaskItem(
-        title: 'Monthly Safety Audit',
-        projectCode: 'PRJ-001',
-        category: 'Safety Audit',
-        timeRange: '10:00 AM - 12:00 PM',
-        priority: 'Medium',
-        priorityBgColor: const Color(0xFFE8F5E9),
-        priorityTextColor: const Color(0xFF2E7D32),
-        themeColor: const Color(0xFF10B981),
-      ),
-    ],
-  };
+  final Map<String, List<CalendarTaskItem>> _eventsMap = {};
+
+  @override
+  void initState() {
+    super.initState();
+    final now = DateTime.now();
+    _currentMonth = DateTime(now.year, now.month, 1);
+    _selectedDate = now;
+    _fetchCalendarData();
+  }
+
+  Future<void> _fetchCalendarData() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      final String refDateStr = '${_currentMonth.year}-${_currentMonth.month.toString().padLeft(2, '0')}-01';
+      final List<dynamic> feed = await ApiService.getCalendarFeed(
+        viewType: 'month',
+        date: refDateStr,
+      );
+
+      final Map<String, List<CalendarTaskItem>> newEventsMap = {};
+
+      for (var item in feed) {
+        final String dateRaw = item['date']?.toString() ?? '';
+        if (dateRaw.isEmpty) continue;
+
+        String dateKey = dateRaw;
+        if (dateRaw.contains('T')) {
+          dateKey = dateRaw.split('T')[0];
+        }
+
+        final String type = item['type']?.toString() ?? 'TASK';
+        final String title = item['title']?.toString() ?? '';
+        final String code = item['code']?.toString() ?? '';
+        final String desc = item['description']?.toString() ?? '';
+        final String time = item['time']?.toString() ?? 'All Day';
+        final String status = item['status']?.toString() ?? 'OPEN';
+
+        String priority = 'Medium';
+        Color priorityBg = const Color(0xFFFFF3E0);
+        Color priorityText = const Color(0xFFEF6C00);
+        Color themeColor = const Color(0xFF10B981);
+
+        if (type == 'HOLIDAY') {
+          priority = 'Low';
+          priorityBg = const Color(0xFFEFF6FF);
+          priorityText = const Color(0xFF1E40AF);
+          themeColor = const Color(0xFF3B82F6);
+        } else if (type == 'MILESTONE') {
+          priority = 'High';
+          priorityBg = const Color(0xFFF3E5F5);
+          priorityText = const Color(0xFF6A1B9A);
+          themeColor = const Color(0xFF8B5CF6);
+        } else {
+          if (status == 'HIGH' || status == 'COMPLETED') {
+            priority = 'High';
+            priorityBg = const Color(0xFFFFEBEE);
+            priorityText = const Color(0xFFC62828);
+            themeColor = const Color(0xFFEF4444);
+          } else if (status == 'WIP' || status == 'UNDER_REVIEW') {
+            priority = 'Medium';
+            priorityBg = const Color(0xFFFFF3E0);
+            priorityText = const Color(0xFFEF6C00);
+            themeColor = const Color(0xFFF59E0B);
+          } else {
+            priority = 'Low';
+            priorityBg = const Color(0xFFE8F5E9);
+            priorityText = const Color(0xFF2E7D32);
+            themeColor = const Color(0xFF10B981);
+          }
+        }
+
+        final eventItem = CalendarTaskItem(
+          title: title,
+          projectCode: code.isNotEmpty ? code : (type == 'HOLIDAY' ? 'HOLIDAY' : 'N/A'),
+          category: type,
+          timeRange: time.isNotEmpty ? time : 'All Day',
+          priority: priority,
+          priorityBgColor: priorityBg,
+          priorityTextColor: priorityText,
+          themeColor: themeColor,
+        );
+
+        if (!newEventsMap.containsKey(dateKey)) {
+          newEventsMap[dateKey] = [];
+        }
+        newEventsMap[dateKey]!.add(eventItem);
+      }
+
+      if (mounted) {
+        setState(() {
+          _eventsMap.clear();
+          _eventsMap.addAll(newEventsMap);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   void _handleNotification() {
     Navigator.pushNamed(context, '/notifications');
@@ -206,12 +164,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month - 1, 1);
     });
+    _fetchCalendarData();
   }
 
   void _nextMonth() {
     setState(() {
       _currentMonth = DateTime(_currentMonth.year, _currentMonth.month + 1, 1);
     });
+    _fetchCalendarData();
   }
 
   // Returns 42 days for the calendar grid
@@ -467,7 +427,12 @@ class _CalendarScreenState extends State<CalendarScreen> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 8),
+                      if (_isLoading)
+                        const LinearProgressIndicator(minHeight: 2, color: Color(0xFF2563EB), backgroundColor: Color(0xFFF1F5F9))
+                      else
+                        const SizedBox(height: 2),
+                      const SizedBox(height: 8),
 
                       // View Selector Tabs (Month, Week, Day)
                       Container(

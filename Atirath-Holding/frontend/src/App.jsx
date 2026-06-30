@@ -7,18 +7,26 @@ import "./styles/mobile-responsive.css"; // Added global mobile responsive style
 import Login from "./components/Login";
 import AdminDashboard from "./components/Projectmanager/AdminDashboard";
 import UserDashboard from "./components/Projectmanager/UserDashboard"; // New User Dashboard
+import ProjectManagerDashboard from "./components/Projectmanager/ProjectManagerDashboard";
 import CompanyCreation from "./components/Admin/CompanyMaster";
 import PlantCreation from "./components/Admin/PlantMaster";
 import AgriLandAllocation from "./components/Admin/LandMaster";
+import DepartmentMapping from "./components/Admin/DepartmentMapping";
 import Projects from "./components/User/Projects";
 import Calendar from "./components/User/Calendar";
 import ProjectCreation from "./components/Projectmanager/ProjectCreation";
 import MilestoneCreation from "./components/Projectmanager/MilestoneCreation";
 import EmployeeCreation from "./components/Projectmanager/EmployeeMaster";
 import DepartmentCreation from "./components/Projectmanager/DepartmentMaster";
-import TaskBoard from "./components/User/TaskBoard";
+import TaskBoard from "./components/Projectmanager/TaskBoard";
 import MyTasks from "./components/User/My Tasks";
 import Profile from "./components/User/Profile";
+import PublicHoliday from "./components/User/PublicHoliday";
+import ProjectDetails from "./components/User/ProjectDetails";
+import ProjectList from "./components/Projectmanager/ProjectList";
+import AssignAccess from "./components/Projectmanager/AssignAccess";
+import CreateIndividualTask from "./components/Projectmanager/IndividualTask";
+import ResetPassword from "./components/ResetPassword";
 
 const AppContent = () => {
   const navigate = useNavigate();
@@ -56,15 +64,19 @@ const AppContent = () => {
       {/* Dashboards */}
       <Route path="/dashboard" element={isLoggedIn ? <AdminDashboard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/user-dashboard" element={isLoggedIn ? <UserDashboard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/pm-dashboard" element={isLoggedIn ? <ProjectManagerDashboard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
 
       {/* Common Routes */}
       <Route path="/projects" element={isLoggedIn ? <Projects userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/project-list" element={isLoggedIn ? <ProjectList userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/project-details/:id" element={isLoggedIn ? <ProjectDetails userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/calendar" element={isLoggedIn ? <Calendar userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
 
       {/* Admin Features */}
       <Route path="/company-creation" element={isLoggedIn ? <CompanyCreation onLogout={handleLogout} userRole={userRole} /> : <Navigate to="/" replace />} />
       <Route path="/plant-creation" element={isLoggedIn ? <PlantCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/agriland-allocation" element={isLoggedIn ? <AgriLandAllocation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/department-mapping" element={isLoggedIn ? <DepartmentMapping userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
 
       {/* Project Manager Features */}
       <Route path="/project-creation" element={isLoggedIn ? <ProjectCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
@@ -74,6 +86,10 @@ const AppContent = () => {
       <Route path="/employee-creation" element={isLoggedIn ? <EmployeeCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/department-creation" element={isLoggedIn ? <DepartmentCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/profile" element={isLoggedIn ? <Profile userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/public-holidays" element={isLoggedIn ? <PublicHoliday userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/assign-access" element={isLoggedIn ? <AssignAccess userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/individual-task" element={isLoggedIn ? <CreateIndividualTask userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
       
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

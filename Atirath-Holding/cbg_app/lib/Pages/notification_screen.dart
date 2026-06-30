@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../widgets/header.dart';      
 import '../widgets/footer.dart';      
+import '../services/api_service.dart';
+import 'main_screen.dart';
 
 // ============================================
 // NOTIFICATION MODEL
@@ -40,6 +42,123 @@ class NotificationModel {
     this.isArchived = false,
     this.quickActions = const [],
   });
+
+  factory NotificationModel.fromJson(Map<String, dynamic> json, {VoidCallback? onMarkRead}) {
+    final title = json['title'] ?? '';
+    final message = json['message'] ?? '';
+    
+    // Category mapping based on content keywords
+    String category = 'system';
+    final lowerTitle = title.toLowerCase();
+    final lowerMsg = message.toLowerCase();
+    
+    if (lowerTitle.contains('overdue') || lowerTitle.contains('escalat') || 
+        lowerMsg.contains('overdue') || lowerMsg.contains('escalat')) {
+      category = 'critical';
+    } else if (lowerTitle.contains('task') || lowerTitle.contains('assign') || 
+               lowerMsg.contains('task') || lowerMsg.contains('assign')) {
+      category = 'tasks';
+    } else if (lowerTitle.contains('comment') || lowerMsg.contains('comment')) {
+      category = 'comments';
+    } else if (lowerTitle.contains('progress') || lowerTitle.contains('milestone') || 
+               lowerMsg.contains('progress') || lowerMsg.contains('milestone')) {
+      category = 'progress';
+    } else if (lowerTitle.contains('document') || lowerTitle.contains('file') || 
+               lowerMsg.contains('document') || lowerMsg.contains('file') || 
+               lowerMsg.contains('upload')) {
+      category = 'document';
+    }
+
+    // Priority mapping based on keywords
+    String priority = 'info';
+    if (category == 'critical') {
+      priority = 'critical';
+    } else if (lowerTitle.contains('high') || lowerMsg.contains('high') || 
+               lowerTitle.contains('urgent') || lowerMsg.contains('urgent')) {
+      priority = 'high';
+    } else if (lowerTitle.contains('medium') || lowerMsg.contains('medium') || 
+               lowerTitle.contains('normal') || lowerMsg.contains('normal')) {
+      priority = 'medium';
+    } else if (lowerTitle.contains('low') || lowerMsg.contains('low')) {
+      priority = 'low';
+    }
+
+    // Icon mapping
+    String icon = 'bell';
+    if (priority == 'critical') {
+      icon = 'exclamation-triangle';
+    } else if (category == 'tasks') {
+      if (lowerMsg.contains('complet')) {
+        icon = 'check-circle';
+      } else {
+        icon = 'tasks';
+      }
+    } else if (category == 'comments') {
+      icon = 'comment';
+    } else if (category == 'progress') {
+      if (lowerMsg.contains('milestone')) {
+        icon = 'flag-checkered';
+      } else {
+        icon = 'chart-line';
+      }
+    } else if (category == 'document') {
+      icon = 'file-upload';
+    }
+
+    // Color mapping
+    Color color = const Color(0xFF0EA5E9); // sky blue for info/system
+    if (priority == 'critical') {
+      color = const Color(0xFFEF4444); // red
+    } else if (priority == 'high') {
+      color = const Color(0xFFF59E0B); // orange
+    } else if (priority == 'medium') {
+      color = category == 'comments' ? const Color(0xFF8B5CF6) : const Color(0xFF2563EB); // purple or blue
+    } else if (priority == 'low') {
+      color = const Color(0xFF10B981); // green
+    }
+
+    // Project tag extraction (e.g. PRJ-001)
+    String projectTag = 'General';
+    final regExp = RegExp(r'PRJ-\d+');
+    final match = regExp.firstMatch('$title $message');
+    if (match != null) {
+      projectTag = match.group(0)!;
+    }
+
+    // Parse timestamp
+    DateTime timestamp = DateTime.now();
+    if (json['createdAt'] != null) {
+      timestamp = DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now();
+    }
+
+    // Generate quick actions
+    final List<QuickAction> quickActions = [];
+    if (!(json['isRead'] ?? false) && onMarkRead != null) {
+      quickActions.add(
+        QuickAction(
+          label: 'Mark Read',
+          icon: Icons.check,
+          color: const Color(0xFF10B981),
+          onTap: onMarkRead,
+        ),
+      );
+    }
+
+    return NotificationModel(
+      id: json['id']?.toString() ?? '',
+      title: title,
+      message: message,
+      category: category,
+      priority: priority,
+      icon: icon,
+      color: color,
+      projectTag: projectTag,
+      timestamp: timestamp,
+      isRead: json['isRead'] ?? false,
+      isArchived: false,
+      quickActions: quickActions,
+    );
+  }
 
   String get timeAgo {
     final now = DateTime.now();
@@ -100,7 +219,7 @@ class _NotificationScreenState extends State<NotificationScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _loadSampleNotifications();
+    _fetchNotifications();
   }
 
   @override
@@ -109,288 +228,45 @@ class _NotificationScreenState extends State<NotificationScreen>
     super.dispose();
   }
 
-  void _loadSampleNotifications() {
-    _notifications = [
-      // Critical - Overdue
-      NotificationModel(
-        id: '1',
-        title: 'Equipment Inspection Overdue',
-        message: 'Task is 3 days overdue. Please take immediate action.',
-        category: 'critical',
-        priority: 'critical',
-        icon: 'exclamation-triangle',
-        color: const Color(0xFFEF4444),
-        taskId: 'TASK-005',
-        projectId: 'PRJ-005',
-        projectTag: 'PRJ-005 • Maintenance',
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-        isRead: false,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Equipment Inspection'),
-          ),
-          QuickAction(
-            label: 'Dismiss',
-            icon: Icons.check,
-            color: const Color(0xFF64748B),
-            onTap: () => _handleDismiss('1'),
-          ),
-        ],
-      ),
+  bool _isLoading = true;
+  String? _error;
 
-      // Completed
-      NotificationModel(
-        id: '2',
-        title: 'PCC Work Completed',
-        message: 'Ravi Kumar marked "PCC Work" as completed.',
-        category: 'tasks',
-        priority: 'low',
-        icon: 'check-circle',
-        color: const Color(0xFF10B981),
-        taskId: 'TASK-002',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • PCC Work',
-        timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('PCC Work'),
-          ),
-          QuickAction(
-            label: 'Approve',
-            icon: Icons.check_circle,
-            color: const Color(0xFF10B981),
-            onTap: () => _handleApprove('2'),
-          ),
-        ],
-      ),
+  Future<void> _fetchNotifications() async {
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+    try {
+      final List<dynamic> rawNotifications = await ApiService.getNotifications();
+      if (!mounted) return;
+      setState(() {
+        _notifications = rawNotifications.map((json) {
+          final idVal = json['id'] as int? ?? 0;
+          return NotificationModel.fromJson(
+            json,
+            onMarkRead: () => _handleMarkRead(idVal),
+          );
+        }).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
 
-      // New Task Assigned
-      NotificationModel(
-        id: '3',
-        title: 'New Task Assigned',
-        message: '"Reinforcement Fixing" task assigned to you by Suresh Babu.',
-        category: 'tasks',
-        priority: 'high',
-        icon: 'tasks',
-        color: const Color(0xFFF59E0B),
-        taskId: 'TASK-003',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Civil Construction',
-        timestamp: DateTime.now().subtract(const Duration(hours: 6)),
-        isRead: false,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Reinforcement Fixing'),
-          ),
-          QuickAction(
-            label: 'Accept',
-            icon: Icons.check,
-            color: const Color(0xFF10B981),
-            onTap: () => _handleAccept('3'),
-          ),
-          QuickAction(
-            label: 'Decline',
-            icon: Icons.close,
-            color: const Color(0xFFEF4444),
-            onTap: () => _handleDecline('3'),
-          ),
-        ],
-      ),
-
-      // Comment
-      NotificationModel(
-        id: '4',
-        title: 'New Comment on Task',
-        message: 'Suresh Babu: "Please check the rebar spacing measurements."',
-        category: 'comments',
-        priority: 'medium',
-        icon: 'comment',
-        color: const Color(0xFF8B5CF6),
-        taskId: 'TASK-003',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Reinforcement',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Reinforcement Fixing'),
-          ),
-          QuickAction(
-            label: 'Reply',
-            icon: Icons.reply,
-            color: const Color(0xFF8B5CF6),
-            onTap: () => _handleReply('4'),
-          ),
-        ],
-      ),
-
-      // Progress Update
-      NotificationModel(
-        id: '5',
-        title: 'Project Progress Updated',
-        message: '50 TPD CBG Plant is now 65% complete. 🎉',
-        category: 'progress',
-        priority: 'info',
-        icon: 'chart-line',
-        color: const Color(0xFF0EA5E9),
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • CBG Plant',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Project',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewProject('50 TPD CBG Plant'),
-          ),
-        ],
-      ),
-
-      // Document Upload
-      NotificationModel(
-        id: '6',
-        title: 'Document Uploaded',
-        message: '"Inspection_Report.pdf" uploaded by Ravi Kumar.',
-        category: 'document',
-        priority: 'medium',
-        icon: 'file-upload',
-        color: const Color(0xFF2563EB),
-        taskId: 'TASK-002',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Documents',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Document',
-            icon: Icons.picture_as_pdf,
-            color: const Color(0xFFEF4444),
-            onTap: () => _handleViewDocument('Inspection_Report.pdf'),
-          ),
-        ],
-      ),
-
-      // Task Reassigned
-      NotificationModel(
-        id: '7',
-        title: 'Task Reassigned',
-        message: '"Excavation Work" reassigned from Ravi to Suresh. Reason: Leave.',
-        category: 'tasks',
-        priority: 'medium',
-        icon: 'exchange-alt',
-        color: const Color(0xFFF59E0B),
-        taskId: 'TASK-001',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Excavation',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Excavation Work'),
-          ),
-        ],
-      ),
-
-      // Milestone
-      NotificationModel(
-        id: '8',
-        title: 'Milestone Achieved',
-        message: '"PCC Work Completion" milestone achieved on 02-Jun-2025.',
-        category: 'progress',
-        priority: 'info',
-        icon: 'flag-checkered',
-        color: const Color(0xFF10B981),
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Milestones',
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Project',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewProject('50 TPD CBG Plant'),
-          ),
-        ],
-      ),
-
-      // Deadline Reminder
-      NotificationModel(
-        id: '9',
-        title: 'Deadline Reminder',
-        message: '"Pipeline Installation" due in 2 days (25-Jul-2025).',
-        category: 'tasks',
-        priority: 'high',
-        icon: 'clock',
-        color: const Color(0xFFF59E0B),
-        taskId: 'TASK-008',
-        projectId: 'PRJ-002',
-        projectTag: 'PRJ-002 • Infrastructure',
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-        isRead: false,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Pipeline Installation'),
-          ),
-          QuickAction(
-            label: 'Dismiss',
-            icon: Icons.check,
-            color: const Color(0xFF64748B),
-            onTap: () => _handleDismiss('9'),
-          ),
-        ],
-      ),
-
-      // Escalation
-      NotificationModel(
-        id: '10',
-        title: 'Issue Escalated',
-        message: '"Grouting Work" blocked - Inspection pending. Escalated to Manager.',
-        category: 'critical',
-        priority: 'critical',
-        icon: 'arrow-up',
-        color: const Color(0xFFEF4444),
-        taskId: 'TASK-006',
-        projectId: 'PRJ-002',
-        projectTag: 'PRJ-002 • Grouting',
-        timestamp: DateTime.now().subtract(const Duration(days: 4)),
-        isRead: false,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Grouting Work'),
-          ),
-          QuickAction(
-            label: 'Resolve',
-            icon: Icons.check_circle,
-            color: const Color(0xFF10B981),
-            onTap: () => _handleResolve('10'),
-          ),
-        ],
-      ),
-    ];
+  Future<void> _handleMarkRead(int id) async {
+    final success = await ApiService.markNotificationAsRead(id);
+    if (success) {
+      _fetchNotifications();
+      _showSnackBar('✅ Notification marked as read');
+    } else {
+      _showSnackBar('❌ Failed to mark notification as read');
+    }
   }
 
   // ============================================
@@ -476,7 +352,11 @@ class _NotificationScreenState extends State<NotificationScreen>
     _showSnackBar('✅ Escalation resolved!');
   }
 
-  void _handleDismiss(String id) {
+  void _handleDismiss(String id) async {
+    final idInt = int.tryParse(id);
+    if (idInt != null) {
+      await ApiService.markNotificationAsRead(idInt);
+    }
     setState(() {
       _notifications.removeWhere((n) => n.id == id);
     });
@@ -640,9 +520,13 @@ class _NotificationScreenState extends State<NotificationScreen>
           _buildFilterBar(),
           // Notification List
           Expanded(
-            child: keys.isEmpty
-                ? _buildEmptyState()
-                : _buildNotificationList(keys, groupedNotifications),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(child: Text('Error: $_error'))
+                    : keys.isEmpty
+                        ? _buildEmptyState()
+                        : _buildNotificationList(keys, groupedNotifications),
           ),
         ],
       ),
@@ -656,12 +540,10 @@ class _NotificationScreenState extends State<NotificationScreen>
         child: CustomFooter(
           currentIndex: _currentIdx,
           onTabSelected: (index) {
-            setState(() {
-              _currentIdx = index;
-            });
-            // డ్యాష్‌బోర్డ్ లేదా టాస్క్ రూట్స్‌కి వెళ్ళడానికి కండిషన్స్
-            if (index == 0) Navigator.pushReplacementNamed(context, '/dashboard');
-            if (index == 1) Navigator.pushReplacementNamed(context, '/tasks');
+            if (MainScreen.navigatorKey.currentState != null) {
+              MainScreen.navigatorKey.currentState!.changeTab(index);
+              Navigator.popUntil(context, (route) => route.isFirst);
+            }
           },
         ),
       ),
@@ -873,30 +755,15 @@ class _NotificationScreenState extends State<NotificationScreen>
         child: const Icon(Icons.delete, color: Colors.white),
       ),
       child: GestureDetector(
-        onTap: () {
+        onTap: () async {
           if (isUnread) {
-            setState(() {
-              final index = _notifications.indexWhere((n) => n.id == notification.id);
-              if (index != -1) {
-                _notifications[index] = NotificationModel(
-                  id: _notifications[index].id,
-                  title: _notifications[index].title,
-                  message: _notifications[index].message,
-                  category: _notifications[index].category,
-                  priority: _notifications[index].priority,
-                  icon: _notifications[index].icon,
-                  color: _notifications[index].color,
-                  taskId: _notifications[index].taskId,
-                  projectId: _notifications[index].projectId,
-                  userId: _notifications[index].userId,
-                  projectTag: _notifications[index].projectTag,
-                  timestamp: _notifications[index].timestamp,
-                  isRead: true,
-                  isArchived: _notifications[index].isArchived,
-                  quickActions: _notifications[index].quickActions,
-                );
+            final idInt = int.tryParse(notification.id);
+            if (idInt != null) {
+              final success = await ApiService.markNotificationAsRead(idInt);
+              if (success) {
+                _fetchNotifications();
               }
-            });
+            }
           }
         },
         child: Container(

@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/header.dart';
 import '../widgets/footer.dart';
 import 'main_screen.dart';
+import '../models/project_model.dart';
+import '../models/task_item.dart';
+import '../services/api_service.dart';
 
 // --- DATA MODELS ---
 class MilestoneModel {
@@ -41,6 +45,8 @@ class TaskModel {
   final double progress;
   final Color priorityColor;
   final Color statusColor;
+  final TaskItem taskItem;
+  final String milestoneTitle;
 
   TaskModel({
     required this.code,
@@ -52,6 +58,8 @@ class TaskModel {
     required this.progress,
     required this.priorityColor,
     required this.statusColor,
+    required this.taskItem,
+    required this.milestoneTitle,
   });
 }
 
@@ -99,107 +107,402 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   // Selected task ID for highlighting
   String? _selectedTaskId;
 
-  // Milestone dropdown
   String _selectedMilestone = "All Milestones";
-  final List<String> _milestoneNames = ["All Milestones", "Project Initiation", "Civil Construction"];
+  List<String> _milestoneNames = ["All Milestones"];
+  String? _selectedMilestoneTitle;
 
-  final List<MilestoneModel> _milestones = [
-    MilestoneModel(id: "1", title: "PCC Work Completion", desc: "PCC work for foundation and structures", startDate: "10-Apr-2025", targetDate: "02-Jun-2025", progress: 100, assigned: 2, open: 0, status: "Completed", color: const Color(0xff10B981)),
-    MilestoneModel(id: "2", title: "Reinforcement Fixing", desc: "Rebar fixing for all major structures", startDate: "03-Jun-2025", targetDate: "05-Jun-2025", progress: 60, assigned: 3, open: 2, status: "In Progress", color: const Color(0xff2563EB)),
-    MilestoneModel(id: "3", title: "Equipment Foundation", desc: "Foundation work for equipment and skids", startDate: "05-Jun-2025", targetDate: "20-Jun-2025", progress: 20, assigned: 2, open: 2, status: "In Progress", color: const Color(0xff7C3AED)),
-    MilestoneModel(id: "4", title: "Grouting Work", desc: "Grouting for equipment foundation", startDate: "21-Jun-2025", targetDate: "10-Jun-2025", progress: 0, assigned: 1, open: 1, status: "Not Started", color: const Color(0xff94A3B8)),
-    MilestoneModel(id: "5", title: "Pipe Line Installation", desc: "Installation of process piping", startDate: "11-Jun-2025", targetDate: "25-Jul-2025", progress: 0, assigned: 4, open: 4, status: "Not Started", color: const Color(0xff94A3B8)),
-  ];
+  List<MilestoneModel> _milestones = [];
+  List<TaskModel> _tasks = [];
+  List<GanttItemModel> _ganttData = [];
 
-  final List<TaskModel> _tasks = [
-    TaskModel(code: "PRJ-001-T02", name: "Column Reinforcement - C1 to C10", assignedTo: "Ravi Kumar (You)", priority: "High", dueDate: "04-Jun-2025", status: "In Progress", progress: 0.6, priorityColor: const Color(0xffEF4444), statusColor: const Color(0xff2563EB)),
-    TaskModel(code: "PRJ-001-T03", name: "Beam Reinforcement - B1 to B8", assignedTo: "Ravi Kumar (You)", priority: "Medium", dueDate: "05-Jun-2025", status: "Pending", progress: 0.0, priorityColor: const Color(0xffF59E0B), statusColor: const Color(0xffF59E0B)),
-    TaskModel(code: "PRJ-001-T04", name: "Slab Reinforcement - S1", assignedTo: "Ravi Kumar (You)", priority: "Medium", dueDate: "05-Jun-2025", status: "Pending", progress: 0.0, priorityColor: const Color(0xffF59E0B), statusColor: const Color(0xffF59E0B)),
-  ];
+  ProjectModel? _project;
+  bool _isProjectLoaded = false;
+  bool _isLoading = true;
+  String? _error;
+  String _projectLocation = 'Loading Location...';
 
-  final List<GanttItemModel> _ganttData = [
-    GanttItemModel(
-      id: "g1",
-      milestoneName: "Milestone 1",
-      taskName: "Task A - Site Preparation",
-      progress: "100%",
-      startDay: 1,
-      durationDays: 6,
-    ),
-    GanttItemModel(
-      id: "g2",
-      milestoneName: "Milestone 2",
-      taskName: "Task B - Excavation",
-      progress: "100%",
-      startDay: 5,
-      durationDays: 6,
-    ),
-    GanttItemModel(
-      id: "g3",
-      milestoneName: "Milestone 3",
-      taskName: "Task C - PCC Work",
-      progress: "87%",
-      startDay: 9,
-      durationDays: 7,
-    ),
-    GanttItemModel(
-      id: "g4",
-      milestoneName: "Milestone 4",
-      taskName: "Task D - Reinforcement",
-      progress: "60%",
-      startDay: 13,
-      durationDays: 8,
-    ),
-    GanttItemModel(
-      id: "g5",
-      milestoneName: "Milestone 5",
-      taskName: "Task E - Shuttering",
-      progress: "20%",
-      startDay: 18,
-      durationDays: 5,
-    ),
-    GanttItemModel(
-      id: "g6",
-      milestoneName: "Milestone 6",
-      taskName: "Task F - Concrete Pouring",
-      progress: "10%",
-      startDay: 22,
-      durationDays: 4,
-    ),
-    GanttItemModel(
-      id: "g7",
-      milestoneName: "Milestone 7",
-      taskName: "Task G - Curing",
-      progress: "0%",
-      startDay: 25,
-      durationDays: 6,
-    ),
-  ];
+  Future<void> _fetchProjectData() async {
+    if (_project == null) {
+      setState(() { _isLoading = false; });
+      return;
+    }
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      // Fetch plant location
+      if (_project?.pltId != null && _project!.pltId! > 0) {
+        try {
+          final plants = await ApiService.getPlants();
+          final match = plants.firstWhere(
+            (p) => (p['pltId'] ?? p['plt_id']) == _project!.pltId,
+            orElse: () => null,
+          );
+          if (match != null) {
+            final String addr = match['addr'] ?? '';
+            final String dist = match['dist'] ?? '';
+            final String pltNm = match['pltNm'] ?? match['plt_nm'] ?? '';
+            
+            List<String> parts = [];
+            if (pltNm.isNotEmpty) parts.add(pltNm);
+            if (dist.isNotEmpty) parts.add(dist);
+            if (addr.isNotEmpty && parts.length < 2) parts.add(addr);
+            
+            _projectLocation = parts.isNotEmpty ? parts.join(', ') : 'Unknown Location';
+          } else {
+            _projectLocation = 'Location Not Found';
+          }
+        } catch (pe) {
+          debugPrint('Error fetching plant: $pe');
+          _projectLocation = 'Unknown Location';
+        }
+      } else {
+        _projectLocation = 'No Location Assigned';
+      }
+
+      final currentEmpId = await ApiService.getCurrentEmployeeId();
+      final prefs = await SharedPreferences.getInstance();
+      final role = prefs.getString('userRole') ?? '';
+      final filterByEmp = currentEmpId != null &&
+          role.isNotEmpty &&
+          role.toLowerCase() != 'admin' &&
+          role.toLowerCase() != 'manager';
+
+      List<dynamic> rawMilestones = [];
+      List<List<dynamic>> allRawTasks = [];
+      List<dynamic> rawGantt = [];
+
+      if (filterByEmp) {
+        final employeeMilestones = await ApiService.getMilestonesByEmployee(currentEmpId);
+        rawMilestones = employeeMilestones.where((m) => m['prjId'] == _project!.prjId).toList();
+
+        final employeeTasks = await ApiService.getTasksByEmployee(currentEmpId);
+        for (var m in rawMilestones) {
+          final rawMId = m['mId'] ?? m['mid'];
+          if (rawMId == null) continue;
+          final int mId = (rawMId as num).toInt();
+
+          final mTasks = employeeTasks.where((t) {
+            final rawTaskMId = t['mId'] ?? t['mid'];
+            if (rawTaskMId == null) return false;
+            return (rawTaskMId as num).toInt() == mId;
+          }).toList();
+          allRawTasks.add(mTasks);
+        }
+      } else {
+        final results = await Future.wait([
+          ApiService.getMilestones(_project!.prjId),
+          ApiService.getGanttData(_project!.prjId),
+        ]);
+        rawMilestones = results[0] as List<dynamic>;
+        rawGantt = results[1] as List<dynamic>;
+
+        final List<Future<List<dynamic>>> taskFutures = rawMilestones.map((m) {
+          final rawMId = m['mId'] ?? m['mid'];
+          if (rawMId == null) return Future.value(<dynamic>[]);
+          final int mId = (rawMId as num).toInt();
+          return ApiService.getTasksForMilestone(mId);
+        }).toList();
+
+        allRawTasks = await Future.wait(taskFutures);
+      }
+
+      // ── Step 2: Parse project start date (handles ISO or human format) ──
+      final DateTime projectStart = _parseAnyDate(_project!.stDt);
+
+      // ── Step 3: Parse Gantt data ──
+      final List<GanttItemModel> ganttModels = [];
+      if (rawGantt.isNotEmpty) {
+        var prjItem = rawGantt.firstWhere((item) => item['type'] == 'project', orElse: () => null);
+        DateTime pStart = projectStart;
+        if (prjItem != null && prjItem['startDate'] != null) {
+          pStart = _parseAnyDate(prjItem['startDate'].toString(), projectStart);
+        }
+
+        Map<String, String> milestoneMap = {};
+        for (var item in rawGantt) {
+          if (item['type'] == 'milestone') {
+            milestoneMap[item['id'].toString()] = item['name']?.toString() ?? '';
+          }
+        }
+
+        for (var item in rawGantt) {
+          if (item['type'] == 'task') {
+            final String tId = item['id']?.toString() ?? '';
+            final String tName = item['name']?.toString() ?? '';
+            final double progVal = (item['progress'] as num?)?.toDouble() ?? 0.0;
+            final String progText = '${(progVal * 100).toInt()}%';
+
+            final String parentId = item['parent']?.toString() ?? '';
+            final String msName = milestoneMap[parentId] ?? 'Other';
+
+            final String stDtRaw = item['startDate']?.toString() ?? '';
+            final String endDtRaw = item['endDate']?.toString() ?? '';
+
+            int ganttStart = 1;
+            int ganttDuration = 3;
+
+            if (stDtRaw.isNotEmpty) {
+              try {
+                final ts = _parseAnyDate(stDtRaw, pStart);
+                ganttStart = ts.difference(pStart).inDays + 1;
+                if (ganttStart < 1) ganttStart = 1;
+              } catch (_) {}
+            }
+            if (stDtRaw.isNotEmpty && endDtRaw.isNotEmpty) {
+              try {
+                final ts = _parseAnyDate(stDtRaw, pStart);
+                final te = _parseAnyDate(endDtRaw, pStart);
+                final diff = te.difference(ts).inDays;
+                if (diff > 0) {
+                  ganttDuration = diff;
+                }
+              } catch (_) {}
+            }
+
+            ganttModels.add(GanttItemModel(
+              id: tId,
+              milestoneName: msName,
+              taskName: tName,
+              progress: progText,
+              startDay: ganttStart,
+              durationDays: ganttDuration,
+            ));
+          }
+        }
+      }
+
+      // ── Step 4: Build UI models from results ───────────────────────────
+      final List<MilestoneModel> milestoneModels = [];
+      final List<TaskModel> taskModels = [];
+
+      for (int mi = 0; mi < rawMilestones.length; mi++) {
+        final m = rawMilestones[mi];
+        final rawMId = m['mId'] ?? m['mid'];
+        if (rawMId == null) continue;
+        final int mId = (rawMId as num).toInt();
+
+        final String title    = m['mlstnTtl']?.toString() ?? '';
+        final String desc     = m['mlstnDesc']?.toString() ?? '';
+        final String stDtRaw  = m['stDt']?.toString() ?? '';
+        final String endDtRaw = m['endDt']?.toString() ?? '';
+        final String sts      = m['mlstnSts']?.toString() ?? 'LIVE';
+
+        final String stDtDisplay  = _formatDbDate(stDtRaw);
+        final String endDtDisplay = _formatDbDate(endDtRaw);
+
+        final rawTasks = allRawTasks[mi];
+        final List<dynamic> filteredTasks = [];
+        for (var t in rawTasks) {
+          if (filterByEmp) {
+            final int? taskEmpId = t['empId'] != null ? (t['empId'] as num).toInt() : null;
+            if (taskEmpId == currentEmpId) {
+              filteredTasks.add(t);
+            }
+          } else {
+            filteredTasks.add(t);
+          }
+        }
+
+        if (filterByEmp && filteredTasks.isEmpty) {
+          continue;
+        }
+
+        int openCount = 0;
+        int completedCount = 0;
+
+        for (var t in filteredTasks) {
+          final String tId     = t['taskId']?.toString() ?? '';
+          final String tName   = t['taskNm']?.toString() ?? '';
+          final String tStatus = t['taskSts']?.toString() ?? 'OPEN';
+          final String tCd     = t['taskCd']?.toString() ?? 'T-$tId';
+          final String tStRaw  = t['stDt']?.toString() ?? '';
+          final String tEndRaw = t['endDt']?.toString() ?? '';
+
+          // Parse noOfDays safely
+          int tDays = 3;
+          final rawDays = t['noOfDays'];
+          if (rawDays is num) tDays = rawDays.toInt();
+          else if (rawDays is String) tDays = int.tryParse(rawDays) ?? 3;
+
+          // Status counts
+          if (tStatus == 'COMPLETED') completedCount++; else openCount++;
+
+          // Friendly status + progress
+          String friendlyStatus = 'Pending';
+          Color statusColor = const Color(0xffF59E0B);
+          double progress = 0.0;
+          switch (tStatus) {
+            case 'WIP':
+              friendlyStatus = 'In Progress'; statusColor = const Color(0xff2563EB); progress = 0.5;
+              break;
+            case 'COMPLETED':
+              friendlyStatus = 'Completed'; statusColor = const Color(0xff10B981); progress = 1.0;
+              break;
+            case 'SUBMIT_REVIEW':
+            case 'UNDER_REVIEW':
+              friendlyStatus = 'Under Review'; statusColor = const Color(0xff7C3AED); progress = 0.8;
+              break;
+            case 'REWORK':
+              friendlyStatus = 'Rework'; statusColor = const Color(0xffEF4444); progress = 0.3;
+              break;
+          }
+
+          // Gantt: use real start/end dates from DB
+          int ganttStart = 1;
+          int ganttDuration = tDays.clamp(1, 9999);
+          if (tStRaw.isNotEmpty) {
+            try {
+              final ts = _parseAnyDate(tStRaw, projectStart);
+              ganttStart = ts.difference(projectStart).inDays + 1;
+              if (ganttStart < 1) ganttStart = 1;
+            } catch (_) {}
+          }
+          if (tStRaw.isNotEmpty && tEndRaw.isNotEmpty) {
+            try {
+              final ts = _parseAnyDate(tStRaw, projectStart);
+              final te = _parseAnyDate(tEndRaw, projectStart);
+              final diff = te.difference(ts).inDays;
+              if (diff > 0) ganttDuration = diff;
+            } catch (_) {}
+          }
+
+          final taskItem = TaskItem.fromJson(t, _project!, m);
+          taskModels.add(TaskModel(
+            code: tCd,
+            name: tName,
+            assignedTo: 'Assigned',
+            priority: tDays <= 2 ? 'High' : tDays <= 5 ? 'Medium' : 'Low',
+            dueDate: _formatDbDate(tEndRaw),
+            status: friendlyStatus,
+            progress: progress,
+            priorityColor: tDays <= 2
+                ? const Color(0xffEF4444)
+                : tDays <= 5
+                    ? const Color(0xffF59E0B)
+                    : const Color(0xff2563EB),
+            statusColor: statusColor,
+            taskItem: taskItem,
+            milestoneTitle: title,
+          ));
+
+          if (rawGantt.isEmpty) {
+            ganttModels.add(GanttItemModel(
+              id: tId,
+              milestoneName: title,
+              taskName: tName,
+              progress: '${(progress * 100).toInt()}%',
+              startDay: ganttStart,
+              durationDays: ganttDuration,
+            ));
+          }
+        }
+
+        // Milestone progress = completed / total tasks
+        final int progressPercent = filteredTasks.isEmpty
+            ? 0
+            : ((completedCount / filteredTasks.length) * 100).round();
+
+        milestoneModels.add(MilestoneModel(
+          id: mId.toString(),
+          title: title,
+          desc: desc,
+          startDate: stDtDisplay,
+          targetDate: endDtDisplay,
+          progress: progressPercent,
+          assigned: filteredTasks.length,
+          open: openCount,
+          status: sts == 'COMPLETED'
+              ? 'Completed'
+              : sts == 'HOLD'
+                  ? 'On Hold'
+                  : 'In Progress',
+          color: sts == 'COMPLETED'
+              ? const Color(0xff10B981)
+              : sts == 'HOLD'
+                  ? const Color(0xffF59E0B)
+                  : const Color(0xff2563EB),
+        ));
+      }
+
+      if (mounted) {
+        setState(() {
+          _milestones = milestoneModels;
+          _tasks     = taskModels;
+          _ganttData = ganttModels;
+          _milestoneNames = [
+            'All Milestones',
+            ...milestoneModels.map((m) => m.title),
+          ];
+          if (_selectedMilestoneTitle == null && milestoneModels.isNotEmpty) {
+            _selectedMilestoneTitle = milestoneModels.first.title;
+          } else if (milestoneModels.isNotEmpty && !milestoneModels.any((m) => m.title == _selectedMilestoneTitle)) {
+            _selectedMilestoneTitle = milestoneModels.first.title;
+          }
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  /// Parses any date string: ISO "2025-05-01" or human "01 May 2025" or "May 1, 2025".
+  /// Falls back to [DateTime.now] if parsing fails.
+  static DateTime _parseAnyDate(String raw, [DateTime? fallback]) {
+    if (raw.isEmpty) return fallback ?? DateTime.now();
+    // Try ISO first (fast path)
+    try { return DateTime.parse(raw); } catch (_) {}
+    // Try human format: "01 May 2025" or "1 May 2025" or with hyphens/slashes
+    const months = {
+      'jan': 1, 'feb': 2, 'mar': 3, 'apr': 4, 'may': 5, 'jun': 6,
+      'jul': 7, 'aug': 8, 'sep': 9, 'oct': 10, 'nov': 11, 'dec': 12,
+    };
+    final cleanRaw = raw.trim().replaceAll('-', ' ').replaceAll('/', ' ');
+    final parts = cleanRaw.split(RegExp(r'[\s,]+'));
+    if (parts.length >= 3) {
+      // "DD Mon YYYY"
+      final day   = int.tryParse(parts[0]);
+      final month = months[parts[1].toLowerCase().substring(0, 3)];
+      final year  = int.tryParse(parts[2]);
+      if (day != null && month != null && year != null) {
+        return DateTime(year, month, day);
+      }
+      // "Mon DD YYYY"
+      final mAlt = months[parts[0].toLowerCase().substring(0, 3)];
+      final dAlt = int.tryParse(parts[1].replaceAll(',', ''));
+      final yAlt = int.tryParse(parts[2]);
+      if (mAlt != null && dAlt != null && yAlt != null) {
+        return DateTime(yAlt, mAlt, dAlt);
+      }
+    }
+    return fallback ?? DateTime.now();
+  }
 
   List<GanttItemModel> get _currentTasks {
     if (_selectedMilestone == "All Milestones") {
       return _ganttData;
-    } else if (_selectedMilestone == "Project Initiation") {
-      return _ganttData.where((item) => 
-        item.milestoneName.contains("Milestone 1") ||
-        item.milestoneName.contains("Milestone 2")
-      ).toList();
     } else {
-      return _ganttData.where((item) => 
-        !item.milestoneName.contains("Milestone 1") &&
-        !item.milestoneName.contains("Milestone 2")
-      ).toList();
+      return _ganttData.where((item) => item.milestoneName == _selectedMilestone).toList();
     }
   }
 
   Color get _currentColor {
-    if (_selectedMilestone == "Project Initiation") {
-      return const Color(0xff10B981);
-    } else if (_selectedMilestone == "Civil Construction") {
-      return const Color(0xff2563EB);
-    } else {
+    if (_selectedMilestone == "All Milestones" || _milestones.isEmpty) {
       return const Color(0xff2563EB);
     }
+    final matchingMilestone = _milestones.firstWhere(
+      (m) => m.title == _selectedMilestone,
+      orElse: () => _milestones.first,
+    );
+    return matchingMilestone.color;
   }
 
   void _updateZoom(double newDayWidth) {
@@ -207,6 +510,32 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
       _baseDayWidth = newDayWidth.clamp(14.0, 80.0);
       _zoomPercent = ((_baseDayWidth / 40) * 100).roundToDouble();
     });
+  }
+
+  String _getGanttMonthYearHeader() {
+    if (_project == null) return 'May, 2025';
+    final DateTime projectStart = _parseAnyDate(_project!.stDt);
+    const months = [
+      'January', 'February', 'March', 'April', 'May', 'June',
+      'July', 'August', 'September', 'October', 'November', 'December'
+    ];
+    return '${months[projectStart.month - 1]}, ${projectStart.year}';
+  }
+
+  /// Converts a DB ISO LocalDate string ("yyyy-MM-dd") or datetime to a
+  /// user-friendly display string like "26 Jun 2025". Returns raw value if parsing fails.
+  static String _formatDbDate(String raw) {
+    if (raw.isEmpty) return 'No Date';
+    try {
+      final dt = DateTime.parse(raw);
+      const months = [
+        'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+        'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+      ];
+      return '${dt.day.toString().padLeft(2, '0')} ${months[dt.month - 1]} ${dt.year}';
+    } catch (_) {
+      return raw;
+    }
   }
 
   // Priority color mapping method
@@ -233,9 +562,22 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   void initState() {
     super.initState();
     _tabController = TabController(length: 5, vsync: this);
-    _tabController.addListener(() {
-      setState(() {});
-    });
+    _tabController.addListener(() { setState(() {}); });
+  }
+
+  /// Called once after initState and whenever a dependency changes.
+  /// Route arguments (ProjectModel) are available here — safe to fetch.
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_isProjectLoaded) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      if (args is ProjectModel) {
+        _project = args;
+      }
+      _isProjectLoaded = true;
+      _fetchProjectData();
+    }
   }
 
   @override
@@ -246,7 +588,6 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   }
 
   @override
-    @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xffFAFBFC),
@@ -255,10 +596,50 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
         automaticallyImplyLeading: false,
         onNotificationTap: () {},
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+      body: _isLoading
+          ? const Center(
+              child: Padding(
+                padding: EdgeInsets.symmetric(vertical: 80.0),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          : _error != null
+              ? Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24.0),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.error_outline, size: 56, color: Colors.red),
+                        const SizedBox(height: 16),
+                        const Text(
+                          'Failed to load project data',
+                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _error!,
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.red, fontSize: 13),
+                        ),
+                        const SizedBox(height: 24),
+                        ElevatedButton.icon(
+                          onPressed: _fetchProjectData,
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('Retry'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
               child: Row(
@@ -302,7 +683,9 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                       ? _buildMilestonesTabContent()
                       : _tabController.index == 2
                           ? _buildGanttChartTabContent()
-                          : _buildEmptyStateTabContent(),
+                          : _tabController.index == 3
+                              ? _buildMyTasksTabContent()
+                              : _buildEmptyStateTabContent(),
             ),
           ],
         ),
@@ -310,12 +693,9 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
       bottomNavigationBar: CustomFooter(
         currentIndex: _currentIndex,
         onTabSelected: (index) {
-          setState(() {
-            _currentIndex = index;
-          });
-          // Use MainScreen's navigation key to change tab
           if (MainScreen.navigatorKey.currentState != null) {
             MainScreen.navigatorKey.currentState!.changeTab(index);
+            Navigator.popUntil(context, (route) => route.isFirst);
           }
         },
       ),
@@ -480,7 +860,14 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Text('May, 2025', style: GoogleFonts.inter(fontSize: 10, fontWeight: FontWeight.w700, color: const Color(0xff1E293B))),
+                            Text(
+                              _getGanttMonthYearHeader(),
+                              style: GoogleFonts.inter(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: const Color(0xff1E293B),
+                              ),
+                            ),
                             const SizedBox(height: 2),
                             Row(
                               children: visibleDays.map((day) {
@@ -767,86 +1154,109 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
                 itemCount: _milestones.length,
-                separatorBuilder: (context, index) => const Divider(color: Color(0xffF8FAFC), height: 20),
+                separatorBuilder: (context, index) => const SizedBox(height: 10),
                 itemBuilder: (context, index) {
                   final milestone = _milestones[index];
                   bool isCompleted = milestone.status == "Completed";
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 24,
-                        height: 24,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: isCompleted ? const Color(0xffE8F8EC) : milestone.color.withValues(alpha: 0.1),
-                          border: Border.all(color: milestone.color, width: 1),
-                        ),
-                        child: Center(
-                          child: isCompleted
-                              ? const Icon(Icons.check, size: 12, color: Color(0xff10B981))
-                              : Text(milestone.id, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: milestone.color)),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(milestone.title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xff0F172A))),
-                            const SizedBox(height: 2),
-                            Text(milestone.desc, style: const TextStyle(fontSize: 10, color: Color(0xff64748B))),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                Text('Start: ${milestone.startDate}', style: const TextStyle(fontSize: 9.5, color: Color(0xff475569))),
-                                const SizedBox(width: 12),
-                                Text('Target: ${milestone.targetDate}', style: const TextStyle(fontSize: 9.5, color: Color(0xff475569))),
-                              ],
-                            ),
-                            const SizedBox(height: 6),
-                            Row(
-                              children: [
-                                Text('Assigned: ${milestone.assigned}', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xff1E293B))),
-                                const SizedBox(width: 12),
-                                Text('Open: ${milestone.open}', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xff1E293B))),
-                              ],
-                            )
-                          ],
+                  bool isSelected = milestone.title == _selectedMilestoneTitle;
+                  return InkWell(
+                    onTap: () {
+                      setState(() {
+                        _selectedMilestoneTitle = milestone.title;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(8),
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: isSelected ? const Color(0xffEFF6FF) : const Color(0xffF8FAFC),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(
+                          color: isSelected ? const Color(0xff3B82F6) : const Color(0xffE2E8F0),
+                          width: 1.2,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          SizedBox(
-                            width: 32,
-                            height: 32,
-                            child: Stack(
-                              alignment: Alignment.center,
+                          Container(
+                            width: 24,
+                            height: 24,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: isCompleted ? const Color(0xffE8F8EC) : milestone.color.withValues(alpha: 0.1),
+                              border: Border.all(color: milestone.color, width: 1),
+                            ),
+                            child: Center(
+                              child: isCompleted
+                                  ? const Icon(Icons.check, size: 12, color: Color(0xff10B981))
+                                  : Text(milestone.id, style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: milestone.color)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                CircularProgressIndicator(
-                                  value: milestone.progress / 100,
-                                  strokeWidth: 2.5,
-                                  backgroundColor: const Color(0xffF1F5F9),
-                                  color: milestone.color,
+                                Text(milestone.title, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Color(0xff0F172A))),
+                                const SizedBox(height: 2),
+                                Text(milestone.desc, style: const TextStyle(fontSize: 10, color: Color(0xff64748B))),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 4,
+                                  children: [
+                                    Text('Start: ${milestone.startDate}', style: const TextStyle(fontSize: 9.5, color: Color(0xff475569))),
+                                    Text('Target: ${milestone.targetDate}', style: const TextStyle(fontSize: 9.5, color: Color(0xff475569))),
+                                  ],
                                 ),
-                                Text('${milestone.progress}%', style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 6),
+                                Wrap(
+                                  spacing: 12,
+                                  runSpacing: 4,
+                                  children: [
+                                    Text('Assigned: ${milestone.assigned}', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xff1E293B))),
+                                    Text('Open: ${milestone.open}', style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: Color(0xff1E293B))),
+                                  ],
+                                )
                               ],
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: isCompleted ? const Color(0xffE8F8EC) : milestone.status == "In Progress" ? const Color(0xffEFF6FF) : const Color(0xffF1F5F9),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(milestone.status, style: TextStyle(color: milestone.color, fontSize: 8.5, fontWeight: FontWeight.w700)),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              SizedBox(
+                                width: 32,
+                                height: 32,
+                                child: Stack(
+                                  alignment: Alignment.center,
+                                  children: [
+                                    CircularProgressIndicator(
+                                      value: milestone.progress / 100,
+                                      strokeWidth: 2.5,
+                                      backgroundColor: const Color(0xffF1F5F9),
+                                      color: milestone.color,
+                                    ),
+                                    Text('${milestone.progress}%', style: const TextStyle(fontSize: 8.5, fontWeight: FontWeight.w700)),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: isCompleted ? const Color(0xffE8F8EC) : milestone.status == "In Progress" ? const Color(0xffEFF6FF) : const Color(0xffF1F5F9),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(milestone.status, style: TextStyle(color: milestone.color, fontSize: 8.5, fontWeight: FontWeight.w700)),
+                              )
+                            ],
                           )
                         ],
-                      )
-                    ],
+                      ),
+                    ),
                   );
                 },
               ),
@@ -861,6 +1271,8 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   }
 
   Widget _buildTasksAssignedSection() {
+    final filteredTasks = _tasks.where((t) => t.milestoneTitle == _selectedMilestoneTitle).toList();
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(14),
@@ -893,76 +1305,147 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
               )
             ],
           ),
-          const Text('Milestone: Reinforcement Fixing', style: TextStyle(fontSize: 9.5, color: Color(0xff64748B))),
+          const SizedBox(height: 4),
+          Text(
+            'Milestone: ${_selectedMilestoneTitle ?? 'None'}',
+            style: const TextStyle(fontSize: 9.5, color: Color(0xff64748B), fontWeight: FontWeight.w600),
+          ),
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 8),
             child: Divider(color: Color(0xffF1F5F9), thickness: 1),
           ),
-          ListView.separated(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            itemCount: _tasks.length,
-            separatorBuilder: (context, index) => const Divider(color: Color(0xffF8FAFC), height: 16),
-            itemBuilder: (context, index) {
-              final task = _tasks[index];
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(task.code, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xff2563EB))),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: task.priorityColor.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
+          if (filteredTasks.isEmpty)
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 24),
+              child: Center(
+                child: Text(
+                  'No tasks assigned to you under this milestone',
+                  style: TextStyle(fontSize: 12, color: Colors.grey, fontWeight: FontWeight.w500),
+                ),
+              ),
+            )
+          else
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: filteredTasks.length,
+              separatorBuilder: (context, index) => const Divider(color: Color(0xffF8FAFC), height: 16),
+              itemBuilder: (context, index) {
+                final task = filteredTasks[index];
+                return InkWell(
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      '/task-details',
+                      arguments: task.taskItem,
+                    ).then((_) => _fetchProjectData());
+                  },
+                  borderRadius: BorderRadius.circular(6),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(task.code, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xff2563EB))),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: task.priorityColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(task.priority, style: TextStyle(color: task.priorityColor, fontSize: 9, fontWeight: FontWeight.w700)),
+                            ),
+                          ],
                         ),
-                        child: Text(task.priority, style: TextStyle(color: task.priorityColor, fontSize: 9, fontWeight: FontWeight.w700)),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(task.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xff0F172A))),
+                        const SizedBox(height: 6),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text('To: ${task.assignedTo}', style: const TextStyle(fontSize: 10.5, color: Color(0xff475569))),
+                                (() {
+                                  final String roleText = task.code == 'PRJ-001-T03' ? 'Reviewer' : task.code == 'PRJ-001-T04' ? 'Approver' : 'Assignee';
+                                  Color roleBg;
+                                  Color roleTextCol;
+                                  Color roleBorder;
+                                  
+                                  if (roleText == 'Reviewer') {
+                                    roleBg = const Color(0xffF3E8FF);
+                                    roleTextCol = const Color(0xff7C3AED);
+                                    roleBorder = const Color(0xffE9D5FF);
+                                  } else if (roleText == 'Approver') {
+                                    roleBg = const Color(0xffFFF7ED);
+                                    roleTextCol = const Color(0xffEA580C);
+                                    roleBorder = const Color(0xffFED7AA);
+                                  } else {
+                                    roleBg = const Color(0xffEFF6FF);
+                                    roleTextCol = const Color(0xff2563EB);
+                                    roleBorder = const Color(0xffBFDBFE);
+                                  }
+                                  
+                                  return Container(
+                                    margin: const EdgeInsets.only(top: 4),
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: roleBg,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: roleBorder),
+                                    ),
+                                    child: Text(
+                                      'Role: $roleText',
+                                      style: TextStyle(
+                                        fontSize: 8.5,
+                                        color: roleTextCol,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  );
+                                })(),
+                              ],
+                            ),
+                            Text('Due: ${task.dueDate}', style: const TextStyle(fontSize: 10.5, color: Color(0xff64748B))),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                              decoration: BoxDecoration(
+                                color: task.status == "In Progress" ? const Color(0xffEFF6FF) : const Color(0xffFFF7ED),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(task.status, style: TextStyle(color: task.statusColor, fontSize: 9, fontWeight: FontWeight.w700)),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ClipRRect(
+                                borderRadius: BorderRadius.circular(4),
+                                child: LinearProgressIndicator(
+                                  value: task.progress,
+                                  minHeight: 5,
+                                  backgroundColor: const Color(0xffF1F5F9),
+                                  color: const Color(0xff2563EB),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text('${(task.progress * 100).toInt()}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                          ],
+                        )
+                      ],
+                    ),
                   ),
-                  const SizedBox(height: 4),
-                  Text(task.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xff0F172A))),
-                  const SizedBox(height: 6),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('To: ${task.assignedTo}', style: const TextStyle(fontSize: 10.5, color: Color(0xff475569))),
-                      Text('Due: ${task.dueDate}', style: const TextStyle(fontSize: 10.5, color: Color(0xff64748B))),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: task.status == "In Progress" ? const Color(0xffEFF6FF) : const Color(0xffFFF7ED),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(task.status, style: TextStyle(color: task.statusColor, fontSize: 9, fontWeight: FontWeight.w700)),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: ClipRRect(
-                          borderRadius: BorderRadius.circular(4),
-                          child: LinearProgressIndicator(
-                            value: task.progress,
-                            minHeight: 5,
-                            backgroundColor: const Color(0xffF1F5F9),
-                            color: const Color(0xff2563EB),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Text('${(task.progress * 100).toInt()}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
-                    ],
-                  )
-                ],
-              );
-            },
-          )
+                );
+              },
+            )
         ],
       ),
     );
@@ -977,10 +1460,140 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
     );
   }
 
+  Widget _buildMyTasksTabContent() {
+    if (_tasks.isEmpty) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(24),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: const Color(0xffE2E8F0)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.assignment_outlined, size: 48, color: Colors.grey),
+            SizedBox(height: 12),
+            Text(
+              'No tasks assigned to you in this project',
+              style: TextStyle(fontSize: 13, color: Colors.grey, fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xffE2E8F0)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: const [
+              Icon(Icons.check_box_outlined, size: 18, color: Color(0xff2563EB)),
+              SizedBox(width: 8),
+              Text('MY TASKS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Color(0xff1E293B))),
+            ],
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 8),
+            child: Divider(color: Color(0xffF1F5F9), thickness: 1),
+          ),
+          ListView.separated(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _tasks.length,
+            separatorBuilder: (context, index) => const Divider(color: Color(0xffF8FAFC), height: 16),
+            itemBuilder: (context, index) {
+              final task = _tasks[index];
+              return InkWell(
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/task-details',
+                    arguments: task.taskItem,
+                  ).then((_) => _fetchProjectData());
+                },
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(task.code, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xff2563EB))),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: task.priorityColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(task.priority, style: TextStyle(color: task.priorityColor, fontSize: 9, fontWeight: FontWeight.w700)),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Text(task.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xff0F172A))),
+                      const SizedBox(height: 6),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Due: ${task.dueDate}', style: const TextStyle(fontSize: 10.5, color: Color(0xff64748B))),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: task.status == "In Progress" ? const Color(0xffEFF6FF) : const Color(0xffFFF7ED),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(task.status, style: TextStyle(color: task.statusColor, fontSize: 9, fontWeight: FontWeight.w700)),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: task.progress,
+                                minHeight: 5,
+                                backgroundColor: const Color(0xffF1F5F9),
+                                color: const Color(0xff2563EB),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text('${(task.progress * 100).toInt()}%', style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
+                        ],
+                      )
+                    ],
+                  ),
+                ),
+              );
+            },
+          )
+        ],
+      ),
+    );
+  }
+
   Widget _buildProjectBannerCard() {
-    // Project priority (hardcoded for now, can be passed from constructor)
-    const String projectPriority = 'Atmost Critical';
-    final Color priorityColor = getPriorityColor(projectPriority);
+    final String prjName = _project?.prjNm ?? 'No Project Name';
+    final String prjDesc = _project?.prjDesc ?? 'No Description';
+    final String prjStatus = _project?.prjSts ?? 'LIVE';
+    final String prjPriority = _project?.prjPrty ?? 'Medium';
+    final Color priorityColor = getPriorityColor(prjPriority);
 
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 12, 16, 16),
@@ -1022,18 +1635,18 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '50 TPD CBG Plant Construction',
-                      style: TextStyle(
+                    Text(
+                      prjName,
+                      style: const TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.w700,
                         color: Color(0xff0F172A),
                       ),
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Atirath Bio Energy Pvt. Ltd.\nNalgonda Plant',
-                      style: TextStyle(
+                    Text(
+                      _projectLocation,
+                      style: const TextStyle(
                         fontSize: 11,
                         color: Color(0xff64748B),
                         height: 1.3,
@@ -1042,10 +1655,9 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                   ],
                 ),
               ),
-              // Status - Plain text, no color
-              const Text(
-                'In Progress',
-                style: TextStyle(
+              Text(
+                prjStatus,
+                style: const TextStyle(
                   color: Color(0xff475569),
                   fontSize: 11,
                   fontWeight: FontWeight.w600,
@@ -1062,19 +1674,19 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
             children: [
               _buildTopMetaItem(
                 'Start Date',
-                '10-Apr-2025',
+                _project?.stDt ?? 'N/A',
                 Icons.calendar_today_outlined,
                 iconColor: Colors.green,
               ),
               _buildTopMetaItem(
                 'Target Date',
-                '30-Sep-2025',
+                _project?.endDt ?? 'N/A',
                 Icons.event_outlined,
                 iconColor: Colors.orange,
               ),
               _buildTopMetaItem(
                 'Priority',
-                projectPriority,
+                prjPriority,
                 Icons.flag_outlined,
                 iconColor: priorityColor,
                 textColor: priorityColor,
@@ -1117,6 +1729,11 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   }
 
   Widget _buildTaskSummaryCard() {
+    final totalCount = _tasks.length;
+    final inProgressCount = _tasks.where((t) => t.status == 'In Progress').length;
+    final openCount = _tasks.where((t) => t.status == 'Pending' || t.status == 'Open').length;
+    final completedCount = _tasks.where((t) => t.status == 'Completed').length;
+
     return _buildSectionCard(
       title: 'TASK SUMMARY',
       icon: Icons.assignment_outlined,
@@ -1127,10 +1744,10 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
         crossAxisCount: 4,
         childAspectRatio: 0.85,
         children: [
-          _buildTaskBlock('Tasks Assigned', '8', Icons.assignment_turned_in_outlined, Colors.green),
-          _buildTaskBlock('In Progress', '5', Icons.play_circle_outline, Colors.blue),
-          _buildTaskBlock('Open Tasks', '3', Icons.query_builder, Colors.orange),
-          _buildTaskBlock('Completed', '0', Icons.check_circle_outline, Colors.red),
+          _buildTaskBlock('Tasks Assigned', '$totalCount', Icons.assignment_turned_in_outlined, Colors.green),
+          _buildTaskBlock('In Progress', '$inProgressCount', Icons.play_circle_outline, Colors.blue),
+          _buildTaskBlock('Open Tasks', '$openCount', Icons.query_builder, Colors.orange),
+          _buildTaskBlock('Completed', '$completedCount', Icons.check_circle_outline, Colors.red),
         ],
       ),
     );
@@ -1150,6 +1767,15 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   }
 
   Widget _buildProjectProgressCard() {
+    final total = _tasks.length;
+    final completed = _tasks.where((t) => t.status == 'Completed').length;
+    final inProgress = _tasks.where((t) => t.status == 'In Progress').length;
+    final yetToStart = total - completed - inProgress;
+
+    final double completedPct = total == 0 ? 0.0 : (completed / total);
+    final double inProgressPct = total == 0 ? 0.0 : (inProgress / total);
+    final double yetToStartPct = total == 0 ? 0.0 : (yetToStart / total);
+
     return _buildSectionCard(
       title: 'PROJECT PROGRESS',
       icon: Icons.pie_chart_outline,
@@ -1162,16 +1788,21 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
             child: Stack(
               alignment: Alignment.center,
               children: [
-                const SizedBox(
+                SizedBox(
                   width: 74,
                   height: 74,
-                  child: CircularProgressIndicator(value: 0.65, strokeWidth: 8, backgroundColor: Colors.orange, color: Colors.green),
+                  child: CircularProgressIndicator(
+                    value: completedPct,
+                    strokeWidth: 8,
+                    backgroundColor: Colors.orange,
+                    color: Colors.green,
+                  ),
                 ),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Text('65%', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xff0F172A))),
-                    Text('Completed', style: TextStyle(fontSize: 8, color: Color(0xff64748B))),
+                  children: [
+                    Text('${(completedPct * 100).round()}%', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xff0F172A))),
+                    const Text('Completed', style: TextStyle(fontSize: 8, color: Color(0xff64748B))),
                   ],
                 )
               ],
@@ -1181,9 +1812,9 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
           Expanded(
             child: Column(
               children: [
-                _buildProgressLegend('Completed', '65%', Colors.green),
-                _buildProgressLegend('In Progress', '20%', Colors.blue),
-                _buildProgressLegend('Yet to Start', '15%', Colors.orange),
+                _buildProgressLegend('Completed', '${(completedPct * 100).round()}%', Colors.green),
+                _buildProgressLegend('In Progress', '${(inProgressPct * 100).round()}%', Colors.blue),
+                _buildProgressLegend('Yet to Start', '${(yetToStartPct * 100).round()}%', Colors.orange),
               ],
             ),
           )
@@ -1218,35 +1849,37 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
       iconColor: Colors.blue,
       child: Column(
         children: [
-          _buildRowDetail('Project Code', 'PRJ-001'),
-          _buildRowDetail('Project Type', 'Construction'),
-          _buildRowDetail('Location', 'Nalgonda, Telangana'),
+          _buildRowDetail('Project Code', _project?.prjCd ?? 'N/A'),
+          _buildRowDetail('Project Type', 'CBG Plant'),
+          _buildRowDetail('Location', 'Site Location'),
           _buildRowDetail('Client', 'Atirath Bio Energy Pvt. Ltd.'),
           const SizedBox(height: 10),
           const Align(alignment: Alignment.centerLeft, child: Text('Description', style: TextStyle(fontSize: 11, color: Color(0xff64748B)))),
           const SizedBox(height: 4),
-          const Text('50 TPD Compressed Biogas (CBG) Plant Construction Project.', style: TextStyle(fontSize: 11.5, color: Color(0xff1E293B), height: 1.3)),
+          Text(_project?.prjDesc ?? 'No description provided.', style: const TextStyle(fontSize: 11.5, color: Color(0xff1E293B), height: 1.3)),
         ],
       ),
     );
   }
 
   Widget _buildUpcomingMilestonesCard() {
+    final upcoming = _milestones.take(4).toList();
     return _buildSectionCard(
       title: 'UPCOMING MILESTONES',
       icon: Icons.flag_outlined,
       iconColor: Colors.blue,
-      actionWidget: InkWell(
-        onTap: () {},
-        child: const Text('View all', style: TextStyle(fontSize: 11, color: Color(0xff2563EB), fontWeight: FontWeight.w600)),
-      ),
       child: Column(
-        children: [
-          _buildMilestoneRow('PCC Work Completion', '02-Jun-2025'),
-          _buildMilestoneRow('Reinforcement Fixing', '05-Jun-2025'),
-          _buildMilestoneRow('Equipment Foundation', '20-Jun-2025'),
-          _buildMilestoneRow('Installation & Erection', '15-Jul-2025', isLast: true),
-        ],
+        children: upcoming.isEmpty
+            ? [
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 10),
+                  child: Text('No upcoming milestones', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                )
+              ]
+            : List.generate(upcoming.length, (index) {
+                final m = upcoming[index];
+                return _buildMilestoneRow(m.title, m.targetDate, isLast: index == upcoming.length - 1);
+              }),
       ),
     );
   }

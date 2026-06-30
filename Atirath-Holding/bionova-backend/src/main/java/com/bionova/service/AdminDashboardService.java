@@ -179,24 +179,7 @@ public class AdminDashboardService {
                     .build());
         }
 
-        // Fallback activities if none are found in the database
-        if (systemActivities.isEmpty()) {
-            systemActivities.add(AdminDashboardResponse.ActivityDto.builder()
-                    .description("Welcome to Atirath Holdings BIONOVA System")
-                    .actor("System")
-                    .timestamp("Just now")
-                    .build());
-            systemActivities.add(AdminDashboardResponse.ActivityDto.builder()
-                    .description("Employee database operational")
-                    .actor("HR Manager")
-                    .timestamp("1 hour ago")
-                    .build());
-            systemActivities.add(AdminDashboardResponse.ActivityDto.builder()
-                    .description("Calendar sync completed successfully")
-                    .actor("Cron Job")
-                    .timestamp("4:00 AM")
-                    .build());
-        }
+        // No fallback — if no activities, return empty list
 
         // 8. Upcoming Deadlines
         List<AdminDashboardResponse.DeadlineDto> upcomingDeadlines = new ArrayList<>();
@@ -241,23 +224,7 @@ public class AdminDashboardService {
                     .build());
         }
 
-        // Fallbacks if no deadlines
-        if (upcomingDeadlines.isEmpty()) {
-            upcomingDeadlines.add(AdminDashboardResponse.DeadlineDto.builder()
-                    .title("BIONOVA System Configuration Setup")
-                    .projectName("Global Operations")
-                    .dueDate(today.plusDays(5))
-                    .timeLeft("5 Days Left")
-                    .isCritical(false)
-                    .build());
-            upcomingDeadlines.add(AdminDashboardResponse.DeadlineDto.builder()
-                    .title("Quarterly Project Performance Audit")
-                    .projectName("Executive Review")
-                    .dueDate(today.plusDays(1))
-                    .timeLeft("1 Day Left")
-                    .isCritical(true)
-                    .build());
-        }
+        // No fallback — if no deadlines, return empty list
 
         // 9. Top Projects Tracker (calculating progress percent dynamically)
         List<AdminDashboardResponse.ProjectProgressDto> topProjects = new ArrayList<>();
@@ -307,34 +274,7 @@ public class AdminDashboardService {
             topProjects = topProjects.subList(0, 5);
         }
 
-        // Fallback default projects if no projects are present
-        if (topProjects.isEmpty()) {
-            topProjects.add(AdminDashboardResponse.ProjectProgressDto.builder()
-                    .projectId(1L)
-                    .projectName("CBG Plant - Phase 1")
-                    .progressPercent(82.0)
-                    .build());
-            topProjects.add(AdminDashboardResponse.ProjectProgressDto.builder()
-                    .projectId(2L)
-                    .projectName("CBG Plant - Phase 2")
-                    .progressPercent(68.0)
-                    .build());
-            topProjects.add(AdminDashboardResponse.ProjectProgressDto.builder()
-                    .projectId(3L)
-                    .projectName("Bio Energy Project")
-                    .progressPercent(54.0)
-                    .build());
-            topProjects.add(AdminDashboardResponse.ProjectProgressDto.builder()
-                    .projectId(4L)
-                    .projectName("Solar Power Plant")
-                    .progressPercent(41.0)
-                    .build());
-            topProjects.add(AdminDashboardResponse.ProjectProgressDto.builder()
-                    .projectId(5L)
-                    .projectName("Ethanol Plant Project")
-                    .progressPercent(25.0)
-                    .build());
-        }
+        // No fallback — if no projects, return empty list
 
         return AdminDashboardResponse.builder()
                 .employeeCount(employeeCount)

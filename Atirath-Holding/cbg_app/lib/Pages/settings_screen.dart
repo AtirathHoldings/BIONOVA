@@ -120,6 +120,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         onTabSelected: (index) {
           if (MainScreen.navigatorKey.currentState != null) {
             MainScreen.navigatorKey.currentState!.changeTab(index);
+            Navigator.popUntil(context, (route) => route.isFirst);
           }
         },
       ),

@@ -5,7 +5,7 @@ import com.bionova.dto.SaveAccessRequest;
 import com.bionova.dto.RoleDto;
 import com.bionova.entity.*;
 import com.bionova.repository.*;
-import jakarta.annotation.PostConstruct;
+
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,94 +25,6 @@ public class RbacService {
     @Autowired
     private RoleBasedEmployeeMappingRepository employeeMappingRepository;
 
-    @PostConstruct
-    public void init() {
-        initializeDefaultScreensAndRoles();
-    }
-
-    @Transactional
-    public void initializeDefaultScreensAndRoles() {
-        if (screenMasterRepository.count() == 0) {
-            List<ScreenMaster> screens = new ArrayList<>();
-            
-            // Dashboard & Home
-            screens.add(createScreen("Dashboard", "Dashboard & Home", "DASHBOARD"));
-            screens.add(createScreen("My Tasks", "Dashboard & Home", "MY_TASKS"));
-            screens.add(createScreen("Notifications", "Dashboard & Home", "NOTIFICATIONS"));
-            screens.add(createScreen("Calendar", "Dashboard & Home", "CALENDAR"));
-            screens.add(createScreen("Announcements", "Dashboard & Home", "ANNOUNCEMENTS"));
-
-            // Masters
-            screens.add(createScreen("Companies", "Masters", "COMPANIES"));
-            screens.add(createScreen("Plants", "Masters", "PLANTS"));
-            screens.add(createScreen("Departments", "Masters", "DEPARTMENTS"));
-            screens.add(createScreen("Employees", "Masters", "EMPLOYEES"));
-
-            // Project Management
-            screens.add(createScreen("Projects", "Project Management", "PROJECTS"));
-            screens.add(createScreen("Milestones", "Project Management", "MILESTONES"));
-            screens.add(createScreen("Tasks", "Project Management", "TASKS"));
-            screens.add(createScreen("Gantt Chart", "Project Management", "GANTT_CHART"));
-
-            // Task Management
-            screens.add(createScreen("Task Boards", "Task Management", "TASK_BOARDS"));
-            screens.add(createScreen("Individual Tasks", "Task Management", "INDIVIDUAL_TASKS"));
-
-            // Reports & Analytics
-            screens.add(createScreen("Forecasting", "Reports & Analytics", "FORECASTING"));
-            screens.add(createScreen("Dashboard Charts", "Reports & Analytics", "DASHBOARD_CHARTS"));
-
-            // Administration
-            screens.add(createScreen("Process Config", "Administration", "PROCESS_CONFIG"));
-            screens.add(createScreen("Process Config Master", "Administration", "PROCESS_CONFIG_MASTER"));
-
-            // Audit & Logs
-            screens.add(createScreen("Activity Logs", "Audit & Logs", "ACTIVITY_LOGS"));
-            screens.add(createScreen("Audit Trails", "Audit & Logs", "AUDIT_TRAILS"));
-
-            // Settings
-            screens.add(createScreen("Profile", "Settings", "PROFILE"));
-            screens.add(createScreen("Security", "Settings", "SECURITY"));
-
-            screenMasterRepository.saveAll(screens);
-        }
-
-        if (rbacRepository.count() == 0) {
-            // Create Admin role (ID: 1)
-            saveDefaultPermissions(1, "Admin Template", true, true, true, true);
-
-            // Create Project Manager role (ID: 2)
-            saveDefaultPermissions(2, "Project Manager Template", true, true, true, true);
-
-            // Create Site Engineer role (ID: 3)
-            saveDefaultPermissions(3, "Site Engineer Template", true, false, false, false);
-        }
-    }
-
-    private ScreenMaster createScreen(String name, String group, String code) {
-        ScreenMaster sm = new ScreenMaster();
-        sm.setScreenNm(name);
-        sm.setGroupNm(group);
-        sm.setScreenCode(code);
-        sm.setStatus(true);
-        return sm;
-    }
-
-    private void saveDefaultPermissions(Integer roleId, String roleNm, boolean view, boolean edit, boolean add, boolean del) {
-        List<ScreenMaster> screens = screenMasterRepository.findAll();
-        List<RoleBasedAccessControl> rbacs = screens.stream().map(screen -> {
-            RoleBasedAccessControl rbac = new RoleBasedAccessControl();
-            rbac.setRoleId(roleId);
-            rbac.setRoleNm(roleNm);
-            rbac.setScreenId(screen.getScreenId());
-            rbac.setViewFlg(view);
-            rbac.setEditFlg(edit);
-            rbac.setAddFlg(add);
-            rbac.setDeleteFlg(del);
-            return rbac;
-        }).collect(Collectors.toList());
-        rbacRepository.saveAll(rbacs);
-    }
 
     public List<ScreenMaster> getAllScreens() {
         return screenMasterRepository.findAll();

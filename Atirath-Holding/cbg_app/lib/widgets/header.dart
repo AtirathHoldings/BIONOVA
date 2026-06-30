@@ -27,7 +27,7 @@ class CustomHeader extends StatelessWidget implements PreferredSizeWidget {
         children: [
           // Logo
           Image.asset(
-            'assets/Logo.png',
+            'assets/BioNova.png',
             height: 32,
             width: 32,
             errorBuilder: (context, error, stackTrace) {

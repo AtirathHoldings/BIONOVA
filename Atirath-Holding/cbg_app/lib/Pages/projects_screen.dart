@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../widgets/header.dart';
+import '../models/project_model.dart';
+import '../models/task_item.dart';
+import '../services/api_service.dart';
 
 class ProjectsScreen extends StatefulWidget {
   const ProjectsScreen({super.key});
@@ -14,84 +17,108 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   String _selectedFilter = 'All Projects';
   String _searchQuery = '';
 
-  final List<ProjectModel> _projects = [
-    ProjectModel(
-      projectName: '50 TPD CBG Plant Construction',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 8,
-      openTasks: 3,
-      progress: 65,
-      status: 'In Progress',
-      priority: 'Atmost Critical',
-    ),
-    ProjectModel(
-      projectName: 'Bio Fertilizer Unit',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 4,
-      openTasks: 2,
-      progress: 40,
-      status: 'Open',
-      priority: 'Critical',
-    ),
-    ProjectModel(
-      projectName: 'CBG Expansion Phase-II',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 5,
-      openTasks: 1,
-      progress: 25,
-      status: 'Open',
-      priority: 'High',
-    ),
-    ProjectModel(
-      projectName: 'Gas Pipeline Installation',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 12,
-      openTasks: 5,
-      progress: 55,
-      status: 'In Progress',
-      priority: 'Medium',
-    ),
-    ProjectModel(
-      projectName: 'Water Treatment Plant',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 10,
-      openTasks: 0,
-      progress: 100,
-      status: 'Closed',
-      priority: 'Normal',
-    ),
-    ProjectModel(
-      projectName: 'Solar Power Integration',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 3,
-      openTasks: 1,
-      progress: 15,
-      status: 'Open',
-      priority: 'Low',
-    ),
-  ];
+  List<ProjectModel> _projects = [];
+  bool _isLoading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchProjects();
+  }
+
+  Future<void> fetchProjects() async {
+    try {
+      final results = await Future.wait([
+        ApiService.getLiveProjects(),
+        ApiService.getLiveTasks(),
+        ApiService.getUserDashboardData(),
+      ]);
+
+      final liveProjects = results[0] as List<ProjectModel>;
+      final liveTasks = results[1] as List<TaskItem>;
+      final dashboardData = results[2] as Map<String, dynamic>?;
+
+      final Set<int> assignedProjectIds = {};
+      if (dashboardData != null && dashboardData['myProjects'] != null) {
+        final myProjectsList = dashboardData['myProjects'] as List<dynamic>;
+        for (final p in myProjectsList) {
+          final id = (p['projectId'] as num?)?.toInt();
+          if (id != null) {
+            assignedProjectIds.add(id);
+          }
+        }
+      }
+
+      final filteredLiveProjects = liveProjects.where((p) {
+        return assignedProjectIds.contains(p.prjId);
+      }).toList();
+
+      // Fallback to all live projects if assigned list is empty
+      final projectsToMap = filteredLiveProjects.isEmpty ? liveProjects : filteredLiveProjects;
+
+      final List<ProjectModel> mappedProjects = [];
+      for (final p in projectsToMap) {
+        final projectTasks = liveTasks.where((t) => t.subtitle.startsWith('${p.prjCd} •')).toList();
+        final assigned = projectTasks.length;
+        final open = projectTasks.where((t) => t.status != 'Completed').length;
+        final completed = assigned - open;
+        final progressVal = assigned == 0 ? 0.0 : (completed / assigned);
+        final progressTxt = '${(progressVal * 100).round()}%';
+        final barColor = progressVal >= 0.7 ? const Color(0xFF16A34A) : const Color(0xFF2563EB);
+
+        mappedProjects.add(ProjectModel(
+          prjId: p.prjId,
+          prjCd: p.prjCd,
+          prjNm: p.prjNm,
+          prjDesc: p.prjDesc,
+          prjPrty: p.prjPrty,
+          prjSts: p.prjSts,
+          stDt: p.stDt,
+          endDt: p.endDt,
+          noOfDays: p.noOfDays,
+          logo: p.logo,
+          name: p.prjNm,
+          details: p.prjDesc,
+          role: 'Assignee',
+          assigned: assigned,
+          open: open,
+          progressValue: progressVal,
+          progressText: progressTxt,
+          barColor: barColor,
+        ));
+      }
+
+      setState(() {
+        _projects = mappedProjects;
+        _isLoading = false;
+      });
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+      debugPrint(e.toString());
+    }
+  }
 
   List<ProjectModel> get _filteredProjects {
     return _projects.where((project) {
-      final matchesSearch = project.projectName
+      final matchesSearch = project.prjNm
           .toLowerCase()
           .contains(_searchQuery.toLowerCase());
 
       final matchesFilter = _selectedFilter == 'All Projects'
           ? true
-          : project.status == _selectedFilter;
+          : project.prjSts == _selectedFilter;
 
       return matchesSearch && matchesFilter;
     }).toList();
   }
 
-  Color getPriorityColor(String priority) {
+  Color getPriorityColor(String? priority) {
+    if (priority == null) return const Color(0xFF10B981);
+    
     switch (priority.toLowerCase()) {
       case 'low':
         return const Color(0xFF2563EB);
@@ -120,35 +147,43 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           Navigator.pushNamed(context, '/notifications');
         },
       ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Row(
-              children: [
-                Expanded(child: _buildSearchField()),
-                const SizedBox(width: 10),
-                _buildProjectDropdown(),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _filteredProjects.length,
-              itemBuilder: (context, index) {
-                return _buildProjectCard(
-                  _filteredProjects[index],
-                  themeColor,
-                );
-              },
-            ),
-          ),
-          _buildPagination(),
-        ],
-      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
+          : _error != null
+              ? Center(
+                  child: Text(_error!),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: Row(
+                        children: [
+                          Expanded(child: _buildSearchField()),
+                          const SizedBox(width: 10),
+                          _buildProjectDropdown(),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _filteredProjects.length,
+                        itemBuilder: (context, index) {
+                          return _buildProjectCard(
+                            _filteredProjects[index],
+                            themeColor,
+                          );
+                        },
+                      ),
+                    ),
+                    _buildPagination(),
+                  ],
+                ),
     );
   }
 
@@ -230,11 +265,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   Widget _buildProjectCard(ProjectModel project, Color themeColor) {
-    final priorityColor = getPriorityColor(project.priority);
+    final priorityColor = getPriorityColor(project.prjPrty);
     
     return GestureDetector(
       onTap: () {
-        Navigator.pushNamed(context, '/project-details');
+        Navigator.pushNamed(context, '/project-details', arguments: project);
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
@@ -288,7 +323,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          project.projectName,
+                          project.prjNm,
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 13.5,
@@ -298,9 +333,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           maxLines: 2,
                         ),
                         const SizedBox(height: 4),
+                        // Fixed LayoutBuilder section
                         LayoutBuilder(
                           builder: (context, constraints) {
-                            final label = '${project.companyName}   |   ${project.location}';
+                            final label = project.prjCd ?? '';
                             
                             final textPainter = TextPainter(
                               text: TextSpan(text: label, style: const TextStyle(fontSize: 10)),
@@ -313,12 +349,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    project.companyName,
+                                    project.prjDesc ?? '',
                                     style: const TextStyle(fontSize: 10, color: Color(0xff64748B), fontWeight: FontWeight.w500),
                                   ),
                                   const SizedBox(height: 1),
                                   Text(
-                                    project.location,
+                                    project.stDt ?? '',
                                     style: const TextStyle(fontSize: 10, color: Color(0xff64748B), fontWeight: FontWeight.w500),
                                   ),
                                 ],
@@ -332,7 +368,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           },
                         ),
                         const SizedBox(height: 8),
-                        _buildPriorityBadge(project.priority, priorityColor),
+                        _buildPriorityBadge(project.prjPrty, priorityColor),
                       ],
                     ),
                   ),
@@ -346,13 +382,13 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           alignment: Alignment.center,
                           children: [
                             CircularProgressIndicator(
-                              value: project.progress / 100,
+                              value: project.progressValue,
                               strokeWidth: 3,
                               backgroundColor: const Color(0xffF1F5F9),
                               color: priorityColor,
                             ),
                             Text(
-                              '${project.progress}%',
+                              project.progressText,
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
@@ -363,7 +399,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                         ),
                       ),
                       const SizedBox(height: 4),
-                      _buildLeadLagBadge(project.progress >= 50),
+                      _buildLeadLagBadge(project.progressValue >= 0.5),
                     ],
                   ),
                 ],
@@ -388,17 +424,17 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 children: [
                   Row(
                     children: [
-                      _buildMetricBlock('Tasks Assigned', project.taskAssigned, themeColor),
+                      _buildMetricBlock('Tasks Assigned', project.assigned, themeColor),
                       Container(
                         height: 20,
                         width: 1,
                         color: themeColor.withValues(alpha: 0.20),
                         margin: const EdgeInsets.symmetric(horizontal: 16),
                       ),
-                      _buildMetricBlock('Open Tasks', project.openTasks, themeColor),
+                      _buildMetricBlock('Open Tasks', project.open, themeColor),
                     ],
                   ),
-                  _buildStatusPill(project.status, themeColor),
+                  _buildStatusPill(project.prjSts, themeColor),
                 ],
               ),
             ),
@@ -433,7 +469,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
-  Widget _buildPriorityBadge(String priority, Color priorityColor) {
+  Widget _buildPriorityBadge(String? priority, Color priorityColor) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 8,
@@ -447,7 +483,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         ),
       ),
       child: Text(
-        priority,
+        priority ?? 'Normal',
         style: TextStyle(
           color: priorityColor,
           fontSize: 10,
@@ -457,7 +493,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
-  Widget _buildStatusPill(String status, Color themeColor) {
+  Widget _buildStatusPill(String? status, Color themeColor) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 10,
@@ -472,7 +508,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         ),
       ),
       child: Text(
-        status,
+        status ?? 'Open',
         style: TextStyle(
           color: themeColor,
           fontSize: 10,
@@ -561,26 +597,4 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       ),
     );
   }
-}
-
-class ProjectModel {
-  final String projectName;
-  final String companyName;
-  final String location;
-  final int taskAssigned;
-  final int openTasks;
-  final int progress;
-  final String status;
-  final String priority;
-
-  ProjectModel({
-    required this.projectName,
-    required this.companyName,
-    required this.location,
-    required this.taskAssigned,
-    required this.openTasks,
-    required this.progress,
-    required this.status,
-    required this.priority,
-  });
-}
+}  

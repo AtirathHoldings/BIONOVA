@@ -24,7 +24,7 @@ import Header from "../Header";
 import AlertModal from "../AlertModal";
 import "../../styles/DepartmentMaster.css";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -159,7 +159,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     const codeToCheck = form.code.trim().toUpperCase();
 
     const isDuplicate = departments.some(
-      (dept) => dept.code.toUpperCase() === codeToCheck && (!isEditing || dept.id !== editingId)
+      (dept) => dept.code && dept.code.toUpperCase() === codeToCheck && (!isEditing || dept.id !== editingId)
     );
 
     if (isDuplicate) {
@@ -200,7 +200,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
           else if (parsed.error && parsed.status) {
             errorMsg = `Server Error (${parsed.status}): ${parsed.error}.`;
           }
-        } catch(e) {
+        } catch (e) {
           errorMsg = errorText || errorMsg;
         }
         throw new Error(errorMsg);
@@ -254,7 +254,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
           } else if (parsed.error) {
             errorMsg = parsed.error;
           }
-        } catch(e) {
+        } catch (e) {
           errorMsg = errorText || errorMsg;
         }
         throw new Error(errorMsg);
@@ -297,21 +297,21 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
       <Sidebar userRole={userRole} onLogout={onLogout} />
 
       <div className="dept-shell">
-        <Header 
-          title="Department Master" 
-          showSearch={false} 
-          userName="Syed Mohammad Johny Basha" 
-          userRole="Web Developer" 
-          initials="SB" 
+        <Header
+          title="Department Master"
+          showSearch={false}
+          userName="Syed Mohammad Johny Basha"
+          userRole="Web Developer"
+          initials="SB"
         />
 
         {/* Breadcrumb Navigation */}
-       
+
         <main className="dept-main" style={{ padding: '24px' }}>
           {view === "form" ? (
             <div className="dept-content" style={{ paddingBottom: '80px', width: '100%', maxWidth: 'none' }}>
               <div className="dept-form-card" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                
+
                 {/* Form Header */}
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -323,7 +323,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                         Enter department details in the form below
                       </p>
                     </div>
-                    
+
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
                       <button type="button" className="dept-nav-view-btn" onClick={() => { handleReset(); setIsEditing(false); setView("list"); }}>
                         <ArrowLeft size={15} /> Back to Department List
@@ -334,13 +334,13 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
 
                 {/* Form Body - UPDATED DEPARTMENT NAME (REVERTED TO NORMAL) AND TOGGLE (SCREENSHOT MATCH) */}
                 <div style={{ padding: '24px', display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
-                  
+
                   {/* Left Side: Inputs */}
                   <div style={{ flex: '1 1 400px', maxWidth: '700px' }}>
-                    
+
                     {/* --- Side by Side Wrapper --- */}
                     <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-                      
+
                       {/* Department Code Input */}
                       <div className="dept-form-item" style={{ flex: '1 1 200px', marginBottom: 0 }}>
                         <label>Department Code <span className="dept-req-star">*</span></label>
@@ -376,12 +376,12 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                   {/* Right Side: Status Toggle (SCREENSHOT STYLE) */}
                   <div style={{ width: '280px', paddingTop: '8px' }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      
+
                       <span style={{ fontSize: "16px", fontWeight: "600", color: "#334155" }}>Status:</span>
-                      
+
                       <label style={{ position: "relative", display: "inline-block", width: "48px", height: "26px", margin: 0 }}>
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={form.status === "Active"}
                           onChange={handleToggleStatus}
                           style={{ opacity: 0, width: 0, height: 0 }}
@@ -392,7 +392,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                           transition: ".3s", borderRadius: "34px"
                         }}>
                           <span style={{
-                            position: "absolute", height: "20px", width: "20px", 
+                            position: "absolute", height: "20px", width: "20px",
                             left: form.status === "Active" ? "25px" : "3px", bottom: "3px",
                             backgroundColor: "white", transition: ".3s", borderRadius: "50%",
                             boxShadow: "0 1px 3px rgba(0,0,0,0.15)"
@@ -400,9 +400,9 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                         </span>
                       </label>
 
-                      <span style={{ 
+                      <span style={{
                         fontSize: "16px", fontWeight: "600", minWidth: "50px",
-                        color: form.status === "Active" ? "#10b981" : "#64748b" 
+                        color: form.status === "Active" ? "#10b981" : "#64748b"
                       }}>
                         {form.status}
                       </span>
@@ -423,7 +423,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
           ) : (
             <div className="dept-content" style={{ width: '100%', maxWidth: 'none' }}>
               <div className="dept-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                
+
                 {/* Header with Title and Add New Button */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
                   <div>
@@ -467,7 +467,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                                   <div className="dept-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("info", "Department Info", `Department Info:\nCode: ${dept.code}\nName: ${dept.name}\nDescription: ${dept.description}`); setActiveDropdown(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleEdit(dept)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Edit size={15} /> Edit </button>
-                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("success", "Saved", `Department record ${dept.code} saved successfully.`); setActiveDropdown(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Save size={15} /> Save </button>
+                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }} onClick={() => confirmDelete(dept.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Trash2 size={15} /> Delete </button>
                                   </div>
                                 </>
                               )}

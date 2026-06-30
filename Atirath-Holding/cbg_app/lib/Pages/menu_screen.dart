@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../widgets/header.dart';
 import 'settings_screen.dart';
 import 'main_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -104,19 +105,27 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  void _handleLogout() {
-    Navigator.pushNamedAndRemoveUntil(
-      context, 
-      '/signin', 
-      (route) => false
-    );
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Logged out successfully'),
-        duration: Duration(seconds: 1),
-      ),
-    );
+  void _handleLogout() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('authToken');
+    await prefs.remove('userRole');
+    await prefs.remove('userEmail');
+    await prefs.remove('currentEmpId');
+
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context, 
+        '/signin', 
+        (route) => false
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Logged out successfully'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   @override

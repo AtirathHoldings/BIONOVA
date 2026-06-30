@@ -5,6 +5,7 @@ import 'dart:io';
 import '../widgets/header.dart';
 import '../widgets/footer.dart';
 import 'main_screen.dart';
+import '../services/api_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -18,26 +19,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // Profile screen editing states
   bool _isEditing = false;
+  bool _isLoading = true;
+  String? _loadError;
   final GlobalKey<FormState> _profileFormKey = GlobalKey<FormState>();
 
-  // Profile data state
-  final String _employeeCode = 'EMP00125';
-  String _firstName = 'Ravi';
-  String _lastName = 'Kumar';
-  String _gender = 'Male';
-  DateTime _dob = DateTime(1995, 5, 10);
-  String _email = 'ravi.kumar@cpgp.com';
-  String _mobileNumber = '+91 98765 43210';
-  String _bloodGroup = 'O+';
-  String _address = 'Flat 402, Sri Sai Residency, Madhapur, Hyderabad, 500081';
-  final String _doj = '15 Jan 2024';
-  final String _empType = 'Full-time';
-  final String _designation = 'Software Engineer';
-  final String _company = 'Atirath CBG Pvt Ltd';
-  final String _plant = 'Plant A';
-  final String _department = 'Engineering';
-  final String _workLocation = 'Hyderabad, India';
-  final String _reportingManager = 'Suresh Babu (Project Manager)';
+  // Profile data state — populated from DB
+  String _employeeCode = '';
+  String _firstName = '';
+  String _lastName = '';
+  String _gender = '';
+  DateTime _dob = DateTime(1990, 1, 1);
+  String _email = '';
+  String _mobileNumber = '';
+  String _bloodGroup = '';
+  String _address = '';
+  String _doj = '';
+  String _empType = '';
+  String _designation = ''; // role from DB
+  String _company = 'Atirath Holding Pvt. Ltd.';
+  String _plant = '';
+  String _department = '';
+  String _workLocation = '';
+  String _reportingManager = '';
+  Map<String, dynamic> _rawProfile = {};
 
   // Text controllers for editing profile
   late TextEditingController _firstNameController;
@@ -72,22 +76,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSavedProfileImage();
-
-    // Initialize profile text controllers with current values
-    _firstNameController = TextEditingController(text: _firstName);
-    _lastNameController = TextEditingController(text: _lastName);
-    _emailController = TextEditingController(text: _email);
-    _mobileController = TextEditingController(text: _mobileNumber);
-    _addressController = TextEditingController(text: _address);
-
-    _tempGender = _gender;
-    _tempBloodGroup = _bloodGroup;
+    _firstNameController = TextEditingController();
+    _lastNameController = TextEditingController();
+    _emailController = TextEditingController();
+    _mobileController = TextEditingController();
+    _addressController = TextEditingController();
+    _tempGender = '';
+    _tempBloodGroup = '';
     _tempDOB = _dob;
+    _fetchProfile();
   }
 
-  void _loadSavedProfileImage() {
-    // Load from SharedPreferences in real app
+  Future<void> _fetchProfile() async {
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
+    try {
+      final data = await ApiService.getProfile();
+      _rawProfile = data;
+      _applyProfileData(data);
+    } catch (e) {
+      setState(() {
+        _loadError = e.toString();
+        _isLoading = false;
+      });
+    }
+  }
+
+  void _applyProfileData(Map<String, dynamic> data) {
+    final String rawDob = data['dob']?.toString() ?? '';
+    final String rawDoj = data['doj']?.toString() ?? '';
+    final String rawGender = data['gender']?.toString() ?? '';
+    final String rawEmpTyp = data['empTyp']?.toString() ?? '';
+
+    DateTime parsedDob = DateTime(1990, 1, 1);
+    try { parsedDob = DateTime.parse(rawDob); } catch (_) {}
+
+    String friendlyGender = rawGender;
+    if (rawGender == 'MALE') friendlyGender = 'Male';
+    if (rawGender == 'FEMALE') friendlyGender = 'Female';
+    if (rawGender == 'OTHER') friendlyGender = 'Other';
+
+    String friendlyEmpTyp = rawEmpTyp;
+    if (rawEmpTyp == 'FTE') friendlyEmpTyp = 'Full-time';
+    if (rawEmpTyp == 'CON') friendlyEmpTyp = 'Contractual';
+    if (rawEmpTyp == 'RET') friendlyEmpTyp = 'Retired';
+
+    setState(() {
+      _employeeCode = data['empCode']?.toString() ?? '';
+      _firstName = data['fstNm']?.toString() ?? '';
+      _lastName = data['lstNm']?.toString() ?? '';
+      _email = data['email']?.toString() ?? '';
+      _mobileNumber = data['mobNum']?.toString() ?? '';
+      _bloodGroup = data['bldGrp']?.toString() ?? '';
+      _address = data['address']?.toString() ?? '';
+      _workLocation = data['wLoc']?.toString() ?? '';
+      _designation = (data['designation'] ?? data['role'])?.toString() ?? '';
+      _gender = friendlyGender;
+      _dob = parsedDob;
+      _empType = friendlyEmpTyp;
+      _doj = _formatDate(_parseDate(rawDoj));
+
+      // Seed text controllers
+      _firstNameController.text = _firstName;
+      _lastNameController.text = _lastName;
+      _emailController.text = _email;
+      _mobileController.text = _mobileNumber;
+      _addressController.text = _address;
+      _tempGender = _gender;
+      _tempBloodGroup = _bloodGroup;
+      _tempDOB = _dob;
+
+      _isLoading = false;
+    });
+  }
+
+  DateTime _parseDate(String raw) {
+    try { return DateTime.parse(raw); } catch (_) { return DateTime(1990, 1, 1); }
   }
 
   String _formatDate(DateTime date) {
@@ -382,6 +448,64 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8FAFE),
+        appBar: CustomHeader(
+          title: 'My Profile',
+          automaticallyImplyLeading: false,
+          onNotificationTap: () {},
+        ),
+        body: const Center(child: CircularProgressIndicator(color: Color(0xFF2563EB))),
+        bottomNavigationBar: CustomFooter(
+          currentIndex: _currentIndex,
+          onTabSelected: (index) {
+            if (MainScreen.navigatorKey.currentState != null) {
+              MainScreen.navigatorKey.currentState!.changeTab(index);
+              Navigator.popUntil(context, (route) => route.isFirst);
+            }
+          },
+        ),
+      );
+    }
+
+    if (_loadError != null) {
+      return Scaffold(
+        backgroundColor: const Color(0xFFF8FAFE),
+        appBar: CustomHeader(
+          title: 'My Profile',
+          automaticallyImplyLeading: false,
+          onNotificationTap: () {},
+        ),
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error_outline, size: 52, color: Colors.red),
+              const SizedBox(height: 12),
+              Text('Failed to load profile', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              ElevatedButton.icon(
+                onPressed: _fetchProfile,
+                icon: const Icon(Icons.refresh, size: 18),
+                label: const Text('Retry'),
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+              ),
+            ],
+          ),
+        ),
+        bottomNavigationBar: CustomFooter(
+          currentIndex: _currentIndex,
+          onTabSelected: (index) {
+            if (MainScreen.navigatorKey.currentState != null) {
+              MainScreen.navigatorKey.currentState!.changeTab(index);
+              Navigator.popUntil(context, (route) => route.isFirst);
+            }
+          },
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFE),
       appBar: CustomHeader(
@@ -389,17 +513,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
         automaticallyImplyLeading: false,
         onNotificationTap: () {},
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            _buildProfileAvatarCard(),
-            const SizedBox(height: 16),
-            _buildProfileInfoCard(),
-            const SizedBox(height: 16),
-            _buildAccountSecurityCard(),
-            const SizedBox(height: 16),
-          ],
+      body: RefreshIndicator(
+        onRefresh: _fetchProfile,
+        color: const Color(0xFF2563EB),
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              _buildProfileAvatarCard(),
+              const SizedBox(height: 16),
+              _buildProfileInfoCard(),
+              const SizedBox(height: 16),
+              _buildAccountSecurityCard(),
+              const SizedBox(height: 16),
+            ],
+          ),
         ),
       ),
       bottomNavigationBar: CustomFooter(
@@ -407,6 +536,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onTabSelected: (index) {
           if (MainScreen.navigatorKey.currentState != null) {
             MainScreen.navigatorKey.currentState!.changeTab(index);
+            Navigator.popUntil(context, (route) => route.isFirst);
           }
         },
       ),

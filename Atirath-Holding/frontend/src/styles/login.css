@@ -4,7 +4,7 @@
   box-sizing: border-box;
 }
 
-/* ఫుల్ స్క్రీన్ కంటైనర్ */
+/* Full screen container */
 .login-container {
   height: 100vh;
   width: 100vw;
@@ -14,7 +14,7 @@
   font-family: 'Segoe UI', Inter, sans-serif;
 }
 
-/* స్ప్లిట్ స్క్రీన్ లేఅవుట్ */
+/* Split screen layout */
 .login-fullscreen-split {
   display: flex;
   width: 100%;
@@ -24,19 +24,19 @@
 /* LEFT SIDE - Just Image Container */
 .login-left {
   flex: 0 0 50%;
-  background-color: #f1f5f9; /* Fallback background */
+  background-color: #f1f5f9;
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden; /* ఇమేజ్ బయటకు రాకుండా */
+  overflow: hidden;
 }
 
-/* ఎడమవైపు ఇమేజ్ పర్ఫెక్ట్ గా ఫిట్ అవ్వడానికి */
+/* Left side image */
 .left-side-image {
   width: 100%;
   height: 100%;
-  object-fit: cover; /* ఇమేజ్ సాగదీసినట్లు కాకుండా ఫుల్ గా ఫిట్ అవుతుంది */
+  object-fit: cover;
   display: block;
 }
 
@@ -116,46 +116,6 @@
   text-transform: uppercase;
 }
 
-/* Divider with leaf */
-.divider-wrapper {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  margin-bottom: 30px;
-}
-
-.divider-line {
-  flex: 1;
-  height: 1px;
-  background-color: #e2e8f0;
-  border: none;
-  max-width: 120px;
-}
-
-.divider-icon {
-  color: #3a7d34;
-  font-size: 14px;
-}
-
-/* Welcome Text */
-.welcome-text {
-  text-align: center;
-  margin-bottom: 35px;
-}
-
-.welcome-text h2 {
-  color: #1e293b;
-  font-size: 22px;
-  font-weight: 600;
-  margin-bottom: 8px;
-}
-
-.welcome-text p {
-  color: #64748b;
-  font-size: 14px;
-}
-
 /* Form Inputs */
 .input-group {
   margin-bottom: 24px;
@@ -174,7 +134,8 @@
   width: 100%;
 }
 
-.input-wrapper i:first-child {
+/* Left icon styling */
+.input-icon {
   position: absolute;
   left: 14px;
   top: 50%;
@@ -182,8 +143,10 @@
   color: #94a3b8;
   font-size: 15px;
   z-index: 1;
+  pointer-events: none;
 }
 
+/* Input field styling */
 .input-wrapper input {
   width: 100%;
   padding: 13px 40px 13px 42px;
@@ -193,6 +156,7 @@
   transition: all 0.3s ease;
   color: #334155;
   background: #ffffff;
+  height: 48px;
 }
 
 .input-wrapper input::placeholder {
@@ -205,27 +169,78 @@
   box-shadow: 0 0 0 3px rgba(57, 126, 50, 0.1);
 }
 
+/* Password wrapper - special styling */
 .password-wrapper {
   position: relative;
 }
 
-.password-toggle {
+.password-wrapper .input-icon {
+  left: 14px;
+}
+
+/* Password input with extra right padding for the toggle button */
+.password-input {
+  padding-right: 48px !important;
+}
+
+/* Password toggle button - inside the input */
+.password-toggle-btn {
   position: absolute;
-  right: 14px;
+  right: 12px;
   top: 50%;
   transform: translateY(-50%);
+  background: transparent;
+  border: none;
   cursor: pointer;
   color: #94a3b8;
-  transition: color 0.2s;
-  z-index: 10;
-  background: transparent;
+  padding: 0;
   display: flex;
   align-items: center;
   justify-content: center;
+  width: 24px;
+  height: 24px;
+  z-index: 2;
+  font-size: 16px;
+  transition: color 0.2s ease;
 }
 
-.password-toggle:hover {
+.password-toggle-btn:hover {
   color: #397e32;
+}
+
+.password-toggle-btn:focus {
+  outline: none;
+}
+
+.password-toggle-btn i {
+  font-size: 16px;
+  color: #94a3b8;
+  transition: color 0.2s ease;
+}
+
+.password-toggle-btn:hover i {
+  color: #397e32;
+}
+
+/* Forgot Password link */
+.forgot-link-wrapper {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 20px;
+  margin-top: -10px;
+}
+
+.forgot-link {
+  color: #397e32;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: color 0.2s ease;
+}
+
+.forgot-link:hover {
+  color: #2d6627;
+  text-decoration: underline;
 }
 
 /* Sign In Button */
@@ -244,6 +259,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  height: 48px;
 }
 
 .login-btn:hover:not(:disabled) {
@@ -270,28 +286,7 @@
   font-weight: 500;
 }
 
-/* --- NEW FORGOT PASSWORD STYLES --- */
-
-.forgot-link-wrapper {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 20px;
-  margin-top: -10px; /* Pulls it closer to the password field */
-}
-
-.forgot-link {
-  color: #397e32;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: color 0.2s ease;
-}
-
-.forgot-link:hover {
-  color: #2d6627;
-  text-decoration: underline;
-}
-
+/* Success Message */
 .success-message {
   background: rgba(34, 197, 94, 0.1);
   border-left: 3px solid #22c55e;
@@ -306,6 +301,7 @@
   font-weight: 500;
 }
 
+/* Back Link */
 .back-link {
   text-align: center;
   margin-top: 20px;
@@ -323,15 +319,7 @@
   color: #397e32;
 }
 
-/* Footer Copyright */
-.login-footer {
-  text-align: center;
-  margin-top: 50px;
-  font-size: 11px;
-  color: #94a3b8;
-}
-
-/* మొబైల్ & టాబ్లెట్ రెస్పాన్సివ్ డిజైన్ */
+/* Mobile & Tablet Responsive Design */
 @media (max-width: 900px) {
   .login-container {
     overflow: auto; 
@@ -344,12 +332,52 @@
   }
   
   .login-left {
-    height: 350px; /* చిన్న స్క్రీన్స్ లో ఇమేజ్ హైట్ కంట్రోల్ చేయడానికి */
+    height: 350px;
     flex: none;
   }
   
   .login-right {
     padding: 50px 20px;
     flex: none;
+  }
+}
+
+/* Small screens */
+@media (max-width: 480px) {
+  .login-right {
+    padding: 30px 16px;
+  }
+  
+  .login-body {
+    max-width: 100%;
+  }
+  
+  .brand-title-primary {
+    font-size: 20px;
+  }
+  
+  .brand-title-secondary {
+    font-size: 17px;
+  }
+  
+  .input-wrapper input {
+    padding: 11px 36px 11px 38px;
+    height: 44px;
+    font-size: 13px;
+  }
+  
+  .password-input {
+    padding-right: 44px !important;
+  }
+  
+  .password-toggle-btn {
+    right: 10px;
+    width: 20px;
+    height: 20px;
+  }
+  
+  .login-btn {
+    height: 44px;
+    font-size: 14px;
   }
 }
