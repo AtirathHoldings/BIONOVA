@@ -1,70 +1,128 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Calendar, Building2, CheckCircle2, AlertCircle, ClipboardCheck, CheckSquare, ArrowRight, ChevronDown } from 'lucide-react';
+import { Calendar, Building2, CheckCircle2, AlertCircle, ClipboardCheck, CheckSquare, ArrowRight } from 'lucide-react';
 import Sidebar from '../Sidebar'; 
-import Header from '../Header'; // <--- Dynamic Header
+import Header from '../Header';
 import '../../styles/userDashboard.css';
+
+const API_BASE = (import.meta.env.VITE_API_BASE_URL) + "/api";
+const getAuthToken = () => sessionStorage.getItem("authToken") || "";
+const authHeaders = () => ({
+  "Content-Type": "application/json",
+  "Authorization": `Bearer ${getAuthToken()}`
+});
 
 const UserDashboard = ({ onLogout }) => {
   const navigate = useNavigate();
-  const [timeFilter, setTimeFilter] = useState('this-month');
+  const [dashboardData, setDashboardData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const taskData = {
-    'this-week': {
-      overall: 45,
-      completed: { count: 9, percent: 45, color: 'success', hex: '#198754' },
-      inProgress: { count: 5, percent: 25, color: 'primary', hex: '#0d6efd' },
-      underReview: { count: 3, percent: 15, color: 'warning', hex: '#ffc107' },
-      pending: { count: 2, percent: 10, color: 'purple', hex: '#6f42c1' },
-      overdue: { count: 1, percent: 5, color: 'danger', hex: '#dc3545' }
-    },
-    'this-month': {
-      overall: 64,
-      completed: { count: 32, percent: 64, color: 'success', hex: '#198754' },
-      inProgress: { count: 12, percent: 24, color: 'primary', hex: '#0d6efd' },
-      underReview: { count: 4, percent: 8, color: 'warning', hex: '#ffc107' },
-      pending: { count: 1, percent: 2, color: 'purple', hex: '#6f42c1' },
-      overdue: { count: 1, percent: 2, color: 'danger', hex: '#dc3545' }
-    },
-    'last-month': {
-      overall: 82,
-      completed: { count: 41, percent: 82, color: 'success', hex: '#198754' },
-      inProgress: { count: 4, percent: 8, color: 'primary', hex: '#0d6efd' },
-      underReview: { count: 2, percent: 4, color: 'warning', hex: '#ffc107' },
-      pending: { count: 2, percent: 4, color: 'purple', hex: '#6f42c1' },
-      overdue: { count: 1, percent: 2, color: 'danger', hex: '#dc3545' }
-    },
-    'this-year': {
-      overall: 75,
-      completed: { count: 150, percent: 75, color: 'success', hex: '#198754' },
-      inProgress: { count: 20, percent: 10, color: 'primary', hex: '#0d6efd' },
-      underReview: { count: 10, percent: 5, color: 'warning', hex: '#ffc107' },
-      pending: { count: 10, percent: 5, color: 'purple', hex: '#6f42c1' },
-      overdue: { count: 10, percent: 5, color: 'danger', hex: '#dc3545' }
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      setLoading(true);
+      try {
+        const res = await fetch(`${API_BASE}/user-dashboard`, { headers: authHeaders() });
+        if (res.ok) {
+          const data = await res.json();
+          setDashboardData(data);
+        } else {
+          setError("Failed to fetch user dashboard data");
+        }
+      } catch (err) {
+        console.error("Error loading user dashboard:", err);
+        setError("Network error loading dashboard");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDashboardData();
+  }, []);
+
+  const getInitials = (name) => {
+    if (!name) return "U";
+    const parts = name.split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[1][0]).toUpperCase();
     }
+    return parts[0].substring(0, 2).toUpperCase();
   };
 
-  const currentData = taskData[timeFilter];
+  const formatDate = (dateStr) => {
+    if (!dateStr) return "N/A";
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return dateStr;
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = d.toLocaleDateString('en-GB', { month: 'short' });
+    const year = d.getFullYear();
+    return `${day} ${month} ${year}`;
+  };
+
+  const getPriorityColor = (priority) => {
+    const p = (priority || "").toLowerCase();
+    if (p === 'high') return 'danger';
+    if (p === 'medium') return 'warning';
+    return 'success';
+  };
+
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#64748b' }}>
+        <div style={{ textAlign: 'center' }}>
+          <h4>Loading Dashboard...</h4>
+          <p>Please wait while we fetch your assigned tasks and projects.</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !dashboardData) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', color: '#ef4444' }}>
+        <div style={{ textAlign: 'center', maxWidth: '400px', padding: '20px' }}>
+          <h4>Access Error</h4>
+          <p>{error || "No dashboard data available. Please verify your login session."}</p>
+          <button className="btn btn-primary btn-sm mt-3" onClick={() => navigate("/")}>Go to Login</button>
+        </div>
+      </div>
+    );
+  }
+
+  // Calculate percentages for donut chart
+  const completedCount = dashboardData.taskStatusCounts?.["Completed"] || 0;
+  const inProgressCount = dashboardData.taskStatusCounts?.["In Progress"] || 0;
+  const underReviewCount = dashboardData.taskStatusCounts?.["Under Review"] || 0;
+  const pendingCount = dashboardData.taskStatusCounts?.["Pending"] || 0;
+  const overdueCount = dashboardData.taskStatusCounts?.["Overdue"] || 0;
+
+  const totalTasks = completedCount + inProgressCount + underReviewCount + pendingCount + overdueCount;
+
+  const completedPercent = totalTasks > 0 ? Math.round((completedCount / totalTasks) * 100) : 0;
+  const inProgressPercent = totalTasks > 0 ? Math.round((inProgressCount / totalTasks) * 100) : 0;
+  const underReviewPercent = totalTasks > 0 ? Math.round((underReviewCount / totalTasks) * 100) : 0;
+  const pendingPercent = totalTasks > 0 ? Math.round((pendingCount / totalTasks) * 100) : 0;
+  const overduePercent = totalTasks > 0 ? Math.round((overdueCount / totalTasks) * 100) : 0;
 
   const getDynamicGradient = () => {
-    const c = currentData.completed.percent;
-    const i = c + currentData.inProgress.percent;
-    const u = i + currentData.underReview.percent;
-    const p = u + currentData.pending.percent;
+    const c = completedPercent;
+    const i = c + inProgressPercent;
+    const u = i + underReviewPercent;
+    const p = u + pendingPercent;
     
     return `conic-gradient(
-      ${currentData.completed.hex} 0% ${c}%, 
-      ${currentData.inProgress.hex} ${c}% ${i}%, 
-      ${currentData.underReview.hex} ${i}% ${u}%, 
-      ${currentData.pending.hex} ${u}% ${p}%, 
-      ${currentData.overdue.hex} ${p}% 100%
+      #198754 0% ${c}%, 
+      #0d6efd ${c}% ${i}%, 
+      #ffc107 ${i}% ${u}%, 
+      #6f42c1 ${u}% ${p}%, 
+      #dc3545 ${p}% 100%
     )`;
   };
 
   return (
     <div className="dashboard-shell-container">
       {/* Sidebar Navigation */}
-      <Sidebar userRole="Site Engineer" onLogout={onLogout} />
+      <Sidebar userRole={dashboardData.role || "Site Engineer"} onLogout={onLogout} />
 
       {/* Main Container Viewport (Fixes Layout Shift) */}
       <div className="dashboard-shell">
@@ -73,9 +131,9 @@ const UserDashboard = ({ onLogout }) => {
         <Header 
           title="User Dashboard" 
           showSearch={false} 
-          userName="Ravi Kumar" 
-          userRole="Site Engineer" 
-          initials="RK" 
+          userName={dashboardData.fullName || "User"} 
+          userRole={dashboardData.role || "Site Engineer"} 
+          initials={getInitials(dashboardData.fullName)} 
         />
 
         <main className="dashboard-main">
@@ -87,32 +145,36 @@ const UserDashboard = ({ onLogout }) => {
                   <h6 className="fw-bold d-flex align-items-center gap-2 m-0 text-uppercase">
                     <CheckSquare size={18} className="text-success" /> To-Do List
                   </h6>
-                  <a href="#" className="text-primary text-decoration-none small fw-semibold">View all</a>
+                  <span onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }} className="text-primary text-decoration-none small fw-semibold">View all</span>
                 </div>
                 <div className="todo-list flex-grow-1">
-                  {[
-                    { task: "Update excavation progress", id: "PRJ-001 • Excavation Work", priority: "High", date: "Today", pColor: "danger" },
-                    { task: "Upload PCC inspection report", id: "PRJ-001 • PCC Work", priority: "Medium", date: "Today", pColor: "warning" },
-                    { task: "Complete safety checklist", id: "PRJ-005 • Safety", priority: "Low", date: "30 May 2025", pColor: "success" },
-                    { task: "Submit daily progress report", id: "PRJ-001 • Daily Reporting", priority: "Medium", date: "31 May 2025", pColor: "warning" },
-                  ].map((item, index) => (
-                    <div key={index} className="todo-item d-flex align-items-center justify-content-between">
-                      <div className="d-flex align-items-start gap-3">
-                        <input type="checkbox" className="form-check-input mt-1 cursor-pointer" />
-                        <div>
-                          <p className="mb-0 fw-semibold">{item.task}</p>
-                          <small className="text-muted">{item.id}</small>
+                  {(!dashboardData.todoList || dashboardData.todoList.length === 0) ? (
+                    <div className="text-center py-5 text-muted">No pending to-do tasks. All caught up!</div>
+                  ) : (
+                    dashboardData.todoList.map((item, index) => {
+                      const pColor = getPriorityColor(item.priority);
+                      return (
+                        <div key={item.taskId || index} className="todo-item d-flex align-items-center justify-content-between">
+                          <div className="d-flex align-items-start gap-3">
+                            <input type="checkbox" className="form-check-input mt-1 cursor-pointer" />
+                            <div>
+                              <p className="mb-0 fw-semibold">{item.taskName}</p>
+                              <small className="text-muted">{item.projectCodeName || "N/A"}</small>
+                            </div>
+                          </div>
+                          <div className="d-flex align-items-center gap-3">
+                            <span className={`badge bg-${pColor}-subtle text-${pColor} rounded-pill px-3 py-2`}>{item.priority}</span>
+                            <small className="text-muted d-flex align-items-center gap-1">
+                              <Calendar size={14} /> {item.isOverdue ? "Overdue" : (item.isDueToday ? "Today" : formatDate(item.dueDate))}
+                            </small>
+                          </div>
                         </div>
-                      </div>
-                      <div className="d-flex align-items-center gap-3">
-                        <span className={`badge bg-${item.pColor}-subtle text-${item.pColor} rounded-pill px-3 py-2`}>{item.priority}</span>
-                        <small className="text-muted d-flex align-items-center gap-1"><Calendar size={14} /> {item.date}</small>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })
+                  )}
                 </div>
                 <div className="text-center mt-auto pt-3 border-top">
-                  <a href="#" className="text-primary text-decoration-none fw-semibold small">View full to-do list <ArrowRight size={14}/></a>
+                  <span onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }} className="text-primary text-decoration-none fw-semibold small">View full to-do list <ArrowRight size={14}/></span>
                 </div>
               </div>
             </div>
@@ -124,38 +186,39 @@ const UserDashboard = ({ onLogout }) => {
                   <h6 className="fw-bold d-flex align-items-center gap-2 m-0 text-uppercase">
                     <Calendar size={18} className="text-primary" /> Upcoming Tasks
                   </h6>
-                  <a href="#" className="text-primary text-decoration-none small fw-semibold">View all</a>
+                  <span onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }} className="text-primary text-decoration-none small fw-semibold">View all</span>
                 </div>
                 <div className="table-responsive flex-grow-1">
-                  <table className="table table-borderless table-hover align-middle mb-0 ud-table">
-                    <thead className="text-muted small border-bottom">
-                      <tr>
-                        <th className="pb-2">Task Name</th>
-                        <th className="pb-2">Project</th>
-                        <th className="pb-2">Due Date</th>
-                        <th className="pb-2">Priority</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {[
-                        { task: "PCC Work", prj: "PRJ-001", date: "02-Jun-2025", priority: "Medium", pColor: "warning" },
-                        { task: "Reinforcement Fixing", prj: "PRJ-001", date: "05-Jun-2025", priority: "High", pColor: "danger" },
-                        { task: "Equipment Inspection", prj: "PRJ-005", date: "08-Jun-2025", priority: "Medium", pColor: "warning" },
-                        { task: "Grouting Work", prj: "PRJ-002", date: "10-Jun-2025", priority: "Low", pColor: "success" },
-                        { task: "Pipe Line Testing", prj: "PRJ-005", date: "12-Jun-2025", priority: "Medium", pColor: "warning" },
-                      ].map((row, i) => (
-                        <tr key={i} className="border-bottom">
-                          <td className="fw-semibold py-3">{row.task}</td>
-                          <td className="text-muted">{row.prj}</td>
-                          <td className="text-muted">{row.date}</td>
-                          <td><span className={`badge bg-${row.pColor}-subtle text-${row.pColor} rounded-pill px-3 py-2`}>{row.priority}</span></td>
+                  {(!dashboardData.upcomingTasks || dashboardData.upcomingTasks.length === 0) ? (
+                    <div className="text-center py-5 text-muted">No upcoming tasks scheduled.</div>
+                  ) : (
+                    <table className="table table-borderless table-hover align-middle mb-0 ud-table">
+                      <thead className="text-muted small border-bottom">
+                        <tr>
+                          <th className="pb-2">Task Name</th>
+                          <th className="pb-2">Project</th>
+                          <th className="pb-2">Due Date</th>
+                          <th className="pb-2">Priority</th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                      </thead>
+                      <tbody>
+                        {dashboardData.upcomingTasks.map((row, i) => {
+                          const pColor = getPriorityColor(row.priority);
+                          return (
+                            <tr key={row.taskId || i} className="border-bottom">
+                              <td className="fw-semibold py-3">{row.taskName}</td>
+                              <td className="text-muted">{row.projectCode || "N/A"}</td>
+                              <td className="text-muted">{formatDate(row.dueDate)}</td>
+                              <td><span className={`badge bg-${pColor}-subtle text-${pColor} rounded-pill px-3 py-2`}>{row.priority}</span></td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
                 <div className="text-center mt-auto pt-3">
-                  <a href="#" className="text-primary text-decoration-none fw-semibold small">View all upcoming tasks <ArrowRight size={14}/></a>
+                  <span onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }} className="text-primary text-decoration-none fw-semibold small">View all upcoming tasks <ArrowRight size={14}/></span>
                 </div>
               </div>
             </div>
@@ -167,40 +230,49 @@ const UserDashboard = ({ onLogout }) => {
                   <h6 className="fw-bold d-flex align-items-center gap-2 m-0 text-uppercase">
                     <Building2 size={18} className="text-primary" /> My Projects
                   </h6>
-                  <a href="#" className="text-primary text-decoration-none small fw-semibold">View all</a>
+                  <span onClick={() => navigate("/projects")} style={{ cursor: 'pointer' }} className="text-primary text-decoration-none small fw-semibold">View all</span>
                 </div>
                 <div className="projects-list flex-grow-1">
-                  {[
-                    { name: "50 TPD CBG Plant Construction", role: "Site Engineer", loc: "Atirath Bio Energy Pvt. Ltd. | Nalgonda Plant", prog: 65, tasks: 8, open: 3, pColor: "success" },
-                    { name: "Bio Fertilizer Unit", role: "QA Engineer", loc: "Atirath Bio Energy Pvt. Ltd. | Nalgonda Plant", prog: 40, tasks: 4, open: 2, pColor: "primary" },
-                    { name: "CBG Expansion Phase-II", role: "Reviewer", loc: "Atirath Bio Energy Pvt. Ltd. | Nalgonda Plant", prog: 25, tasks: 5, open: 1, pColor: "purple" },
-                  ].map((prj, i) => (
-                    <div key={i} className="project-item d-flex align-items-center py-3 border-bottom">
-                      <div className="prj-img me-3"></div>
-                      <div className="flex-grow-1">
-                        <h6 className="mb-1 fw-bold fs-6">{prj.name}</h6>
-                        <small className="text-muted d-block mb-1">{prj.loc}</small>
-                        <small className="text-muted">Role: <strong>{prj.role}</strong></small>
-                      </div>
-                      <div className="d-flex align-items-center gap-4 text-center">
-                        <div>
-                          <div className={`circular-progress text-${prj.pColor}`}>{prj.prog}%</div>
-                          <small className="text-muted mt-1 d-block" style={{fontSize: '10px'}}>Progress</small>
+                  {(!dashboardData.myProjects || dashboardData.myProjects.length === 0) ? (
+                    <div className="text-center py-5 text-muted">No projects assigned yet.</div>
+                  ) : (
+                    dashboardData.myProjects.map((prj, i) => {
+                      const pColors = ["success", "primary", "purple", "warning"];
+                      const pColor = pColors[i % pColors.length];
+                      return (
+                        <div key={prj.projectId || i} className="project-item d-flex align-items-center py-3 border-bottom" style={{ cursor: 'pointer' }} onClick={() => navigate(`/projects/${prj.projectId}`)}>
+                          <div className="prj-img me-3" style={{ width: '120px', height: '80px', borderRadius: '8px', overflow: 'hidden', flexShrink: 0, backgroundColor: '#e9ecef' }}>
+                            <img src={prj.projectImage || `https://images.unsplash.com/photo-1541888081638-76508920bc8b?w=400&q=80`} alt={prj.projectName} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                          <div className="flex-grow-1">
+                            <h6 className="mb-1 fw-bold" style={{ fontSize: '15px', color: '#1e293b' }}>{prj.projectName}</h6>
+                            <small className="d-block mb-1" style={{ color: '#64748b', fontSize: '12px' }}>{prj.clientName} | {prj.plantName}</small>
+                            <small style={{ color: '#475569', fontSize: '12px' }}>Role: <strong>{prj.role}</strong></small>
+                          </div>
+                          <div className="d-flex align-items-center text-center" style={{ gap: '30px' }}>
+                            <div>
+                              <small className="mb-2 d-block" style={{fontSize: '11px', color: '#64748b', fontWeight: '600'}}>Progress</small>
+                              <div className={`circular-progress text-${pColor} mx-auto`} style={{ width: '48px', height: '48px', borderRadius: '50%', border: `3px solid currentColor`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold', fontSize: '14px' }}>
+                                {prj.progress}%
+                              </div>
+                            </div>
+                            <div>
+                              <small className="mb-2 d-block" style={{fontSize: '11px', color: '#64748b', fontWeight: '600'}}>Tasks Assigned</small>
+                              <h5 className="mb-0 fw-bold" style={{ fontSize: '18px', color: '#0f172a' }}>{prj.tasksAssigned}</h5>
+                            </div>
+                            <div>
+                              <small className="mb-2 d-block" style={{fontSize: '11px', color: '#64748b', fontWeight: '600'}}>Open Tasks</small>
+                              <h5 className="mb-1 fw-bold" style={{ fontSize: '18px', color: '#0f172a' }}>{prj.openTasks || 0}</h5>
+                              <span className="badge bg-success-subtle text-success rounded-pill px-2" style={{fontSize: '10px'}}>{prj.status || 'In Progress'}</span>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <h5 className="mb-0 fw-bold">{prj.tasks}</h5>
-                          <small className="text-muted" style={{fontSize: '10px'}}>Tasks Assigned</small>
-                        </div>
-                        <div>
-                          <h5 className="mb-0 fw-bold">{prj.open}</h5>
-                          <span className="badge bg-success-subtle text-success mt-1 rounded-pill px-2" style={{fontSize: '10px'}}>In Progress</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                      );
+                    })
+                  )}
                 </div>
                 <div className="text-center mt-auto pt-3">
-                  <a href="#" className="text-primary text-decoration-none fw-semibold small">View all projects <ArrowRight size={14}/></a>
+                  <span onClick={() => navigate("/projects")} style={{ cursor: 'pointer' }} className="text-primary text-decoration-none fw-semibold small">View all projects <ArrowRight size={14}/></span>
                 </div>
               </div>
             </div>
@@ -212,40 +284,29 @@ const UserDashboard = ({ onLogout }) => {
                   <h6 className="fw-bold d-flex align-items-center gap-2 m-0 text-uppercase">
                     <CheckCircle2 size={18} className="text-secondary" /> Task Completion Overview
                   </h6>
-                  
-                  <select 
-                    className="form-select form-select-sm w-auto bg-light border-0 fw-semibold cursor-pointer" 
-                    value={timeFilter}
-                    onChange={(e) => setTimeFilter(e.target.value)}
-                  >
-                    <option value="this-week">This Week</option>
-                    <option value="this-month">This Month</option>
-                    <option value="last-month">Last Month</option>
-                    <option value="this-year">This Year</option>
-                  </select>
                 </div>
                 
                 <div className="d-flex align-items-center justify-content-around my-auto py-3">
                   <div className="donut-chart-container">
                     <div className="donut-chart" style={{ background: getDynamicGradient() }}>
                       <div className="donut-inner">
-                        <h2 className="fw-bold mb-0 fs-1">{currentData.overall}%</h2>
+                        <h2 className="fw-bold mb-0 fs-1">{Math.round(dashboardData.overallCompletionPercentage)}%</h2>
                         <small className="text-muted text-center" style={{fontSize: '13px'}}>Overall<br/>Completion</small>
                       </div>
                     </div>
                   </div>
                   
                   <div className="chart-legend">
-                    <div className="legend-item"><span className="dot bg-success"></span><span className="l-text">Completed</span><span className="l-val text-success fw-bold">{currentData.completed.count} ({currentData.completed.percent}%)</span></div>
-                    <div className="legend-item"><span className="dot bg-primary"></span><span className="l-text">In Progress</span><span className="l-val text-primary fw-bold">{currentData.inProgress.count} ({currentData.inProgress.percent}%)</span></div>
-                    <div className="legend-item"><span className="dot bg-warning"></span><span className="l-text">Under Review</span><span className="l-val text-warning fw-bold">{currentData.underReview.count} ({currentData.underReview.percent}%)</span></div>
-                    <div className="legend-item"><span className="dot bg-purple"></span><span className="l-text">Pending</span><span className="l-val text-purple fw-bold">{currentData.pending.count} ({currentData.pending.percent}%)</span></div>
-                    <div className="legend-item"><span className="dot bg-danger"></span><span className="l-text">Overdue</span><span className="l-val text-danger fw-bold">{currentData.overdue.count} ({currentData.overdue.percent}%)</span></div>
+                    <div className="legend-item"><span className="dot bg-success"></span><span className="l-text">Completed</span><span className="l-val text-success fw-bold">{completedCount} ({completedPercent}%)</span></div>
+                    <div className="legend-item"><span className="dot bg-primary"></span><span className="l-text">In Progress</span><span className="l-val text-primary fw-bold">{inProgressCount} ({inProgressPercent}%)</span></div>
+                    <div className="legend-item"><span className="dot bg-warning"></span><span className="l-text">Under Review</span><span className="l-val text-warning fw-bold">{underReviewCount} ({underReviewPercent}%)</span></div>
+                    <div className="legend-item"><span className="dot bg-purple"></span><span className="l-text">Pending</span><span className="l-val text-purple fw-bold">{pendingCount} ({pendingPercent}%)</span></div>
+                    <div className="legend-item"><span className="dot bg-danger"></span><span className="l-text">Overdue</span><span className="l-val text-danger fw-bold">{overdueCount} ({overduePercent}%)</span></div>
                   </div>
                 </div>
                 
                 <div className="text-center mt-auto pt-3 border-top">
-                  <a href="#" className="text-primary text-decoration-none fw-semibold small">View detailed report <ArrowRight size={14}/></a>
+                  <span onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }} className="text-primary text-decoration-none fw-semibold small">View detailed report <ArrowRight size={14}/></span>
                 </div>
               </div>
             </div>
@@ -254,11 +315,11 @@ const UserDashboard = ({ onLogout }) => {
           {/* Bottom Summary Cards */}
           <div className="row row-cols-1 row-cols-md-3 row-cols-xl-5 g-3 mt-3 mb-4">
             {[
-              { icon: Building2, val: 3, label: "My Projects", link: "View projects", path: "/projects", cardBg: "ud-card-green", iconColor: "text-success bg-success-subtle" },
-              { icon: ClipboardCheck, val: 14, label: "My Tasks", link: "View tasks", path: "/my-tasks", cardBg: "ud-card-blue", iconColor: "text-primary bg-primary-subtle" },
-              { icon: Calendar, val: 2, label: "Due Today", link: "View today's tasks", path: "/calendar", cardBg: "ud-card-orange", iconColor: "text-warning bg-warning-subtle" },
-              { icon: AlertCircle, val: 1, label: "Overdue Tasks", link: "View overdue", path: "/my-tasks", cardBg: "ud-card-red", iconColor: "text-danger bg-danger-subtle" },
-              { icon: CheckCircle2, val: 32, label: "Completed Tasks", link: "View completed", path: "/my-tasks", cardBg: "ud-card-purple", iconColor: "text-purple bg-purple-subtle" }
+              { icon: Building2, val: dashboardData.myProjectsCount || 0, label: "My Projects", link: "View projects", path: "/projects", cardBg: "ud-card-green", iconColor: "text-success bg-success-subtle" },
+              { icon: ClipboardCheck, val: dashboardData.myTasksCount || 0, label: "My Tasks", link: "View tasks", path: "/my-tasks", cardBg: "ud-card-blue", iconColor: "text-primary bg-primary-subtle" },
+              { icon: Calendar, val: dashboardData.dueTodayCount || 0, label: "Due Today", link: "View today's tasks", path: "/calendar", cardBg: "ud-card-orange", iconColor: "text-warning bg-warning-subtle" },
+              { icon: AlertCircle, val: dashboardData.overdueTasksCount || 0, label: "Overdue Tasks", link: "View overdue", path: "/my-tasks", cardBg: "ud-card-red", iconColor: "text-danger bg-danger-subtle" },
+              { icon: CheckCircle2, val: dashboardData.completedTasksCount || 0, label: "Completed Tasks", link: "View completed", path: "/my-tasks", cardBg: "ud-card-purple", iconColor: "text-purple bg-purple-subtle" }
             ].map((card, i) => (
               <div key={i} className="col">
                 <div className={`ud-summary-card h-100 d-flex align-items-center gap-3 px-3 py-3 ${card.cardBg}`}>

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState, useEffect } from "react";
 import Sidebar from "../Sidebar";
 import Header from "../Header";
 import { 
@@ -20,23 +20,167 @@ import {
 } from "lucide-react";
 import "../../styles/profile.css";
 
+const API_BASE = (import.meta.env.VITE_API_BASE_URL) + "/api";
+
+const authHeaders = () => {
+  const token = sessionStorage.getItem("authToken");
+  return {
+    "Content-Type": "application/json",
+    "Authorization": token ? `Bearer ${token}` : ""
+  };
+};
+
 const Profile = ({ userRole, onLogout }) => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Hardcoded based on the screenshot
-  const profileDetails = {
-    employeeCode: "EMP00125",
-    employeeName: "Ravi Kumar",
-    email: "ravi.kumar@cpgp.com",
-    mobileNumber: "+91 98765 43210",
-    department: "Engineering",
-    role: "Engineer",
-    reportingManager: "Suresh Babu (Project Manager)",
-    workLocation: "Hyderabad, India",
-    dateOfJoining: "15 Jan 2024",
-    status: "Active"
+  // Password fields state
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  // Profile data states
+  const [profile, setProfile] = useState(null);
+
+  const handleUpdatePassword = async () => {
+    setError("");
+    setMessage("");
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+      setError("All password fields are required.");
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setError("New password and confirm password do not match.");
+      return;
+    }
+
+    // Password strength regex (min 8 chars, at least one uppercase, one lowercase, one number, one special char)
+    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    if (!passwordRegex.test(newPassword)) {
+      setError("Password must be at least 8 characters long and include uppercase, lowercase, number and special character.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_BASE}/employees/change-password`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({ currentPassword, newPassword })
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setMessage(data.message || "Password updated successfully!");
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+      } else {
+        setError(data.message || "Failed to update password.");
+      }
+    } catch (err) {
+      console.error("Error updating password:", err);
+      setError("An error occurred. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  };
+  const [companies, setCompanies] = useState([]);
+  const [plants, setPlants] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [employees, setEmployees] = useState([]);
+
+  const fetchProfileData = async () => {
+    const headers = authHeaders();
+
+    // 1. Fetch companies
+    try {
+      const res = await fetch(`${API_BASE}/companies`, { headers });
+      if (res.ok) setCompanies(await res.json());
+    } catch (err) {
+      console.error("Error fetching companies:", err);
+    }
+
+    // 2. Fetch plants
+    try {
+      const res = await fetch(`${API_BASE}/plants`, { headers });
+      if (res.ok) setPlants(await res.json());
+    } catch (err) {
+      console.error("Error fetching plants:", err);
+    }
+
+    // 3. Fetch departments
+    try {
+      const res = await fetch(`${API_BASE}/departments`, { headers });
+      if (res.ok) setDepartments(await res.json());
+    } catch (err) {
+      console.error("Error fetching departments:", err);
+    }
+
+    // 4. Fetch employees and match profile by logged-in user email
+    try {
+      const res = await fetch(`${API_BASE}/employees`, { headers });
+      if (res.ok) {
+        const empData = await res.json();
+        setEmployees(empData);
+        const loggedInEmail = sessionStorage.getItem("userEmail") || localStorage.getItem("userEmail");
+        if (loggedInEmail) {
+          const matchedProfile = empData.find(
+            (emp) => emp.email && emp.email.toLowerCase().trim() === loggedInEmail.toLowerCase().trim()
+          );
+          if (matchedProfile) {
+            setProfile(matchedProfile);
+          }
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching employees:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchProfileData();
+  }, []);
+
+  const getDeptName = (id) => {
+    const d = departments.find(dept => dept.deptId === id);
+    return d ? d.deptNm : `Department ID: ${id}`;
+  };
+
+  const getManagerName = (id) => {
+    if (!id) return "None";
+    const mgr = employees.find(emp => emp.empId === id);
+    return mgr ? `${mgr.fstNm || ""} ${mgr.lstNm || ""}`.trim() : `Manager ID: ${id}`;
+  };
+
+  const profileDetails = profile ? {
+    employeeCode: profile.empCode || "N/A",
+    employeeName: `${profile.fstNm || ""} ${profile.lstNm || ""}`.trim() || "N/A",
+    email: profile.email || "N/A",
+    mobileNumber: profile.mobNum || "N/A",
+    department: profile.deptId ? getDeptName(profile.deptId) : "N/A",
+    role: profile.role || "N/A",
+    reportingManager: profile.repManId ? getManagerName(profile.repManId) : "None",
+    workLocation: profile.wLoc || "N/A",
+    dateOfJoining: profile.doj || "N/A",
+    status: profile.sts === true || profile.sts === "ACTIVE" ? "Active" : "Inactive"
+  } : {
+    employeeCode: "Loading...",
+    employeeName: "Loading...",
+    email: "Loading...",
+    mobileNumber: "Loading...",
+    department: "Loading...",
+    role: "Loading...",
+    reportingManager: "Loading...",
+    workLocation: "Loading...",
+    dateOfJoining: "Loading...",
+    status: "Loading..."
   };
 
   return (
@@ -45,24 +189,17 @@ const Profile = ({ userRole, onLogout }) => {
 
       <div className="pf-shell">
         <Header 
-          title="" 
+          title="My Profile" 
           showSearch={false} 
-          userName="Ravi Kumar" 
-          userRole="Engineer" 
-          initials="RK" 
+          userName={profileDetails.employeeName} 
+          userRole={profileDetails.role} 
+          initials={profile ? `${profile.fstNm?.[0] || profile.firstName?.[0] || ""}${profile.lstNm?.[0] || profile.lastName?.[0] || ""}`.toUpperCase() || "RK" : "RK"} 
         />
 
         <main className="pf-main">
-          <h1 style={{ fontSize: '24px', fontWeight: '700', color: '#0f172a', margin: '0 0 8px 0' }}>
-            My Profile
-          </h1>
           
-          <div className="pf-breadcrumb">
-            <Home size={14} />
-            <span>Home</span>
-            <ChevronRight size={14} />
-            <strong style={{ color: '#0f172a', fontWeight: '500' }}>Profile</strong>
-          </div>
+
+          
 
           <div className="pf-content">
             
@@ -80,11 +217,7 @@ const Profile = ({ userRole, onLogout }) => {
                 {/* Avatar Section */}
                 <div className="pf-avatar-section">
                   <div className="pf-avatar-wrapper">
-                    <img 
-                      src="https://images.unsplash.com/photo-1633332755192-727a05c4013d?q=80&w=250&auto=format&fit=crop" 
-                      alt="Profile Avatar" 
-                      className="pf-avatar-image" 
-                    />
+                    <User size={80} color="#94a3b8" strokeWidth={1.5} />
                   </div>
                   <button className="pf-change-photo-btn">
                     <Camera size={16} />
@@ -143,7 +276,7 @@ const Profile = ({ userRole, onLogout }) => {
                   <div className="pf-detail-row">
                     <div className="pf-detail-label">
                       <ShieldCheck size={16} />
-                      Role
+                      Designation
                     </div>
                     <span className="pf-detail-separator">:</span>
                     <div className="pf-detail-value">{profileDetails.role}</div>
@@ -211,6 +344,8 @@ const Profile = ({ userRole, onLogout }) => {
                     <input 
                       type={showCurrentPassword ? "text" : "password"} 
                       placeholder="Enter current password" 
+                      value={currentPassword}
+                      onChange={(e) => setCurrentPassword(e.target.value)}
                     />
                     {showCurrentPassword ? (
                       <Eye className="pf-input-icon" size={18} onClick={() => setShowCurrentPassword(false)} />
@@ -226,6 +361,8 @@ const Profile = ({ userRole, onLogout }) => {
                     <input 
                       type={showNewPassword ? "text" : "password"} 
                       placeholder="Enter new password" 
+                      value={newPassword}
+                      onChange={(e) => setNewPassword(e.target.value)}
                     />
                     {showNewPassword ? (
                       <Eye className="pf-input-icon" size={18} onClick={() => setShowNewPassword(false)} />
@@ -244,6 +381,8 @@ const Profile = ({ userRole, onLogout }) => {
                     <input 
                       type={showConfirmPassword ? "text" : "password"} 
                       placeholder="Confirm new password" 
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
                     />
                     {showConfirmPassword ? (
                       <Eye className="pf-input-icon" size={18} onClick={() => setShowConfirmPassword(false)} />
@@ -253,9 +392,16 @@ const Profile = ({ userRole, onLogout }) => {
                   </div>
                 </div>
 
-                <button className="pf-update-btn">
+                {error && <p style={{ color: '#ef4444', fontSize: '13px', margin: '0 0 16px 0', fontWeight: '500' }}>{error}</p>}
+                {message && <p style={{ color: '#16a34a', fontSize: '13px', margin: '0 0 16px 0', fontWeight: '500' }}>{message}</p>}
+
+                <button 
+                  className="pf-update-btn" 
+                  onClick={handleUpdatePassword}
+                  disabled={loading}
+                >
                   <Lock size={16} />
-                  Update Password
+                  {loading ? "Updating..." : "Update Password"}
                 </button>
               </div>
 

@@ -115,7 +115,7 @@ const Dashboard = ({ onLogout, userRole }) => {
 
     return (
         <div className="modern-dashboard">
-            <Sidebar userRole={userRole} sidebarOpen={sidebarOpen} />
+            <Sidebar userRole={userRole} onLogout={onLogout} sidebarOpen={sidebarOpen} />
             
             <div className={`dashboard-main ${!sidebarOpen ? 'expanded' : ''}`}>
                 {/* Top Header */}

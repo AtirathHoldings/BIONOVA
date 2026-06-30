@@ -39,7 +39,7 @@ const stateToZoneMap = {
   "Madhya Pradesh": "Central Zone"
 };
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -59,7 +59,18 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       const response = await fetch(`${apiBaseUrl}/api/companies`, { headers: getAuthHeaders() });
       if (response.ok) {
         const data = await response.json();
-        setCompanies(data);
+        let localData = {};
+        try {
+          localData = JSON.parse(localStorage.getItem("company_local_fields") || "{}");
+        } catch (e) {
+          console.error("Error parsing local company data:", e);
+        }
+        const enriched = data.map(company => ({
+          ...company,
+          flatPlotDoor: localData[company.coyId]?.flatPlotDoor || "",
+          workingDaysPerWeek: company.wrkDaysPerWk || localData[company.coyId]?.workingDaysPerWeek || ""
+        }));
+        setCompanies(enriched);
       }
     } catch (error) {
       console.error("Error fetching companies:", error);
@@ -89,6 +100,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
 
   // Form state – all empty by default
   const [formData, setFormData] = useState({
@@ -112,7 +124,8 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     remarks: "",
     website: "",
     logo: null,
-    status: "Active"
+    status: "Active",
+    workingDaysPerWeek: ""
   });
 
   // Table action dropdown trigger state
@@ -136,6 +149,96 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
+  const validateField = (name, value) => {
+    let error = "";
+    if (name === "companyName") {
+      if (!value.trim()) error = "Company Name is required.";
+      else if (value.length > 100) error = "Company Name cannot exceed 100 characters.";
+    } else if (name === "companyCode") {
+      if (!value.trim()) error = "Company Code is required.";
+      else if (value.length > 10) error = "Company Code cannot exceed 10 characters.";
+    } else if (name === "under") {
+      if (!value) error = "Parent Company selection is required.";
+    } else if (name === "cinNumber") {
+      if (!value.trim()) error = "Company CIN Number is required.";
+      else {
+        const cinRegex = /^[LU]{1}[0-9]{5}[A-Z]{2}[0-9]{4}[A-Z]{3}[0-9]{6}$/;
+        if (!cinRegex.test(value.trim())) {
+          error = "Invalid CIN format (e.g. L01500MH1988PLC048508, 21 characters).";
+        }
+      }
+    } else if (name === "gstNumber") {
+      if (value.trim()) {
+        const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+        if (!gstRegex.test(value.trim())) {
+          error = "Invalid GSTIN format (e.g. 22AAAAA1111A1Z5, 15 characters).";
+        }
+      }
+    } else if (name === "panNumber") {
+      if (!value.trim()) error = "PAN Number is required.";
+      else {
+        const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
+        if (!panRegex.test(value.trim())) {
+          error = "Invalid PAN format (e.g. ABCDE1234F, 10 characters).";
+        }
+      }
+    } else if (name === "tanNumber") {
+      if (!value.trim()) error = "TAN Number is required.";
+      else {
+        const tanRegex = /^[A-Z]{4}[0-9]{5}[A-Z]{1}$/;
+        if (!tanRegex.test(value.trim())) {
+          error = "Invalid TAN format (e.g. ABCD12345E, 10 characters).";
+        }
+      }
+    } else if (name === "incorporationDate") {
+      if (!value.trim()) error = "Incorporation Date is required.";
+
+    } else if (name === "streetAddress") {
+      if (!value.trim()) error = "Street Name is required.";
+      else if (value.length > 50) error = "Cannot exceed 50 characters.";
+    } else if (name === "city") {
+      if (!value.trim()) error = "City/Village is required.";
+      else if (value.length > 30) error = "Cannot exceed 30 characters.";
+    } else if (name === "district") {
+      if (!value.trim()) error = "District Name is required.";
+      else if (value.length > 30) error = "Cannot exceed 30 characters.";
+    } else if (name === "state") {
+      if (!value) error = "State Reference selection is required.";
+    } else if (name === "pincode") {
+      if (!value.trim()) error = "Postal Code (Pincode) is required.";
+      else {
+        const pincodeRegex = /^\d{6}$/;
+        if (!pincodeRegex.test(value.trim())) {
+          error = "Pincode must be exactly 6 numeric digits.";
+        }
+      }
+    } else if (name === "email") {
+      if (!value.trim()) error = "Company Email is required.";
+      else if (value.length > 100) error = "Company Email cannot exceed 100 characters.";
+      else {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(value.trim())) {
+          error = "Please enter a valid Company Email address.";
+        }
+      }
+    } else if (name === "website") {
+      if (value.trim()) {
+        if (value.length > 100) error = "Cannot exceed 100 characters.";
+        else {
+          const urlPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
+          if (!urlPattern.test(value.trim())) {
+            error = "Please enter a valid Company Website URL.";
+          }
+        }
+      }
+    } else if (name === "remarks") {
+      if (value.trim() && value.length > 255) error = "Remarks cannot exceed 255 characters.";
+    } else if (name === "workingDaysPerWeek") {
+      if (!value) error = "Working Days Per Week is required.";
+    }
+    return error;
+  };
+
   // Handle input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -148,9 +251,11 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     } else if (name === "companyName") {
       newValue = value.slice(0, 100);
     } else if (name === "cinNumber") {
-      newValue = value.slice(0, 25);
-    } else if (name === "panNumber" || name === "tanNumber") {
-      newValue = value.slice(0, 15);
+      newValue = value.toUpperCase().slice(0, 21);
+    } else if (name === "panNumber") {
+      newValue = value.toUpperCase().slice(0, 10);
+    } else if (name === "tanNumber") {
+      newValue = value.toUpperCase().slice(0, 10);
     } else if (name === "streetAddress") {
       newValue = value.slice(0, 50);
     } else if (name === "city" || name === "district") {
@@ -160,12 +265,15 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     } else if (name === "remarks") {
       newValue = value.slice(0, 255);
     } else if (name === "gstNumber") {
-      newValue = value.slice(0, 20);
+      newValue = value.toUpperCase().slice(0, 15);
     } else if (name === "flatPlotDoor" || name === "landMark") {
       newValue = value.slice(0, 50);
     }
 
     setFormData(prev => ({ ...prev, [name]: newValue }));
+
+    const error = validateField(name, newValue);
+    setFormErrors(prev => ({ ...prev, [name]: error }));
   };
 
   const handleToggleStatus = (e) => {
@@ -180,6 +288,12 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       ...prev,
       state: selectedStateId,
       zone: mappedZone
+    }));
+
+    setFormErrors(prev => ({
+      ...prev,
+      state: selectedStateId ? "" : "State Reference selection is required.",
+      zone: mappedZone ? "" : "Zone selection is required (auto-filled from State)."
     }));
   };
 
@@ -215,218 +329,37 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       remarks: "",
       website: "",
       logo: null,
-      status: "Active"
+      status: "Active",
+      workingDaysPerWeek: ""
     });
+    setFormErrors({});
   };
 
   const handleSave = () => {
-    // 1. Company Name check
-    if (!formData.companyName.trim()) {
-      triggerAlert("error", "Validation Error", "Company Name is required.");
-      return;
-    }
-    if (formData.companyName.length > 100) {
-      triggerAlert("error", "Validation Error", "Company Name cannot exceed 100 characters.");
-      return;
-    }
-
-    // 2. Company Code check
-    if (!formData.companyCode.trim()) {
-      triggerAlert("error", "Validation Error", "Company Code is required.");
-      return;
-    }
-    if (formData.companyCode.length > 10) {
-      triggerAlert("error", "Validation Error", "Company Code cannot exceed 10 characters.");
-      return;
-    }
-
-    // 3. Parent Company ID (Under / Subsidiary) check
-    if (!formData.under) {
-      triggerAlert("error", "Validation Error", "Parent Company selection is required.");
-      return;
-    }
-
-    // 4. Company CIN Number check
-    if (!formData.cinNumber.trim()) {
-      triggerAlert("error", "Validation Error", "Company CIN Number is required.");
-      return;
-    }
-    if (formData.cinNumber.length > 21) {
-      triggerAlert("error", "Validation Error", "Company CIN Number cannot exceed 21 characters.");
-      return;
-    }
-
-    // 5. GST Number check
-    if (formData.gstNumber.trim() && formData.gstNumber.length > 20) {
-      triggerAlert("error", "Validation Error", "GST Number cannot exceed 20 characters.");
-      return;
-    }
-
-    // 6. PAN Number check
-    if (!formData.panNumber.trim()) {
-      triggerAlert("error", "Validation Error", "PAN Number is required.");
-      return;
-    }
-    if (formData.panNumber.length > 10) {
-      triggerAlert("error", "Validation Error", "PAN Number cannot exceed 10 characters.");
-      return;
-    }
-
-    // 7. TAN Number check
-    if (!formData.tanNumber.trim()) {
-      triggerAlert("error", "Validation Error", "TAN Number is required.");
-      return;
-    }
-    if (formData.tanNumber.length > 15) {
-      triggerAlert("error", "Validation Error", "TAN Number cannot exceed 15 characters.");
-      return;
-    }
-
-    // 8. Incorporation Date check
-    if (!formData.incorporationDate.trim()) {
-      triggerAlert("error", "Validation Error", "Incorporation Date is required.");
-      return;
-    }
-
-    // 9. Flat/Plot/Door No check (NEW mandatory check)
-    if (!formData.flatPlotDoor.trim()) {
-      triggerAlert("error", "Validation Error", "Flat/Plot/Door No is required.");
-      return;
-    }
-    if (formData.flatPlotDoor.length > 50) {
-      triggerAlert("error", "Validation Error", "Flat/Plot/Door No cannot exceed 50 characters.");
-      return;
-    }
-
-    // 10. Street Address check
-    if (!formData.streetAddress.trim()) {
-      triggerAlert("error", "Validation Error", "Street Name is required.");
-      return;
-    }
-    if (formData.streetAddress.length > 50) {
-      triggerAlert("error", "Validation Error", "Street Name cannot exceed 50 characters.");
-      return;
-    }
-
-    // 11. City/Village check
-    if (!formData.city.trim()) {
-      triggerAlert("error", "Validation Error", "City/Village is required.");
-      return;
-    }
-    if (formData.city.length > 30) {
-      triggerAlert("error", "Validation Error", "City/Village cannot exceed 30 characters.");
-      return;
-    }
-
-    // 12. District Name check
-    if (!formData.district.trim()) {
-      triggerAlert("error", "Validation Error", "District Name is required.");
-      return;
-    }
-    if (formData.district.length > 30) {
-      triggerAlert("error", "Validation Error", "District Name cannot exceed 30 characters.");
-      return;
-    }
-
-    // 13. State Reference check
-    if (!formData.state) {
-      triggerAlert("error", "Validation Error", "State Reference selection is required.");
-      return;
-    }
-
-    // 14. Postal Code (Pincode) check
-    if (!formData.pincode.trim()) {
-      triggerAlert("error", "Validation Error", "Postal Code (Pincode) is required.");
-      return;
-    }
-    const pincodeRegex = /^\d{6}$/;
-    if (!pincodeRegex.test(formData.pincode.trim())) {
-      triggerAlert("error", "Validation Error", "Postal Code must be exactly 6 numeric digits.");
-      return;
-    }
-
-    // 15. Company Email check
-    if (!formData.email.trim()) {
-      triggerAlert("error", "Validation Error", "Company Email is required.");
-      return;
-    }
-    if (formData.email.length > 100) {
-      triggerAlert("error", "Validation Error", "Company Email cannot exceed 100 characters.");
-      return;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(formData.email.trim())) {
-      triggerAlert("error", "Validation Error", "Please enter a valid Company Email address.");
-      return;
-    }
-
-    // 16. Company Website URL check
-    if (formData.website.trim()) {
-      if (formData.website.length > 100) {
-        triggerAlert("error", "Validation Error", "Company Website URL cannot exceed 100 characters.");
-        return;
+    // Validate all fields
+    const errors = {};
+    Object.keys(formData).forEach(key => {
+      const error = validateField(key, formData[key]);
+      if (error) {
+        errors[key] = error;
       }
-      const urlPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([/\w .-]*)*\/?$/;
-      if (!urlPattern.test(formData.website.trim())) {
-        triggerAlert("error", "Validation Error", "Please enter a valid Company Website URL.");
-        return;
-      }
+    });
+
+    // Zone check
+    if (!formData.zone || !formData.zone.trim()) {
+      errors["zone"] = "Zone selection is required (auto-filled from State).";
     }
 
-    // 17. Additional Remarks check
-    if (formData.remarks.trim() && formData.remarks.length > 255) {
-      triggerAlert("error", "Validation Error", "Additional Remarks cannot exceed 255 characters.");
+    setFormErrors(errors);
+
+    if (Object.keys(errors).length > 0) {
+      const firstErrorKey = Object.keys(errors)[0];
+      const fieldLabel = firstErrorKey.replace(/([A-Z])/g, ' $1').toLowerCase();
+      triggerAlert("error", "Validation Error", `Please fix the error in ${fieldLabel}: ${errors[firstErrorKey]}`);
       return;
     }
 
-    // 18. Active / Inactive Status check (boolean represented by string "Active" / "Inactive")
-    if (!formData.status) {
-      triggerAlert("error", "Validation Error", "Status selection is required.");
-      return;
-    }
 
-    // Unique Data checks
-    const isDuplicateCode = companies.some(
-      c => c.coyCd?.toLowerCase().trim() === formData.companyCode.toLowerCase().trim() && c.coyId !== editingId
-    );
-    if (isDuplicateCode) {
-      triggerAlert("error", "Duplicate Error", "Company code must be unique. This code already exists.");
-      return;
-    }
-
-    const isDuplicateCIN = companies.some(
-      c => c.cin?.toLowerCase().trim() === formData.cinNumber.toLowerCase().trim() && c.coyId !== editingId
-    );
-    if (isDuplicateCIN) {
-      triggerAlert("error", "Duplicate Error", "CIN Number must be unique. This CIN already exists.");
-      return;
-    }
-
-    const isDuplicatePAN = companies.some(
-      c => c.panNum?.toLowerCase().trim() === formData.panNumber.toLowerCase().trim() && c.coyId !== editingId
-    );
-    if (isDuplicatePAN) {
-      triggerAlert("error", "Duplicate Error", "PAN Number must be unique. This PAN already exists.");
-      return;
-    }
-
-    const isDuplicateTAN = companies.some(
-      c => c.tanNum?.toLowerCase().trim() === formData.tanNumber.toLowerCase().trim() && c.coyId !== editingId
-    );
-    if (isDuplicateTAN) {
-      triggerAlert("error", "Duplicate Error", "TAN Number must be unique. This TAN already exists.");
-      return;
-    }
-
-    if (formData.gstNumber?.trim()) {
-      const isDuplicateGST = companies.some(
-        c => c.gstNum?.toLowerCase().trim() === formData.gstNumber.toLowerCase().trim() && c.coyId !== editingId
-      );
-      if (isDuplicateGST) {
-        triggerAlert("error", "Duplicate Error", "GST Number must be unique. This GST already exists.");
-        return;
-      }
-    }
 
     const companyPayload = {
       coyCd: formData.companyCode.trim(),
@@ -446,10 +379,9 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       stId: formData.state ? Number(formData.state) : null,
       znNm: formData.zone,
       pin: formData.pincode.trim(),
-      flatPlotDoor: formData.flatPlotDoor.trim(),        // now included in payload
-      landMark: formData.landMark ? formData.landMark.trim() : null,
       addlRem: formData.remarks ? formData.remarks.trim() : null,
-      sts: formData.status === "Active"
+      sts: formData.status === "Active",
+      wrkDaysPerWk: formData.workingDaysPerWeek ? Number(formData.workingDaysPerWeek) : null
     };
 
     setLoading(true);
@@ -458,33 +390,46 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       headers: getAuthHeaders(),
       body: JSON.stringify(companyPayload)
     })
-    .then(async (response) => {
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMsg = "Failed to save company";
-        try {
-          const parsed = JSON.parse(errorText);
-          if (parsed.message) errorMsg = parsed.message;
-          else if (parsed.error && parsed.status) {
-            errorMsg = `Server Error (${parsed.status}): ${parsed.error}. Please check the data constraints or duplicate values.`;
+      .then(async (response) => {
+        if (!response.ok) {
+          const errorText = await response.text();
+          let errorMsg = "Failed to save company";
+          try {
+            const parsed = JSON.parse(errorText);
+            if (parsed.message) errorMsg = parsed.message;
+            else if (parsed.error && parsed.status) {
+              errorMsg = `Server Error (${parsed.status}): ${parsed.error}. Please check the data constraints or duplicate values.`;
+            }
+          } catch (e) {
+            errorMsg = errorText || errorMsg;
           }
-        } catch(e) {
-          errorMsg = errorText || errorMsg;
+          throw new Error(errorMsg);
         }
-        throw new Error(errorMsg);
-      }
-      triggerAlert("success", "Success", isEditing ? "Company updated successfully!" : "Company created successfully!");
-      fetchCompanies();
-      handleResetForm();
-      setIsEditing(false);
-      setEditingId(null);
-      setView("list");
-    })
-    .catch((err) => {
-      console.error("Save company failed:", err);
-      triggerAlert("error", "Error", err.message || "Could not connect to server or save company.");
-    })
-    .finally(() => setLoading(false));
+
+        const savedCompany = await response.json();
+        try {
+          const localData = JSON.parse(localStorage.getItem("company_local_fields") || "{}");
+          localData[savedCompany.coyId] = {
+            flatPlotDoor: formData.flatPlotDoor.trim(),
+            workingDaysPerWeek: formData.workingDaysPerWeek
+          };
+          localStorage.setItem("company_local_fields", JSON.stringify(localData));
+        } catch (e) {
+          console.error("Error saving local company fields:", e);
+        }
+
+        triggerAlert("success", "Success", isEditing ? "Company updated successfully!" : "Company created successfully!");
+        fetchCompanies();
+        handleResetForm();
+        setIsEditing(false);
+        setEditingId(null);
+        setView("list");
+      })
+      .catch((err) => {
+        console.error("Save company failed:", err);
+        triggerAlert("error", "Error", err.message || "Could not connect to server or save company.");
+      })
+      .finally(() => setLoading(false));
   };
 
   const handleEdit = (company) => {
@@ -509,8 +454,10 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       remarks: company.addlRem || "",
       website: company.webUrl || "",
       logo: company.logo || null,
-      status: company.sts ? "Active" : "Inactive"
+      status: company.sts ? "Active" : "Inactive",
+      workingDaysPerWeek: company.workingDaysPerWeek || ""
     });
+    setFormErrors({});
     setIsEditing(true);
     setEditingId(company.coyId);
     setActiveDropdown(null);
@@ -532,8 +479,26 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     if (!company) return;
 
     const companyPayload = {
-      ...company,
-      sts: false
+      coyCd: company.coyCd,
+      coyNm: company.coyNm,
+      prntCoyId: company.prntCoyId,
+      email: company.email,
+      gstNum: company.gstNum,
+      tanNum: company.tanNum,
+      panNum: company.panNum,
+      incDt: company.incDt,
+      cin: company.cin,
+      webUrl: company.webUrl,
+      logo: company.logo,
+      str: company.str,
+      ctVlg: company.ctVlg,
+      dist: company.dist,
+      stId: company.stId,
+      znNm: company.znNm,
+      pin: company.pin,
+      addlRem: company.addlRem,
+      sts: false,
+      wrkDaysPerWk: company.wrkDaysPerWk ? Number(company.wrkDaysPerWk) : null
     };
 
     setLoading(true);
@@ -557,40 +522,57 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     setDeactivateTargetId(null);
   };
 
-  const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this company?")) {
-      setLoading(true);
-      try {
-        const response = await fetch(`${apiBaseUrl}/api/companies/${id}`, {
-          method: "DELETE",
-          headers: getAuthHeaders()
-        });
-        if (!response.ok) {
-          const errorText = await response.text();
-          let errorMsg = "Could not delete company.";
-          try {
-            const parsed = JSON.parse(errorText);
-            if (parsed.message) errorMsg = parsed.message;
-            else if (parsed.error && parsed.status === 500) {
-              errorMsg = "Cannot delete this company because it is currently linked to other records (like a subsidiary company or a plant). Please remove those links first or deactivate the company instead.";
-            } else if (parsed.error) {
-              errorMsg = parsed.error;
+  const handleDelete = (id) => {
+    setAlertConfig({
+      isOpen: true,
+      type: "warning",
+      title: "Confirm Delete",
+      message: "Are you sure you want to delete this company?",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          const response = await fetch(`${apiBaseUrl}/api/companies/${id}`, {
+            method: "DELETE",
+            headers: getAuthHeaders()
+          });
+          if (!response.ok) {
+            const errorText = await response.text();
+            let errorMsg = "Could not delete company.";
+            try {
+              const parsed = JSON.parse(errorText);
+              if (parsed.message) errorMsg = parsed.message;
+              else if (parsed.error && parsed.status === 500) {
+                errorMsg = "Cannot delete this company because it is currently linked to other records (like a subsidiary company or a plant). Please remove those links first or deactivate the company instead.";
+              } else if (parsed.error) {
+                errorMsg = parsed.error;
+              }
+            } catch (e) {
+              errorMsg = errorText || errorMsg;
             }
-          } catch(e) {
-            errorMsg = errorText || errorMsg;
+            throw new Error(errorMsg);
           }
-          throw new Error(errorMsg);
+
+          try {
+            const localData = JSON.parse(localStorage.getItem("company_local_fields") || "{}");
+            delete localData[id];
+            localStorage.setItem("company_local_fields", JSON.stringify(localData));
+          } catch (e) {
+            console.error("Error removing local company fields:", e);
+          }
+
+          triggerAlert("success", "Success", "Company deleted successfully!");
+          fetchCompanies();
+        } catch (err) {
+          console.error("Delete company failed:", err);
+          triggerAlert("error", "Error", err.message || "Could not delete company.");
+        } finally {
+          setLoading(false);
         }
-        triggerAlert("success", "Success", "Company deleted successfully!");
-        fetchCompanies();
-      } catch (err) {
-        console.error("Delete company failed:", err);
-        triggerAlert("error", "Error", err.message || "Could not delete company.");
-      } finally {
-        setLoading(false);
       }
-      setActiveDropdown(null);
-    }
+    });
+    setActiveDropdown(null);
   };
 
   // Sorting calculation
@@ -635,13 +617,10 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
   return (
     <div className="cc-shell-container">
-      {/* Sidebar Navigation */}
       <Sidebar userRole={userRole} onLogout={onLogout} />
 
-      {/* Main Container Viewport */}
       <div className="cc-shell">
 
-        {/* ======================= DYNAMIC HEADER ======================= */}
         <Header
           title="Company Master"
           showSearch={false}
@@ -652,15 +631,10 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
         <main className="cc-main" style={{ padding: '24px' }}>
 
-          {/* Breadcrumb Navigation */}
-
-
           {view === "form" ? (
-            /* ================= VIEW: ADD NEW COMPANY FORM ================= */
             <>
               <div className="cc-content" style={{ paddingBottom: '80px', maxWidth: '1280px', margin: '0 auto' }}>
 
-                {/* Form Card */}
                 <div className="cc-form-card" style={{
                   backgroundColor: 'white',
                   borderRadius: '8px',
@@ -669,7 +643,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                   boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                 }}>
 
-                  {/* Form Header with Title and Back Button */}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -700,10 +673,8 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                     </button>
                   </div>
 
-                  {/* Form Body */}
                   <div style={{ padding: '24px' }}>
 
-                    {/* 1. Company Details */}
                     <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
@@ -711,7 +682,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                           Company Details
                         </h3>
 
-                        {/* Status Toggle Bar */}
                         <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
                           <span style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>Status:</span>
 
@@ -749,11 +719,12 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         <label className="cc-field-item">
                           <span>Company Name <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="companyName" value={formData.companyName} onChange={handleInputChange} placeholder="Enter company name" maxLength={100} />
+                          {formErrors.companyName && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.companyName}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>Company Code <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="companyCode" value={formData.companyCode} onChange={handleInputChange} placeholder="Enter code" maxLength={10} />
-                          <small style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Must be unique.</small>
+                          {formErrors.companyCode && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.companyCode}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>Under / Subsidiary <b style={{ color: '#ef4444' }}>*</b></span>
@@ -764,10 +735,12 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                             ))}
                             <option value="Independent" style={{ fontWeight: "bold" }}>Independent (No Parent)</option>
                           </select>
+                          {formErrors.under && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.under}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>CIN Number <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="cinNumber" value={formData.cinNumber} onChange={handleInputChange} placeholder="Enter CIN number" maxLength={21} />
+                          {formErrors.cinNumber && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.cinNumber}</span>}
                         </label>
                       </div>
 
@@ -775,18 +748,22 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         <label className="cc-field-item">
                           <span>GST Number</span>
                           <input type="text" name="gstNumber" value={formData.gstNumber} onChange={handleInputChange} placeholder="Enter GST number" maxLength={20} />
+                          {formErrors.gstNumber && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.gstNumber}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>PAN Number <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="panNumber" value={formData.panNumber} onChange={handleInputChange} placeholder="Enter PAN number" maxLength={10} />
+                          {formErrors.panNumber && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.panNumber}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>TAN Number <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="tanNumber" value={formData.tanNumber} onChange={handleInputChange} placeholder="Enter TAN number" maxLength={15} />
+                          {formErrors.tanNumber && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.tanNumber}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>Incorporation Date <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="date" name="incorporationDate" value={formData.incorporationDate} onChange={handleInputChange} />
+                          {formErrors.incorporationDate && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.incorporationDate}</span>}
                         </label>
                       </div>
 
@@ -803,36 +780,46 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                             </button>
                           </div>
                         </label>
+                        <label className="cc-field-item">
+                          <span>Working Days Per Week <b style={{ color: '#ef4444' }}>*</b></span>
+                          <select
+                            name="workingDaysPerWeek"
+                            value={formData.workingDaysPerWeek}
+                            onChange={handleInputChange}
+                            style={{ backgroundColor: 'white' }}
+                          >
+                            <option value="" disabled hidden>Select working days</option>
+                            <option value="5">5 days per week</option>
+                            <option value="6">6 days per week</option>
+                          </select>
+                          {formErrors.workingDaysPerWeek && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.workingDaysPerWeek}</span>}
+                        </label>
                       </div>
+
                     </section>
 
-                    {/* 2. Address Information */}
                     <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
                       <h3 className="cc-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Address Information</h3>
-                      <div className="cc-form-layout-row columns-3">
-                        <label className="cc-field-item">
-                          <span>Flat/Plot/Door No <b style={{ color: '#ef4444' }}>*</b></span>  {/* MANDATORY INDICATOR ADDED */}
-                          <input type="text" name="flatPlotDoor" value={formData.flatPlotDoor} onChange={handleInputChange} placeholder="Enter flat/plot/door number" maxLength={50} />
-                        </label>
+                      <div className="cc-form-layout-row columns-4">
+
                         <label className="cc-field-item">
                           <span>Street Address <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="streetAddress" value={formData.streetAddress} onChange={handleInputChange} placeholder="Enter street address" maxLength={50} />
+                          {formErrors.streetAddress && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.streetAddress}</span>}
                         </label>
-                        <label className="cc-field-item">
-                          <span>Land Mark</span>
-                          <input type="text" name="landMark" value={formData.landMark} onChange={handleInputChange} placeholder="Enter landmark" maxLength={50} />
-                        </label>
-                      </div>
-
-                      <div className="cc-form-layout-row columns-4" style={{ marginTop: '20px' }}>
                         <label className="cc-field-item">
                           <span>City/Village <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="city" value={formData.city} onChange={handleInputChange} placeholder="Enter city/village" maxLength={30} />
+                          {formErrors.city && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.city}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>District <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="district" value={formData.district} onChange={handleInputChange} placeholder="Enter district" maxLength={30} />
+                          {formErrors.district && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.district}</span>}
                         </label>
+                      </div>
+
+                      <div className="cc-form-layout-row columns-4" style={{ marginTop: '20px' }}>
                         <label className="cc-field-item">
                           <span>State <b style={{ color: '#ef4444' }}>*</b></span>
                           <select name="state" value={formData.state} onChange={handleStateChange} style={{ backgroundColor: 'white' }}>
@@ -841,6 +828,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                               <option key={s.stId} value={s.stId}>{s.stNm}</option>
                             ))}
                           </select>
+                          {formErrors.state && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.state}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>Zone <b style={{ color: '#ef4444' }}>*</b></span>
@@ -852,41 +840,41 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                             className="cc-readonly-input"
                             placeholder="Auto-fills from State"
                           />
+                          {formErrors.zone && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.zone}</span>}
                         </label>
-                      </div>
-
-                      <div className="cc-form-layout-row columns-4" style={{ marginTop: '20px' }}>
                         <label className="cc-field-item">
                           <span>Pincode <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="pincode" value={formData.pincode} onChange={handleInputChange} placeholder="Enter 6-digit pincode" maxLength={6} />
+                          {formErrors.pincode && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.pincode}</span>}
                         </label>
                       </div>
                     </section>
 
-                    {/* 3. Contact Information */}
                     <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
                       <h3 className="cc-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Contact Information</h3>
                       <div className="cc-form-layout-row columns-2">
                         <label className="cc-field-item">
                           <span>Email <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="email" name="email" value={formData.email} onChange={handleInputChange} placeholder="Enter email address" maxLength={100} />
+                          {formErrors.email && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.email}</span>}
                         </label>
                         <label className="cc-field-item">
                           <span>Website URL</span>
                           <input type="url" name="website" value={formData.website} onChange={handleInputChange} placeholder="https://www.example.com" maxLength={100} />
+                          {formErrors.website && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.website}</span>}
                         </label>
                       </div>
 
                       <div className="cc-form-layout-row columns-1" style={{ marginTop: '20px' }}>
                         <label className="cc-field-item">
-                          <span>Additional Remarks</span>
-                          <textarea name="remarks" value={formData.remarks} onChange={handleInputChange} placeholder="Enter additional remarks" rows={3} maxLength={255} />
+                          <span>Remarks</span>
+                          <textarea name="remarks" value={formData.remarks} onChange={handleInputChange} placeholder="Enter Remarks" rows={3} maxLength={255} />
+                          {formErrors.remarks && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.remarks}</span>}
                         </label>
                       </div>
                     </section>
                   </div>
 
-                  {/* Form Footer Buttons */}
                   <div className="cc-form-footer" style={{
                     display: 'flex',
                     justifyContent: 'flex-end',
@@ -914,13 +902,10 @@ const CompanyCreation = ({ onLogout, userRole }) => {
               </div>
             </>
           ) : (
-            /* ================= VIEW: COMPANY LIST ================= */
             <div className="cc-content" style={{ maxWidth: '1280px', margin: '0 auto' }}>
 
-              {/* INTEGRATED CARD FOR FILTERS, ADD BUTTON AND TABLE - Matching Screenshot Layout */}
               <div className="cc-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
 
-                {/* Header with Title and Add New Button - Inside Card */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
@@ -949,7 +934,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                   </button>
                 </div>
 
-                {/* Data Table Section Inside the Card */}
                 <div className="cc-table-container" style={{ overflowX: 'auto' }}>
                   <table className="cc-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
@@ -980,9 +964,8 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PAN NUMBER</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TAN NUMBER</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>INCORPORATION DATE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>FLAT/PLOT/DOOR</th>
+
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STREET ADDRESS</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LANDMARK</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CITY</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DISTRICT</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
@@ -991,6 +974,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>EMAIL</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>REMARKS</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WEBSITE</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WORKING DAYS PER WEEK</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
                         <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           ACTIONS
@@ -1023,9 +1007,8 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.panNum}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.tanNum || "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.incDt || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.flatPlotDoor || "N/A"}</td>
+
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.str || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.landMark || "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.ctVlg || "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.dist || "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{states.find(s => Number(s.stId) === Number(company.stId))?.stNm || "N/A"}</td>
@@ -1034,6 +1017,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.email}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.addlRem || "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.webUrl || "N/A"}</td>
+                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.workingDaysPerWeek ? `${company.workingDaysPerWeek} Days` : "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span
                                 style={{
@@ -1060,7 +1044,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                 <MoreVertical size={18} />
                               </button>
 
-                              {/* Actions Dropdown menu */}
                               {activeDropdown === company.coyId && (
                                 <>
                                   <div
@@ -1094,15 +1077,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                     >
                                       <Edit size={15} /> Edit
                                     </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => triggerDeactivate(company.coyId)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Trash2 size={15} /> Deactivate
-                                    </button>
+
                                     <button
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
@@ -1120,15 +1095,14 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="23" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="22" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             No company records found. Add a new company using the button above.
                           </td>
                         </tr>
                       )}
-</tbody>
+                    </tbody>
                   </table>
                 </div>
-
 
               </div>
             </div>
@@ -1136,7 +1110,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
         </main>
       </div>
 
-      {/* Deactivation Confirmation Modal */}
       {showDeactivateModal && (
         <div className="cc-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="cc-modal" style={{ backgroundColor: 'white', borderRadius: '8px', width: '400px', maxWidth: '90%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
@@ -1182,7 +1155,10 @@ const CompanyCreation = ({ onLogout, userRole }) => {
         type={alertConfig.type}
         title={alertConfig.title}
         message={alertConfig.message}
-        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false, onConfirm: null }))}
+        onConfirm={alertConfig.onConfirm}
+        confirmText={alertConfig.confirmText}
+        cancelText={alertConfig.cancelText}
       />
     </div>
   );

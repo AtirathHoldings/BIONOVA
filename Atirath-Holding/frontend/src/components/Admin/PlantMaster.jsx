@@ -26,7 +26,7 @@ import {
 import '../../styles/PlantMaster.css';
 import AlertModal from "../AlertModal";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -131,6 +131,32 @@ const PlantCreation = ({ userRole, onLogout }) => {
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
+  const [formErrors, setFormErrors] = useState({});
+
+  const validateField = (name, value) => {
+    let error = "";
+    if (name === "latitude") {
+      if (!value) {
+        error = "Latitude is required.";
+      } else {
+        const latRegex = /^\d{2}\.\d{6}\s[NEWS]$/;
+        if (!latRegex.test(value.trim())) {
+          error = "Format must be e.g. 17.438574 N (2 digits, dot, 6 decimals, space, and N/E/W/S).";
+        }
+      }
+    } else if (name === "longitude") {
+      if (!value) {
+        error = "Longitude is required.";
+      } else {
+        const lngRegex = /^\d{2}\.\d{6}\s[NEWS]$/;
+        if (!lngRegex.test(value.trim())) {
+          error = "Format must be e.g. 78.421012 E (2 digits, dot, 6 decimals, space, and N/E/W/S).";
+        }
+      }
+    }
+    return error;
+  };
+
   const handleChange = (e) => {
     const { name, value } = e.target;
     let newValue = value;
@@ -140,12 +166,16 @@ const PlantCreation = ({ userRole, onLogout }) => {
       if (newValue && !/^\d{0,8}(\.\d{0,2})?$/.test(newValue)) return;
     } else if (name === 'pincode') {
       newValue = value.replace(/[^0-9]/g, '').slice(0, 6);
-    } else if (name === 'latitude') {
-      newValue = value.replace(/[^0-9.-]/g, '');
-      if (newValue && !/^-?\d{0,2}(\.\d{0,8})?$/.test(newValue)) return;
-    } else if (name === 'longitude') {
-      newValue = value.replace(/[^0-9.-]/g, '');
-      if (newValue && !/^-?\d{0,3}(\.\d{0,8})?$/.test(newValue)) return;
+    } else if (name === 'latitude' || name === 'longitude') {
+      let upperValue = value.toUpperCase();
+      if (/^\d{2}\.\d{6}[NEWS]$/.test(upperValue)) {
+        upperValue = upperValue.slice(0, 9) + ' ' + upperValue.slice(9);
+      }
+      const partialRegex = /^(?:\d{0,2}|\d{2}\.|\d{2}\.\d{1,6}|\d{2}\.\d{6}\s|\d{2}\.\d{6}\s[NEWS])?$/;
+      if (!partialRegex.test(upperValue)) {
+        return;
+      }
+      newValue = upperValue;
     } else if (name === 'plantCode') {
       newValue = value.slice(0, 10);
     } else if (name === 'plantName' || name === 'email' || name === 'addressLine1') {
@@ -162,19 +192,37 @@ const PlantCreation = ({ userRole, onLogout }) => {
       return;
     }
 
-    setForm(prev => ({ ...prev, [name]: newValue }));
+    setForm(prev => {
+      const updatedForm = { ...prev, [name]: newValue };
+      if (name === 'latitude' || name === 'longitude') {
+        const error = validateField(name, newValue);
+        setFormErrors(prevErrors => ({ ...prevErrors, [name]: error }));
+      }
+      return updatedForm;
+    });
   };
 
   const handleToggleStatus = (e) => {
     setForm(prev => ({ ...prev, status: e.target.checked ? "Active" : "Inactive" }));
   };
 
-  const handleLogoChange = (e) => {
+  const handleLogoChange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => setForm((prev) => ({ ...prev, logo: reader.result }));
-    reader.readAsDataURL(file);
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", file);
+      const response = await fetch(`${apiBaseUrl}/api/storage/upload/plant-logo`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("authToken") || ""}` },
+        body: formDataUpload
+      });
+      if (!response.ok) throw new Error("Logo upload failed");
+      const data = await response.json();
+      setForm((prev) => ({ ...prev, logo: data.url }));
+    } catch (err) {
+      console.error("Plant logo upload error:", err);
+    }
   };
 
   const handleResetForm = () => {
@@ -195,6 +243,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
       status: 'Active',
       logo: null
     });
+    setFormErrors({});
   };
 
   const handleSave = async (e) => {
@@ -210,11 +259,31 @@ const PlantCreation = ({ userRole, onLogout }) => {
       !form.addressLine1.trim() ||
       !form.state ||
       !form.district.trim() ||
-      !form.latitude ||
-      !form.longitude ||
       !form.status
     ) {
       triggerAlert("error", "Validation Error", "Please fill in all required fields marked with *");
+      return;
+    }
+
+    // Latitude check
+    if (!form.latitude || !form.latitude.trim()) {
+      triggerAlert("error", "Validation Error", "Latitude is required.");
+      return;
+    }
+    const latRegex = /^\d{2}\.\d{6}\s[NEWS]$/;
+    if (!latRegex.test(form.latitude.trim())) {
+      triggerAlert("error", "Validation Error", "Latitude format must be e.g. 17.438574 N (2 digits, dot, 6 decimals, space, and N/E/W/S).");
+      return;
+    }
+
+    // Longitude check
+    if (!form.longitude || !form.longitude.trim()) {
+      triggerAlert("error", "Validation Error", "Longitude is required.");
+      return;
+    }
+    const lngRegex = /^\d{2}\.\d{6}\s[NEWS]$/;
+    if (!lngRegex.test(form.longitude.trim())) {
+      triggerAlert("error", "Validation Error", "Longitude format must be e.g. 78.421012 E (2 digits, dot, 6 decimals, space, and N/E/W/S).");
       return;
     }
 
@@ -239,8 +308,8 @@ const PlantCreation = ({ userRole, onLogout }) => {
       stId: Number(form.state),
       znNm: form.zone,
       pin: form.pincode.trim(),
-      lat: Number(form.latitude),
-      longt: Number(form.longitude),
+      lat: form.latitude.trim(),
+      longt: form.longitude.trim(),
       addlRem: form.additionalRemarks ? form.additionalRemarks.trim() : null,
       sts: form.status === "Active"
     };
@@ -432,6 +501,23 @@ const PlantCreation = ({ userRole, onLogout }) => {
   }, [plants, sortConfig, companies]);
 
   const currentItems = sortedPlants;
+
+  const thStyle = {
+    padding: '14px 20px',
+    fontSize: '11px',
+    color: '#64748b',
+    fontWeight: '700',
+    textTransform: 'uppercase',
+    letterSpacing: '0.5px',
+    whiteSpace: 'nowrap'
+  };
+
+  const tdStyle = {
+    padding: '14px 20px',
+    fontSize: '14px',
+    color: '#334155',
+    whiteSpace: 'nowrap'
+  };
 
   // Reusable vibrant blue color matching the sidebar active state
   const vibrantBlue = "#2563eb"; 
@@ -634,10 +720,24 @@ const PlantCreation = ({ userRole, onLogout }) => {
                         <label className="pc-field-item">
                           <span>Latitude <b style={{color: '#ef4444'}}>*</b></span>
                           <input type="text" name="latitude" value={form.latitude} onChange={handleChange} placeholder="Enter latitude" />
+                          {formErrors.latitude && (
+                            <span className="error-text" style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.latitude}</span>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', color: '#64748b', fontSize: '12px', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
+                            <MapPin size={14} style={{ color: '#3b82f6' }} />
+                            <span>17.438574 N</span>
+                          </div>
                         </label>
                         <label className="pc-field-item">
                           <span>Longitude <b style={{color: '#ef4444'}}>*</b></span>
                           <input type="text" name="longitude" value={form.longitude} onChange={handleChange} placeholder="Enter longitude" />
+                          {formErrors.longitude && (
+                            <span className="error-text" style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.longitude}</span>
+                          )}
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', color: '#64748b', fontSize: '12px', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
+                            <MapPin size={14} style={{ color: '#3b82f6' }} />
+                            <span>78.421012 E</span>
+                          </div>
                         </label>
                       </div>
                     </section>
@@ -719,15 +819,15 @@ const PlantCreation = ({ userRole, onLogout }) => {
 
                 {/* Data Table Section Inside the Card */}
                 <div className="pc-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="pc-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
+                  <table className="pc-list-table text-nowrap" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px', whiteSpace: 'nowrap' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
+                        <th style={{ ...thStyle, width: "50px" }}>#</th>
+                        <th style={thStyle}>LOGO</th>
                         <th
                           className="sortable"
                           onClick={() => handleSort("plantCode")}
-                          style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                          style={{ ...thStyle, cursor: 'pointer' }}
                         >
                           PLANT CODE{" "}
                           {sortConfig.key === "plantCode" &&
@@ -736,7 +836,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                         <th
                           className="sortable"
                           onClick={() => handleSort("plantName")}
-                          style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                          style={{ ...thStyle, cursor: 'pointer' }}
                         >
                           PLANT NAME{" "}
                           {sortConfig.key === "plantName" &&
@@ -745,24 +845,24 @@ const PlantCreation = ({ userRole, onLogout }) => {
                         <th
                           className="sortable"
                           onClick={() => handleSort("company")}
-                          style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                          style={{ ...thStyle, cursor: 'pointer' }}
                         >
                           COMPANY{" "}
                           {sortConfig.key === "company" &&
                             (sortConfig.direction === "asc" ? "▲" : "▼")}
                         </th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>EMAIL</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CAPACITY (TPD)</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ADDRESS</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ZONE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DISTRICT</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PINCODE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LATITUDE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LONGITUDE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ADDITIONAL REMARKS</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
-                        <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <th style={thStyle}>EMAIL</th>
+                        <th style={thStyle}>CAPACITY (TPD)</th>
+                        <th style={thStyle}>ADDRESS</th>
+                        <th style={thStyle}>STATE</th>
+                        <th style={thStyle}>ZONE</th>
+                        <th style={thStyle}>DISTRICT</th>
+                        <th style={thStyle}>PINCODE</th>
+                        <th style={thStyle}>LATITUDE</th>
+                        <th style={thStyle}>LONGITUDE</th>
+                        <th style={thStyle}>ADDITIONAL REMARKS</th>
+                        <th style={thStyle}>STATUS</th>
+                        <th style={{ ...thStyle, textAlign: "center", width: "100px" }}>
                           ACTIONS
                         </th>
                       </tr>
@@ -771,8 +871,8 @@ const PlantCreation = ({ userRole, onLogout }) => {
                       {currentItems.length > 0 ? (
                         currentItems.map((plant, index) => (
                           <tr key={plant.pltId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td data-label="#" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{index + 1}</td>
-                            <td data-label="LOGO" style={{ padding: '14px 20px' }}>
+                            <td data-label="#" style={tdStyle}>{index + 1}</td>
+                            <td data-label="LOGO" style={{ ...tdStyle, padding: '14px 20px' }}>
                               {plant.logo ? (
                                 <img src={plant.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
                               ) : (
@@ -781,28 +881,28 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                 </div>
                               )}
                             </td>
-                            <td data-label="PLANT CODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="PLANT CODE" style={tdStyle}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {plant.pltCd}
                               </span>
                             </td>
-                            <td data-label="PLANT NAME" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{plant.pltNm}</strong></td>
-                            <td data-label="COMPANY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="PLANT NAME" style={tdStyle}><strong>{plant.pltNm}</strong></td>
+                            <td data-label="COMPANY" style={tdStyle}>
                               {companies.find(c => Number(c.coyId) === Number(plant.coyId))?.coyNm || "N/A"}
                             </td>
-                            <td data-label="EMAIL" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.email}</td>
-                            <td data-label="CAPACITY (TPD)" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.cap}</td>
-                            <td data-label="ADDRESS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.addr}</td>
-                            <td data-label="STATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="EMAIL" style={tdStyle}>{plant.email}</td>
+                            <td data-label="CAPACITY (TPD)" style={tdStyle}>{plant.cap}</td>
+                            <td data-label="ADDRESS" style={tdStyle}>{plant.addr}</td>
+                            <td data-label="STATE" style={tdStyle}>
                               {states.find(s => Number(s.stId) === Number(plant.stId))?.stNm || "N/A"}
                             </td>
-                            <td data-label="ZONE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.znNm || "N/A"}</td>
-                            <td data-label="DISTRICT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.dist}</td>
-                            <td data-label="PINCODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.pin}</td>
-                            <td data-label="LATITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.lat}</td>
-                            <td data-label="LONGITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.longt}</td>
-                            <td data-label="ADDITIONAL REMARKS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{plant.addlRem || "N/A"}</td>
-                            <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="ZONE" style={tdStyle}>{plant.znNm || "N/A"}</td>
+                            <td data-label="DISTRICT" style={tdStyle}>{plant.dist}</td>
+                            <td data-label="PINCODE" style={tdStyle}>{plant.pin}</td>
+                            <td data-label="LATITUDE" style={tdStyle}>{plant.lat}</td>
+                            <td data-label="LONGITUDE" style={tdStyle}>{plant.longt}</td>
+                            <td data-label="ADDITIONAL REMARKS" style={tdStyle}>{plant.addlRem || "N/A"}</td>
+                            <td data-label="STATUS" style={tdStyle}>
                               <span
                                 style={{ 
                                   padding: '4px 12px', 
@@ -817,7 +917,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                 {plant.sts ? 'Active' : 'Inactive'}
                               </span>
                             </td>
-                            <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
+                            <td data-label="ACTIONS" style={{ ...tdStyle, position: "relative", textAlign: 'center' }}>
                               <button
                                 type="button"
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
@@ -827,7 +927,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                               >
                                 <MoreVertical size={18} />
                               </button>
-
+ 
                               {/* Actions Dropdown menu */}
                               {activeDropdown === plant.pltId && (
                                 <>

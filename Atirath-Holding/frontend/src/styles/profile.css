@@ -7,10 +7,18 @@
 
 .pf-shell {
   flex: 1;
+  margin-left: 260px; /* SIDEBAR OVERLAP FIX */
   display: flex;
   flex-direction: column;
   overflow-y: auto;
   position: relative;
+  transition: all 0.3s ease;
+}
+
+@media (max-width: 1024px) {
+  .pf-shell {
+    margin-left: 0;
+  }
 }
 
 .pf-main {
@@ -33,7 +41,7 @@
 
 .pf-content {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 24px;
   align-items: stretch;
 }
@@ -138,9 +146,9 @@
 
 .pf-details-list {
   flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px 24px;
 }
 
 .pf-detail-row {

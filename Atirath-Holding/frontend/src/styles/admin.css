@@ -115,7 +115,7 @@
 /* ===== ERP ENTERPRISE KPI CARDS ===== */
 .db-shell-container .erp-kpi-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(6, 1fr);
   gap: 20px;
 }
 
@@ -123,9 +123,10 @@
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 12px;
-  padding: 20px;
+  padding: 20px 16px;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: center;
   gap: 16px;
   box-shadow: 0 1px 3px rgba(0,0,0,0.02);
   transition: box-shadow 0.3s ease, border-color 0.3s ease;
@@ -136,54 +137,56 @@
   border-color: #cbd5e1;
 }
 
-.db-shell-container .kpi-header {
+.db-shell-container .kpi-icon-box {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.db-shell-container .kpi-content {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .db-shell-container .kpi-title {
   font-size: 13px;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+  font-weight: 500;
+  color: #475569;
+  margin-bottom: 4px;
 }
 
-.db-shell-container .kpi-icon-box {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.db-shell-container .kpi-content h2 {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 4px 0;
+  line-height: 1.1;
 }
 
-.db-shell-container .bg-blue-light { background: #eff6ff; }
-.db-shell-container .bg-purple-light { background: #f5f3ff; }
-.db-shell-container .bg-green-light { background: #ecfdf5; }
-.db-shell-container .bg-red-light { background: #fef2f2; }
-.db-shell-container .bg-orange-light { background: #fffbeb; }
+.db-shell-container .bg-blue { background: #3b82f6; }
+.db-shell-container .bg-purple { background: #8b5cf6; }
+.db-shell-container .bg-green { background: #10b981; }
+.db-shell-container .bg-red { background: #ef4444; }
+.db-shell-container .bg-orange { background: #f97316; }
+.db-shell-container .bg-cyan { background: #06b6d4; }
 
 .db-shell-container .text-blue { color: #3b82f6; }
 .db-shell-container .text-purple { color: #8b5cf6; }
 .db-shell-container .text-green { color: #10b981; }
 .db-shell-container .text-red { color: #ef4444; }
-.db-shell-container .text-orange { color: #f59e0b; }
-
-.db-shell-container .kpi-body h2 {
-  font-size: 28px;
-  font-weight: 800;
-  color: #0f172a;
-  margin-bottom: 8px;
-  line-height: 1;
-}
+.db-shell-container .text-orange { color: #f97316; }
+.db-shell-container .text-cyan { color: #06b6d4; }
 
 .db-shell-container .kpi-footer {
   display: flex;
   align-items: center;
   gap: 8px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .db-shell-container .kpi-trend {
@@ -196,8 +199,7 @@
 .db-shell-container .kpi-trend.up { color: #10b981; }
 .db-shell-container .kpi-trend.down { color: #ef4444; }
 .db-shell-container .kpi-trend.neutral { color: #64748b; }
-
-.db-shell-container .kpi-subtitle {
+.db-shell-container .kpi-subtext {
   color: #94a3b8;
   font-weight: 500;
 }
@@ -411,8 +413,8 @@
 }
 
 @media (max-width: 1024px) {
-  .db-shell-container > aside { display: none; }
-  .db-shell-container .db-shell { margin-left: 0; }
+  /* Sidebar now hidden via translateX in mobile-responsive.css - do NOT use display:none */
+  .db-shell-container .db-shell { margin-left: 0 !important; width: 100% !important; }
   .db-shell-container .db-charts-grid, .db-shell-container .db-lists-grid { grid-template-columns: 1fr; }
   .db-shell-container .erp-welcome-toast { right: 10px; top: 70px; min-width: 280px; }
 }
@@ -420,3 +422,75 @@
 @media (max-width: 640px) {
   .db-shell-container .erp-kpi-grid { grid-template-columns: 1fr; }
 }
+
+/* ===== ERP STAT CARDS (Matches Project Dashboard Style) ===== */
+.db-shell-container .erp-stats-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  background: #ffffff;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.04);
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+.db-shell-container .erp-stat-item {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex: 1;
+  min-width: 150px;
+}
+
+.db-shell-container .erp-stat-divider {
+  width: 1px;
+  height: 48px;
+  background: #e2e8f0;
+  margin: 0 10px;
+}
+
+.db-shell-container .erp-stat-icon-box.filled {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.db-shell-container .erp-stat-details {
+  min-width: 0;
+}
+
+.db-shell-container .erp-stat-value {
+  font-size: 22px;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+}
+
+.db-shell-container .erp-stat-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #374151;
+  margin-top: 2px;
+  white-space: nowrap;
+}
+
+.db-shell-container .erp-stat-sub {
+  font-size: 11px;
+  color: #94a3b8;
+  margin-top: 1px;
+}
+
+/* Color Variants */
+.db-shell-container .erp-stat-pm-blue .erp-stat-icon-box.filled  { background: #1d4ed8; color: #fff; box-shadow: 0 4px 12px rgba(29, 78, 216, 0.25); }
+.db-shell-container .erp-stat-pm-green .erp-stat-icon-box.filled { background: #16a34a; color: #fff; box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25); }
+.db-shell-container .erp-stat-pm-purple .erp-stat-icon-box.filled{ background: #7c3aed; color: #fff; box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25); }
+.db-shell-container .erp-stat-pm-orange .erp-stat-icon-box.filled{ background: #ea580c; color: #fff; box-shadow: 0 4px 12px rgba(234, 88, 12, 0.25); }
+.db-shell-container .erp-stat-pm-cyan .erp-stat-icon-box.filled  { background: #0891b2; color: #fff; box-shadow: 0 4px 12px rgba(8, 145, 178, 0.25); }
+.db-shell-container .erp-stat-pm-red .erp-stat-icon-box.filled   { background: #dc2626; color: #fff; box-shadow: 0 4px 12px rgba(220, 38, 38, 0.25); }

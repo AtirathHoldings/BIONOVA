@@ -35,7 +35,7 @@ import Header from "../Header";
 import AlertModal from "../AlertModal";
 import "../../styles/EmployeeMaster.css";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -58,6 +58,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activeActionsMenu, setActiveActionsMenu] = useState(null);
+  const [formErrors, setFormErrors] = useState({});
 
   const [alertConfig, setAlertConfig] = useState({
     isOpen: false,
@@ -100,7 +101,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     username: "",
     password: "",
     confirmPassword: "",
-    status: ""
+    status: "",
+    employmentType: "",
+    role: "user"
   });
 
   const fetchAllData = async () => {
@@ -124,27 +127,66 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
           const pltNm = pltData.find(p => String(p.pltId || p.id) === String(emp.pltId))?.pltNm || emp.plant || "N/A";
           const deptNm = deptData.find(d => String(d.deptId || d.id) === String(emp.deptId))?.deptNm || emp.department || "N/A";
 
+          let displayGender = "";
+          if (emp.gender) {
+            const g = emp.gender.toUpperCase();
+            if (g === "MALE") displayGender = "Male";
+            else if (g === "FEMALE") displayGender = "Female";
+            else displayGender = "Others";
+          }
+
+          let displayEmpTyp = "";
+          const t = emp.empTyp || "";
+          if (t === "RET" || t === "Retainer") {
+            displayEmpTyp = "Retainer";
+          } else if (t === "CON" || t === "Contract Employee") {
+            displayEmpTyp = "Contract Employee";
+          } else if (t === "FTE" || t === "Full Time Employee (FTE)" || t === "PER") {
+            displayEmpTyp = "Full Time Employee (FTE)";
+          } else {
+            displayEmpTyp = t;
+          }
+
+          const resolvedFirstName = emp.fstNm || emp.firstName || "";
+          const resolvedLastName = emp.lstNm || emp.lastName || "";
+
+          let resolvedDesignation = emp.designation || emp.role;
+          if (!resolvedDesignation) {
+            if (emp.desigId === 1) resolvedDesignation = "Site Engineer";
+            else if (emp.desigId === 2) resolvedDesignation = "QA Engineer";
+            else if (emp.desigId === 3) resolvedDesignation = "Reviewer";
+            else if (emp.desigId === 4) resolvedDesignation = "Project Manager";
+            else resolvedDesignation = emp.desigId ? `Designation ${emp.desigId}` : "N/A";
+          }
+          const repManager = data.find(e => String(e.empId || e.id) === String(emp.repManId));
+          const repManagerName = repManager ? `${repManager.fstNm || repManager.firstName || ""} ${repManager.lstNm || repManager.lastName || ""}`.trim() : (emp.repManId ? `Employee ${emp.repManId}` : "N/A");
+
           return {
             ...emp,
             id: emp.empId || emp.id,
             employeeCode: emp.empCode || emp.employeeCode || "",
-            employeeName: `${emp.firstName || ""} ${emp.lastName || ""}`.trim(),
-            gender: emp.gender ? (emp.gender.charAt(0) + emp.gender.slice(1).toLowerCase()) : "",
+            firstName: resolvedFirstName,
+            lastName: resolvedLastName,
+            employeeName: `${resolvedFirstName} ${resolvedLastName}`.trim(),
+            gender: displayGender,
             dateOfBirth: emp.dob || emp.dateOfBirth || "",
             mobile: emp.mobNum || emp.mobile || "",
             bloodGroup: emp.bldGrp || emp.bloodGroup || "",
             photoPath: emp.photoUrl || emp.photoPath || "",
             joiningDate: emp.doj || emp.joiningDate || "",
-            workLocation: emp.wloc || emp.wLoc || emp.workLocation || "",
-            status: emp.status === true || emp.status === "Active" ? "Active" : "Inactive",
+            workLocation: emp.wLoc || emp.wloc || emp.workLocation || "",
+            status: emp.sts === true || emp.status === true || emp.status === "Active" ? "Active" : "Inactive",
             company: coyNm,
             plant: pltNm,
-            department: deptNm
+            department: deptNm,
+            employmentType: displayEmpTyp,
+            designation: resolvedDesignation,
+            reportingManager: repManagerName
           };
         });
         setEmployees(mappedEmps);
       }
-      
+
       setCompanies(coyData);
       setPlants(pltData);
       setDepartments(deptData);
@@ -159,6 +201,45 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   useEffect(() => {
     fetchAllData();
   }, []);
+
+  const validateField = (name, value, currentForm = form) => {
+    let error = "";
+    if (name === "email" || name === "username") {
+      const emailVal = value.trim();
+      if (!emailVal) {
+        error = "Email is required.";
+      } else if (!emailVal.includes("@")) {
+        error = "Email must contain @.";
+      }
+    } else if (name === "password") {
+      if (!value) {
+        error = "Password is required.";
+      } else {
+        const hasUpper = /[A-Z]/.test(value);
+        const hasLower = /[a-z]/.test(value);
+        const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(value);
+        if (!hasUpper || !hasLower || !hasSpecial) {
+          error = "Password must include at least one uppercase letter, one lowercase letter, and one special character.";
+        }
+      }
+    } else if (name === "confirmPassword") {
+      if (!value) {
+        error = "Confirm Password is required.";
+      } else if (value !== currentForm.password) {
+        error = "Passwords does not match.";
+      }
+    } else if (name === "mobile") {
+      const mobileVal = value.trim();
+      if (!mobileVal) {
+        error = "Mobile Number is required.";
+      } else if (!/^[6789]/.test(mobileVal)) {
+        error = "Mobile Number must start with 6, 7, 8, or 9.";
+      } else if (mobileVal.length > 0 && mobileVal.length < 10) {
+        error = "Mobile Number must be exactly 10 digits.";
+      }
+    }
+    return error;
+  };
 
   // Handle Input Change for Employee Form
   const handleChange = (e) => {
@@ -182,32 +263,57 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     } else if (name === "mobile") {
       newValue = value.replace(/[^0-9]/g, '').slice(0, 10);
     } else if (name === "bloodGroup") {
-      newValue = value.slice(0, 5);
+      newValue = value.slice(0, 10);
     } else if (name === "address") {
       newValue = value.slice(0, 255);
     } else if (name === "workLocation") {
       newValue = value.slice(0, 100);
     } else if (name === "password" || name === "confirmPassword") {
-      newValue = value.slice(0, 10); // <--- changed to 10
+      newValue = value.slice(0, 50);
     }
 
-    if (name === "email") {
-      setForm((prev) => ({ ...prev, email: newValue, username: newValue }));
+    if (name === "email" || name === "username") {
+      setForm((prev) => {
+        const updatedForm = { ...prev, email: newValue, username: newValue };
+        const error = validateField("email", newValue, updatedForm);
+        setFormErrors((prevErrors) => ({ ...prevErrors, email: error }));
+        return updatedForm;
+      });
     } else {
-      setForm((prev) => ({ ...prev, [name]: newValue }));
+      setForm((prev) => {
+        const updatedForm = { ...prev, [name]: newValue };
+        const error = validateField(name, newValue, updatedForm);
+        setFormErrors((prevErrors) => {
+          let updatedErrors = { ...prevErrors, [name]: error };
+          if (name === "password") {
+            const confirmError = validateField("confirmPassword", updatedForm.confirmPassword, updatedForm);
+            updatedErrors.confirmPassword = confirmError;
+          }
+          return updatedErrors;
+        });
+        return updatedForm;
+      });
     }
   };
 
-  // Handle Profile Photo Upload
-  const handlePhotoChange = (event) => {
+  const handlePhotoChange = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onloadend = () => {
-      setPhoto(reader.result);
-      setForm((prev) => ({ ...prev, photoPath: reader.result }));
-    };
-    reader.readAsDataURL(file);
+    try {
+      const formDataUpload = new FormData();
+      formDataUpload.append("file", file);
+      const response = await fetch(`${apiBaseUrl}/api/storage/upload/employee-photo`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${sessionStorage.getItem("authToken") || ""}` },
+        body: formDataUpload
+      });
+      if (!response.ok) throw new Error("Photo upload failed");
+      const data = await response.json();
+      setPhoto(data.url);
+      setForm((prev) => ({ ...prev, photoPath: data.url }));
+    } catch (err) {
+      console.error("Employee photo upload error:", err);
+    }
   };
 
   // Handle New Department Modal Input Change
@@ -279,8 +385,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       username: "",
       password: "",
       confirmPassword: "",
-      status: ""
+      status: "",
+      employmentType: "",
+      role: "user"
     });
+    setFormErrors({});
     setPhoto(null);
     setShowPassword(false);
     setShowConfirmPassword(false);
@@ -345,9 +454,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Employee Email cannot exceed 50 characters.");
       return;
     }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.email.trim())) {
-      triggerAlert("error", "Validation Error", "Please enter a valid Employee Email address.");
+    const emailVal = form.email.trim();
+    if (!emailVal.includes("@")) {
+      triggerAlert("error", "Validation Error", "Please enter a valid Employee Email address (must contain @).");
       return;
     }
 
@@ -356,9 +465,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Mobile Number is required.");
       return;
     }
-    const mobileRegex = /^\d{10}$/;
+    const mobileRegex = /^[6789]\d{9}$/;
     if (!mobileRegex.test(form.mobile.trim())) {
-      triggerAlert("error", "Validation Error", "Mobile Number must be exactly 10 digits.");
+      triggerAlert("error", "Validation Error", "Mobile Number must be exactly 10 digits and start with 6, 7, 8, or 9.");
       return;
     }
 
@@ -390,6 +499,12 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
 
+    // Employment Type check
+    if (!form.employmentType) {
+      triggerAlert("error", "Validation Error", "Employment Type is required.");
+      return;
+    }
+
     // 12. Company check
     if (!form.company) {
       triggerAlert("error", "Validation Error", "Company selection is required.");
@@ -418,11 +533,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
 
-    // 16. Reporting Manager check
-    if (!form.reportingManager) {
-      triggerAlert("error", "Validation Error", "Reporting Manager is required.");
-      return;
-    }
+
 
     // 17. Username check
     if (!form.username.trim()) {
@@ -434,23 +545,27 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
 
-    // 18. Password check with complexity rules (EXACTLY 10 characters, 1 upper, 1 lower, 1 special)
-    if (!form.password) {
-      triggerAlert("error", "Validation Error", "Password is required.");
-      return;
-    }
-    const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{10}$/;
-    if (!passwordRegex.test(form.password)) {
-      triggerAlert(
-        "error",
-        "Validation Error",
-        "Password must be exactly 10 characters long and include at least one uppercase letter, one lowercase letter, and one special character."
-      );
-      return;
-    }
-    if (form.password !== form.confirmPassword) {
-      triggerAlert("error", "Validation Error", "Password and Confirm Password do not match!");
-      return;
+    // 18. Password check with complexity rules (only required for new employee, optional for editing if blank)
+    if (!isEditing || form.password) {
+      if (!form.password) {
+        triggerAlert("error", "Validation Error", "Password is required.");
+        return;
+      }
+      const hasUpper = /[A-Z]/.test(form.password);
+      const hasLower = /[a-z]/.test(form.password);
+      const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(form.password);
+      if (!hasUpper || !hasLower || !hasSpecial) {
+        triggerAlert(
+          "error",
+          "Validation Error",
+          "Password must include at least one uppercase letter, one lowercase letter, and one special character."
+        );
+        return;
+      }
+      if (form.password !== form.confirmPassword) {
+        triggerAlert("error", "Validation Error", "Password and Confirm Password does not match!");
+        return;
+      }
     }
 
     // 19. Status check
@@ -469,11 +584,29 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
 
+    let genderVal = "MALE";
+    if (form.gender.toUpperCase() === "FEMALE") {
+      genderVal = "FEMALE";
+    } else if (form.gender.toUpperCase() === "OTHERS" || form.gender.toUpperCase() === "OTHER") {
+      genderVal = "OTHER";
+    }
+
+    let empTypVal = "FTE";
+    if (form.employmentType === "Retainer") {
+      empTypVal = "RET";
+    } else if (form.employmentType === "Contract Employee") {
+      empTypVal = "CON";
+    } else if (form.employmentType === "Full Time Employee (FTE)") {
+      empTypVal = "FTE";
+    } else {
+      empTypVal = form.employmentType;
+    }
+
     const payload = {
       empCode: form.employeeCode.trim(),
-      firstName: form.firstName.trim(),
-      lastName: form.lastName.trim(),
-      gender: form.gender.toUpperCase(),
+      fstNm: form.firstName.trim(),
+      lstNm: form.lastName.trim(),
+      gender: genderVal,
       dob: form.dateOfBirth,
       email: form.email.trim(),
       mobNum: form.mobile.trim(),
@@ -481,16 +614,21 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       address: form.address.trim(),
       photoUrl: form.photoPath || null,
       doj: form.joiningDate,
-      desigId: 1, // Default or map if designation table exists
+      empTyp: empTypVal,
+      designation: form.designation.trim(),
       coyId: parseInt(form.company),
       pltId: parseInt(form.plant),
       deptId: parseInt(form.department),
-      wloc: form.workLocation.trim(),
+      wLoc: form.workLocation.trim(),
       repManId: form.reportingManager ? parseInt(form.reportingManager) : null,
-      status: form.status === "Active",
+      sts: form.status === "Active",
       role: form.role || "user",
-      password: form.password || null
+      password: form.password ? form.password : null
     };
+
+    if (isEditing) {
+      payload.empId = editId;
+    }
 
     setLoading(true);
     try {
@@ -515,8 +653,19 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
         setView("list");
         fetchAllData();
       } else {
-        const errorText = await response.text();
-        triggerAlert("error", "Error", "Failed to save employee: " + (errorText || "Ensure Unique constraints are met."));
+        let errorMsg = "Ensure Unique constraints are met.";
+        try {
+          const errorJson = await response.json();
+          if (errorJson && errorJson.message) {
+            errorMsg = errorJson.message;
+          } else {
+            errorMsg = JSON.stringify(errorJson);
+          }
+        } catch (e) {
+          const errorText = await response.text();
+          if (errorText) errorMsg = errorText;
+        }
+        triggerAlert("error", "Error", "Failed to save employee: " + errorMsg);
       }
     } catch (err) {
       console.error("Error saving employee:", err);
@@ -540,22 +689,68 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       address: emp.address || "",
       photoPath: emp.photoUrl || emp.photoPath || "",
       joiningDate: emp.doj || emp.joiningDate || "",
-      designation: String(emp.desigId || emp.designation || ""),
-      company: String(emp.coyId || emp.company || ""),
-      plant: String(emp.pltId || emp.plant || ""),
-      department: String(emp.deptId || emp.department || ""),
+      designation: emp.designation || "",
+      company: emp.coyId ? String(emp.coyId) : "",
+      plant: emp.pltId ? String(emp.pltId) : "",
+      department: emp.deptId ? String(emp.deptId) : "",
       workLocation: emp.wloc || emp.wLoc || emp.workLocation || "",
-      reportingManager: String(emp.repManId || emp.reportingManager || ""),
+      reportingManager: emp.repManId ? String(emp.repManId) : "",
       username: emp.email || emp.username || "",
       password: "",
       confirmPassword: "",
-      status: emp.status === true || emp.status === "Active" ? "Active" : "Inactive"
+      status: emp.status === true || emp.status === "Active" ? "Active" : "Inactive",
+      employmentType: emp.employmentType || "",
+      role: emp.role || "user"
     });
 
     setPhoto(emp.photoUrl && emp.photoUrl.startsWith("data:") ? emp.photoUrl : (emp.photoPath && emp.photoPath.startsWith("data:") ? emp.photoPath : null));
+    setFormErrors({});
     setIsEditing(true);
     setEditId(emp.empId || emp.id);
     setView("form");
+    setActiveActionsMenu(null);
+  };
+
+  const handleDelete = (empId) => {
+    setAlertConfig({
+      isOpen: true,
+      type: "warning",
+      title: "Confirm Delete",
+      message: "Are you sure you want to delete this employee? This action cannot be undone.",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        setLoading(true);
+        try {
+          const response = await fetch(`${apiBaseUrl}/api/employees/${empId}`, {
+            method: "DELETE",
+            headers: getAuthHeaders()
+          });
+          if (response.ok) {
+            triggerAlert("success", "Success", "Employee deleted successfully!");
+            fetchAllData();
+          } else {
+            const errorText = await response.text();
+            let errorMsg = "Could not delete employee.";
+            try {
+              const parsed = JSON.parse(errorText);
+              if (parsed.message) errorMsg = parsed.message;
+              else if (parsed.error && parsed.status === 500) {
+                errorMsg = "Cannot delete this employee because they are linked to other records. Please deactivate instead.";
+              }
+            } catch (e) {
+              errorMsg = errorText || errorMsg;
+            }
+            triggerAlert("error", "Error", errorMsg);
+          }
+        } catch (err) {
+          console.error("Delete employee failed:", err);
+          triggerAlert("error", "Error", err.message || "Could not delete employee.");
+        } finally {
+          setLoading(false);
+        }
+      }
+    });
     setActiveActionsMenu(null);
   };
 
@@ -565,9 +760,46 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     if (!emp) return;
 
     const nextStatus = emp.status === "Active" ? false : true;
+    let genderVal = "MALE";
+    if (emp.gender) {
+      const g = emp.gender.toUpperCase();
+      if (g === "FEMALE") genderVal = "FEMALE";
+      else if (g === "OTHERS" || g === "OTHER") genderVal = "OTHER";
+    }
+
+    let empTypVal = "FTE";
+    if (emp.employmentType === "Retainer") {
+      empTypVal = "RET";
+    } else if (emp.employmentType === "Contract Employee") {
+      empTypVal = "CON";
+    } else if (emp.employmentType === "Full Time Employee (FTE)") {
+      empTypVal = "FTE";
+    } else {
+      empTypVal = emp.employmentType;
+    }
+
     const payload = {
-      ...emp,
-      status: nextStatus
+      empId: emp.empId || emp.id,
+      empCode: emp.empCode || emp.employeeCode,
+      fstNm: emp.firstName || "",
+      lstNm: emp.lastName || "",
+      gender: genderVal,
+      dob: emp.dob || emp.dateOfBirth,
+      email: emp.email,
+      mobNum: emp.mobNum || emp.mobile,
+      bldGrp: emp.bldGrp || emp.bloodGroup || null,
+      address: emp.address,
+      photoUrl: emp.photoUrl || emp.photoPath || null,
+      doj: emp.doj || emp.joiningDate,
+      empTyp: empTypVal,
+      desigId: emp.desigId || 1,
+      coyId: emp.coyId || null,
+      pltId: emp.pltId || null,
+      deptId: emp.deptId || null,
+      wLoc: emp.wLoc || emp.wloc || emp.workLocation || "",
+      repManId: emp.repManId || null,
+      sts: nextStatus,
+      role: emp.role || "user"
     };
 
     try {
@@ -650,9 +882,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <input type="text" name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" maxLength="50" required />
                         </div>
                       </div>
-                    </div>
-
-                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Gender <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
@@ -664,6 +893,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           </select>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Date of Birth <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
@@ -677,6 +909,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><Mail size={16} /></span>
                           <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="Enter email id" maxLength="50" required />
                         </div>
+                        {formErrors.email && (
+                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                            {formErrors.email}
+                          </div>
+                        )}
                       </div>
                       <div className="emp-form-item">
                         <label>Mobile Number <span className="emp-req-star">*</span></label>
@@ -684,10 +921,12 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><Phone size={16} /></span>
                           <input type="text" name="mobile" value={form.mobile} onChange={handleChange} placeholder="Enter mobile number" maxLength="10" required />
                         </div>
+                        {formErrors.mobile && (
+                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                            {formErrors.mobile}
+                          </div>
+                        )}
                       </div>
-                    </div>
-
-                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Blood Group</label>
                         <div className="emp-input-icon-wrap">
@@ -702,7 +941,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             <option value="O+">O+</option>
                             <option value="O-">O-</option>
                             <option value="Bombay">Bombay</option>
-                            <option value="Rh Null">Rh Null</option>
+                            <option value="RH-Null">Rh Null</option>
                           </select>
                         </div>
                       </div>
@@ -757,6 +996,18 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         </div>
                       </div>
                       <div className="emp-form-item">
+                        <label>Employee Type <span className="emp-req-star">*</span></label>
+                        <div className="emp-input-icon-wrap">
+                          <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
+                          <select name="employmentType" value={form.employmentType} onChange={handleChange} required>
+                            <option value="">Select employment type</option>
+                            <option value="Retainer">Retainer</option>
+                            <option value="Full Time Employee (FTE)">Full Time Employee (FTE)</option>
+                            <option value="Contract Employee">Contract Employee</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="emp-form-item">
                         <label>Company <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Building size={16} /></span>
@@ -768,6 +1019,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           </select>
                         </div>
                       </div>
+                    </div>
+
+                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Plant <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
@@ -780,9 +1034,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           </select>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Department <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
@@ -798,7 +1049,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           </select>
                         </div>
                       </div>
-                      <div className="emp-form-item emp-span-2">
+                      <div className="emp-form-item">
                         <label>Work Location <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><MapPin size={16} /></span>
@@ -806,10 +1057,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         </div>
                       </div>
                       <div className="emp-form-item">
-                        <label>Reporting Manager <span className="emp-req-star">*</span></label>
+                        <label>Reporting Manager</label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
-                          <select name="reportingManager" value={form.reportingManager} onChange={handleChange} required>
+                          <select name="reportingManager" value={form.reportingManager} onChange={handleChange}>
                             <option value="">Select reporting manager</option>
                             {employees.map((emp) => (
                               <option key={emp.empId || emp.id} value={emp.empId || emp.id}>{emp.employeeName || `${emp.firstName} ${emp.lastName}`}</option>
@@ -832,42 +1083,57 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><Mail size={16} /></span>
                           <input type="email" name="username" value={form.username} onChange={handleChange} placeholder="Enter email id" maxLength="50" required />
                         </div>
+                        {formErrors.email && (
+                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                            {formErrors.email}
+                          </div>
+                        )}
                       </div>
                       <div className="emp-form-item">
                         <label>Password <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Lock size={16} /></span>
-                          <input 
-                            type={showPassword ? "text" : "password"} 
-                            name="password" 
-                            value={form.password} 
-                            onChange={handleChange} 
-                            placeholder="Enter Password" 
-                            maxLength="10" 
-                            required 
+                          <input
+                            type={showPassword ? "text" : "password"}
+                            name="password"
+                            value={form.password}
+                            onChange={handleChange}
+                            placeholder="Enter Password"
+                            maxLength="50"
+                            required
                           />
                           <button type="button" className="emp-input-suffix-btn" onClick={() => setShowPassword(!showPassword)}>
                             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>
                         </div>
+                        {formErrors.password && (
+                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                            {formErrors.password}
+                          </div>
+                        )}
                       </div>
                       <div className="emp-form-item">
                         <label>Confirm Password <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Lock size={16} /></span>
-                          <input 
-                            type={showConfirmPassword ? "text" : "password"} 
-                            name="confirmPassword" 
-                            value={form.confirmPassword} 
-                            onChange={handleChange} 
-                            placeholder="Confirm password" 
-                            maxLength="10" 
-                            required 
+                          <input
+                            type={showConfirmPassword ? "text" : "password"}
+                            name="confirmPassword"
+                            value={form.confirmPassword}
+                            onChange={handleChange}
+                            placeholder="Confirm password"
+                            maxLength="50"
+                            required
                           />
                           <button type="button" className="emp-input-suffix-btn" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
                             {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
                           </button>
                         </div>
+                        {formErrors.confirmPassword && (
+                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                            {formErrors.confirmPassword}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -935,12 +1201,12 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Address</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Joining Date</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employment Type</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Company</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Plant</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Work Location</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Reporting Manager</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Username</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
                         <th style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
                       </tr>
@@ -952,7 +1218,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         filteredEmployees.map((emp, index) => (
                           <tr key={emp.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{index + 1}</td>
-                              <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{emp.employeeCode}</span></td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{emp.employeeCode}</span></td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 {emp.photoPath ? (<img src={emp.photoPath} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #e2e8f0' }} />) : (<div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600', color: '#475569' }}>{emp.employeeName ? emp.employeeName.charAt(0) : ''}</div>)}
@@ -967,12 +1233,12 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={emp.address}>{emp.address}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.joiningDate}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.designation}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.employmentType || "N/A"}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.company}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.plant}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.department}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.workLocation}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.reportingManager}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.username}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: emp.status === 'Active' ? '#dcfce7' : '#fee2e2', color: emp.status === 'Active' ? '#166534' : '#991b1b' }}>{emp.status}</span>
                             </td>
@@ -984,9 +1250,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                                 <>
                                   <div className="emp-actions-dropdown-backdrop" onClick={() => setActiveActionsMenu(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }} />
                                   <div className="emp-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
-                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("info", "Employee Details", `Employee Details:\nName: ${emp.employeeName}\nCode: ${emp.employeeCode}\nDepartment: ${emp.department}\nLocation: ${emp.workLocation || "N/A"}`); setActiveActionsMenu(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
+                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("info", "Employee Details", `Employee Details:\nName: ${emp.employeeName}\nCode: ${emp.employeeCode}\nDepartment: ${emp.department}\nEmployment Type: ${emp.employmentType || "N/A"}\nLocation: ${emp.workLocation || "N/A"}`); setActiveActionsMenu(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleEdit(emp)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Edit size={15} /> Edit </button>
-                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("success", "Saved", `${emp.employeeName}'s record saved successfully.`); setActiveActionsMenu(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Save size={15} /> Save </button>
+                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleDelete(emp.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Trash2 size={15} /> Delete </button>
                                   </div>
                                 </>
                               )}
@@ -1064,7 +1330,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
         type={alertConfig.type}
         title={alertConfig.title}
         message={alertConfig.message}
-        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false, onConfirm: null }))}
+        onConfirm={alertConfig.onConfirm}
+        confirmText={alertConfig.confirmText}
+        cancelText={alertConfig.cancelText}
       />
     </div>
   );

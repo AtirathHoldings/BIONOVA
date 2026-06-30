@@ -35,8 +35,7 @@ body {
   margin-left: 260px;
   display: flex;
   flex-direction: column;
-  min-height: 100vh;
-  padding-bottom: 90px;
+  padding-bottom: 24px;
   background: #f4f7fc;
   min-width: 0;
 }
@@ -315,7 +314,7 @@ body {
   font-weight: 600;
   color: #475569;
   border-bottom: 1px solid #e2e8f0;
-  white-space: nowrap;
+  white-space: nowrap !important;
 }
 
 .cc-list-table th.sortable {
@@ -331,7 +330,7 @@ body {
   padding: 10px 12px;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
-  white-space: nowrap;
+  white-space: nowrap !important;
 }
 
 .cc-list-table tbody tr:hover {

@@ -1,313 +1,364 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
-  Search,
-  Bell,
-  Plus,
-  Download,
-  Filter,
-  ArrowUpDown,
-  Briefcase,
-  CircleCheck,
-  Clock3,
-  FolderOpen,
-  MoreVertical,
-  X,
-  Edit,
-  Trash2,
-  Copy,
-  Archive,
-  Menu,
-  ChevronRight
+  Search, Download, ArrowLeft, ChevronLeft, ChevronRight,
+  ChevronDown, Calendar, Clock, CheckCircle2, BarChart2,
+  PlayCircle, Users, Menu
 } from "lucide-react";
 import Sidebar from "../Sidebar";
-import Header from "../Header"; // <--- Imported Header component
-import AlertModal from "../AlertModal";
-import "../../styles/projects.css";
+import Header from "../Header";
+import UserOverview from "./UserOverview";
+import UserMilestone from "./UserMilestone";
+import UserMyTask from "./UserMyTask";
+import ProjectGanttChart from "./ProjectGanttChart";
+import "../../styles/my-project.css";
 
-const Projects = ({ userRole, onLogout }) => {
-  const [activeTab, setActiveTab] = useState("All Projects");
+// Circular Progress SVG
+const CircularProgress = ({ pct, color = "#10b981", size = 52, stroke = 5 }) => {
+  const r = (size - stroke) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (pct / 100) * circ;
+  return (
+    <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }}>
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#e9ecef" strokeWidth={stroke} />
+      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={color} strokeWidth={stroke}
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round" />
+      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle"
+        style={{ transform: "rotate(90deg)", transformOrigin: "center", fontSize: size < 56 ? "11px" : "14px", fontWeight: 700, fill: "#0d1126" }}>
+        {pct}%
+      </text>
+    </svg>
+  );
+};
+
+import { safeFetch } from "../../utils/api";
+
+const TABS = ["Overview", "Milestones", "My Tasks", "Gantt Chart", "Documents"];
+
+const MyProjects = ({ userRole, onLogout }) => {
+  const [selectedProject, setSelectedProject] = useState(null);
+  const [activeTab, setActiveTab] = useState("Overview");
   const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("All Projects");
+  const [showFilterDrop, setShowFilterDrop] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
-  const [showModal, setShowModal] = useState(false);
-  const [showFilterDropdown, setShowFilterDropdown] = useState(false);
-  const [showSortDropdown, setShowSortDropdown] = useState(false);
-  const [openMenuId, setOpenMenuId] = useState(null);
-  const itemsPerPage = 5;
+  const [projects, setProjects] = useState([]);
+  const [milestones, setMilestones] = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [profile, setProfile] = useState(null);
+  const [loading, setLoading] = useState(true);
+  
+  const projectsPerPage = 5;
 
-  const [alertConfig, setAlertConfig] = useState({
-    isOpen: false,
-    type: "info",
-    title: "",
-    message: ""
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        setLoading(true);
+        const [profRes, projRes, msRes, taskRes, coyRes, pltRes, deptRes] = await Promise.all([
+          safeFetch('/api/profile'),
+          safeFetch('/api/project-live', []),
+          safeFetch('/api/milestone-live', []),
+          safeFetch('/api/task-live', []),
+          safeFetch('/api/companies', []),
+          safeFetch('/api/plants', []),
+          safeFetch('/api/departments', [])
+        ]);
+
+        setProfile(profRes);
+        const empId = profRes?.empId;
+        const isAdmin = profRes?.email === 'siva@atirath.com';
+
+        // Filter tasks to only user tasks
+        const userTasks = (taskRes || []).filter(t => isAdmin || t.empId === empId);
+        setTasks(userTasks);
+
+        // Filter milestones: keep milestones that have at least one task assigned to the user
+        const userMilestones = (msRes || []).filter(m => {
+          if (isAdmin) return true;
+          return userTasks.some(t => t.mId === m.mId);
+        });
+        setMilestones(userMilestones);
+
+        // Filter projects: keep projects that have at least one milestone in userMilestones
+        const userProjects = (projRes || []).filter(p => {
+          if (isAdmin) return true;
+          return userMilestones.some(m => m.prjId === p.prjId);
+        });
+
+        // Map projects to match the page expectations
+        const mapped = userProjects.map(proj => {
+          const companyName = coyRes?.find(c => c.coyId === proj.coyId)?.coyNm || `Company ${proj.coyId}`;
+          const plantName = pltRes?.find(pl => pl.pltId === proj.pltId)?.pltNm || `Plant ${proj.pltId}`;
+          const deptName = deptRes?.find(d => d.deptId === proj.deptId)?.deptNm || `Dept ${proj.deptId}`;
+
+          const projMilestones = userMilestones.filter(m => m.prjId === proj.prjId);
+          const projTasks = userTasks.filter(t => projMilestones.some(m => m.mId === t.mId));
+
+          const totalTasksCount = projTasks.length;
+          const completedTasksCount = projTasks.filter(t => t.taskSts === 'COMPLETED').length;
+          const wipTasksCount = projTasks.filter(t => t.taskSts === 'WIP').length;
+          const openTasksCount = projTasks.filter(t => t.taskSts === 'OPEN' || t.taskSts === 'REWORK').length;
+          const reviewTasksCount = projTasks.filter(t => t.taskSts === 'SUBMIT_REVIEW' || t.taskSts === 'UNDER_REVIEW').length;
+
+          let progressPct = 0;
+          if (totalTasksCount > 0) {
+            progressPct = Math.round(((completedTasksCount + reviewTasksCount * 0.8 + wipTasksCount * 0.5) / totalTasksCount) * 100);
+          }
+
+          return {
+            id: proj.prjId,
+            prjId: proj.prjId,
+            name: proj.prjNm,
+            company: companyName,
+            plant: plantName,
+            role: profRes?.firstName ? `${profRes.firstName} ${profRes.lastName || ''}` : "Team Member",
+            tasksAssigned: totalTasksCount,
+            openTasks: openTasksCount + wipTasksCount + reviewTasksCount,
+            status: proj.prjSts || "In Progress",
+            progress: progressPct,
+            image: proj.logo || "https://images.unsplash.com/photo-1504328345606-18bbc8c9d7d1?w=200&h=120&fit=crop",
+            manager: "Siva Kumar",
+            startDate: proj.stDt || "N/A",
+            targetDate: proj.endDt || "N/A",
+            code: proj.prjCd || `PRJ-${proj.prjId}`,
+            type: "Construction",
+            location: "N/A",
+            client: companyName,
+            department: deptName,
+            reportingTo: "Siva Kumar",
+            description: proj.prjDesc || "",
+            milestones: projMilestones.map(m => ({
+              id: m.mId,
+              mId: m.mId,
+              name: m.mlstnTtl,
+              date: m.endDt || "N/A",
+              start: m.stDt || "N/A",
+              desc: m.mlstnDesc || "",
+              status: m.mlstnSts || "Not Started",
+              days: m.mlstnDays || 0
+            })),
+            taskSummary: {
+              assigned: totalTasksCount,
+              inProgress: wipTasksCount,
+              openTasks: openTasksCount,
+              completed: completedTasksCount
+            }
+          };
+        });
+
+        setProjects(mapped);
+      } catch (err) {
+        console.error("Error fetching projects data:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, []);
+
+  const filtered = projects.filter(p => {
+    const matchSearch = p.name.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchFilter = statusFilter === "All Projects" || p.status === statusFilter;
+    return matchSearch && matchFilter;
   });
 
-  const triggerAlert = (type, title, message) => {
-    setAlertConfig({ isOpen: true, type, title, message });
-  };
+  const totalPages = Math.ceil(filtered.length / projectsPerPage);
+  const paged = filtered.slice((currentPage - 1) * projectsPerPage, currentPage * projectsPerPage);
 
-  const projects = [
-    { id: 1, name: "ERP Management System", client: "Infosys Technologies", status: "In Progress", progress: 72, startDate: "2026-06-02", dueDate: "2026-07-20", priority: "High", category: "My Projects", description: "Enterprise resource planning system integration" },
-    { id: 2, name: "HR Portal Development", client: "TCS Global", status: "Completed", progress: 100, startDate: "2026-04-15", dueDate: "2026-06-10", priority: "Medium", category: "Completed", description: "Human resources management portal" },
-    { id: 3, name: "E-Commerce Platform", client: "Amazon India", status: "Planning", progress: 25, startDate: "2026-07-01", dueDate: "2026-08-30", priority: "High", category: "My Projects", description: "Full-featured e-commerce website" },
-    { id: 4, name: "CRM System Upgrade", client: "Wipro Solutions", status: "On Hold", progress: 45, startDate: "2026-05-18", dueDate: "2026-08-15", priority: "Low", category: "On Hold", description: "Customer relationship management upgrade" },
-    { id: 5, name: "Cloud Migration", client: "AWS Cloud", status: "In Progress", progress: 67, startDate: "2026-06-15", dueDate: "2026-09-15", priority: "High", category: "My Projects", description: "Migrating infrastructure to cloud" }
-  ];
+  const progressColor = (pct) => pct >= 70 ? "#10b981" : pct >= 40 ? "#3b82f6" : "#f59e0b";
 
-  const stats = [
-    { title: "Total Projects", value: projects.length, icon: FolderOpen, class: "total" },
-    { title: "In Progress", value: projects.filter(p => p.status === "In Progress").length, icon: Clock3, class: "progress" },
-    { title: "Completed", value: projects.filter(p => p.status === "Completed").length, icon: CircleCheck, class: "completed" },
-    { title: "On Hold", value: projects.filter(p => p.status === "On Hold").length, icon: Briefcase, class: "hold" }
-  ];
-
-  const tabs = ["All Projects", "My Projects", "Participating", "Completed", "On Hold", "Planning"];
-
-  const filteredProjects = projects.filter(project => {
-    const matchesTab = activeTab === "All Projects" || project.category === activeTab || project.status === activeTab;
-    const matchesSearch = project.name.toLowerCase().includes(searchQuery.toLowerCase()) || project.client.toLowerCase().includes(searchQuery.toLowerCase());
-    return matchesTab && matchesSearch;
-  });
-
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentProjects = filteredProjects.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
+  if (loading) {
+    return (
+      <div className="mp-shell-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh', color: '#64748b' }}>
+        Loading projects...
+      </div>
+    );
+  }
 
   return (
-    <div className="pjs-shell-container">
-      {/* Sidebar Component */}
+    <div className="mp-shell-container">
       <Sidebar userRole={userRole} onLogout={onLogout} />
 
-      {/* Main Container Layout */}
-      <div className="pjs-shell">
-        
-        {/* ======================= DYNAMIC HEADER ======================= */}
-        <Header 
-          title="All Projects" 
-          showSearch={false} 
-          userName="Syed Mohammad Johny Basha" 
-          userRole="Web Developer" 
-          initials="SB" 
-        />
+      <div className="mp-shell">
+        <Header title="MY PROJECTS" showSearch={false} />
 
-        <main className="pjs-main">
-          <div className="pjs-breadcrumb">
-            <span>Home</span> <ChevronRight size={12} />
-            <span>Dashboard</span> <ChevronRight size={12} />
-            <strong>Projects</strong>
-          </div>
-
-          <div className="pjs-content">
-            {/* ===== SECTION 1: STATISTICS CARDS ===== */}
-            <div className="pjs-stats-grid">
-              {stats.map((item, index) => {
-                const Icon = item.icon;
-                return (
-                  <div className={`pjs-stat-card ${item.class}`} key={index}>
-                    <div className="stat-info">
-                      <p>{item.title}</p>
-                      <h3>{item.value}</h3>
-                    </div>
-                    <div className="stat-icon">
-                      <Icon size={20} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-
-            {/* ===== SECTION 2: SINGLE-LINE INTEGRATED TOOLBAR PANEL ===== */}
-            <div className="pjs-panel pjs-integrated-toolbar">
-              <div className="pjs-toolbar-left-side">
-                {/* Tabs Row */}
-                <div className="pjs-tabs-group">
-                  {tabs.map((tab) => (
-                    <button
-                      key={tab}
-                      className={activeTab === tab ? "pjs-tab active" : "pjs-tab"}
-                      onClick={() => { setActiveTab(tab); setCurrentPage(1); }}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Vertical Divider */}
-                <div className="pjs-toolbar-divider"></div>
-
-                {/* Filter Actions right after Planning tab */}
-                <div className="pjs-actions-group">
-                  <div className="pjs-dropdown-wrap">
-                    <button className="pjs-action-btn-sm" onClick={() => setShowFilterDropdown(!showFilterDropdown)}>
-                      <Filter size={14} /> Filter
-                    </button>
-                    {showFilterDropdown && (
-                      <div className="pjs-dropdown-menu">
-                        <button onClick={() => setShowFilterDropdown(false)}>High Priority</button>
-                        <button onClick={() => setShowFilterDropdown(false)}>Medium Priority</button>
-                        <button onClick={() => setShowFilterDropdown(false)}>Low Priority</button>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="pjs-dropdown-wrap">
-                    <button className="pjs-action-btn-sm" onClick={() => setShowSortDropdown(!showSortDropdown)}>
-                      <ArrowUpDown size={14} /> Sort
-                    </button>
-                    {showSortDropdown && (
-                      <div className="pjs-dropdown-menu">
-                        <button onClick={() => setShowSortDropdown(false)}>Name A-Z</button>
-                        <button onClick={() => setShowSortDropdown(false)}>Date (Newest)</button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              {/* Search Bar perfectly aligned on the right end */}
-              <div className="pjs-search-box">
-                <Search size={14} className="pjs-search-icon" />
+        <div className="mp-body">
+          {/* ========== FULL PAGE: Project List ========== */}
+          {!selectedProject && (
+            <div className="mp-left-panel full-width">
+            {/* Search + Filter */}
+            <div className="mp-list-toolbar">
+              <div className="mp-search-box">
+                <Search size={14} />
                 <input
                   type="text"
-                  placeholder="Search project or client..."
+                  placeholder="Search projects..."
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onChange={e => setSearchQuery(e.target.value)}
                 />
-                {searchQuery && <X size={14} className="pjs-search-clear" onClick={() => setSearchQuery("")} />}
+              </div>
+              <div className="mp-filter-wrap">
+                <button className="mp-filter-btn" onClick={() => setShowFilterDrop(!showFilterDrop)}>
+                  {statusFilter} <ChevronDown size={14} />
+                </button>
+                {showFilterDrop && (
+                  <div className="mp-filter-dropdown">
+                    {["All Projects", "In Progress", "Completed", "On Hold"].map(s => (
+                      <div key={s} className={`mp-filter-item ${statusFilter === s ? "active" : ""}`}
+                        onClick={() => { setStatusFilter(s); setShowFilterDrop(false); setCurrentPage(1); }}>
+                        {s}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* ===== SECTION 3: DATA LIST TABLE ===== */}
-            <section className="pjs-panel">
-              <div className="pjs-table-wrap">
-                <table className="pjs-data-table">
-                  <thead>
-                    <tr>
-                      <th>Project Name</th>
-                      <th>Client Name</th>
-                      <th>Status</th>
-                      <th>Progress</th>
-                      <th>Start Date</th>
-                      <th>Due Date</th>
-                      <th>Priority</th>
-                      <th style={{ width: "80px", textAlign: "center" }}>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {currentProjects.map((project) => (
-                      <tr key={project.id}>
-                        <td style={{ fontWeight: 600, color: "#1e293b" }}>{project.name}</td>
-                        <td>{project.client}</td>
-                        <td>
-                          <span className={`pjs-status-badge status-${project.status.toLowerCase().replace(" ", "")}`}>
-                            {project.status}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="pjs-progress-wrapper">
-                            <div className="pjs-progress-bar">
-                              <div className="pjs-progress-fill" style={{ width: `${project.progress}%` }}></div>
-                            </div>
-                            <span className="pjs-progress-text">{project.progress}%</span>
-                          </div>
-                        </td>
-                        <td>{project.startDate}</td>
-                        <td>{project.dueDate}</td>
-                        <td>
-                          <span className={`pjs-status-badge prio-${project.priority.toLowerCase()}`}>
-                            {project.priority}
-                          </span>
-                        </td>
-                        <td>
-                          <div className="pjs-action-menu-container">
-                            <button className="pjs-dot-btn" onClick={() => setOpenMenuId(openMenuId === project.id ? null : project.id)}>
-                              <MoreVertical size={14} />
-                            </button>
-                            {openMenuId === project.id && (
-                              <div className="pjs-action-dropdown">
-                                <button onClick={() => setOpenMenuId(null)}><Edit size={12} /> Edit</button>
-                                <button onClick={() => setOpenMenuId(null)}><Copy size={12} /> Duplicate</button>
-                                <button onClick={() => setOpenMenuId(null)}><Archive size={12} /> Archive</button>
-                                <button className="delete" onClick={() => setOpenMenuId(null)}><Trash2 size={12} /> Delete</button>
-                              </div>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            {/* Project Cards */}
+            <div className="mp-card-list">
+              {paged.map(proj => (
+                <div
+                  key={proj.id}
+                  className={`mp-project-card ${selectedProject?.id === proj.id ? "selected" : ""}`}
+                  onClick={() => { setSelectedProject(proj); setActiveTab("Overview"); }}
+                >
+                  <img src={proj.image} alt={proj.name} className="mp-card-img" />
+                  <div className="mp-card-info">
+                    <div className="mp-card-header-row">
+                      <div>
+                        <div className="mp-card-name">{proj.name}</div>
+                        <div className="mp-card-sub">{proj.company} | {proj.plant}</div>
+                        <div className="mp-card-role">Role: <strong>{proj.role}</strong></div>
+                      </div>
+                      <div className="mp-card-circle">
+                        <CircularProgress pct={proj.progress} color={progressColor(proj.progress)} />
+                      </div>
+                    </div>
+                    <div className="mp-card-footer">
+                      <div className="mp-card-stat">
+                        <span className="mp-stat-label">Tasks Assigned</span>
+                        <span className="mp-stat-value">{proj.tasksAssigned}</span>
+                      </div>
+                      <div className="mp-card-stat">
+                        <span className="mp-stat-label">Open Tasks</span>
+                        <span className="mp-stat-value">{proj.openTasks}</span>
+                      </div>
+                      <span className={`mp-status-badge mp-status-${proj.status.toLowerCase().replace(/ /g, "-")}`}>
+                        {proj.status}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {/* Pagination */}
+            <div className="mp-pagination">
+              <span>Showing 1 to {filtered.length} of {filtered.length} projects</span>
+              <div className="mp-pag-controls">
+                <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft size={14} /></button>
+                <span className="mp-pag-page">{currentPage}</span>
+                <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight size={14} /></button>
+              </div>
+            </div>
+          </div>
+          )}
+
+          {/* ========== FULL PAGE: Project Detail ========== */}
+          {selectedProject && (
+            <div className="mp-right-panel full-width">
+              {/* Back + Download */}
+              <div className="mp-detail-topbar">
+                <button className="mp-back-btn" onClick={() => setSelectedProject(null)}>
+                  <ArrowLeft size={16} /> Back to Projects
+                </button>
+                <button className="mp-download-btn">
+                  <Download size={14} /> Download Report
+                </button>
               </div>
 
-              {/* Pagination controls */}
-              {filteredProjects.length > 0 && (
-                <div className="pjs-pagination">
-                  <button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>Previous</button>
-                  <div className="pjs-page-numbers">
-                    {[...Array(totalPages)].map((_, i) => (
-                      <button key={i} className={currentPage === i + 1 ? "active" : ""} onClick={() => setCurrentPage(i + 1)}>{i + 1}</button>
-                    ))}
+              {/* Project Hero */}
+              <div className="mp-detail-hero">
+                <img src={selectedProject.image} alt={selectedProject.name} className="mp-detail-img" />
+                <div className="mp-detail-hero-info">
+                  <div className="mp-detail-hero-row">
+                    <div>
+                      <h2 className="mp-detail-name">{selectedProject.name}</h2>
+                      <div className="mp-detail-sub">
+                        {selectedProject.company} &nbsp;|&nbsp; {selectedProject.plant}
+                      </div>
+                    </div>
+                    <span className={`mp-status-badge mp-status-${selectedProject.status.toLowerCase().replace(/ /g, "-")}`}>
+                      {selectedProject.status}
+                    </span>
                   </div>
-                  <button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>Next</button>
+                  <div className="mp-detail-meta">
+                    <div className="mp-meta-item">
+                      <span className="mp-meta-label">Project Manager</span>
+                      <span className="mp-meta-value bold">{selectedProject.manager}</span>
+                    </div>
+                    <div className="mp-meta-item">
+                      <Calendar size={14} style={{ color: "#3b82f6" }} />
+                      <div>
+                        <span className="mp-meta-label">Start Date</span>
+                        <span className="mp-meta-value">{selectedProject.startDate}</span>
+                      </div>
+                    </div>
+                    <div className="mp-meta-item">
+                      <Clock size={14} style={{ color: "#f59e0b" }} />
+                      <div>
+                        <span className="mp-meta-label">Target Date</span>
+                        <span className="mp-meta-value">{selectedProject.targetDate}</span>
+                      </div>
+                    </div>
+                    <div className="mp-meta-item">
+                      <div>
+                        <span className="mp-meta-label">Overall Progress</span>
+                        <div style={{ marginTop: 4 }}>
+                          <CircularProgress pct={selectedProject.progress} color={progressColor(selectedProject.progress)} size={64} stroke={6} />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Tabs */}
+              <div className="mp-tabs">
+                {TABS.map(tab => (
+                  <button key={tab} className={`mp-tab ${activeTab === tab ? "active" : ""}`}
+                    onClick={() => setActiveTab(tab)}>
+                    {tab}
+                  </button>
+                ))}
+              </div>
+
+              {/* Tab Content: Overview */}
+              {activeTab === "Overview" && (
+                <UserOverview selectedProject={selectedProject} />
+              )}
+
+              {activeTab === "Milestones" && (
+                <UserMilestone selectedProject={selectedProject} userTasks={tasks} />
+              )}
+              {activeTab === "My Tasks" && (
+                <UserMyTask selectedProject={selectedProject} userTasks={tasks} />
+              )}
+              {activeTab === "Gantt Chart" && (
+                <ProjectGanttChart project={selectedProject} userRole="user" />
+              )}
+              {activeTab === "Documents" && (
+                <div className="mp-tab-placeholder">
+                  <Download size={40} color="#e2e8f0" />
+                  <p>Documents section coming soon.</p>
                 </div>
               )}
-            </section>
-          </div>
-        </main>
-
-        {/* ===== FIXED FOOTER ACTIONS BAR ===== */}
-        <div className="pjs-footer">
-          <button type="button" className="pjs-btn secondary" onClick={() => setSearchQuery("")}>Clear Search</button>
-          <button type="button" className="pjs-btn tertiary" onClick={() => triggerAlert("success", "Export Report", "Exporting report...")}><Download size={14} /> Export Report</button>
-          <button type="button" className="pjs-btn primary" onClick={() => setShowModal(true)}><Plus size={14} /> Create New Project</button>
-        </div>
-
-        {/* Modal Window popup */}
-        {showModal && (
-          <div className="pjs-modal-overlay" onClick={() => setShowModal(false)}>
-            <div className="pjs-modal" onClick={(e) => e.stopPropagation()}>
-              <div className="pjs-modal-header">
-                <h3>Create New Project</h3>
-                <button className="pjs-modal-close" onClick={() => setShowModal(false)}><X size={18} /></button>
-              </div>
-              <div className="pjs-modal-body">
-                <div className="pjs-form-group">
-                  <label>Project Name *</label>
-                  <input type="text" placeholder="Enter project name" />
-                </div>
-                <div className="pjs-form-group">
-                  <label>Client Name *</label>
-                  <input type="text" placeholder="Enter client name" />
-                </div>
-                <div className="pjs-form-row">
-                  <div className="pjs-form-group">
-                    <label>Start Date</label>
-                    <input type="date" />
-                  </div>
-                  <div className="pjs-form-group">
-                    <label>Due Date</label>
-                    <input type="date" />
-                  </div>
-                </div>
-              </div>
-              <div className="pjs-modal-footer">
-                <button className="pjs-btn secondary" onClick={() => setShowModal(false)}>Cancel</button>
-                <button className="pjs-btn primary" onClick={() => setShowModal(false)}>Create Project</button>
-              </div>
             </div>
-          </div>
-        )}
-
-        <AlertModal
-          isOpen={alertConfig.isOpen}
-          type={alertConfig.type}
-          title={alertConfig.title}
-          message={alertConfig.message}
-          onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
-        />
+          )}
+        </div>
       </div>
     </div>
   );
 };
 
-export default Projects;
+export default MyProjects;
