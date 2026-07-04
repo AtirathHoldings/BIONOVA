@@ -54,6 +54,7 @@ D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\Pro
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ResetPasswordRequest.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\RoleDto.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\SaveAccessRequest.java
+D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\SaveRoleRequest.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\ScreenPermissionDto.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\TeamMemberDto.java
 D:\git\BIONOVA\Atirath-Holding\bionova-backend\src\main\java\com\bionova\dto\UserDashboardResponseDto.java

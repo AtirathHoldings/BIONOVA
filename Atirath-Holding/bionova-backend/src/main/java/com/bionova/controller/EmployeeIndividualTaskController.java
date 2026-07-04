@@ -233,6 +233,10 @@ public class EmployeeIndividualTaskController {
 
         task.setPrcsYesActn(details.getPrcsYesActn());
 
+        task.setReviewerId(details.getReviewerId());
+
+        task.setApproverId(details.getApproverId());
+
         task.setTaskSts(details.getTaskSts());
 
         task.setRemarks(details.getRemarks());

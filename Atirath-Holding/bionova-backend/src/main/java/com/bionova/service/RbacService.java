@@ -37,6 +37,15 @@ public class RbacService {
                 .collect(Collectors.toList());
     }
 
+    /**
+     * Returns true if the employee has at least one RBAC mapping in the database.
+     * When false → no RBAC configured yet → show all screens (full_access mode).
+     * When true  → RBAC is set up → filter screens based on permissions.
+     */
+    public boolean hasRbacConfigured(Long empId) {
+        return !employeeMappingRepository.findByEmpId(empId).isEmpty();
+    }
+
     public List<ScreenPermissionDto> getRolePermissions(Integer roleId) {
         List<ScreenMaster> screens = screenMasterRepository.findAll();
         List<RoleBasedAccessControl> mapped = rbacRepository.findByRoleId(roleId);
@@ -113,13 +122,13 @@ public class RbacService {
             // Save as a new named template role
             finalRoleNm = request.getCustomRoleName().trim();
             finalRoleId = rbacRepository.findMaxRoleId() + 1;
-            savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions());
+            savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions(), request.getCreatedBy());
         } 
         else if (hasOverrides(request.getRoleId(), request.getPermissions())) {
             // Save as an ad-hoc custom override role specific to this configuration
             finalRoleNm = "Custom_Access_" + System.currentTimeMillis();
             finalRoleId = rbacRepository.findMaxRoleId() + 1;
-            savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions());
+            savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions(), request.getCreatedBy());
         } else if (request.getRoleId() != null) {
             // Just use the base template role, find its name
             List<RoleBasedAccessControl> existing = rbacRepository.findByRoleId(request.getRoleId());
@@ -140,8 +149,9 @@ public class RbacService {
         }
     }
 
-    private void savePermissionsForRole(Integer roleId, String roleNm, List<ScreenPermissionDto> permissions) {
+    private void savePermissionsForRole(Integer roleId, String roleNm, List<ScreenPermissionDto> permissions, String createdBy) {
         if (permissions == null) return;
+        final String creator = (createdBy == null || createdBy.trim().isEmpty()) ? "Admin" : createdBy;
         List<RoleBasedAccessControl> rbacs = permissions.stream().map(p -> {
             RoleBasedAccessControl r = new RoleBasedAccessControl();
             r.setRoleId(roleId);
@@ -151,9 +161,40 @@ public class RbacService {
             r.setEditFlg(p.getEditFlg() != null && p.getEditFlg());
             r.setAddFlg(p.getAddFlg() != null && p.getAddFlg());
             r.setDeleteFlg(p.getDeleteFlg() != null && p.getDeleteFlg());
+            r.setCreatedBy(creator);
             return r;
         }).collect(Collectors.toList());
         rbacRepository.saveAll(rbacs);
+    }
+
+    @Transactional
+    public void saveRole(String roleNm, List<ScreenPermissionDto> permissions, String createdBy) {
+        Integer finalRoleId = rbacRepository.findMaxRoleId() + 1;
+        savePermissionsForRole(finalRoleId, roleNm, permissions, createdBy);
+    }
+
+    @Transactional
+    public void updateRole(Integer roleId, String roleNm, List<ScreenPermissionDto> permissions, String createdBy) {
+        String name = roleNm;
+        if (name == null || name.trim().isEmpty()) {
+            List<RoleBasedAccessControl> existing = rbacRepository.findByRoleId(roleId);
+            if (!existing.isEmpty()) {
+                name = existing.get(0).getRoleNm();
+            } else {
+                name = "Role_" + roleId;
+            }
+        }
+        rbacRepository.deleteByRoleId(roleId);
+        savePermissionsForRole(roleId, name, permissions, createdBy);
+    }
+
+    @Transactional
+    public void deleteRole(Integer roleId) {
+        rbacRepository.deleteByRoleId(roleId);
+        List<RoleBasedEmployeeMapping> mappings = employeeMappingRepository.findByRoleId(roleId);
+        if (!mappings.isEmpty()) {
+            employeeMappingRepository.deleteAll(mappings);
+        }
     }
 
     private boolean hasOverrides(Integer baseRoleId, List<ScreenPermissionDto> requested) {
