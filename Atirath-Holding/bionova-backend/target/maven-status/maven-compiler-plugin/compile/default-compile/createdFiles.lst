@@ -81,6 +81,7 @@ com\bionova\controller\MilestoneLiveController.class
 com\bionova\controller\ChecklistController.class
 com\bionova\config\SecurityConfig.class
 com\bionova\repository\AttachmentMasterRepository.class
+com\bionova\dto\SaveRoleRequest.class
 com\bionova\controller\ProjectDashboardController.class
 com\bionova\controller\TaskDraftController.class
 com\bionova\repository\ProcessConfigRepository.class

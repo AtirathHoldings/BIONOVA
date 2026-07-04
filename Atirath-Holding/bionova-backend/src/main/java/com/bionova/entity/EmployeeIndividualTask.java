@@ -62,6 +62,12 @@ public class EmployeeIndividualTask {
     @Column(name = "prcs_yes_actn", length = 200)
     private String prcsYesActn;
 
+    @Column(name = "reviewer_id")
+    private Integer reviewerId;
+
+    @Column(name = "approver_id")
+    private Long approverId;
+
     @Column(name = "task_sts", length = 20)
     private String taskSts = "DRAFT";
 

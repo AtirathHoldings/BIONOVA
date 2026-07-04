@@ -46,8 +46,8 @@ public class TaskLiveController {
         if (employee == null) {
             return false;
         }
-        // Since role column is removed, we treat siva@atirath.com as admin
-        return "siva@atirath.com".equalsIgnoreCase(employee.getEmail());
+        // Since role column is removed, we treat vsv.vempati@gmail.com as admin
+        return "vsv.vempati@gmail.com".equalsIgnoreCase(employee.getEmail());
     }
 
     @GetMapping
