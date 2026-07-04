@@ -12,6 +12,7 @@ import java.util.List;
 @Repository
 public interface CalendarMasterRepository extends JpaRepository<CalendarMaster, Long> {
 
+    List<CalendarMaster> findByCalDt(LocalDate calDt);
     List<CalendarMaster> findByCoyId(Integer coyId);
     List<CalendarMaster> findByCoyIdAndPltId(Integer coyId, Integer pltId);
     List<CalendarMaster> findByCalYr(Integer calYr);

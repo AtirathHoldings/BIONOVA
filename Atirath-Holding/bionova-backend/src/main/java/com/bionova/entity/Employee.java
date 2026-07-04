@@ -45,7 +45,7 @@ public class Employee {
     @Column(name = "mob_num", unique = true, length = 15)
     private String mobNum;
 
-    @Column(name = "bld_grp", length = 10)
+    @Column(name = "bld_grp", length = 20)
     private String bldGrp;
 
     @Column(name = "address", nullable = false, length = 255)

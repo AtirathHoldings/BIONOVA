@@ -24,6 +24,4 @@ public class DesignationMaster {
     @Column(name = "desig_desc", length = 255)
     private String desigDesc;
 
-    @Column(name = "sts")
-    private Boolean sts;
 }

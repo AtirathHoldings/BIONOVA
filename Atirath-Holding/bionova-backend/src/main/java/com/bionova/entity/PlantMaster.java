@@ -48,11 +48,14 @@ public class PlantMaster {
     @Column(name = "wrk_days_per_wk")
     private Integer wrkDaysPerWk;
 
-    @Column(name = "lat")
-    private Double lat;
+    @Column(name = "lat", length = 20)
+    private String lat;
 
-    @Column(name = "longt")
-    private Double longt;
+    @Column(name = "longt", length = 20)
+    private String longt;
+
+    @Column(name="logo",length=255)
+    private String logo;
 
     @Column(name = "addl_rem", length = 255)
     private String addlRem;

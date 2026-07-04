@@ -35,7 +35,7 @@ public class ChecklistMaster {
     @Column(name = "is_live", nullable = false)
     private Boolean isLive = false;
 
-    @Column(name = "chk_cd", unique = true, length = 10)
+    @Column(name = "chk_cd", length = 10)
     private String chkCd;
 
     @Column(name = "chk_nm", nullable = false, length = 100)

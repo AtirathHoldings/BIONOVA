@@ -96,21 +96,42 @@ public class CalendarMasterController {
 
     /** POST – add a holiday (auto-fills cal_yr from cal_dt) */
     @PostMapping
-    public ResponseEntity<CalendarMaster> create(@RequestBody CalendarMaster holiday) {
+    public ResponseEntity<?> create(@RequestBody CalendarMaster holiday) {
         if (holiday.getCalDt() != null && holiday.getCalYr() == null) {
             holiday.setCalYr(holiday.getCalDt().getYear());
         }
+
+        // Check for duplicate holiday on same date and scope
+        if (holiday.getCalDt() != null) {
+            List<CalendarMaster> existing = calendarMasterRepository.findByCalDt(holiday.getCalDt());
+            for (CalendarMaster ext : existing) {
+                if (isDuplicateHoliday(ext, holiday)) {
+                    return ResponseEntity.badRequest().body("A holiday with the same date and scope already exists.");
+                }
+            }
+        }
+
         return ResponseEntity.ok(calendarMasterRepository.save(holiday));
     }
 
     /** PUT – update holiday */
     @PutMapping("/{id}")
-    public ResponseEntity<CalendarMaster> update(
+    public ResponseEntity<?> update(
             @PathVariable Long id,
             @RequestBody CalendarMaster details) {
 
         CalendarMaster holiday = calendarMasterRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Holiday not found: " + id));
+
+        // Check for duplicate holiday on same date and scope, excluding self
+        if (details.getCalDt() != null) {
+            List<CalendarMaster> existing = calendarMasterRepository.findByCalDt(details.getCalDt());
+            for (CalendarMaster ext : existing) {
+                if (!ext.getClId().equals(id) && isDuplicateHoliday(ext, details)) {
+                    return ResponseEntity.badRequest().body("A holiday with the same date and scope already exists.");
+                }
+            }
+        }
 
         holiday.setCalDt(details.getCalDt());
         holiday.setHolidayNm(details.getHolidayNm());
@@ -125,6 +146,34 @@ public class CalendarMasterController {
         }
 
         return ResponseEntity.ok(calendarMasterRepository.save(holiday));
+    }
+
+    private boolean isDuplicateHoliday(CalendarMaster h1, CalendarMaster h2) {
+        String holTyp1 = h1.getHolTyp() != null ? h1.getHolTyp() : "";
+        String holTyp2 = h2.getHolTyp() != null ? h2.getHolTyp() : "";
+        if (!holTyp1.equals(holTyp2)) {
+            return false;
+        }
+
+        String calType1 = h1.getCalType() != null ? h1.getCalType() : "";
+        String calType2 = h2.getCalType() != null ? h2.getCalType() : "";
+        if (!calType1.equals(calType2)) {
+            return false;
+        }
+
+        Integer coyId1 = h1.getCoyId() != null ? h1.getCoyId() : 0;
+        Integer coyId2 = h2.getCoyId() != null ? h2.getCoyId() : 0;
+        if (!coyId1.equals(coyId2)) {
+            return false;
+        }
+
+        Integer pltId1 = h1.getPltId() != null ? h1.getPltId() : 0;
+        Integer pltId2 = h2.getPltId() != null ? h2.getPltId() : 0;
+        if (!pltId1.equals(pltId2)) {
+            return false;
+        }
+
+        return true;
     }
 
     /** DELETE */

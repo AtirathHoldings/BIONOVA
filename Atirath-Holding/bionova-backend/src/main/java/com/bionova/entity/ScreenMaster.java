@@ -23,7 +23,4 @@ public class ScreenMaster {
 
     @Column(name = "screen_code", unique = true, length = 50)
     private String screenCode;
-
-    @Column(name = "sts")
-    private Boolean status = true;
 }

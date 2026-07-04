@@ -5,6 +5,7 @@ import java.math.BigDecimal;
 
 import lombok.Getter;
 import lombok.Setter;
+import java.time.LocalDate;
 
 @Entity
 @Table(name = "land_master")
@@ -39,7 +40,7 @@ public class Landmaster {
     @Column(name = "alloted_for", length = 3)
     private String AllotedFor;
 
-    @Column(name = "vlg", length = 50)
+    @Column(name = "vlg", length = 150)
     private String vlg;
 
     @Column(name = "mdl", length = 30)
@@ -51,6 +52,9 @@ public class Landmaster {
     @Column(name = "st_id")
     private Long stId;
 
+    @Column(name="zn_nm",length=20)
+    private String znNm;
+
     @Column(name = "pin", length = 6)
     private String pin;
 
@@ -59,6 +63,15 @@ public class Landmaster {
 
     @Column(name = "longt", length = 20)
     private String longt;
+
+    @Column(name = "photo_url", length = 255)
+    private String logo;
+
+    @Column(name = "lease_dt")
+    private LocalDate leaseDt;
+
+    @Column(name = "lease_end_dt")
+    private LocalDate leaseEndDt;
 
     @Column(name = "sts")
     private Boolean sts;

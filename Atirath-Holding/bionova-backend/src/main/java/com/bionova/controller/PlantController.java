@@ -88,6 +88,7 @@ public class PlantController {
         plant.setWrkDaysPerWk(details.getWrkDaysPerWk());
         plant.setLat(details.getLat());
         plant.setLongt(details.getLongt());
+        plant.setLogo(details.getLogo());
         plant.setAddlRem(details.getAddlRem());
         plant.setSts(details.getSts());
         PlantMaster saved = plantRepository.save(plant);

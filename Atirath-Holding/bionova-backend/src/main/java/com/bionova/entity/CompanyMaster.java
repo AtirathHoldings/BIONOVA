@@ -49,7 +49,7 @@ public class CompanyMaster {
     @Column(name = "logo", length = 255)
     private String logo;
 
-    @Column(name = "str", length = 50)
+    @Column(name = "str", length = 150)
     private String str;
 
     @Column(name = "ct_vlg", length = 30)

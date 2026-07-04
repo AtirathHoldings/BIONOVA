@@ -4,10 +4,8 @@ import lombok.Data;
 import java.util.List;
 
 @Data
-public class SaveAccessRequest {
-    private List<Long> empIds;
-    private Integer roleId;
-    private String customRoleName;
+public class SaveRoleRequest {
+    private String roleNm;
     private List<ScreenPermissionDto> permissions;
     private String createdBy;
 }

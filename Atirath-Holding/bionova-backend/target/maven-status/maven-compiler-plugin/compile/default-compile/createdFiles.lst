@@ -7,6 +7,7 @@ com\bionova\service\ProjectStatusCascadeService.class
 com\bionova\controller\EmployeeController.class
 com\bionova\entity\RoleBasedEmployeeMapping.class
 com\bionova\repository\MilestoneLiveRepository.class
+com\bionova\repository\TeamMemberRepository.class
 com\bionova\service\PasswordResetService.class
 com\bionova\controller\AppNotificationController.class
 com\bionova\controller\ProjectAccessControlController.class
@@ -35,6 +36,7 @@ com\bionova\service\ActivityLogService.class
 com\bionova\entity\ProjectLive.class
 com\bionova\entity\ExternalEmployee.class
 com\bionova\dto\ScreenPermissionDto.class
+com\bionova\entity\TeamMember.class
 com\bionova\service\ProjectAccessControlService.class
 com\bionova\repository\EmployeeIndividualTaskRepository.class
 com\bionova\controller\EmployeeSettingsController.class
@@ -52,7 +54,9 @@ com\bionova\dto\ProjectAccessControlResponseDto.class
 com\bionova\repository\AppNotificationRepository.class
 com\bionova\entity\Landmaster.class
 com\bionova\controller\AdminDashboardController.class
+com\bionova\dto\TeamMemberDto.class
 com\bionova\dto\UserDashboardResponseDto.class
+com\bionova\controller\TeamMemberController.class
 com\bionova\entity\EmployeeIndividualTask.class
 com\bionova\repository\CompanyRepository.class
 com\bionova\repository\ExternalEmployeeRepository.class
@@ -71,11 +75,13 @@ com\bionova\config\SwaggerConfig.class
 com\bionova\controller\DepartmentController.class
 com\bionova\entity\ProjectDraft.class
 com\bionova\controller\ProjectForecastingController.class
+com\bionova\controller\StorageController.class
 com\bionova\controller\ExternalEmployeeController$ExternalSecurityHelper.class
 com\bionova\controller\MilestoneLiveController.class
 com\bionova\controller\ChecklistController.class
 com\bionova\config\SecurityConfig.class
 com\bionova\repository\AttachmentMasterRepository.class
+com\bionova\dto\SaveRoleRequest.class
 com\bionova\controller\ProjectDashboardController.class
 com\bionova\controller\TaskDraftController.class
 com\bionova\repository\ProcessConfigRepository.class
@@ -94,6 +100,8 @@ com\bionova\dto\LoginResponse.class
 com\bionova\repository\EmployeeSettingsRepository.class
 com\bionova\repository\RoleBasedAccessControlRepository.class
 com\bionova\dto\UserDashboardResponseDto$TodoTaskDto.class
+com\bionova\controller\DesignationController.class
+com\bionova\config\DatabaseFixer.class
 com\bionova\controller\ReviewerMasterController.class
 com\bionova\repository\EmployeeLoginActivityRepository.class
 com\bionova\repository\TaskLiveRepository.class
@@ -123,6 +131,7 @@ com\bionova\dto\ProjectDashboardResponse$TaskStatusOverview.class
 com\bionova\dto\ProjectDashboardResponse$ForecastSummary.class
 com\bionova\dto\ProjectDashboardResponse$PortfolioProgress.class
 com\bionova\repository\MilestoneDraftRepository.class
+com\bionova\service\SupabaseStorageService.class
 com\bionova\controller\EmployeeIndividualTaskController.class
 com\bionova\controller\AuthController.class
 com\bionova\entity\TaskLive.class

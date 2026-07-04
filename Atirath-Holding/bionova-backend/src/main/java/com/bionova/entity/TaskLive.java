@@ -10,7 +10,7 @@ import java.time.LocalDate;
 @Table(name = "task_live_master")
 @org.hibernate.annotations.Check(constraints =
     "task_asgn_to IN ('INTERNAL','EXTERNAL') AND task_dep_typ IN ('INDEPENDENT','SEQUENTIAL','PARALLEL') " +
-    "AND task_sts IN ('OPEN','WIP','SUBMIT_REVIEW','UNDER_REVIEW','COMPLETED','REWORK')")
+    "AND task_sts IN ('OPEN','WIP','SUBMIT_REVIEW','UNDER_REVIEW','COMPLETED','REWORK','REASSIGN')")
 @Getter
 @Setter
 public class TaskLive {

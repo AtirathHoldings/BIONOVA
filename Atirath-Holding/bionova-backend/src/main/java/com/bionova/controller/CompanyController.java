@@ -27,6 +27,13 @@ public class CompanyController {
         return companyRepository.findAll();
     }
 
+    @GetMapping("/companies/{id}")
+    public ResponseEntity<?> getCompanyById(@PathVariable Long id) {
+        return companyRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
     @PostMapping("/companies")
     public ResponseEntity<?> saveCompany(@RequestBody CompanyMaster company) {
         if (company.getCoyCd() != null && companyRepository.existsByCoyCd(company.getCoyCd())) {

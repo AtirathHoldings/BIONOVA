@@ -8,6 +8,7 @@ import com.bionova.repository.EmployeeRepository;
 import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
+import com.bionova.repository.RoleBasedEmployeeMappingRepository;
 import com.bionova.service.ProjectPromotionService;
 import com.bionova.service.ActivityLogService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -23,23 +24,32 @@ import java.util.Map;
 @RequestMapping("/api/project-live")
 public class ProjectLiveController {
 
-    @Autowired private ProjectLiveRepository   projectLiveRepository;
-    @Autowired private MilestoneLiveRepository milestoneLiveRepository;
-    @Autowired private TaskLiveRepository      taskLiveRepository;
-    @Autowired private ProjectPromotionService promotionService;
-    @Autowired private EmployeeRepository      employeeRepository;
-    @Autowired private ActivityLogService      activityLogService;
+    @Autowired private ProjectLiveRepository            projectLiveRepository;
+    @Autowired private MilestoneLiveRepository          milestoneLiveRepository;
+    @Autowired private TaskLiveRepository               taskLiveRepository;
+    @Autowired private ProjectPromotionService          promotionService;
+    @Autowired private EmployeeRepository               employeeRepository;
+    @Autowired private ActivityLogService               activityLogService;
+    @Autowired private RoleBasedEmployeeMappingRepository rbacMappingRepository;
     @Autowired private com.bionova.repository.ChecklistMasterRepository checklistMasterRepository;
     @Autowired private com.bionova.repository.AttachmentMasterRepository attachmentMasterRepository;
     @Autowired private com.bionova.repository.ProcessConfigRepository processConfigRepository;
     @Autowired private com.bionova.service.ProjectStatusCascadeService projectStatusCascadeService;
 
+    /**
+     * Determines if the employee should see ALL projects (PM / Admin view).
+     *
+     * Rules:
+     *  - No RBAC mapping configured yet (full_access mode) → see all projects.
+     *  - RBAC mapping exists → restricted to own assigned projects (user view).
+     *
+     * This means: after RBAC is set up, only employees whose role grants
+     * project-level access (via PAC) will see all projects; others see only theirs.
+     */
     private boolean isAdminOrManager(Employee employee) {
-        if (employee == null) {
-            return false;
-        }
-        // Since role column is removed, we treat siva@atirath.com as admin
-        return "siva@atirath.com".equalsIgnoreCase(employee.getEmail());
+        if (employee == null) return false;
+        // If no RBAC mapping → still in full_access mode → treat as manager (see all)
+        return rbacMappingRepository.findByEmpId(employee.getEmpId()).isEmpty();
     }
 
     // ── GET ────────────────────────────────────────────────────────────────

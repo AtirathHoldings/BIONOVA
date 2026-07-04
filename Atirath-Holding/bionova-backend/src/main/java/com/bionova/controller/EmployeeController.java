@@ -150,7 +150,6 @@ public class EmployeeController {
                 .orElseGet(() -> {
                     com.bionova.entity.DesignationMaster newDesig = new com.bionova.entity.DesignationMaster();
                     newDesig.setDesigNm(desigName);
-                    newDesig.setSts(true);
                     return designationRepository.save(newDesig);
                 });
             employee.setDesigId(desig.getDesigId());
@@ -203,7 +202,6 @@ public class EmployeeController {
                 .orElseGet(() -> {
                     com.bionova.entity.DesignationMaster newDesig = new com.bionova.entity.DesignationMaster();
                     newDesig.setDesigNm(desigName);
-                    newDesig.setSts(true);
                     return designationRepository.save(newDesig);
                 });
             employee.setDesigId(desig.getDesigId());
