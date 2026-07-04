@@ -1,7 +1,17 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { House, Building, Flag, Users, Calendar, Settings, Factory, MapPinned, FolderPlus, ChevronDown, ChevronRight, ChevronLeft, LogOut, ClipboardCheck, User, X, PanelLeftOpen, PanelLeftClose } from "lucide-react";
+import { House, Building, Flag, Users, Calendar, Settings, Factory, MapPinned, FolderPlus, ChevronDown, ChevronRight, ChevronLeft, LogOut, ClipboardCheck, User, X, PanelLeftOpen, PanelLeftClose, FileText } from "lucide-react";
 import "../styles/sidebar.css";
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+const getAuthHeaders = () => {
+  const token = sessionStorage.getItem("authToken") || localStorage.getItem("authToken");
+  return {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${token || ""}`
+  };
+};
 
 const Sidebar = ({ onLogout }) => {
   const navigate = useNavigate();
@@ -11,48 +21,139 @@ const Sidebar = ({ onLogout }) => {
     localStorage.getItem("sidebarCollapsed") === "true"
   );
 
-  // Active path highlight logic
-  const isCompanyActive = [
-    "/dashboard",
-    "/company-creation",
-    "/plant-creation",
-    "/agriland-allocation",
-    "/employee-creation",
-    "/department-creation",
-    "/department-mapping"
-  ].includes(location.pathname);
-  const isProjectActive = [
-    "/project-creation",
-    "/milestone-creation",
-    "/pm-dashboard",
-    "/project-list",
-    "/individual-task",
-    "/task-board"
-  ].includes(location.pathname);
-  const isUserMasterActive = [
-    "/user-dashboard",
-    "/my-tasks",
-    "/calendar",
-    "/projects"
-  ].includes(location.pathname);
+  const [menuItems, setMenuItems] = useState([]);
+  const [singleItems, setSingleItems] = useState([]);
+  const [openDropdowns, setOpenDropdowns] = useState({});
 
-  // Initialize dropdowns open/closed based on current active paths
-  const [openDropdowns, setOpenDropdowns] = useState({
-    company: isCompanyActive,
-    project: isProjectActive,
-    userMaster: isUserMasterActive
-  });
-
-  // Update dropdown state when navigating to match current active paths and collapse inactive ones
   useEffect(() => {
-    setOpenDropdowns({
-      company: isCompanyActive,
-      project: isProjectActive,
-      userMaster: isUserMasterActive
-    });
-  }, [location.pathname, isCompanyActive, isProjectActive, isUserMasterActive]);
+    const loadSidebarMenu = async () => {
+      const empId = sessionStorage.getItem("empId");
+      if (!empId) return;
 
-  // Track collapse state and set body class
+      try {
+        const hasRbacRes = await fetch(`${apiBaseUrl}/api/rbac/employees/${empId}/has-rbac`, {
+          headers: getAuthHeaders()
+        });
+        let hasRbac = false;
+        if (hasRbacRes.ok) {
+          const rbacData = await hasRbacRes.json();
+          hasRbac = rbacData.hasRbac;
+        }
+
+        const permsRes = await fetch(`${apiBaseUrl}/api/rbac/employees/${empId}/permissions`, {
+          headers: getAuthHeaders()
+        });
+        if (permsRes.ok) {
+          const permissions = await permsRes.json();
+          
+          // Filter screens (if hasRbac is false, show all screens)
+          const allowedScreens = permissions.filter(p => !hasRbac || p.viewFlg);
+          
+          const SCREEN_MAPPING = {
+            'ADMIN_DASHBOARD': { path: '/dashboard', icon: House },
+            'COMPANY_CREATION': { path: '/company-creation', icon: Building },
+            'PLANT_CREATION': { path: '/plant-creation', icon: Factory },
+            'LAND_CREATION': { path: '/agriland-allocation', icon: MapPinned },
+            'DEPARTMENT_CREATION': { path: '/department-creation', icon: Settings },
+            'DEPARTMENT_MAPPING': { path: '/department-mapping', icon: Settings },
+            'EMPLOYEE_CREATION': { path: '/employee-creation', icon: User },
+            
+            'PROJECT_CREATION': { path: '/project-creation', icon: FolderPlus },
+            'MILESTONE_CREATION': { path: '/milestone-creation', icon: FolderPlus },
+            'PROJECT_DASHBOARD': { path: '/pm-dashboard', icon: FolderPlus },
+            'LIVE_PROJECT_LIST': { path: '/project-list', icon: FolderPlus },
+            'TASK_BOARD': { path: '/task-board', icon: FolderPlus },
+            'GANTT_CHART': { path: '/gantt-chart', icon: FolderPlus },
+            
+            'USER_DASHBOARD': { path: '/user-dashboard', icon: House },
+            'MY_TASK': { path: '/my-tasks', icon: ClipboardCheck },
+            'MY_PROJECTS': { path: '/projects', icon: FolderPlus },
+            'CALENDAR': { path: '/calendar', icon: Calendar },
+            'USER_TASK_BOARD': { path: '/user-task-board', icon: ClipboardCheck },
+            
+            'PUBLIC_HOLIDAYS': { path: '/public-holidays', icon: Calendar },
+            'PROFILE': { path: '/profile', icon: User },
+            'INDIVIDUAL_TASK': { path: '/assignment', icon: FileText },
+            
+            'ASSIGN_ACCESS': { path: '/assign-access', icon: ClipboardCheck },
+            'PROJECT_ACCESS': { path: '/project-access', icon: FolderPlus }
+          };
+
+          // Group screens
+          const groups = {};
+          const standalone = [];
+
+          allowedScreens.forEach(screen => {
+            const mapped = SCREEN_MAPPING[screen.screenCode];
+            if (!mapped) return; // skip if screen code has no route mapping
+
+            const item = {
+              name: screen.screenNm,
+              path: mapped.path,
+              icon: mapped.icon,
+              code: screen.screenCode
+            };
+
+            const dropdownGroups = ['Company Master', 'Project', 'User'];
+            if (dropdownGroups.includes(screen.groupNm)) {
+              if (!groups[screen.groupNm]) {
+                groups[screen.groupNm] = [];
+              }
+              groups[screen.groupNm].push(item);
+            } else {
+              standalone.push(item);
+            }
+          });
+
+          // Build menuConfig
+          const config = [];
+          const groupIcons = {
+            'Company Master': Building,
+            'Project': FolderPlus,
+            'User': Users
+          };
+          const groupKeys = {
+            'Company Master': 'company',
+            'Project': 'project',
+            'User': 'userMaster'
+          };
+
+          Object.keys(groups).forEach(groupNm => {
+            config.push({
+              key: groupKeys[groupNm],
+              name: groupNm,
+              icon: groupIcons[groupNm] || FolderPlus,
+              isActive: groups[groupNm].some(sub => location.pathname === sub.path),
+              subItems: groups[groupNm]
+            });
+          });
+
+          setMenuItems(config);
+          setSingleItems(standalone);
+        }
+      } catch (err) {
+        console.error("Error loading sidebar menu:", err);
+      }
+    };
+
+    loadSidebarMenu();
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (menuItems.length > 0) {
+      setOpenDropdowns(prev => {
+        const next = { ...prev };
+        menuItems.forEach(item => {
+          const hasActiveSub = item.subItems.some(sub => location.pathname === sub.path);
+          if (hasActiveSub) {
+            next[item.key] = true;
+          }
+        });
+        return next;
+      });
+    }
+  }, [location.pathname, menuItems]);
+
   useEffect(() => {
     if (isCollapsed) {
       document.body.classList.add("sidebar-collapsed");
@@ -96,57 +197,6 @@ const Sidebar = ({ onLogout }) => {
     }
   };
 
-  const menuConfig = [
-    {
-      key: "company",
-      name: "Company Master",
-      icon: Building,
-      isActive: isCompanyActive,
-      subItems: [
-        { name: "Admin Dashboard", path: "/dashboard" },
-        { name: "Company Creation", path: "/company-creation" },
-        { name: "Plant Creation", path: "/plant-creation" },
-        { name: "Land Creation", path: "/agriland-allocation" },
-        { name: "Employee Creation", path: "/employee-creation" },
-        { name: "Department Creation", path: "/department-creation" },
-        { name: "Department Mapping", path: "/department-mapping" }
-      ]
-    },
-    {
-      key: "project",
-      name: "Project",
-      icon: FolderPlus,
-      isActive: isProjectActive,
-      subItems: [
-        { name: "Project Creation", path: "/project-creation" },
-        { name: "Milestone Creation", path: "/milestone-creation" },
-        { name: "Project Dashboard", path: "/pm-dashboard" },
-        { name: "Project List", path: "/project-list" },
-        { name: "Individual Task", path: "/individual-task" },
-        { name: "Task Board", path: "/task-board" }
-      ]
-    },
-    {
-      key: "userMaster",
-      name: "User",
-      icon: Users,
-      isActive: isUserMasterActive,
-      subItems: [
-        { name: "User Dashboard", path: "/user-dashboard" },
-        { name: "My Task", path: "/my-tasks" },
-        { name: "Calendar", path: "/calendar" },
-        { name: "My Project", path: "/projects" }
-      ]
-    }
-  ];
-
-  const singleMenus = [
-    { name: "Public Holidays", icon: Calendar, path: "/public-holidays" },
-    { name: "Assign Access", icon: ClipboardCheck, path: "/assign-access" },
-    { name: "Profile", icon: User, path: "/profile" },
-    { name: "Settings", icon: Settings, path: "/settings" }
-  ];
-
   return (
     <>
       {isMobileOpen && <div className="sidebar-overlay" onClick={closeMobileSidebar}></div>}
@@ -165,7 +215,6 @@ const Sidebar = ({ onLogout }) => {
         }}>
           
           {isCollapsed ? (
-            /* ChatGPT Style Combined Toggle & Logo */
             <button
               className="chatgpt-style-btn"
               onClick={handleCollapseToggle}
@@ -180,7 +229,6 @@ const Sidebar = ({ onLogout }) => {
             </button>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: '10px', padding: '0 4px' }}>
-              {/* Desktop Logo when open */}
               <div className="logo-details" 
                 style={{ 
                   display: "flex", 
@@ -228,7 +276,6 @@ const Sidebar = ({ onLogout }) => {
             </div>
           )}
 
-          {/* Mobile close button - only visible on mobile via CSS */}
           <button
             className="sidebar-mobile-close-btn"
             onClick={closeMobileSidebar}
@@ -239,10 +286,8 @@ const Sidebar = ({ onLogout }) => {
           </button>
         </div>
 
-        {/* Menu List */}
         <ul className="menu-list">
-          {/* Dropdown Menus */}
-          {menuConfig.map((item) => (
+          {menuItems.map((item) => (
             <li
               key={item.key}
               className={`dropdown-container ${(item.isActive || openDropdowns[item.key]) ? "active-dropdown" : ""}`}
@@ -257,7 +302,6 @@ const Sidebar = ({ onLogout }) => {
                 {openDropdowns[item.key] ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
               </div>
 
-              {/* Submenu */}
               {!isCollapsed && openDropdowns[item.key] && (
                 <ul className="submenu-list">
                   {item.subItems.map((sub, sIdx) => (
@@ -274,8 +318,7 @@ const Sidebar = ({ onLogout }) => {
             </li>
           ))}
 
-          {/* Single Menus */}
-          {singleMenus.map((m, i) => (
+          {singleItems.map((m, i) => (
             <li
               key={i}
               onClick={() => handleNavigate(m.path)}
@@ -286,12 +329,10 @@ const Sidebar = ({ onLogout }) => {
           ))}
         </ul>
 
-        {/* Logout Button */}
         <div className="logout-button" onClick={() => { onLogout(); closeMobileSidebar(); }}>
           <LogOut size={20} /> <span>Logout</span>
         </div>
 
-        {/* Sidebar Bottom Logo */}
         <div className="sidebar-bottom-logo" style={{
           display: "flex",
           justifyContent: isCollapsed ? "center" : "flex-start",

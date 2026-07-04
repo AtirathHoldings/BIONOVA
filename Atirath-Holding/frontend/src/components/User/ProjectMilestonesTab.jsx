@@ -13,6 +13,7 @@ const authHeaders = () => ({
 const ProjectMilestonesTab = ({ project, userRole }) => {
   const [milestones, setMilestones] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [collapseAll, setCollapseAll] = useState(false);
   const [tasks, setTasks] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +21,23 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [viewTaskModal, setViewTaskModal] = useState(null);
   const [editTaskModal, setEditTaskModal] = useState(null);
+
+  const isDraftProject = project?.status === 'DRAFT' || project?.status === 'Draft';
+
+  // Unified ID helpers: correctly read milestone/task IDs for both draft and live
+  const getMilestoneId = (m) => {
+    if (!m) return null;
+    return isDraftProject
+      ? (m.drftMId || m.drft_m_id || m.id)
+      : (m.mId || m.mid || m.id);
+  };
+
+  const getTaskMilestoneId = (t) => {
+    if (!t) return null;
+    return isDraftProject
+      ? (t.drftMId || t.drft_m_id || t.mId || t.mid)
+      : (t.mId || t.mid || t.mlstm_id);
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -39,7 +57,7 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
           fetch(`${API_BASE}/profile`, { headers: authHeaders() }),
           fetch(`${API_BASE}/employees`, { headers: authHeaders() })
         ]);
-        
+
         const mlData = mlRes.ok ? await mlRes.json() : [];
         const taskData = taskRes.ok ? await taskRes.json() : [];
         const profile = profileRes.ok ? await profileRes.json() : null;
@@ -49,20 +67,15 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
 
         // Filter milestones by project id
         const projectId = project?.id;
-        let filteredMilestones = (mlData || []).filter(m =>
-          String(m.drft_prj_id || m.drftPrjId || m.prjId || m.prj_id || m.id) === String(projectId)
-        );
+        let filteredMilestones = mlData || [];
         let filteredTasks = taskData || [];
 
-        const isAdmin = profile?.email === 'siva@atirath.com';
+        const isAdmin = profile?.email === 'vsv.vempati@gmail.com';
         if (userRole === 'user' && !isAdmin && profile) {
           filteredTasks = filteredTasks.filter(t => t.empId === profile.empId);
           filteredMilestones = filteredMilestones.filter(m => {
-            const mId = m.drft_m_id || m.drftMId || m.mId || m.id;
-            return filteredTasks.some(t => {
-              const tMid = t.drft_m_id || t.drftMId || t.mId || t.mid || t.mlstm_id;
-              return String(mId) === String(tMid);
-            });
+            const mId = getMilestoneId(m);
+            return filteredTasks.some(t => String(getTaskMilestoneId(t)) === String(mId));
           });
         }
 
@@ -70,7 +83,9 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
         setTasks(filteredTasks);
 
         if (filteredMilestones.length > 0) {
-          const firstId = filteredMilestones[0].drft_m_id || filteredMilestones[0].drftMId || filteredMilestones[0].mId || filteredMilestones[0].id;
+          const firstId = isDraftProject
+            ? (filteredMilestones[0].drftMId || filteredMilestones[0].drft_m_id || filteredMilestones[0].id)
+            : (filteredMilestones[0].mId || filteredMilestones[0].mid || filteredMilestones[0].id);
           setSelectedMilestone(firstId);
         }
 
@@ -84,9 +99,7 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
   }, [project, userRole]);
 
   const getTasksForMilestone = (milestoneId) => {
-    return tasks.filter(t =>
-      String(t.drft_m_id || t.drftMId || t.mId || t.mid || t.mlstm_id) === String(milestoneId)
-    );
+    return tasks.filter(t => String(getTaskMilestoneId(t)) === String(milestoneId));
   };
 
   const getStatusClass = (status) => {
@@ -94,9 +107,9 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
     const s = status.toUpperCase().replace(/_/g, ' ');
     switch (s) {
       case 'COMPLETED': return 'st-completed';
-      case 'IN PROGRESS': 
+      case 'IN PROGRESS':
       case 'WIP': return 'st-in-progress';
-      case 'NOT STARTED': 
+      case 'NOT STARTED':
       case 'OPEN': return 'st-not-started';
       case 'OVERDUE': return 'st-overdue';
       case 'DRAFT': return 'st-default';
@@ -126,14 +139,24 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
     if (window.confirm(`Are you sure you want to delete task "${task.taskNm || task.task_nm}"?`)) {
       try {
         const isDraft = project?.status === "DRAFT" || project?.status === "Draft";
-        const taskId = task.id || task.task_id;
-        const url = isDraft 
-          ? `${API_BASE}/task-drafts/${taskId}` 
+        const taskId = isDraftProject
+          ? (task.drftTaskId || task.drft_task_id)
+          : (task.taskId || task.task_id);
+        const url = isDraft
+          ? `${API_BASE}/task-drafts/${taskId}`
           : `${API_BASE}/task-live/${taskId}`;
-        
+
         const res = await fetch(url, { method: 'DELETE', headers: authHeaders() });
         if (res.ok) {
-          setTasks(prev => prev.filter(t => (t.id || t.task_id) !== taskId));
+          setTasks(prev =>
+            prev.filter(t => {
+              const id = isDraftProject
+                ? (t.drftTaskId || t.drft_task_id)
+                : (t.taskId || t.task_id);
+
+              return id !== taskId;
+            })
+          );
           alert("Task deleted successfully");
         } else {
           alert("Failed to delete task");
@@ -149,9 +172,9 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
     if (!empId) return { name: 'Unassigned', role: '' };
     const emp = employees.find(e => e.empId === empId);
     if (emp) {
-      return { 
-        name: `${emp.fstNm || ''} ${emp.lstNm || ''}`.trim(), 
-        role: emp.jobTtl || 'Employee' 
+      return {
+        name: `${emp.fstNm || ''} ${emp.lstNm || ''}`.trim(),
+        role: emp.jobTtl || 'Employee'
       };
     }
     return { name: 'Unknown', role: '' };
@@ -166,24 +189,24 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
 
   // Stats
   const totalMilestones = milestones.length;
-  
+
   // Calculate total relevant tasks (assigned to milestones of this project)
   const relevantTasks = tasks.filter(t => {
-    const tMid = t.drft_m_id || t.drftMId || t.mId || t.mid || t.mlstm_id;
-    return milestones.some(m => String(m.drft_m_id || m.drftMId || m.mId || m.id) === String(tMid));
+    const tMid = getTaskMilestoneId(t);
+    return milestones.some(m => String(getMilestoneId(m)) === String(tMid));
   });
-  
+
   const totalTasks = relevantTasks.length;
-  
+
   const completedTasks = relevantTasks.filter(t => (t.taskSts || '').toUpperCase() === 'COMPLETED').length;
   const inProgressTasks = relevantTasks.filter(t => {
     const s = (t.taskSts || '').toUpperCase();
     return s === 'WIP' || s === 'IN PROGRESS';
   }).length;
-  
+
   const today = new Date();
-  today.setHours(0,0,0,0);
-  
+  today.setHours(0, 0, 0, 0);
+
   const overdueTasks = relevantTasks.filter(t => {
     const s = (t.taskSts || '').toUpperCase();
     if (s === 'COMPLETED') return false;
@@ -192,7 +215,7 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
     const endDt = new Date(endDtStr);
     return endDt < today;
   }).length;
-  
+
   const notStartedTasks = totalTasks - completedTasks - inProgressTasks - overdueTasks;
 
   const getPercentage = (count, total) => {
@@ -208,9 +231,9 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
     );
   }
 
-  const selectedMilestoneData = milestones.find(m => String(m.drft_m_id || m.drftMId || m.mId || m.id) === String(selectedMilestone));
+  const selectedMilestoneData = milestones.find(m => String(getMilestoneId(m)) === String(selectedMilestone));
   const selectedMilestoneTasks = selectedMilestone ? getTasksForMilestone(selectedMilestone) : [];
-  
+
   const filteredTasks = selectedMilestoneTasks.filter(t => {
     if (!searchQuery) return true;
     const q = searchQuery.toLowerCase();
@@ -227,8 +250,9 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
       <div className="mt-header">
         <h2>Milestones & Tasks</h2>
         <div className="mt-header-actions">
-          <button className="mt-btn-outline">
-            <ChevronUp size={14} /> Collapse All
+          <button className="mt-btn-outline" onClick={() => setCollapseAll(prev => !prev)}>
+            {collapseAll ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
+            {collapseAll ? 'Expand All' : 'Collapse All'}
           </button>
           <button className="mt-btn-primary" onClick={() => window.open('/milestone-creation', '_self')}>
             <Plus size={14} /> Add Milestone
@@ -236,74 +260,82 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
         </div>
       </div>
 
-      {/* Stats Cards */}
-      <div className="mt-stats-grid">
-        <div className="mt-stat-card">
-          <div className="mt-stat-icon-wrap bg-purple">
-            <Flag size={20} color="#8b5cf6" />
+      {/* Stats Cards - hidden when collapsed */}
+      {!collapseAll && (
+        <div className="mt-stats-grid">
+          <div className="mt-stat-card">
+            <div className="mt-stat-icon-wrap bg-purple">
+              <Flag size={20} color="#8b5cf6" />
+            </div>
+            <div className="mt-stat-info">
+              <span className="mt-stat-value">{totalMilestones}</span>
+              <span className="mt-stat-label">Total Milestones</span>
+            </div>
           </div>
-          <div className="mt-stat-info">
-            <span className="mt-stat-value">{totalMilestones}</span>
-            <span className="mt-stat-label">Total Milestones</span>
+
+          <div className="mt-stat-card">
+            <div className="mt-stat-icon-wrap bg-blue">
+              <ListTodo size={20} color="#3b82f6" />
+            </div>
+            <div className="mt-stat-info">
+              <span className="mt-stat-value">{totalTasks}</span>
+              <span className="mt-stat-label">Total Tasks</span>
+            </div>
+          </div>
+
+          <div className="mt-stat-card">
+            <div className="mt-stat-icon-wrap bg-green">
+              <CheckSquare size={20} color="#10b981" />
+            </div>
+            <div className="mt-stat-info">
+              <span className="mt-stat-value">{completedTasks}</span>
+              <span className="mt-stat-label">Completed Tasks</span>
+              <span className="mt-stat-percent">{getPercentage(completedTasks, totalTasks)}%</span>
+            </div>
+          </div>
+
+          <div className="mt-stat-card">
+            <div className="mt-stat-icon-wrap bg-orange">
+              <RefreshCcw size={20} color="#f97316" />
+            </div>
+            <div className="mt-stat-info">
+              <span className="mt-stat-value">{inProgressTasks}</span>
+              <span className="mt-stat-label">In Progress Tasks</span>
+              <span className="mt-stat-percent">{getPercentage(inProgressTasks, totalTasks)}%</span>
+            </div>
+          </div>
+
+          <div className="mt-stat-card">
+            <div className="mt-stat-icon-wrap bg-yellow">
+              <HelpCircle size={20} color="#eab308" />
+            </div>
+            <div className="mt-stat-info">
+              <span className="mt-stat-value">{notStartedTasks}</span>
+              <span className="mt-stat-label">Not Started Tasks</span>
+              <span className="mt-stat-percent">{getPercentage(notStartedTasks, totalTasks)}%</span>
+            </div>
+          </div>
+
+          <div className="mt-stat-card">
+            <div className="mt-stat-icon-wrap bg-red">
+              <Clock size={20} color="#ef4444" />
+            </div>
+            <div className="mt-stat-info">
+              <span className="mt-stat-value">{overdueTasks}</span>
+              <span className="mt-stat-label">Overdue Tasks</span>
+              <span className="mt-stat-percent">{getPercentage(overdueTasks, totalTasks)}%</span>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="mt-stat-card">
-          <div className="mt-stat-icon-wrap bg-blue">
-            <ListTodo size={20} color="#3b82f6" />
-          </div>
-          <div className="mt-stat-info">
-            <span className="mt-stat-value">{totalTasks}</span>
-            <span className="mt-stat-label">Total Tasks</span>
-          </div>
+      {collapseAll ? (
+        <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', margin: '16px 0' }}>
+          <Flag size={32} style={{ marginBottom: '12px', opacity: 0.3 }} />
+          <p style={{ margin: 0, fontSize: '14px', fontWeight: '500' }}>All milestones and tasks are collapsed.</p>
+          <p style={{ margin: '6px 0 0', fontSize: '13px', color: '#94a3b8' }}>Click <strong>Expand All</strong> to view milestones, tasks, and project timeline.</p>
         </div>
-
-        <div className="mt-stat-card">
-          <div className="mt-stat-icon-wrap bg-green">
-            <CheckSquare size={20} color="#10b981" />
-          </div>
-          <div className="mt-stat-info">
-            <span className="mt-stat-value">{completedTasks}</span>
-            <span className="mt-stat-label">Completed Tasks</span>
-            <span className="mt-stat-percent">{getPercentage(completedTasks, totalTasks)}%</span>
-          </div>
-        </div>
-
-        <div className="mt-stat-card">
-          <div className="mt-stat-icon-wrap bg-orange">
-            <RefreshCcw size={20} color="#f97316" />
-          </div>
-          <div className="mt-stat-info">
-            <span className="mt-stat-value">{inProgressTasks}</span>
-            <span className="mt-stat-label">In Progress Tasks</span>
-            <span className="mt-stat-percent">{getPercentage(inProgressTasks, totalTasks)}%</span>
-          </div>
-        </div>
-
-        <div className="mt-stat-card">
-          <div className="mt-stat-icon-wrap bg-yellow">
-            <HelpCircle size={20} color="#eab308" />
-          </div>
-          <div className="mt-stat-info">
-            <span className="mt-stat-value">{notStartedTasks}</span>
-            <span className="mt-stat-label">Not Started Tasks</span>
-            <span className="mt-stat-percent">{getPercentage(notStartedTasks, totalTasks)}%</span>
-          </div>
-        </div>
-
-        <div className="mt-stat-card">
-          <div className="mt-stat-icon-wrap bg-red">
-            <Clock size={20} color="#ef4444" />
-          </div>
-          <div className="mt-stat-info">
-            <span className="mt-stat-value">{overdueTasks}</span>
-            <span className="mt-stat-label">Overdue Tasks</span>
-            <span className="mt-stat-percent">{getPercentage(overdueTasks, totalTasks)}%</span>
-          </div>
-        </div>
-      </div>
-
-      {milestones.length === 0 ? (
+      ) : milestones.length === 0 ? (
         <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px' }}>
           <Flag size={40} style={{ marginBottom: '12px', opacity: 0.4 }} />
           <p style={{ margin: 0, fontSize: '14px' }}>No milestones found for this project.</p>
@@ -318,7 +350,7 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
             <div className="mt-sidebar">
               <div className="mt-sidebar-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <h3>Milestone List</h3>
-                <button 
+                <button
                   onClick={() => setSidebarOpen(false)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', display: 'flex', alignItems: 'center', padding: '4px', borderRadius: '4px' }}
                   title="Hide Milestone List"
@@ -328,22 +360,22 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
               </div>
               <div className="mt-milestone-list">
                 {milestones.map((m, idx) => {
-                  const mId = m.drft_m_id || m.drftMId || m.mId || m.id;
+                  const mId = getMilestoneId(m);
                   const isActive = String(selectedMilestone) === String(mId);
                   const mTasks = getTasksForMilestone(mId);
                   const st = (m.mlstnSts || m.mlstn_sts || m.mlstmSts || m.mlstm_sts || 'DRAFT').toUpperCase();
                   const mDur = m.mlstnDays || m.mlstn_days || m.mlstm_days || m.mlstmDays || 0;
                   const sDt = formatDate(m.stDt || m.st_dt || m.tent_st_dt || m.tentStDt);
                   const eDt = formatDate(m.endDt || m.end_dt || m.tent_end_dt || m.tentEndDt);
-                  
+
                   return (
-                    <div 
-                      key={mId} 
+                    <div
+                      key={mId}
                       className={`mt-milestone-item ${isActive ? 'active' : ''}`}
                       onClick={() => setSelectedMilestone(mId)}
                     >
                       <div className="mt-milestone-index-wrap">
-                        <div className={`mt-milestone-index ${isActive ? 'active' : `c-${(idx%5)+1}`}`}>
+                        <div className={`mt-milestone-index ${isActive ? 'active' : `c-${(idx % 5) + 1}`}`}>
                           {idx + 1}
                         </div>
                       </div>
@@ -414,9 +446,9 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                     <option>All Tasks</option>
                   </select>
                   <div className="mt-search-box">
-                    <input 
-                      type="text" 
-                      placeholder="Search Task..." 
+                    <input
+                      type="text"
+                      placeholder="Search Task..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
                     />
@@ -436,7 +468,7 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                       <th>Assigned To</th>
                       <th>Start Date</th>
                       <th>End Date</th>
-                      <th>Duration<br/>(Days)</th>
+                      <th>Duration<br />(Days)</th>
                       <th>Dependency</th>
                       <th>Status</th>
                       <th>Progress</th>
@@ -451,14 +483,16 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                       const st = t.taskSts || t.task_sts || 'DRAFT';
                       const assignee = getAssigneeInfo(t.empId);
                       const prog = calculateTaskProgress(st);
-                      
+
                       return (
                         <tr key={tId}>
                           <td>{idx + 1}</td>
-                          <td className="mt-task-code">{t.taskCd || t.task_cd || `TSK-${String(idx+1).padStart(3, '0')}`}</td>
+                          <td className="mt-task-code">{t.taskCd || t.task_cd || `TSK-${String(idx + 1).padStart(3, '0')}`}</td>
                           <td>{t.taskNm || t.task_nm || 'Task'}</td>
                           <td>
-                            <span className="mt-type-badge">{t.taskAsgnTo || t.task_asgn_to || t.task_type || t.taskType || 'Internal'}</span>
+                            <span className="mt-type-badge">{isDraftProject
+                              ? (t.taskTyp || t.task_typ || 'Internal')
+                              : (t.taskAsgnTo || t.task_asgn_to || 'Internal')}</span>
                           </td>
                           <td>
                             <div className="mt-assignee">
@@ -473,8 +507,8 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                           </td>
                           <td>{sDt}</td>
                           <td>{eDt}</td>
-                          <td style={{textAlign: 'center'}}>{t.noOfDays || t.no_of_days || '-'}</td>
-                          <td style={{textAlign: 'center'}}>{t.depTaskId ? `TSK-${t.depTaskId}` : '-'}</td>
+                          <td style={{ textAlign: 'center' }}>{t.noOfDays || t.no_of_days || '-'}</td>
+                          <td style={{ textAlign: 'center' }}>{t.depTaskId || t.dep_task_id ? `TSK-${t.depTaskId || t.dep_task_id}` : '-'}</td>
                           <td>
                             <span className={`mt-status-badge ${getStatusClass(st)}`}>{st}</span>
                           </td>
@@ -482,22 +516,22 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                             <div className="mt-progress-cell">
                               <span className="mt-prog-text">{prog}%</span>
                               <div className="mt-progress-bar">
-                                <div className="mt-progress-fill" style={{width: `${prog}%`, background: prog === 100 ? '#10b981' : '#3b82f6'}}></div>
+                                <div className="mt-progress-fill" style={{ width: `${prog}%`, background: prog === 100 ? '#10b981' : '#3b82f6' }}></div>
                               </div>
                             </div>
                           </td>
                           <td>
                             <div className="mt-actions">
-                              <button onClick={() => handleViewTask(t)} title="View Task"><Eye size={14}/></button>
-                              <button onClick={() => handleEditTask(t)} title="Edit Task"><Edit2 size={14}/></button>
-                              <button onClick={() => handleDeleteTask(t)} className="text-red" title="Delete Task"><Trash2 size={14}/></button>
+                              <button onClick={() => handleViewTask(t)} title="View Task"><Eye size={14} /></button>
+                              <button onClick={() => handleEditTask(t)} title="Edit Task"><Edit2 size={14} /></button>
+                              <button onClick={() => handleDeleteTask(t)} className="text-red" title="Delete Task"><Trash2 size={14} /></button>
                             </div>
                           </td>
                         </tr>
                       );
                     }) : (
                       <tr>
-                        <td colSpan="12" style={{textAlign: 'center', padding: '24px', color: '#94a3b8'}}>No tasks available for this milestone.</td>
+                        <td colSpan="12" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>No tasks available for this milestone.</td>
                       </tr>
                     )}
                   </tbody>
@@ -575,18 +609,36 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
             e.preventDefault();
             try {
               const isDraft = project?.status === "DRAFT" || project?.status === "Draft";
-              const taskId = editTaskModal.id || editTaskModal.task_id || editTaskModal.taskId || editTaskModal.drftTaskId;
-              const url = isDraft 
-                ? `${API_BASE}/task-drafts/${taskId}` 
+              const taskId = isDraft
+                ? (editTaskModal.drftTaskId || editTaskModal.drft_task_id)
+                : (editTaskModal.taskId || editTaskModal.task_id);
+              const url = isDraft
+                ? `${API_BASE}/task-drafts/${taskId}`
                 : `${API_BASE}/task-live/${taskId}`;
-              
-              const res = await fetch(url, { 
-                method: 'PUT', 
+
+              const res = await fetch(url, {
+                method: 'PUT',
                 headers: authHeaders(),
                 body: JSON.stringify(editTaskModal)
               });
               if (res.ok) {
-                setTasks(prev => prev.map(t => (t.id || t.task_id || t.taskId || t.drftTaskId) === taskId ? editTaskModal : t));
+                setTasks(prev =>
+                  prev.map(t => {
+
+                    const id = isDraftProject
+                      ?
+                      (t.drftTaskId || t.drft_task_id)
+                      :
+                      (t.taskId || t.task_id)
+
+                    return id === taskId
+                      ?
+                      editTaskModal
+                      :
+                      t
+
+                  })
+                );
                 setEditTaskModal(null);
                 alert("Task updated successfully!");
               } else {
@@ -604,18 +656,18 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
             <div className="mt-modal-body">
               <div className="mt-form-group">
                 <label>Task Name</label>
-                <input 
-                  type="text" 
-                  value={editTaskModal.taskNm || editTaskModal.task_nm || ''} 
-                  onChange={e => setEditTaskModal({...editTaskModal, taskNm: e.target.value, task_nm: e.target.value})}
+                <input
+                  type="text"
+                  value={editTaskModal.taskNm || editTaskModal.task_nm || ''}
+                  onChange={e => setEditTaskModal({ ...editTaskModal, taskNm: e.target.value, task_nm: e.target.value })}
                   required
                 />
               </div>
               <div className="mt-form-group">
                 <label>Status</label>
-                <select 
-                  value={editTaskModal.taskSts || editTaskModal.task_sts || 'DRAFT'} 
-                  onChange={e => setEditTaskModal({...editTaskModal, taskSts: e.target.value, task_sts: e.target.value})}
+                <select
+                  value={editTaskModal.taskSts || editTaskModal.task_sts || 'DRAFT'}
+                  onChange={e => setEditTaskModal({ ...editTaskModal, taskSts: e.target.value, task_sts: e.target.value })}
                 >
                   <option value="DRAFT">DRAFT</option>
                   <option value="NOT STARTED">NOT STARTED</option>
@@ -626,10 +678,10 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
               </div>
               <div className="mt-form-group">
                 <label>Description</label>
-                <input 
-                  type="text" 
-                  value={editTaskModal.taskDesc || editTaskModal.task_desc || ''} 
-                  onChange={e => setEditTaskModal({...editTaskModal, taskDesc: e.target.value, task_desc: e.target.value})}
+                <input
+                  type="text"
+                  value={editTaskModal.taskDesc || editTaskModal.task_desc || ''}
+                  onChange={e => setEditTaskModal({ ...editTaskModal, taskDesc: e.target.value, task_desc: e.target.value })}
                 />
               </div>
             </div>

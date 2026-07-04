@@ -17,23 +17,11 @@ const getAuthHeaders = () => {
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
-const dayOfWeek = (dateStr) => new Date(dateStr).getDay();
-const addDays = (dateStr, n) => {
-  const d = new Date(dateStr);
-  d.setDate(d.getDate() + n);
-  return d.toISOString().split('T')[0];
-};
-const fmtDate = (dateStr) => {
-  if (!dateStr) return '—';
-  const d = new Date(dateStr);
-  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
-};
-
 const parseLocal = (dateStr) => {
   if (!dateStr) return null;
   const parts = dateStr.split('T')[0].split('-');
   if (parts.length !== 3) return new Date(dateStr);
-  return new Date(parts[0], parts[1] - 1, parts[2]);
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
 };
 
 const formatLocal = (d) => {
@@ -41,6 +29,25 @@ const formatLocal = (d) => {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+};
+
+const dayOfWeek = (dateStr) => {
+  const d = parseLocal(dateStr);
+  return d ? d.getDay() : new Date(dateStr).getDay();
+};
+
+const addDays = (dateStr, n) => {
+  const d = parseLocal(dateStr);
+  if (!d) return dateStr;
+  d.setDate(d.getDate() + n);
+  return formatLocal(d);
+};
+
+const fmtDate = (dateStr) => {
+  if (!dateStr) return '—';
+  const d = parseLocal(dateStr);
+  if (!d) return '—';
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
 };
 
 const calcWorkingDays = (startStr, endStr, skipSat, skipSun, publicHolidayDates = []) => {
@@ -126,8 +133,33 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
   const buildPreview = async () => {
     setPreviewLoading(true);
     try {
-      const skipSat = calendarMode === 'existing' ? false : considerOnly.saturday.active;
-      const skipSun = calendarMode === 'existing' ? true : considerOnly.sunday.active;
+      // ── Determine skip flags from company wrkDaysPerWk ──────────────────
+      let skipSat = false;
+      let skipSun = false;
+
+      if (calendarMode === 'existing') {
+        // wrkDaysPerWk = 5 → skip Sat AND Sun; 6 → skip Sun only; 7 → all working
+        try {
+          const coyId = project.companyId || project.coyId;
+          if (coyId) {
+            const coyRes = await fetch(`${apiBaseUrl}/api/companies/${coyId}`, { headers: getAuthHeaders() });
+            if (coyRes.ok) {
+              const coyData = await coyRes.json();
+              const wrkDays = coyData.wrkDaysPerWk || coyData.workingDaysPerWeek;
+              if (wrkDays === 5) { skipSat = true; skipSun = true; }
+              else if (wrkDays === 6) { skipSat = false; skipSun = true; }
+              else { skipSat = false; skipSun = false; }
+            }
+          }
+        } catch (e) {
+          console.warn('Could not fetch company working days, defaulting to skipSun only:', e);
+          skipSun = true;
+        }
+      } else {
+        skipSat = considerOnly.saturday.active;
+        skipSun = considerOnly.sunday.active;
+      }
+
       const skipPub = calendarMode === 'existing' ? true : considerOnly.publicHolidays.active;
 
       let publicHolidayDates = [];
@@ -166,10 +198,12 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
 
       const projStart = project.startDate || project.tentStDt || '';
       const projEnd   = project.endDate   || project.tentEndDt  || '';
+      // noOfDays is stored inclusive (start=day1), use directly as calendar-day count
       let totalDays = parseInt(project.totalProjectDays || project.noOfDays || 0, 10);
       if (!totalDays && projStart && projEnd) {
         const sd = parseLocal(projStart);
         const ed = parseLocal(projEnd);
+        // Inclusive fallback: Jul2–Jul26 = 25 days
         if (sd && ed) totalDays = Math.round((ed - sd) / 86400000) + 1;
       }
       const projAdjustedEnd = totalDays ? calcEndDate(projStart, totalDays, skipSat, skipSun, publicHolidayDates) : projEnd;
@@ -181,7 +215,12 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
         const milestonesRes = await fetch(`${apiBaseUrl}/api/milestone-drafts/by-project/${drftPrjId}`, { headers: getAuthHeaders() });
         if (milestonesRes.ok) {
           const milestonesData = await milestonesRes.json();
-          for (const m of milestonesData) {
+          const sortedMilestones = [...(milestonesData || [])].sort((a, b) => {
+            const idA = a.drftMId || a.drft_m_id || 0;
+            const idB = b.drftMId || b.drft_m_id || 0;
+            return idA - idB;
+          });
+          for (const m of sortedMilestones) {
             const mStart = m.tentStDt || '';
             const mEnd = m.tentEndDt || '';
             let mDays = parseInt(m.mlstnDays || m.workingDays || 0, 10);
@@ -196,7 +235,12 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
             let taskRows = [];
             if (tasksRes.ok) {
               const tasksData = await tasksRes.json();
-              taskRows = tasksData.map(t => {
+              const sortedTasks = [...(tasksData || [])].sort((a, b) => {
+                const idA = a.drftTaskId || a.drft_task_id || 0;
+                const idB = b.drftTaskId || b.drft_task_id || 0;
+                return idA - idB;
+              });
+              taskRows = sortedTasks.map(t => {
                 const tStart = t.tentStDt || '';
                 const tEnd = t.tentEndDt || '';
                 let tDays = parseInt(t.noOfDays || t.taskDays || 0, 10);

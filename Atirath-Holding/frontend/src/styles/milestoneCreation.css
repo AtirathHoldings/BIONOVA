@@ -1546,7 +1546,9 @@
   display: grid;
   grid-template-columns: 1fr 0.7fr;
   gap: 4px;
-  padding: 4px 8px;
+  padding: 0 8px;
+  height: 44px;
+  align-items: center;
   background: #f8fafc;
   border-radius: 4px;
   font-size: 10px;
@@ -1586,6 +1588,44 @@
   padding: 0 12px;
 }
 
+.mc-upload-progress-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  padding: 3px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #3b82f6;
+  height: 26px;
+}
+
+.mc-progress-circle {
+  width: 16px;
+  height: 16px;
+  transform: rotate(-90deg);
+}
+
+.mc-progress-circle-bg {
+  fill: none;
+  stroke: #e2e8f0;
+  stroke-width: 3.5;
+}
+
+.mc-progress-circle-fill {
+  fill: none;
+  stroke: #3b82f6;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  transition: stroke-dasharray 0.15s ease-in-out;
+}
+
+.mc-upload-progress-text {
+  font-family: monospace;
+}
+
 .mc-gantt-month-labels {
   display: flex;
   height: 24px;
@@ -1602,11 +1642,36 @@
   flex-shrink: 0;
 }
 
+.mc-gantt-day-labels {
+  display: flex;
+  height: 20px;
+  border-bottom: 1px solid #e2e8f0;
+  background: #fafbfc;
+}
+
+.mc-gantt-day-label {
+  font-size: 9px;
+  font-weight: 600;
+  color: #64748b;
+  text-align: center;
+  padding: 3px 0;
+  border-right: 1px solid #f1f5f9;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mc-gantt-day-label.weekend {
+  background: #f8fafc;
+  color: #94a3b8;
+}
+
 .mc-gantt-grid {
   display: flex;
   height: 100%;
   position: absolute;
-  top: 24px;
+  top: 44px;
   left: 12px;
   right: 12px;
   bottom: 0;
@@ -2774,4 +2839,19 @@
     grid-template-columns: 1fr;
     gap: 16px;
   }
+}
+
+/* Remove number input spinner */
+
+/* Chrome, Edge, Safari */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+}
+
+/* Firefox */
+input[type="number"] {
+    appearance: textfield;
+    -moz-appearance: textfield;
 }

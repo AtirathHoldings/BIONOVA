@@ -88,7 +88,7 @@ const MyTasks = ({ userRole, onLogout }) => {
       ]);
 
       const empId = profileRes?.empId;
-      const isAdmin = profileRes?.email === 'siva@atirath.com';
+      const isAdmin = profileRes?.email === 'vsv.vempati@gmail.com';
 
       // Filter tasks to only show tasks assigned to the logged-in user
       const userTasks = (tasksData || []).filter(t => isAdmin || t.empId === empId);
@@ -229,13 +229,13 @@ const MyTasks = ({ userRole, onLogout }) => {
       const completedCount = newList.filter(i => i.completed).length;
       const progress = Math.round((completedCount / newList.length) * 100);
       setUpdateProgressVal(progress);
-      
+
       if (progress === 100) {
         setUpdateStatusVal("Completed");
       } else if (progress > 0 && updateStatusVal === "To-Do") {
         setUpdateStatusVal("In Progress");
       }
-      
+
       return newList;
     });
   };
@@ -363,13 +363,6 @@ const MyTasks = ({ userRole, onLogout }) => {
         <Header title="My Tasks" subtitle="View and manage all tasks assigned to you." onLogout={onLogout} userRole={userRole} />
 
         <main className="cc-main">
-          {/* Page Header – Export button remains on the right */}
-          <div className="cc-view-header" style={{ marginBottom: "24px", display: "flex", justifyContent: "flex-end", alignItems: "center" }}>
-            <button className="myt-export-btn" onClick={handleExportTasks}>
-              <Download size={16} /> Export
-            </button>
-          </div>
-
           {/* Metrics Cards */}
           <div className="myt-metrics-grid" style={{ marginBottom: "24px" }}>
             <div className={`myt-metric-card todo ${activeTab === "To-Do" ? "active" : ""}`} onClick={() => changeTab("To-Do")}>
@@ -494,9 +487,9 @@ const MyTasks = ({ userRole, onLogout }) => {
                   <label>Due Date</label>
                   <div className="myt-date-input-wrapper" style={{ position: "relative", display: "flex", alignItems: "center" }}>
                     <CalendarIcon size={14} className="myt-date-icon" style={{ position: "absolute", left: "10px", color: "#64748b", pointerEvents: "none" }} />
-                    <input 
-                      type="text" 
-                      placeholder="Select Date Range" 
+                    <input
+                      type="text"
+                      placeholder="Select Date Range"
                       value={selectedDueDate ? formatDate(selectedDueDate) : ""}
                       onFocus={(e) => e.target.type = 'date'}
                       onBlur={(e) => { if (!e.target.value) e.target.type = 'text'; }}
@@ -561,10 +554,10 @@ const MyTasks = ({ userRole, onLogout }) => {
                               <div className="myt-table-progress-fill" style={{
                                 width: `${task.status === "Completed" ? 100 : (task.progress || 0)}%`,
                                 backgroundColor: task.status === "Completed" ? "#16a34a"
-                                              : task.status === "Overdue" ? "#ef4444"
-                                              : task.status === "In Progress" ? "#3b82f6"
-                                              : task.status === "Under Review" ? "#8b5cf6"
-                                              : "#e2e8f0" /* fallback */
+                                  : task.status === "Overdue" ? "#ef4444"
+                                    : task.status === "In Progress" ? "#3b82f6"
+                                      : task.status === "Under Review" ? "#8b5cf6"
+                                        : "#e2e8f0" /* fallback */
                               }} />
                             </div>
                           </div>
@@ -583,7 +576,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                   )}
                 </tbody>
               </table>
-              
+
               {/* Pagination */}
               {filteredTasks.length > 0 && (
                 <div className="myt-pagination-container">
@@ -595,8 +588,8 @@ const MyTasks = ({ userRole, onLogout }) => {
                       <ChevronLeft size={16} />
                     </button>
                     {Array.from({ length: totalPages }).map((_, i) => (
-                      <button 
-                        key={i} 
+                      <button
+                        key={i}
                         className={`myt-page-btn ${currentPage === i + 1 ? 'active' : ''}`}
                         onClick={() => handlePageChange(i + 1)}
                       >
@@ -669,9 +662,9 @@ const MyTasks = ({ userRole, onLogout }) => {
                       <span className="value">: <span className={`myt-priority-badge ${updatingTask.priority.toLowerCase()}`}>{updatingTask.priority}</span></span>
                     </div>
                     <div className="myt-detail-item"><span className="label">Status</span>
-                      <span className="value">: 
-                        <select 
-                          value={updateStatusVal} 
+                      <span className="value">:
+                        <select
+                          value={updateStatusVal}
                           onChange={(e) => {
                             const val = e.target.value;
                             setUpdateStatusVal(val);
@@ -738,12 +731,12 @@ const MyTasks = ({ userRole, onLogout }) => {
                 </div>
                 {updateChecklist.length === 0 ? (
                   <div style={{ display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" }}>
-                    <input 
-                      type="range" 
-                      min="0" 
-                      max="100" 
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
                       step="5"
-                      value={updateProgressVal} 
+                      value={updateProgressVal}
                       onChange={(e) => {
                         const val = parseInt(e.target.value, 10);
                         setUpdateProgressVal(val);
@@ -765,10 +758,10 @@ const MyTasks = ({ userRole, onLogout }) => {
 
               <div className="myt-modal-section">
                 <h4 style={{ fontSize: "14px", fontWeight: "600", marginBottom: "8px", color: "#0f172a" }}>Remarks <span style={{ fontWeight: "400", color: "#64748b" }}>(Optional)</span></h4>
-                <textarea 
-                  className="myt-remarks-input" 
-                  placeholder="Enter remarks..." 
-                  value={updateRemarks} 
+                <textarea
+                  className="myt-remarks-input"
+                  placeholder="Enter remarks..."
+                  value={updateRemarks}
                   onChange={(e) => setUpdateRemarks(e.target.value)}
                 />
               </div>

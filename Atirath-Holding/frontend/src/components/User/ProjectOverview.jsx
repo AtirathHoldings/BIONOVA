@@ -19,10 +19,10 @@ const ProjectOverview = ({ project }) => {
       setLoading(true);
       try {
         const isDraft = project._type === "draft" || project.status === "DRAFT" || project.status === "Draft";
-        const milestonesUrl = isDraft 
+        const milestonesUrl = isDraft
           ? `${API_BASE}/milestone-drafts/by-project/${project.id}`
           : `${API_BASE}/milestone-live/by-project/${project.id}`;
-        
+
         const tasksUrl = isDraft
           ? `${API_BASE}/task-drafts`
           : `${API_BASE}/task-live`;
@@ -35,23 +35,57 @@ const ProjectOverview = ({ project }) => {
 
         const mlData = mlRes.ok ? await mlRes.json() : [];
         const allTasks = taskRes.ok ? await taskRes.json() : [];
+        console.log(JSON.stringify(mlData[0], null, 2));
+        console.log("Tasks =", allTasks);
+
+        if (allTasks.length > 0) {
+          console.log(JSON.stringify(allTasks[0], null, 2));
+        }
         const empData = empRes.ok ? await empRes.json() : [];
 
-        // Map milestones IDs
-        const milestoneIds = mlData.map(m => m.drftMId || m.drft_m_id || m.mId || m.id);
+        const getMilestoneId = (obj) =>
+          obj.mid ??
+          obj.mId ??
+          obj.m_id ??
+          obj.drftMId ??
+          obj.drft_m_id ??
+          obj.milestoneId ??
+          obj.milestone_id ??
+          obj.mlstnId ??
+          obj.mlstn_id ??
+          obj.mlstmId ??
+          obj.mlstm_id ??
+          obj.id;
 
-        // Filter tasks that belong to the milestones of this project
-        const filteredTasks = allTasks.filter(t => {
-          const tMilestoneId = t.drftMId || t.drft_m_id || t.mId || t.milestoneId || t.mlstm_id;
-          return milestoneIds.includes(tMilestoneId);
-        });
+        const milestoneIds = mlData.map(getMilestoneId);
+
+        const filteredTasks = allTasks.filter(task =>
+          milestoneIds.some(id => String(id) === String(getMilestoneId(task)))
+        );
 
         // Map Milestones for display
         const mappedMilestones = mlData.map((m, idx) => {
-          const mId = m.drftMId || m.drft_m_id || m.mId || m.id;
-          const mTasks = filteredTasks.filter(t => (t.drftMId || t.drft_m_id || t.mId || t.milestoneId || t.mlstm_id) === mId);
+          const mId =
+            m.mid ??
+            m.mId ??
+            m.m_id ??
+            m.drftMId ??
+            m.drft_m_id ??
+            m.id;
+          const mTasks = filteredTasks.filter(t => {
+            const taskMid =
+              t.mid ??
+              t.mId ??
+              t.m_id ??
+              t.drftMId ??
+              t.drft_m_id ??
+              t.milestoneId ??
+              t.mlstm_id;
+
+            return String(taskMid) === String(mId);
+          });
           const completedTasksCount = mTasks.filter(t => (t.taskSts || t.task_sts || '').toUpperCase() === 'COMPLETED').length;
-          
+
           let progressPct = 0;
           if (mTasks.length > 0) {
             progressPct = Math.round((completedTasksCount / mTasks.length) * 100);
@@ -75,10 +109,17 @@ const ProjectOverview = ({ project }) => {
 
         // Map Tasks for display
         const mappedTasks = filteredTasks.map((t, idx) => {
-          const mId = t.drftMId || t.drft_m_id || t.mId || t.milestoneId || t.mlstm_id;
+          const mId =
+            t.mid ??
+            t.mId ??
+            t.m_id ??
+            t.drftMId ??
+            t.drft_m_id ??
+            t.milestoneId ??
+            t.mlstm_id;
           const milestoneObj = mappedMilestones.find(m => m.id === mId);
           const milestoneCode = milestoneObj ? milestoneObj.code : 'N/A';
-          
+
           const emp = empData.find(e => e.empId === t.empId);
           const assigneeName = emp ? `${emp.fstNm || ''} ${emp.lstNm || ''}`.trim() : (t.taskAsgnTo || 'Unassigned');
 
@@ -116,12 +157,12 @@ const ProjectOverview = ({ project }) => {
     const s = status.toUpperCase();
     switch (s) {
       case 'COMPLETED': return 'st-completed';
-      case 'IN PROGRESS': 
-      case 'WIP': 
+      case 'IN PROGRESS':
+      case 'WIP':
         return 'st-in-progress';
-      case 'NOT STARTED': 
-      case 'OPEN': 
-      case 'DRAFT': 
+      case 'NOT STARTED':
+      case 'OPEN':
+      case 'DRAFT':
         return 'st-not-started';
       default: return 'st-default';
     }
@@ -147,7 +188,7 @@ const ProjectOverview = ({ project }) => {
   const completedTasks = tasks.filter(t => t.status === 'COMPLETED').length;
   const inProgressTasks = tasks.filter(t => t.status === 'IN PROGRESS' || t.status === 'WIP').length;
   const notStartedTasks = tasks.filter(t => t.status === 'DRAFT' || t.status === 'OPEN' || t.status === 'NOT STARTED').length;
-  
+
   const overdueTasks = tasks.filter(t => {
     if (t.status === 'COMPLETED') return false;
     if (!t.end || t.end === 'N/A') return false;
@@ -188,7 +229,7 @@ const ProjectOverview = ({ project }) => {
       <div className="pd-section-card">
         <div className="pd-section-header">
           <h3>Milestones</h3>
-          <button 
+          <button
             className="pd-add-btn"
             onClick={() => window.open('/milestone-creation', '_self')}
           >
@@ -199,7 +240,7 @@ const ProjectOverview = ({ project }) => {
           <table className="pd-table">
             <thead>
               <tr>
-                <th>#</th>
+                <th>S.No</th>
                 <th>Milestone Code</th>
                 <th>Milestone Title</th>
                 <th>Duration (Days)</th>
@@ -229,7 +270,7 @@ const ProjectOverview = ({ project }) => {
                     </div>
                   </td>
                   <td>
-                    <button 
+                    <button
                       className="pd-action-btn"
                       onClick={() => window.open('/milestone-creation', '_self')}
                     >
@@ -258,7 +299,7 @@ const ProjectOverview = ({ project }) => {
           <table className="pd-table">
             <thead>
               <tr>
-                <th>#</th>
+                <th>S.No</th>
                 <th>Task Code</th>
                 <th>Task Name</th>
                 <th>Milestone</th>

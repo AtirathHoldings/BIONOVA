@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import {
   ArrowLeft,
   Bell,
@@ -42,6 +42,88 @@ const getAuthHeaders = () => ({
   "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
 });
 
+const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled, allowCustom }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = React.useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const selected = options.find(o => String(o.value) === String(value));
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%', ...style }}>
+      <div
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        style={{
+          padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
+          background: disabled ? '#f1f5f9' : 'white', cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '40px', fontSize: '14px', color: disabled ? '#94a3b8' : '#0f172a'
+        }}
+      >
+        <span>{selected ? selected.label : (value && allowCustom ? value : (placeholder || "Select..."))}</span>
+        <span style={{ fontSize: '12px', color: '#64748b' }}>▼</span>
+      </div>
+      {isOpen && !disabled && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0,
+          background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px',
+          marginTop: '4px', zIndex: 999, maxHeight: '250px', overflowY: 'auto',
+          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
+        }} onClick={e => e.stopPropagation()}>
+          <div style={{ padding: '8px', position: 'sticky', top: 0, background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 2 }}>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search..."
+              style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ padding: '4px 0' }}>
+            {allowCustom && search.trim() && !options.some(o => o.label.toLowerCase() === search.toLowerCase()) && (
+              <div 
+                onClick={() => {
+                  onChange({ target: { name, value: search.trim() } });
+                  setIsOpen(false);
+                  setSearch("");
+                }}
+                style={{ padding: '8px 16px', cursor: 'pointer', background: '#eef2ff', fontSize: '14px', color: '#2563eb', fontWeight: '500' }}
+                onMouseOver={e => e.target.style.background = '#e0e7ff'}
+                onMouseOut={e => e.target.style.background = '#eef2ff'}
+              >
+                + Add "{search.trim()}"
+              </div>
+            )}
+            {filtered.map(opt => (
+              <div
+                key={opt.value}
+                onClick={() => {
+                  onChange({ target: { name, value: opt.value } });
+                  setIsOpen(false);
+                  setSearch("");
+                }}
+                style={{ padding: '8px 16px', cursor: 'pointer', background: String(value) === String(opt.value) ? '#f1f5f9' : 'white', fontSize: '14px', color: '#334155' }}
+                onMouseOver={e => e.target.style.background = '#f8fafc'}
+                onMouseOut={e => e.target.style.background = String(value) === String(opt.value) ? '#f1f5f9' : 'white'}
+              >
+                {opt.label}
+              </div>
+            ))}
+            {filtered.length === 0 && <div style={{ padding: '8px 16px', color: '#64748b', fontSize: '13px', textAlign: 'center' }}>No results found</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const EmployeeCreation = ({ userRole, onLogout }) => {
   // API States
   const [employees, setEmployees] = useState([]);
@@ -59,6 +141,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activeActionsMenu, setActiveActionsMenu] = useState(null);
   const [formErrors, setFormErrors] = useState({});
+  const [tableSearchQuery, setTableSearchQuery] = useState("");
 
   const [alertConfig, setAlertConfig] = useState({
     isOpen: false,
@@ -79,6 +162,18 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     description: "",
     status: "Active"
   });
+
+  // Designation Modal State
+  const [showDesigModal, setShowDesigModal] = useState(false);
+  const [desigForm, setDesigForm] = useState({
+    code: "",
+    name: "",
+    description: ""
+  });
+  const [customDesignations, setCustomDesignations] = useState([]);
+  const [designations, setDesignations] = useState([]);
+  const [mappings, setMappings] = useState([]);
+
   // Employee Form State
   const [form, setForm] = useState({
     employeeCode: "",
@@ -93,6 +188,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     photoPath: "",
     joiningDate: "",
     designation: "",
+    workingFor: "company",
     company: "",
     plant: "",
     department: "",
@@ -109,16 +205,20 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const [empRes, coyRes, pltRes, deptRes] = await Promise.all([
+      const [empRes, coyRes, pltRes, deptRes, desigRes, mapRes] = await Promise.all([
         fetch(`${apiBaseUrl}/api/employees`, { headers: getAuthHeaders() }),
         fetch(`${apiBaseUrl}/api/companies`, { headers: getAuthHeaders() }),
         fetch(`${apiBaseUrl}/api/plants`, { headers: getAuthHeaders() }),
-        fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() })
+        fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/designations`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/dept-coy-plt-maps`, { headers: getAuthHeaders() })
       ]);
 
       const coyData = coyRes.ok ? await coyRes.json() : [];
       const pltData = pltRes.ok ? await pltRes.json() : [];
       const deptData = deptRes.ok ? await deptRes.json() : [];
+      const desigData = desigRes.ok ? await desigRes.json() : [];
+      const mapData = mapRes.ok ? await mapRes.json() : [];
 
       if (empRes.ok) {
         const data = await empRes.json();
@@ -181,7 +281,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
             department: deptNm,
             employmentType: displayEmpTyp,
             designation: resolvedDesignation,
-            reportingManager: repManagerName
+            reportingManager: repManagerName,
+            workingFor: emp.pltId ? "plant" : "company"  // <-- NEW: determine workingFor
           };
         });
         setEmployees(mappedEmps);
@@ -190,6 +291,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       setCompanies(coyData);
       setPlants(pltData);
       setDepartments(deptData);
+      setDesignations(desigData);
+      setMappings(mapData);
     } catch (err) {
       console.error("Error fetching data:", err);
       // alertConfig might not be available right away, so we just log
@@ -248,6 +351,66 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     // Check if user clicked "+ Create Department"
     if (name === "department" && value === "CREATE_NEW") {
       setShowDeptModal(true);
+      setForm((prev) => ({ ...prev, department: "" }));
+      return;
+    }
+    // Check if user clicked "+ Create Designation"
+    if (name === "designation" && value === "CREATE_NEW") {
+      setShowDesigModal(true);
+      setForm((prev) => ({ ...prev, designation: "" }));
+      return;
+    }
+
+    if (name === "workingFor") {
+      setForm((prev) => ({
+        ...prev,
+        workingFor: value,
+        company: "",
+        plant: "",
+        department: ""
+      }));
+      setFormErrors((prevErrors) => ({
+        ...prevErrors,
+        company: "",
+        plant: "",
+        department: ""
+      }));
+      return;
+    }
+
+    if (name === "company") {
+      const selectedCompany = companies.find(c => String(c.coyId || c.id) === String(value));
+      const location = selectedCompany ? (selectedCompany.ctVlg || "") : "";
+      setForm((prev) => ({
+        ...prev,
+        company: value,
+        workLocation: location,
+        department: ""
+      }));
+      setFormErrors((prevErrors) => ({
+        ...prevErrors,
+        company: "",
+        workLocation: "",
+        department: ""
+      }));
+      return;
+    }
+
+    if (name === "plant") {
+      const selectedPlant = plants.find(p => String(p.pltId || p.id) === String(value));
+      const location = selectedPlant ? (selectedPlant.addr || "") : "";
+      setForm((prev) => ({
+        ...prev,
+        plant: value,
+        workLocation: location,
+        department: ""
+      }));
+      setFormErrors((prevErrors) => ({
+        ...prevErrors,
+        plant: "",
+        workLocation: "",
+        department: ""
+      }));
       return;
     }
 
@@ -263,7 +426,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     } else if (name === "mobile") {
       newValue = value.replace(/[^0-9]/g, '').slice(0, 10);
     } else if (name === "bloodGroup") {
-      newValue = value.slice(0, 10);
+      newValue = value.slice(0, 20);
     } else if (name === "address") {
       newValue = value.slice(0, 255);
     } else if (name === "workLocation") {
@@ -322,6 +485,51 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     setDeptForm((prev) => ({ ...prev, [name]: value }));
   };
 
+  // Handle New Designation Modal Input Change
+  const handleDesigChange = (e) => {
+    const { name, value } = e.target;
+    setDesigForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Save New Designation from Modal
+  const handleSaveNewDesignation = async () => {
+    if (!desigForm.code.trim() || !desigForm.name.trim()) {
+      triggerAlert("error", "Validation Error", "Designation code and name are required.");
+      return;
+    }
+
+    const payload = {
+      desigCd: desigForm.code.trim().toUpperCase(),
+      desigNm: desigForm.name.trim(),
+      desigDesc: desigForm.description.trim()
+    };
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/designations`, {
+        method: "POST",
+        headers: getAuthHeaders(),
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const newDesig = await response.json();
+        triggerAlert("success", "Success", "Designation created successfully!");
+        setDesigForm({ code: "", name: "", description: "" });
+        setShowDesigModal(false);
+        const desigRes = await fetch(`${apiBaseUrl}/api/designations`, { headers: getAuthHeaders() });
+        if (desigRes.ok) {
+          setDesignations(await desigRes.json());
+        }
+        setForm((prev) => ({ ...prev, designation: newDesig.desigNm }));
+      } else {
+        triggerAlert("error", "Error", "Failed to save designation.");
+      }
+    } catch (err) {
+      console.error("Error saving designation:", err);
+      triggerAlert("error", "Error", "Server error occurred.");
+    }
+  };
+
   // Save New Department from Modal
   const handleSaveNewDepartment = async () => {
     if (!deptForm.code.trim() || !deptForm.name.trim()) {
@@ -330,7 +538,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
 
     const payload = {
-      deptCd: deptForm.code.trim().toUpperCase(),
+      deptCode: deptForm.code.trim().toUpperCase(),
       deptNm: deptForm.name.trim(),
       descr: deptForm.description.trim(),
       sts: deptForm.status === "Active"
@@ -377,6 +585,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       photoPath: "",
       joiningDate: "",
       designation: "",
+      workingFor: "company",
       company: "",
       plant: "",
       department: "",
@@ -472,8 +681,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
 
     // 8. Blood Group check
-    if (form.bloodGroup && form.bloodGroup.length > 5) {
-      triggerAlert("error", "Validation Error", "Blood Group cannot exceed 5 characters.");
+    if (form.bloodGroup && form.bloodGroup.length > 20) {
+      triggerAlert("error", "Validation Error", "Blood Group cannot exceed 20 characters.");
       return;
     }
 
@@ -506,13 +715,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
 
     // 12. Company check
-    if (!form.company) {
+    if (form.workingFor === "company" && !form.company) {
       triggerAlert("error", "Validation Error", "Company selection is required.");
       return;
     }
 
     // 13. Plant check
-    if (!form.plant) {
+    if (form.workingFor === "plant" && !form.plant) {
       triggerAlert("error", "Validation Error", "Plant selection is required.");
       return;
     }
@@ -545,8 +754,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
 
+    const isPasswordChanged = form.password && form.password !== "********";
+
     // 18. Password check with complexity rules (only required for new employee, optional for editing if blank)
-    if (!isEditing || form.password) {
+    if (!isEditing || isPasswordChanged) {
       if (!form.password) {
         triggerAlert("error", "Validation Error", "Password is required.");
         return;
@@ -616,14 +827,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       doj: form.joiningDate,
       empTyp: empTypVal,
       designation: form.designation.trim(),
-      coyId: parseInt(form.company),
-      pltId: parseInt(form.plant),
+      coyId: form.workingFor === "company" && form.company ? parseInt(form.company) : null,
+      pltId: form.workingFor === "plant" && form.plant ? parseInt(form.plant) : null,
       deptId: parseInt(form.department),
       wLoc: form.workLocation.trim(),
       repManId: form.reportingManager ? parseInt(form.reportingManager) : null,
       sts: form.status === "Active",
       role: form.role || "user",
-      password: form.password ? form.password : null
+      password: isPasswordChanged ? form.password : null
     };
 
     if (isEditing) {
@@ -690,14 +901,15 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       photoPath: emp.photoUrl || emp.photoPath || "",
       joiningDate: emp.doj || emp.joiningDate || "",
       designation: emp.designation || "",
+      workingFor: emp.pltId ? "plant" : "company",
       company: emp.coyId ? String(emp.coyId) : "",
       plant: emp.pltId ? String(emp.pltId) : "",
       department: emp.deptId ? String(emp.deptId) : "",
       workLocation: emp.wloc || emp.wLoc || emp.workLocation || "",
       reportingManager: emp.repManId ? String(emp.repManId) : "",
       username: emp.email || emp.username || "",
-      password: "",
-      confirmPassword: "",
+      password: "********",
+      confirmPassword: "********",
       status: emp.status === true || emp.status === "Active" ? "Active" : "Inactive",
       employmentType: emp.employmentType || "",
       role: emp.role || "user"
@@ -821,7 +1033,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
     setActiveActionsMenu(null);
   };
-  const filteredEmployees = employees;
+  const filteredEmployees = tableSearchQuery
+    ? employees.filter(emp =>
+      (emp.employeeCode && emp.employeeCode.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
+      (emp.employeeName && emp.employeeName.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
+      (emp.email && emp.email.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
+      (emp.designation && emp.designation.toLowerCase().includes(tableSearchQuery.toLowerCase()))
+    )
+    : employees;
 
   return (
     <div className="emp-shell-container">
@@ -885,12 +1104,17 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                       <div className="emp-form-item">
                         <label>Gender <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
-                          <select name="gender" value={form.gender} onChange={handleChange} required>
-                            <option value="">Select gender</option>
-                            <option value="Male">Male</option>
-                            <option value="Female">Female</option>
-                            <option value="Others">Others</option>
-                          </select>
+                          <SearchableSelect
+                            name="gender"
+                            value={form.gender}
+                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
+                            placeholder="Select gender"
+                            options={[
+                              { value: "Male", label: "Male" },
+                              { value: "Female", label: "Female" },
+                              { value: "Others", label: "Others" }
+                            ]}
+                          />
                         </div>
                       </div>
                     </div>
@@ -930,19 +1154,24 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                       <div className="emp-form-item">
                         <label>Blood Group</label>
                         <div className="emp-input-icon-wrap">
-                          <select name="bloodGroup" value={form.bloodGroup} onChange={handleChange}>
-                            <option value="">Select blood group</option>
-                            <option value="A+">A+</option>
-                            <option value="A-">A-</option>
-                            <option value="B+">B+</option>
-                            <option value="B-">B-</option>
-                            <option value="AB+">AB+</option>
-                            <option value="AB-">AB-</option>
-                            <option value="O+">O+</option>
-                            <option value="O-">O-</option>
-                            <option value="Bombay">Bombay</option>
-                            <option value="RH-Null">Rh Null</option>
-                          </select>
+                          <SearchableSelect
+                            name="bloodGroup"
+                            value={form.bloodGroup}
+                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
+                            placeholder="Select blood group"
+                            options={[
+                              { value: "A+", label: "A+" },
+                              { value: "A-", label: "A-" },
+                              { value: "B+", label: "B+" },
+                              { value: "B-", label: "B-" },
+                              { value: "AB+", label: "AB+" },
+                              { value: "AB-", label: "AB-" },
+                              { value: "O+", label: "O+" },
+                              { value: "O-", label: "O-" },
+                              { value: "Bombay", label: "Bombay" },
+                              { value: "RH-Null", label: "Rh Null" }
+                            ]}
+                          />
                         </div>
                       </div>
                     </div>
@@ -992,61 +1221,124 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Designation <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
-                          <input type="text" name="designation" value={form.designation} onChange={handleChange} placeholder="Enter designation" required />
+                          <SearchableSelect 
+                            name="designation" 
+                            value={form.designation} 
+                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })} 
+                            placeholder="Select designation"
+                            options={[
+                              ...[...new Set([...designations.map(d => d.desigNm).filter(Boolean), ...employees.map(emp => emp.designation).filter(Boolean)])]
+                                .map(d => ({ value: d, label: d }))
+                                .sort((a, b) => a.label.localeCompare(b.label)),
+                              { value: "CREATE_NEW", label: "+ Create Designation" }
+                            ]}
+                          />
                         </div>
                       </div>
                       <div className="emp-form-item">
                         <label>Employee Type <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
-                          <select name="employmentType" value={form.employmentType} onChange={handleChange} required>
-                            <option value="">Select employment type</option>
-                            <option value="Retainer">Retainer</option>
-                            <option value="Full Time Employee (FTE)">Full Time Employee (FTE)</option>
-                            <option value="Contract Employee">Contract Employee</option>
-                          </select>
+                          <SearchableSelect
+                            name="employmentType"
+                            value={form.employmentType}
+                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
+                            placeholder="Select employment type"
+                            options={[
+                              { value: "Retainer", label: "Retainer" },
+                              { value: "Full Time Employee (FTE)", label: "Full Time Employee (FTE)" },
+                              { value: "Contract Employee", label: "Contract Employee" }
+                            ]}
+                          />
                         </div>
                       </div>
                       <div className="emp-form-item">
-                        <label>Company <span className="emp-req-star">*</span></label>
-                        <div className="emp-input-icon-wrap">
-                          <span className="emp-input-prefix-icon"><Building size={16} /></span>
-                          <select name="company" value={form.company} onChange={handleChange} required>
-                            <option value="">Select company</option>
-                            {companies.map((coy) => (
-                              <option key={coy.coyId || coy.id} value={coy.coyId || coy.id}>{coy.coyNm || coy.name}</option>
-                            ))}
-                          </select>
+                        <label>Working For <span className="emp-req-star">*</span></label>
+                        <div style={{ display: 'flex', gap: '20px', height: '40px', alignItems: 'center' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#334155', margin: 0 }}>
+                            <input 
+                              type="radio" 
+                              name="workingFor" 
+                              value="company" 
+                              checked={form.workingFor === "company"} 
+                              onChange={handleChange}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#2563eb' }}
+                            />
+                            Company
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', fontWeight: '500', color: '#334155', margin: 0 }}>
+                            <input 
+                              type="radio" 
+                              name="workingFor" 
+                              value="plant" 
+                              checked={form.workingFor === "plant"} 
+                              onChange={handleChange}
+                              style={{ width: '16px', height: '16px', cursor: 'pointer', accentColor: '#2563eb' }}
+                            />
+                            Plant
+                          </label>
                         </div>
                       </div>
                     </div>
 
                     <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
-                        <label>Plant <span className="emp-req-star">*</span></label>
+                        <label>Company {form.workingFor === "company" && <span className="emp-req-star">*</span>}</label>
+                        <div className="emp-input-icon-wrap">
+                          <span className="emp-input-prefix-icon"><Building size={16} /></span>
+                          <SearchableSelect
+                            name="company"
+                            value={form.company}
+                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
+                            placeholder="Select company"
+                            options={companies.map(coy => ({ value: coy.coyId || coy.id, label: coy.coyNm || coy.name }))}
+                            disabled={form.workingFor !== "company"}
+                          />
+                        </div>
+                      </div>
+                      <div className="emp-form-item">
+                        <label>Plant {form.workingFor === "plant" && <span className="emp-req-star">*</span>}</label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Factory size={16} /></span>
-                          <select name="plant" value={form.plant} onChange={handleChange} required>
-                            <option value="">Select plant</option>
-                            {plants.map((plt) => (
-                              <option key={plt.pltId || plt.id} value={plt.pltId || plt.id}>{plt.pltNm || plt.name}</option>
-                            ))}
-                          </select>
+                          <SearchableSelect
+                            name="plant"
+                            value={form.plant}
+                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
+                            placeholder="Select plant"
+                            options={plants.map(plt => {
+                              const associatedCoy = companies.find(c => String(c.coyId || c.id) === String(plt.coyId));
+                              const label = associatedCoy ? `${plt.pltNm || plt.name} (${associatedCoy.coyNm || associatedCoy.name})` : (plt.pltNm || plt.name);
+                              return { value: plt.pltId || plt.id, label: label };
+                            })}
+                            disabled={form.workingFor !== "plant"}
+                          />
                         </div>
                       </div>
                       <div className="emp-form-item">
                         <label>Department <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Users size={16} /></span>
-                          <select name="department" value={form.department} onChange={handleChange} required>
-                            <option value="">Select department</option>
-                            {departments.map((dept) => (
-                              <option key={dept.deptId || dept.id} value={dept.deptId || dept.id}>{dept.deptNm || dept.name}</option>
-                            ))}
-                            <option value="CREATE_NEW" style={{ fontWeight: 'bold', color: '#2563eb' }}>
-                              + Create Department
-                            </option>
-                          </select>
+                          <SearchableSelect
+                            name="department"
+                            value={form.department}
+                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
+                            placeholder="Select department"
+                            options={[
+                              ...departments
+                                .filter(dept => {
+                                  const deptId = dept.deptId || dept.id;
+                                  if (form.workingFor === "company") {
+                                    if (!form.company) return true;
+                                    return mappings.some(m => m.coyId === parseInt(form.company) && m.deptId === deptId && m.sts !== false);
+                                  } else {
+                                    if (!form.plant) return true;
+                                    return mappings.some(m => m.pltId === parseInt(form.plant) && m.deptId === deptId && m.sts !== false);
+                                  }
+                                })
+                                .map(dept => ({ value: dept.deptId || dept.id, label: dept.deptNm || dept.name })),
+                              { value: "CREATE_NEW", label: "+ Create Department" }
+                            ]}
+                          />
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -1056,16 +1348,20 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <input type="text" name="workLocation" value={form.workLocation} onChange={handleChange} placeholder="Enter work location" maxLength="100" required />
                         </div>
                       </div>
+                    </div>
+
+                    <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
                         <label>Reporting Manager</label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
-                          <select name="reportingManager" value={form.reportingManager} onChange={handleChange}>
-                            <option value="">Select reporting manager</option>
-                            {employees.map((emp) => (
-                              <option key={emp.empId || emp.id} value={emp.empId || emp.id}>{emp.employeeName || `${emp.firstName} ${emp.lastName}`}</option>
-                            ))}
-                          </select>
+                          <SearchableSelect
+                            name="reportingManager"
+                            value={form.reportingManager}
+                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
+                            placeholder="Select reporting manager"
+                            options={employees.map(emp => ({ value: emp.empId || emp.id, label: emp.employeeName || `${emp.firstName} ${emp.lastName}` }))}
+                          />
                         </div>
                       </div>
                     </div>
@@ -1100,7 +1396,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             onChange={handleChange}
                             placeholder="Enter Password"
                             maxLength="50"
-                            required
+                            required={!isEditing}
                           />
                           <button type="button" className="emp-input-suffix-btn" onClick={() => setShowPassword(!showPassword)}>
                             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1123,7 +1419,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             onChange={handleChange}
                             placeholder="Confirm password"
                             maxLength="50"
-                            required
+                            required={!isEditing}
                           />
                           <button type="button" className="emp-input-suffix-btn" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
                             {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1160,14 +1456,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 </div>
 
                 <div className="emp-form-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#fafbfc', borderTop: '1px solid #e2e8f0' }}>
-                  <button type="button" className="emp-btn secondary" onClick={() => { setView("list"); handleReset(); setIsEditing(false); setEditId(null); }}>
-                    Cancel
+                  <button type="button" className="emp-btn primary" onClick={handleSave}>
+                    <Save size={14} /> {isEditing ? "Update Employee" : "Save Employee"}
                   </button>
                   <button type="button" className="emp-btn tertiary" onClick={handleReset}>
                     <RefreshCcw size={14} /> Reset
                   </button>
-                  <button type="button" className="emp-btn primary" onClick={handleSave}>
-                    <Save size={14} /> {isEditing ? "Update Employee" : "Save Employee"}
+                  <button type="button" className="emp-btn secondary" onClick={() => { setView("list"); handleReset(); setIsEditing(false); setEditId(null); }}>
+                    Cancel
                   </button>
                 </div>
               </div>
@@ -1181,16 +1477,28 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>Employee List</h2>
                     <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>View and manage all employees</p>
                   </div>
-                  <button type="button" className="emp-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setView("form"); }}>
-                    <Plus size={16} /> Add New Employee
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                      <input
+                        type="text"
+                        placeholder="Search employees..."
+                        value={tableSearchQuery}
+                        onChange={(e) => setTableSearchQuery(e.target.value)}
+                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                      />
+                    </div>
+                    <button type="button" className="emp-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setView("form"); }}>
+                      <Plus size={16} /> Add New Employee
+                    </button>
+                  </div>
                 </div>
 
-                <div className="emp-table-container" style={{ overflowX: 'auto' }}>
+                <div className="emp-table-container" style={{ overflowX: 'auto', paddingBottom: '140px' }}>
                   <table className="emp-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Code</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Name</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gender</th>
@@ -1202,8 +1510,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Joining Date</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employment Type</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Company</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Plant</th>
+                        {/* REPLACED Company & Plant columns with a single Working For column */}
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Working For</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Work Location</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Reporting Manager</th>
@@ -1213,7 +1521,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                     </thead>
                     <tbody>
                       {filteredEmployees.length === 0 ? (
-                        <tr><td colSpan="20" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No employee records found. Add a new employee using the button above.</td></tr>
+                        <tr><td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No employee records found. Add a new employee using the button above.</td></tr>
                       ) : (
                         filteredEmployees.map((emp, index) => (
                           <tr key={emp.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
@@ -1234,8 +1542,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.joiningDate}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.designation}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.employmentType || "N/A"}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.company}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.plant}</td>
+                            {/* Working For column: show company if workingFor === "company", else show plant */}
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
+                              {emp.workingFor === "company" ? emp.company : emp.plant}
+                              <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '6px' }}>
+                                ({emp.workingFor === "company" ? "Company" : "Plant"})
+                              </span>
+                            </td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.department}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.workLocation}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.reportingManager}</td>
@@ -1318,6 +1631,53 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                   </button>
                   <button type="button" onClick={handleSaveNewDepartment} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
                     <Save size={14} /> Save Department
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ===================== DESIGNATION CREATION POPUP MODAL ===================== */}
+          {showDesigModal && (
+            <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <div style={{ backgroundColor: 'white', borderRadius: '8px', width: '500px', maxWidth: '95%', boxShadow: '0 10px 25px rgba(0,0,0,0.2)', overflow: 'hidden' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 24px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>Add New Designation</h3>
+                  <button onClick={() => { setShowDesigModal(false); setForm(p => ({ ...p, designation: "" })); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div className="emp-form-item">
+                    <label>Designation Code <span className="emp-req-star">*</span></label>
+                    <div className="emp-input-icon-wrap">
+                      <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
+                      <input type="text" name="code" value={desigForm.code} onChange={handleDesigChange} placeholder="Enter designation code" required />
+                    </div>
+                  </div>
+                  <div className="emp-form-item">
+                    <label>Designation Name <span className="emp-req-star">*</span></label>
+                    <div className="emp-input-icon-wrap">
+                      <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
+                      <input type="text" name="name" value={desigForm.name} onChange={handleDesigChange} placeholder="Enter designation name" required />
+                    </div>
+                  </div>
+                  <div className="emp-form-item">
+                    <label>Description</label>
+                    <div className="emp-input-icon-wrap">
+                      <span className="emp-input-prefix-icon" style={{ alignSelf: "flex-start", marginTop: "14px" }}><FileText size={16} /></span>
+                      <textarea name="description" value={desigForm.description} onChange={handleDesigChange} placeholder="Enter description (optional)" rows={3} style={{ height: "80px" }} />
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', backgroundColor: '#fafbfc' }}>
+                  <button type="button" onClick={() => { setShowDesigModal(false); setForm(p => ({ ...p, designation: "" })); }} style={{ padding: '8px 16px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#475569', cursor: 'pointer', fontWeight: '500' }}>
+                    Cancel
+                  </button>
+                  <button type="button" onClick={handleSaveNewDesignation} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Save size={14} /> Save Designation
                   </button>
                 </div>
               </div>

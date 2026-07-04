@@ -23,14 +23,119 @@ import {
   Check,
   ChevronRight,
   Hand,
-  Menu
+  Menu,
+  ChevronDown
 } from "lucide-react";
 import "../../styles/TaskBoard.css";
 import plantImage from "../../assets/cbg_plant_construction.png";
 
+// ─── Searchable Select Component ──────────────────────────────────────────
+const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = useRef(null);
 
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
-// Map backend task status to board column names
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const selected = options.find(o => String(o.value) === String(value));
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+      <div
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        style={{
+          padding: '10px 12px',
+          border: '1px solid #cbd5e1',
+          borderRadius: '6px',
+          backgroundColor: disabled ? '#f1f5f9' : 'white',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '14px',
+          height: '38px',
+          ...style
+        }}
+      >
+        <span style={{ color: selected ? '#0f172a' : '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <ChevronDown size={14} style={{ color: '#64748b', flexShrink: 0, marginLeft: 8 }} />
+      </div>
+      {isOpen && !disabled && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+          backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '6px',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', zIndex: 1000
+        }}>
+          <div style={{ padding: '8px' }}>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search..."
+              style={{
+                width: '100%',
+                padding: '8px',
+                border: '1px solid #e2e8f0',
+                borderRadius: '4px',
+                outline: 'none',
+                fontSize: '14px',
+                boxSizing: 'border-box'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+            {filtered.length > 0 ? (
+              filtered.map(opt => (
+                <div
+                  key={opt.value}
+                  onClick={() => {
+                    onChange({ target: { name, value: opt.value } });
+                    setIsOpen(false);
+                    setSearch("");
+                  }}
+                  style={{
+                    padding: '10px 12px',
+                    cursor: 'pointer',
+                    backgroundColor: String(value) === String(opt.value) ? '#f1f5f9' : 'transparent',
+                    fontSize: '14px'
+                  }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = String(value) === String(opt.value) ? '#f1f5f9' : 'transparent'}
+                >
+                  {opt.label}
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: '10px 12px', color: '#64748b', fontSize: '14px', textAlign: 'center' }}>No results found</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Helper: generate consistent color from string ──────────────────────
+const stringToColor = (str) => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const hue = Math.abs(hash % 360);
+  return `hsl(${hue}, 70%, 50%)`;
+};
+
+// ─── Mapping helpers ──────────────────────────────────────────────────────
 const mapTaskStatus = (taskSts) => {
   if (!taskSts) return "Not Started";
   const s = taskSts.toUpperCase();
@@ -42,7 +147,6 @@ const mapTaskStatus = (taskSts) => {
   return "Not Started";
 };
 
-// Map board column name back to backend status
 const mapStatusToApi = (uiStatus) => {
   if (uiStatus === "Not Started") return "OPEN";
   if (uiStatus === "In Progress") return "WIP";
@@ -94,13 +198,14 @@ const mapBackendTask = (t, projects, milestones, employees) => {
     progress = 0;
   }
 
-  const assigneeName = employee ? `${employee.fstNm || employee.firstName || ""} ${employee.lstNm || employee.lastName || ""}`.trim() : "Unassigned";
+  const assigneeName = employee ? `${employee.fstNm || employee.firstName || ""} ${employee.lstNm || employee.lastName || ""}`.trim() || "Unassigned" : "Unassigned";
 
   return {
     id: t.taskCd || `TSK-${t.taskId}`,
     taskId: t.taskId,
     title: t.taskNm,
     project: project ? project.prjNm : "Unknown Project",
+    projectId: project ? project.prjId : null,
     milestone: milestone ? `${milestone.mlstnCd || "ML-???"} ${milestone.mlstnTtl || ""}` : "Unknown Milestone",
     milestoneId: t.mId,
     assignee: assigneeName,
@@ -118,6 +223,7 @@ const mapBackendTask = (t, projects, milestones, employees) => {
   };
 };
 
+// ─── Main Component ────────────────────────────────────────────────────────
 const TaskBoard = ({ userRole, onLogout }) => {
   const [tasks, setTasks] = useState([]);
   const [apiLoaded, setApiLoaded] = useState(false);
@@ -127,11 +233,12 @@ const TaskBoard = ({ userRole, onLogout }) => {
   const [companiesList, setCompaniesList] = useState([]);
   const [plantsList, setPlantsList] = useState([]);
   const [departmentsList, setDepartmentsList] = useState([]);
+  const [designationsList, setDesignationsList] = useState([]);
   const [selectedProjectId, setSelectedProjectId] = useState("All");
 
   const fetchLiveTasks = async () => {
     try {
-      const [liveProjects, liveMilestones, liveTasks, liveEmployees, profileRes, companies, plants, departments] = await Promise.all([
+      const [liveProjects, liveMilestones, liveTasks, liveEmployees, profileRes, companies, plants, departments, designations] = await Promise.all([
         safeFetch("/api/project-live", []),
         safeFetch("/api/milestone-live", []),
         safeFetch("/api/task-live", []),
@@ -139,7 +246,8 @@ const TaskBoard = ({ userRole, onLogout }) => {
         safeFetch("/api/profile"),
         safeFetch("/api/companies", []),
         safeFetch("/api/plants", []),
-        safeFetch("/api/departments", [])
+        safeFetch("/api/departments", []),
+        safeFetch("/api/designations", [])
       ]);
 
       setProjectsRaw(liveProjects);
@@ -148,21 +256,16 @@ const TaskBoard = ({ userRole, onLogout }) => {
       setCompaniesList(companies);
       setPlantsList(plants);
       setDepartmentsList(departments);
+      setDesignationsList(designations);
 
       const empId = profileRes?.empId;
-      const isAdmin = profileRes?.email === 'siva@atirath.com';
+      const isAdmin = profileRes?.email === 'vsv.vempati@gmail.com';
 
-      // Filter tasks to only show tasks assigned to the logged-in user
       const userTasks = (liveTasks || []).filter(t => isAdmin || t.empId === empId);
 
       const mapped = userTasks.map(t => mapBackendTask(t, liveProjects, liveMilestones, liveEmployees));
       setTasks(mapped);
       setApiLoaded(true);
-
-      const loadedMilestones = liveMilestones.map(m => `${m.mlstnCd || "ML-???"} ${m.mlstnTtl || ""}`).filter(Boolean);
-      if (loadedMilestones.length > 0) {
-        setNewMilestone(loadedMilestones[0]);
-      }
     } catch (err) {
       console.error("Failed to load tasks from API:", err);
     }
@@ -172,11 +275,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
     fetchLiveTasks();
   }, []);
 
-  useEffect(() => {
-    if (employeesList.length > 0) {
-      setNewAssignee(`${employeesList[0].fstNm || employeesList[0].firstName || ""} ${employeesList[0].lstNm || employeesList[0].lastName || ""}`.trim());
-    }
-  }, [employeesList]);
+  // ─── State for filters ──────────────────────────────────────────────────
   const [selectedMilestone, setSelectedMilestone] = useState("All Milestones");
   const [selectedAssignee, setSelectedAssignee] = useState("All Employees");
   const [selectedTaskType, setSelectedTaskType] = useState("All");
@@ -184,13 +283,12 @@ const TaskBoard = ({ userRole, onLogout }) => {
   const [selectedStatus, setSelectedStatus] = useState("All Statuses");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Modals state
+  // ─── Modals state ──────────────────────────────────────────────────────
   const [showAddModal, setShowAddModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
-  
-  // Add task form state
+
+  // ─── Add task form state ──────────────────────────────────────────────
   const [newTitle, setNewTitle] = useState("");
   const [newMilestone, setNewMilestone] = useState("");
   const [newAssignee, setNewAssignee] = useState("");
@@ -201,26 +299,21 @@ const TaskBoard = ({ userRole, onLogout }) => {
   const [newDescription, setNewDescription] = useState("");
   const [targetColumn, setTargetColumn] = useState("Not Started");
 
-  // Edit/Update progress form state
-  const [editStatus, setEditStatus] = useState("");
-  const [editProgress, setEditProgress] = useState(0);
-  const [editPriority, setEditPriority] = useState("Medium");
-
-  // Drag and drop states
+  // ─── Drag & drop ──────────────────────────────────────────────────────
   const [draggedTaskId, setDraggedTaskId] = useState(null);
   const [draggedOverCol, setDraggedOverCol] = useState(null);
 
-  // Board scroll refs
+  // ─── Refs ──────────────────────────────────────────────────────────────
   const boardRef = useRef(null);
   const colRefs = {
-    "Not Started":  useRef(null),
-    "In Progress":  useRef(null),
+    "Not Started": useRef(null),
+    "In Progress": useRef(null),
     "Under Review": useRef(null),
-    "Completed":    useRef(null),
-    "Overdue":      useRef(null),
+    "Completed": useRef(null),
+    "Overdue": useRef(null),
   };
 
-  // Scroll board to a specific column
+  // ─── Scroll helper ────────────────────────────────────────────────────
   const scrollToCol = (status) => {
     if (status === "All Statuses") {
       boardRef.current?.scrollTo({ left: 0, behavior: "smooth" });
@@ -229,14 +322,14 @@ const TaskBoard = ({ userRole, onLogout }) => {
     const colEl = colRefs[status]?.current;
     if (colEl && boardRef.current) {
       const boardLeft = boardRef.current.getBoundingClientRect().left;
-      const colLeft   = colEl.getBoundingClientRect().left;
+      const colLeft = colEl.getBoundingClientRect().left;
       boardRef.current.scrollBy({ left: colLeft - boardLeft - 12, behavior: "smooth" });
     }
   };
 
-  // Prevent background scrolling on modals open
+  // ─── Lock body scroll when modals open ──────────────────────────────
   useEffect(() => {
-    if (showAddModal || showDetailModal || showEditModal) {
+    if (showAddModal || showDetailModal) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
@@ -244,9 +337,43 @@ const TaskBoard = ({ userRole, onLogout }) => {
     return () => {
       document.body.style.overflow = "";
     };
-  }, [showAddModal, showDetailModal, showEditModal]);
+  }, [showAddModal, showDetailModal]);
 
-  // Filter Tasks
+  // ─── Derived data for dropdowns ──────────────────────────────────────
+  const derivedMilestones = milestonesRaw
+    .filter(m => selectedProjectId === "All" || String(m.prjId || m.prj_id || m.drftPrjId || m.id) === String(selectedProjectId))
+    .map(m => ({
+      value: `${m.mlstnCd || "ML-???"} ${m.mlstnTtl || ""}`,
+      label: `${m.mlstnCd || "ML-???"} ${m.mlstnTtl || ""}`
+    }))
+    .filter(Boolean);
+
+  // ─── Format assignee options with designation + company/plant ──────────
+  const getAssigneeLabel = (emp) => {
+    const name = `${emp.fstNm || emp.firstName || ""} ${emp.lstNm || emp.lastName || ""}`.trim();
+    let desig = emp.designation || emp.role;
+    if (!desig) {
+      const desigObj = designationsList.find(d => String(d.desigId || d.id) === String(emp.desigId));
+      desig = desigObj?.desigNm || "N/A";
+    }
+    let orgName = "";
+    if (emp.coyId) {
+      const coy = companiesList.find(c => String(c.coyId || c.id) === String(emp.coyId));
+      orgName = coy ? coy.coyNm : "";
+    } else if (emp.pltId) {
+      const plt = plantsList.find(p => String(p.pltId || p.id) === String(emp.pltId));
+      orgName = plt ? plt.pltNm : "";
+    }
+    if (!orgName) orgName = "N/A";
+    return `${name} – ${desig} – ${orgName}`;
+  };
+
+  const assigneeOptions = employeesList.map(emp => ({
+    value: emp.empId,
+    label: getAssigneeLabel(emp)
+  }));
+
+  // ─── Filter and sorting ──────────────────────────────────────────────
   const filteredTasks = tasks.filter((task) => {
     const matchProject = selectedProjectId === "All" || String(task.projectId) === String(selectedProjectId);
     const matchMilestone = selectedMilestone === "All Milestones" || task.milestone === selectedMilestone;
@@ -262,19 +389,13 @@ const TaskBoard = ({ userRole, onLogout }) => {
     return matchProject && matchMilestone && matchAssignee && matchTaskType && matchPriority && matchStatus && matchSearch;
   });
 
-  const derivedMilestones = milestonesRaw
-    .filter(m => selectedProjectId === "All" || String(m.prjId || m.prj_id || m.drftPrjId || m.id) === String(selectedProjectId))
-    .map(m => `${m.mlstnCd || "ML-???"} ${m.mlstnTtl || ""}`)
-    .filter(Boolean);
-
   const activeProject = projectsRaw.find(p => selectedProjectId !== "All" ? String(p.prjId) === String(selectedProjectId) : true) || projectsRaw[0];
   const activePlant = activeProject ? plantsList.find(pl => pl.pltId === activeProject.pltId)?.pltNm : null;
   const activeDept = activeProject ? departmentsList.find(d => d.deptId === activeProject.deptId)?.deptNm : null;
 
-  // Calculate Metrics based on ALL tasks of selected project (ignoring other filters to match mockup initial visual state,
-  // but let them update dynamically when tasks are dragged/added/deleted)
+  // ─── Metrics ──────────────────────────────────────────────────────────
   const projectTasks = tasks.filter(task => selectedProjectId === "All" || String(task.projectId) === String(selectedProjectId));
-  const totalTasksCount = projectTasks.filter(t => t.status !== "Under Review").length; // Completed + In Progress + Not Started + Overdue
+  const totalTasksCount = projectTasks.filter(t => t.status !== "Under Review").length;
   const notStartedCount = projectTasks.filter(t => t.status === "Not Started").length;
   const inProgressCount = projectTasks.filter(t => t.status === "In Progress" || t.status === "Under Review").length;
   const completedCount = projectTasks.filter(t => t.status === "Completed").length;
@@ -285,7 +406,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
   const completedPct = totalTasksCount > 0 ? ((completedCount / totalTasksCount) * 100).toFixed(2) : "0.00";
   const overduePct = totalTasksCount > 0 ? ((overdueCount / totalTasksCount) * 100).toFixed(2) : "0.00";
 
-  // Drag & Drop
+  // ─── Drag & drop handlers ────────────────────────────────────────────
   const handleDragStart = (e, taskId) => {
     e.dataTransfer.setData("text/plain", taskId);
     setDraggedTaskId(taskId);
@@ -322,7 +443,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
     setDraggedOverCol(null);
   };
 
-  // Add Task
+  // ─── Add Task ─────────────────────────────────────────────────────────
   const openAddTaskModal = (colStatus) => {
     setTargetColumn(colStatus);
     setNewTitle("");
@@ -339,7 +460,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
     const msObj = milestonesRaw.find(m => `${m.mlstnCd || "ML-???"} ${m.mlstnTtl || ""}` === newMilestone);
     const mId = msObj ? msObj.mId : (milestonesRaw[0]?.mId || 1);
 
-    const empObj = employeesList.find(emp => `${emp.firstName} ${emp.lastName}` === newAssignee);
+    const empObj = employeesList.find(emp => getAssigneeLabel(emp) === newAssignee);
     const empId = empObj ? empObj.empId : null;
 
     const backendSts = mapStatusToApi(targetColumn);
@@ -366,12 +487,13 @@ const TaskBoard = ({ userRole, onLogout }) => {
     }
   };
 
-  // View Details
+  // ─── View Details ────────────────────────────────────────────────────
   const handleCardClick = (task) => {
     setSelectedTask(task);
     setShowDetailModal(true);
   };
 
+  // ─── Toggle subtask ──────────────────────────────────────────────────
   const toggleSubtask = async () => {
     if (!selectedTask || !selectedTask.taskId) return;
     const completed = selectedTask.subtasksCompleted;
@@ -409,39 +531,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
     }
   };
 
-  // Open Edit progress Modal
-  const openEditProgressModal = (task, e) => {
-    e.stopPropagation();
-    setSelectedTask(task);
-    setEditStatus(task.status);
-    setEditProgress(task.progress || 0);
-    setEditPriority(task.priority === "Completed" || task.priority === "Overdue" ? "Medium" : task.priority);
-    setShowEditModal(true);
-  };
-
-  const handleSaveProgress = async (e) => {
-    e.preventDefault();
-    if (!selectedTask || !selectedTask.taskId) return;
-
-    const backendSts = mapStatusToApi(editStatus);
-
-    try {
-      const updatedDetails = {
-        ...selectedTask.rawTask,
-        taskSts: backendSts,
-        wrkDays: selectedTask.subtasksCount
-      };
-
-      await apiPut(`/api/task-live/${selectedTask.taskId}`, updatedDetails);
-      await fetchLiveTasks();
-      setShowEditModal(false);
-      setShowDetailModal(false);
-    } catch (err) {
-      console.error("Failed to save progress:", err);
-    }
-  };
-
-  // Delete Task
+  // ─── Delete Task ──────────────────────────────────────────────────────
   const handleDeleteTask = async (taskIdVal) => {
     const taskObj = tasks.find(t => t.id === taskIdVal || String(t.taskId) === String(taskIdVal));
     if (!taskObj || !taskObj.taskId) return;
@@ -455,37 +545,15 @@ const TaskBoard = ({ userRole, onLogout }) => {
     }
   };
 
-  // Format date helper
+  // ─── Helpers ──────────────────────────────────────────────────────────
   const formatDate = (dateStr) => {
     if (!dateStr) return "";
     const parts = dateStr.split("-");
     if (parts.length !== 3) return dateStr;
     const day = parts[2];
     const monthIndex = parseInt(parts[1], 10) - 1;
-    const year = parts[0];
-    const months = ["Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec", "Jan", "Feb", "Mar", "Apr", "May"];
-    // Simply map index
     const monthsFull = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    return `${parseInt(day, 10)}-${monthsFull[monthIndex]}-${year}`;
-  };
-
-  const getAssigneeInfo = (name) => {
-    const colors = [
-      { bg: "#e0f2fe", color: "#0369a1" },
-      { bg: "#fee2e2", color: "#b91c1c" },
-      { bg: "#dcfce7", color: "#15803d" },
-      { bg: "#fef9c3", color: "#a16207" },
-      { bg: "#f3e8ff", color: "#6b21a8" },
-      { bg: "#ffedd5", color: "#c2410c" },
-      { bg: "#e0e7ff", color: "#4338ca" }
-    ];
-    if (!name) return { name: "Unassigned", bg: "#e2e8f0", color: "#475569" };
-    let hash = 0;
-    for (let i = 0; i < name.length; i++) {
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    }
-    const index = Math.abs(hash) % colors.length;
-    return { name, ...colors[index] };
+    return `${parseInt(day, 10)}-${monthsFull[monthIndex]}-${parts[0]}`;
   };
 
   const getInitials = (name) => {
@@ -499,15 +567,14 @@ const TaskBoard = ({ userRole, onLogout }) => {
     return filteredTasks.filter(t => t.status === status);
   };
 
+  // ─── Render ────────────────────────────────────────────────────────────
   return (
     <div className="tb-shell-container">
-      {/* Sidebar Component */}
       <Sidebar onLogout={onLogout} />
 
       <div className="tb-shell">
         <Header title="Task Board" subtitle="Visualize and manage tasks across all milestones" />
 
-        {/* Main Content */}
         <main className="tb-main">
 
           {/* Project Summary Card */}
@@ -573,58 +640,113 @@ const TaskBoard = ({ userRole, onLogout }) => {
           {/* ===== ROW 1: Filter Dropdowns + Search ===== */}
           <div className="tb-filter-toolbar">
             <div className="tb-filters-group">
+              {/* Project */}
+              <div className="tb-filter-field">
+                <label>Project</label>
+                <SearchableSelect
+                  name="project"
+                  value={selectedProjectId}
+                  onChange={(e) => {
+                    setSelectedProjectId(e.target.value);
+                    setSelectedMilestone("All Milestones");
+                  }}
+                  options={[
+                    { value: "All", label: "All Projects" },
+                    ...projectsRaw.map(p => ({
+                      value: p.prjId,
+                      label: `${p.prjCd} - ${p.prjNm}`
+                    }))
+                  ]}
+                  placeholder="Select Project"
+                />
+              </div>
+
+              {/* Milestone */}
               <div className="tb-filter-field">
                 <label>Milestone</label>
-                <select className="tb-select-input" value={selectedMilestone} onChange={e => setSelectedMilestone(e.target.value)}>
-                  <option value="All Milestones">All Milestones</option>
-                  {derivedMilestones.map(m => (
-                    <option key={m} value={m}>{m}</option>
-                  ))}
-                </select>
+                <SearchableSelect
+                  name="milestone"
+                  value={selectedMilestone}
+                  onChange={(e) => setSelectedMilestone(e.target.value)}
+                  options={[
+                    { value: "All Milestones", label: "All Milestones" },
+                    ...derivedMilestones
+                  ]}
+                  placeholder="Select Milestone"
+                />
               </div>
+
+              {/* Assignee */}
               <div className="tb-filter-field">
                 <label>Assignee</label>
-                <select className="tb-select-input" value={selectedAssignee} onChange={e => setSelectedAssignee(e.target.value)}>
-                  <option value="All Employees">All Employees</option>
-                  {employeesList.map(emp => {
-                    const fullName = `${emp.fstNm || emp.firstName || ""} ${emp.lstNm || emp.lastName || ""}`.trim();
-                    return <option key={emp.empId} value={fullName}>{fullName}</option>;
-                  })}
-                </select>
+                <SearchableSelect
+                  name="assignee"
+                  value={selectedAssignee}
+                  onChange={(e) => setSelectedAssignee(e.target.value)}
+                  options={[
+                    { value: "All Employees", label: "All Employees" },
+                    ...assigneeOptions
+                  ]}
+                  placeholder="Search Assignee"
+                />
               </div>
+
+              {/* Task Type */}
               <div className="tb-filter-field">
                 <label>Task Type</label>
-                <select className="tb-select-input" value={selectedTaskType} onChange={e => setSelectedTaskType(e.target.value)}>
-                  <option value="All">All</option>
-                  <option value="Internal">Internal</option>
-                  <option value="External">External</option>
-                </select>
+                <SearchableSelect
+                  name="taskType"
+                  value={selectedTaskType}
+                  onChange={(e) => setSelectedTaskType(e.target.value)}
+                  options={[
+                    { value: "All", label: "All" },
+                    { value: "Internal", label: "Internal" },
+                    { value: "External", label: "External" }
+                  ]}
+                  placeholder="Select Type"
+                />
               </div>
+
+              {/* Priority */}
               <div className="tb-filter-field">
                 <label>Priority</label>
-                <select className="tb-select-input" value={selectedPriority} onChange={e => setSelectedPriority(e.target.value)}>
-                  <option value="All">All</option>
-                  <option value="High">High</option>
-                  <option value="Medium">Medium</option>
-                  <option value="Low">Low</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Overdue">Overdue</option>
-                </select>
+                <SearchableSelect
+                  name="priority"
+                  value={selectedPriority}
+                  onChange={(e) => setSelectedPriority(e.target.value)}
+                  options={[
+                    { value: "All", label: "All" },
+                    { value: "High", label: "High" },
+                    { value: "Medium", label: "Medium" },
+                    { value: "Low", label: "Low" },
+                    { value: "Completed", label: "Completed" },
+                    { value: "Overdue", label: "Overdue" }
+                  ]}
+                  placeholder="Select Priority"
+                />
               </div>
+
+              {/* Status */}
               <div className="tb-filter-field">
                 <label>Status</label>
-                <select className="tb-select-input" value={selectedStatus} onChange={e => setSelectedStatus(e.target.value)}>
-                  <option value="All Statuses">All Statuses</option>
-                  <option value="Not Started">Not Started</option>
-                  <option value="In Progress">In Progress</option>
-                  <option value="Under Review">Under Review</option>
-                  <option value="Completed">Completed</option>
-                  <option value="Overdue">Overdue</option>
-                </select>
+                <SearchableSelect
+                  name="status"
+                  value={selectedStatus}
+                  onChange={(e) => setSelectedStatus(e.target.value)}
+                  options={[
+                    { value: "All Statuses", label: "All Statuses" },
+                    { value: "Not Started", label: "Not Started" },
+                    { value: "In Progress", label: "In Progress" },
+                    { value: "Under Review", label: "Under Review" },
+                    { value: "Completed", label: "Completed" },
+                    { value: "Overdue", label: "Overdue" }
+                  ]}
+                  placeholder="Select Status"
+                />
               </div>
 
               {/* Search bar */}
-              <div className="tb-filter-field" style={{ minWidth: 0, flex: "1.5" }}>
+              <div className="tb-filter-field" style={{ minWidth: "180px", flex: "1.5" }}>
                 <label style={{ opacity: 0 }}>Search</label>
                 <div className="tb-search-box-wrap" style={{ width: "100%" }}>
                   <Search size={15} className="tb-search-box-icon" />
@@ -637,17 +759,22 @@ const TaskBoard = ({ userRole, onLogout }) => {
                 </div>
               </div>
             </div>
+
+            <div className="tb-toolbar-actions" style={{ alignSelf: "flex-end", height: "38px", display: "flex", alignItems: "center" }}>
+              <button className="tb-btn-white"><SlidersHorizontal size={14} /> Filters</button>
+              <button className="tb-btn-white"><Grid size={14} /> View</button>
+            </div>
           </div>
 
           {/* ===== ROW 2: Status Tab Pills ===== */}
           <div className="tb-status-tabs">
             {[
-              { label: "All",          value: "All Statuses",   color: "#64748b" },
-              { label: "Not Started",  value: "Not Started",    color: "#2563eb" },
-              { label: "In Progress",  value: "In Progress",    color: "#f97316" },
-              { label: "Under Review", value: "Under Review",   color: "#a855f7" },
-              { label: "Completed",    value: "Completed",      color: "#16a34a" },
-              { label: "Overdue",      value: "Overdue",        color: "#ef4444" },
+              { label: "All", value: "All Statuses", color: "#64748b" },
+              { label: "Not Started", value: "Not Started", color: "#2563eb" },
+              { label: "In Progress", value: "In Progress", color: "#f97316" },
+              { label: "Under Review", value: "Under Review", color: "#a855f7" },
+              { label: "Completed", value: "Completed", color: "#16a34a" },
+              { label: "Overdue", value: "Overdue", color: "#ef4444" },
             ].map(tab => (
               <button
                 key={tab.value}
@@ -682,376 +809,376 @@ const TaskBoard = ({ userRole, onLogout }) => {
           >
             {/* Column 1: Not Started */}
             {(selectedStatus === "All Statuses" || selectedStatus === "Not Started") && (
-            <div
-              ref={colRefs["Not Started"]}
-              className={`tb-col not-started ${draggedOverCol === "Not Started" ? "drag-over" : ""}`}
-              onDragOver={e => handleDragOver(e, "Not Started")}
-              onDragLeave={handleDragLeave}
-              onDrop={e => handleDrop(e, "Not Started")}
-            >
-              <div className="tb-col-header">
-                <div className="tb-col-title-wrap">
-                  <h3 className="tb-col-title">Not Started</h3>
-                  <span className="tb-col-badge">{getTasksByStatus("Not Started").length}</span>
+              <div
+                ref={colRefs["Not Started"]}
+                className={`tb-col not-started ${draggedOverCol === "Not Started" ? "drag-over" : ""}`}
+                onDragOver={e => handleDragOver(e, "Not Started")}
+                onDragLeave={handleDragLeave}
+                onDrop={e => handleDrop(e, "Not Started")}
+              >
+                <div className="tb-col-header">
+                  <div className="tb-col-title-wrap">
+                    <h3 className="tb-col-title">Not Started</h3>
+                    <span className="tb-col-badge">{getTasksByStatus("Not Started").length}</span>
+                  </div>
+                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Not Started")}>
+                    <Plus size={16} />
+                  </button>
                 </div>
-                <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Not Started")}>
-                  <Plus size={16} />
+                <div className="tb-cards-container">
+                  {getTasksByStatus("Not Started").map(task => (
+                    <div
+                      key={task.id}
+                      className="tb-card"
+                      draggable
+                      onDragStart={e => handleDragStart(e, task.id)}
+                      onClick={() => handleCardClick(task)}
+                    >
+                      <div className="tb-card-header">
+                        <span className="tb-card-id">{task.id}</span>
+                        <span className={`tb-card-prio ${task.priority.toLowerCase()}`}>{task.priority}</span>
+                      </div>
+                      <h4 className="tb-card-title">{task.title}</h4>
+                      <p className="tb-card-subtitle">{task.milestone}</p>
+                      <div className="tb-card-footer">
+                        <div className="tb-card-assignee">
+                          <div
+                            className="tb-card-avatar"
+                            style={{
+                              backgroundColor: stringToColor(task.assignee),
+                              color: "#fff"
+                            }}
+                          >
+                            {getInitials(task.assignee)}
+                          </div>
+                          <span className="tb-card-name">{task.assignee}</span>
+                        </div>
+                        <div className="tb-card-date-info">
+                          <CalendarIcon size={12} />
+                          <span>{formatDate(task.dueDate)}</span>
+                        </div>
+                        {task.subtasksCount > 0 && (
+                          <div className="tb-card-subtasks-count">
+                            <CheckSquare size={11} />
+                            <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Not Started")}>
+                  + Add Task
                 </button>
               </div>
-              <div className="tb-cards-container">
-                {getTasksByStatus("Not Started").map(task => (
-                  <div
-                    key={task.id}
-                    className="tb-card"
-                    draggable
-                    onDragStart={e => handleDragStart(e, task.id)}
-                    onClick={() => handleCardClick(task)}
-                  >
-                    <div className="tb-card-header">
-                      <span className="tb-card-id">{task.id}</span>
-                      <span className={`tb-card-prio ${task.priority.toLowerCase()}`}>{task.priority}</span>
-                    </div>
-                    <h4 className="tb-card-title">{task.title}</h4>
-                    <p className="tb-card-subtitle">{task.milestone}</p>
-                    <div className="tb-card-footer">
-                      <div className="tb-card-assignee">
-                        <div
-                          className="tb-card-avatar"
-                          style={{
-                            backgroundColor: getAssigneeInfo(task.assignee).bg,
-                            color: getAssigneeInfo(task.assignee).color
-                          }}
-                        >
-                          {getInitials(task.assignee)}
-                        </div>
-                        <span className="tb-card-name">{task.assignee}</span>
-                      </div>
-                      <div className="tb-card-date-info">
-                        <CalendarIcon size={12} />
-                        <span>{formatDate(task.dueDate)}</span>
-                      </div>
-                      {task.subtasksCount > 0 && (
-                        <div className="tb-card-subtasks-count">
-                          <CheckSquare size={11} />
-                          <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Not Started")}>
-                + Add Task
-              </button>
-            </div>
             )}
 
             {/* Column 2: In Progress */}
             {(selectedStatus === "All Statuses" || selectedStatus === "In Progress") && (
-            <div
-              ref={colRefs["In Progress"]}
-              className={`tb-col in-progress ${draggedOverCol === "In Progress" ? "drag-over" : ""}`}
-              onDragOver={e => handleDragOver(e, "In Progress")}
-              onDragLeave={handleDragLeave}
-              onDrop={e => handleDrop(e, "In Progress")}
-            >
-              <div className="tb-col-header">
-                <div className="tb-col-title-wrap">
-                  <h3 className="tb-col-title">In Progress</h3>
-                  <span className="tb-col-badge">{getTasksByStatus("In Progress").length}</span>
+              <div
+                ref={colRefs["In Progress"]}
+                className={`tb-col in-progress ${draggedOverCol === "In Progress" ? "drag-over" : ""}`}
+                onDragOver={e => handleDragOver(e, "In Progress")}
+                onDragLeave={handleDragLeave}
+                onDrop={e => handleDrop(e, "In Progress")}
+              >
+                <div className="tb-col-header">
+                  <div className="tb-col-title-wrap">
+                    <h3 className="tb-col-title">In Progress</h3>
+                    <span className="tb-col-badge">{getTasksByStatus("In Progress").length}</span>
+                  </div>
+                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("In Progress")}>
+                    <Plus size={16} />
+                  </button>
                 </div>
-                <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("In Progress")}>
-                  <Plus size={16} />
-                </button>
-              </div>
-              <div className="tb-cards-container">
-                {getTasksByStatus("In Progress").map(task => (
-                  <div
-                    key={task.id}
-                    className="tb-card"
-                    draggable
-                    onDragStart={e => handleDragStart(e, task.id)}
-                    onClick={() => handleCardClick(task)}
-                  >
-                    <div className="tb-card-header">
-                      <span className="tb-card-id">{task.id}</span>
-                      <span className={`tb-card-prio ${task.priority.toLowerCase()}`}>{task.priority}</span>
-                    </div>
-                    <h4 className="tb-card-title">{task.title}</h4>
-                    <p className="tb-card-subtitle">{task.milestone}</p>
-                    {task.progress !== undefined && (
-                      <div className="tb-card-progress">
-                        <div className="tb-card-progress-header">
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>Progress</span>
-                          <span style={{ fontSize: '11px', fontWeight: '700' }}>{task.progress}%</span>
-                        </div>
-                        <div className="tb-card-progress-bar">
-                          <div className="tb-card-progress-fill in-progress" style={{ width: `${task.progress}%` }}></div>
-                        </div>
+                <div className="tb-cards-container">
+                  {getTasksByStatus("In Progress").map(task => (
+                    <div
+                      key={task.id}
+                      className="tb-card"
+                      draggable
+                      onDragStart={e => handleDragStart(e, task.id)}
+                      onClick={() => handleCardClick(task)}
+                    >
+                      <div className="tb-card-header">
+                        <span className="tb-card-id">{task.id}</span>
+                        <span className={`tb-card-prio ${task.priority.toLowerCase()}`}>{task.priority}</span>
                       </div>
-                    )}
-                    <div className="tb-card-footer">
-                      <div className="tb-card-assignee">
-                        <div
-                          className="tb-card-avatar"
-                          style={{
-                            backgroundColor: getAssigneeInfo(task.assignee).bg,
-                            color: getAssigneeInfo(task.assignee).color
-                          }}
-                        >
-                          {getInitials(task.assignee)}
-                        </div>
-                        <span className="tb-card-name">{task.assignee}</span>
-                      </div>
-                      <div className="tb-card-date-info">
-                        <CalendarIcon size={12} />
-                        <span>{formatDate(task.dueDate)}</span>
-                      </div>
-                      {task.subtasksCount > 0 && (
-                        <div className="tb-card-subtasks-count">
-                          <CheckSquare size={11} />
-                          <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                      <h4 className="tb-card-title">{task.title}</h4>
+                      <p className="tb-card-subtitle">{task.milestone}</p>
+                      {task.progress !== undefined && (
+                        <div className="tb-card-progress">
+                          <div className="tb-card-progress-header">
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>Progress</span>
+                            <span style={{ fontSize: '11px', fontWeight: '700' }}>{task.progress}%</span>
+                          </div>
+                          <div className="tb-card-progress-bar">
+                            <div className="tb-card-progress-fill in-progress" style={{ width: `${task.progress}%` }}></div>
+                          </div>
                         </div>
                       )}
+                      <div className="tb-card-footer">
+                        <div className="tb-card-assignee">
+                          <div
+                            className="tb-card-avatar"
+                            style={{
+                              backgroundColor: stringToColor(task.assignee),
+                              color: "#fff"
+                            }}
+                          >
+                            {getInitials(task.assignee)}
+                          </div>
+                          <span className="tb-card-name">{task.assignee}</span>
+                        </div>
+                        <div className="tb-card-date-info">
+                          <CalendarIcon size={12} />
+                          <span>{formatDate(task.dueDate)}</span>
+                        </div>
+                        {task.subtasksCount > 0 && (
+                          <div className="tb-card-subtasks-count">
+                            <CheckSquare size={11} />
+                            <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("In Progress")}>
+                  + Add Task
+                </button>
               </div>
-              <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("In Progress")}>
-                + Add Task
-              </button>
-            </div>
             )}
 
             {/* Column 3: Under Review */}
             {(selectedStatus === "All Statuses" || selectedStatus === "Under Review") && (
-            <div
-              ref={colRefs["Under Review"]}
-              className={`tb-col under-review ${draggedOverCol === "Under Review" ? "drag-over" : ""}`}
-              onDragOver={e => handleDragOver(e, "Under Review")}
-              onDragLeave={handleDragLeave}
-              onDrop={e => handleDrop(e, "Under Review")}
-            >
-              <div className="tb-col-header">
-                <div className="tb-col-title-wrap">
-                  <h3 className="tb-col-title">Under Review</h3>
-                  <span className="tb-col-badge">{getTasksByStatus("Under Review").length}</span>
+              <div
+                ref={colRefs["Under Review"]}
+                className={`tb-col under-review ${draggedOverCol === "Under Review" ? "drag-over" : ""}`}
+                onDragOver={e => handleDragOver(e, "Under Review")}
+                onDragLeave={handleDragLeave}
+                onDrop={e => handleDrop(e, "Under Review")}
+              >
+                <div className="tb-col-header">
+                  <div className="tb-col-title-wrap">
+                    <h3 className="tb-col-title">Under Review</h3>
+                    <span className="tb-col-badge">{getTasksByStatus("Under Review").length}</span>
+                  </div>
+                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Under Review")}>
+                    <Plus size={16} />
+                  </button>
                 </div>
-                <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Under Review")}>
-                  <Plus size={16} />
-                </button>
-              </div>
-              <div className="tb-cards-container">
-                {getTasksByStatus("Under Review").map(task => (
-                  <div
-                    key={task.id}
-                    className="tb-card"
-                    draggable
-                    onDragStart={e => handleDragStart(e, task.id)}
-                    onClick={() => handleCardClick(task)}
-                  >
-                    <div className="tb-card-header">
-                      <span className="tb-card-id">{task.id}</span>
-                      <span className={`tb-card-prio ${task.priority.toLowerCase()}`}>{task.priority}</span>
-                    </div>
-                    <h4 className="tb-card-title">{task.title}</h4>
-                    <p className="tb-card-subtitle">{task.milestone}</p>
-                    {task.progress !== undefined && (
-                      <div className="tb-card-progress">
-                        <div className="tb-card-progress-header">
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>Progress</span>
-                          <span style={{ fontSize: '11px', fontWeight: '700' }}>{task.progress}%</span>
-                        </div>
-                        <div className="tb-card-progress-bar">
-                          <div className="tb-card-progress-fill under-review" style={{ width: `${task.progress}%`, backgroundColor: '#a855f7' }}></div>
-                        </div>
+                <div className="tb-cards-container">
+                  {getTasksByStatus("Under Review").map(task => (
+                    <div
+                      key={task.id}
+                      className="tb-card"
+                      draggable
+                      onDragStart={e => handleDragStart(e, task.id)}
+                      onClick={() => handleCardClick(task)}
+                    >
+                      <div className="tb-card-header">
+                        <span className="tb-card-id">{task.id}</span>
+                        <span className={`tb-card-prio ${task.priority.toLowerCase()}`}>{task.priority}</span>
                       </div>
-                    )}
-                    <div className="tb-card-footer">
-                      <div className="tb-card-assignee">
-                        <div
-                          className="tb-card-avatar"
-                          style={{
-                            backgroundColor: getAssigneeInfo(task.assignee).bg,
-                            color: getAssigneeInfo(task.assignee).color
-                          }}
-                        >
-                          {getInitials(task.assignee)}
-                        </div>
-                        <span className="tb-card-name">{task.assignee}</span>
-                      </div>
-                      <div className="tb-card-date-info">
-                        <CalendarIcon size={12} />
-                        <span>{formatDate(task.dueDate)}</span>
-                      </div>
-                      {task.subtasksCount > 0 && (
-                        <div className="tb-card-subtasks-count">
-                          <CheckSquare size={11} />
-                          <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                      <h4 className="tb-card-title">{task.title}</h4>
+                      <p className="tb-card-subtitle">{task.milestone}</p>
+                      {task.progress !== undefined && (
+                        <div className="tb-card-progress">
+                          <div className="tb-card-progress-header">
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>Progress</span>
+                            <span style={{ fontSize: '11px', fontWeight: '700' }}>{task.progress}%</span>
+                          </div>
+                          <div className="tb-card-progress-bar">
+                            <div className="tb-card-progress-fill under-review" style={{ width: `${task.progress}%`, backgroundColor: '#a855f7' }}></div>
+                          </div>
                         </div>
                       )}
+                      <div className="tb-card-footer">
+                        <div className="tb-card-assignee">
+                          <div
+                            className="tb-card-avatar"
+                            style={{
+                              backgroundColor: stringToColor(task.assignee),
+                              color: "#fff"
+                            }}
+                          >
+                            {getInitials(task.assignee)}
+                          </div>
+                          <span className="tb-card-name">{task.assignee}</span>
+                        </div>
+                        <div className="tb-card-date-info">
+                          <CalendarIcon size={12} />
+                          <span>{formatDate(task.dueDate)}</span>
+                        </div>
+                        {task.subtasksCount > 0 && (
+                          <div className="tb-card-subtasks-count">
+                            <CheckSquare size={11} />
+                            <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Under Review")}>
+                  + Add Task
+                </button>
               </div>
-              <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Under Review")}>
-                + Add Task
-              </button>
-            </div>
             )}
 
             {/* Column 4: Completed */}
             {(selectedStatus === "All Statuses" || selectedStatus === "Completed") && (
-            <div
-              ref={colRefs["Completed"]}
-              className={`tb-col completed ${draggedOverCol === "Completed" ? "drag-over" : ""}`}
-              onDragOver={e => handleDragOver(e, "Completed")}
-              onDragLeave={handleDragLeave}
-              onDrop={e => handleDrop(e, "Completed")}
-            >
-              <div className="tb-col-header">
-                <div className="tb-col-title-wrap">
-                  <h3 className="tb-col-title">Completed</h3>
-                  <span className="tb-col-badge">{getTasksByStatus("Completed").length}</span>
+              <div
+                ref={colRefs["Completed"]}
+                className={`tb-col completed ${draggedOverCol === "Completed" ? "drag-over" : ""}`}
+                onDragOver={e => handleDragOver(e, "Completed")}
+                onDragLeave={handleDragLeave}
+                onDrop={e => handleDrop(e, "Completed")}
+              >
+                <div className="tb-col-header">
+                  <div className="tb-col-title-wrap">
+                    <h3 className="tb-col-title">Completed</h3>
+                    <span className="tb-col-badge">{getTasksByStatus("Completed").length}</span>
+                  </div>
+                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Completed")}>
+                    <Plus size={16} />
+                  </button>
                 </div>
-                <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Completed")}>
-                  <Plus size={16} />
-                </button>
-              </div>
-              <div className="tb-cards-container">
-                {getTasksByStatus("Completed").map(task => (
-                  <div
-                    key={task.id}
-                    className="tb-card"
-                    draggable
-                    onDragStart={e => handleDragStart(e, task.id)}
-                    onClick={() => handleCardClick(task)}
-                  >
-                    <div className="tb-card-header">
-                      <span className="tb-card-id completed">{task.id}</span>
-                      <span className="tb-card-prio completed">COMPLETED</span>
-                    </div>
-                    <h4 className="tb-card-title">{task.title}</h4>
-                    <p className="tb-card-subtitle">{task.milestone}</p>
-                    {task.progress !== undefined && (
-                      <div className="tb-card-progress">
-                        <div className="tb-card-progress-header">
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>Progress</span>
-                          <span style={{ fontSize: '11px', fontWeight: '700', color: '#16a34a' }}>100%</span>
-                        </div>
-                        <div className="tb-card-progress-bar">
-                          <div className="tb-card-progress-fill completed" style={{ width: `100%`, backgroundColor: '#16a34a' }}></div>
-                        </div>
+                <div className="tb-cards-container">
+                  {getTasksByStatus("Completed").map(task => (
+                    <div
+                      key={task.id}
+                      className="tb-card"
+                      draggable
+                      onDragStart={e => handleDragStart(e, task.id)}
+                      onClick={() => handleCardClick(task)}
+                    >
+                      <div className="tb-card-header">
+                        <span className="tb-card-id completed">{task.id}</span>
+                        <span className="tb-card-prio completed">COMPLETED</span>
                       </div>
-                    )}
-                    <div className="tb-card-footer">
-                      <div className="tb-card-assignee">
-                        <div
-                          className="tb-card-avatar"
-                          style={{
-                            backgroundColor: getAssigneeInfo(task.assignee).bg,
-                            color: getAssigneeInfo(task.assignee).color
-                          }}
-                        >
-                          {getInitials(task.assignee)}
-                        </div>
-                        <span className="tb-card-name">{task.assignee}</span>
-                      </div>
-                      <div className="tb-card-date-info">
-                        <CalendarIcon size={12} />
-                        <span>{formatDate(task.dueDate)}</span>
-                      </div>
-                      {task.subtasksCount > 0 && (
-                        <div className="tb-card-subtasks-count">
-                          <CheckSquare size={11} />
-                          <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                      <h4 className="tb-card-title">{task.title}</h4>
+                      <p className="tb-card-subtitle">{task.milestone}</p>
+                      {task.progress !== undefined && (
+                        <div className="tb-card-progress">
+                          <div className="tb-card-progress-header">
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>Progress</span>
+                            <span style={{ fontSize: '11px', fontWeight: '700', color: '#16a34a' }}>100%</span>
+                          </div>
+                          <div className="tb-card-progress-bar">
+                            <div className="tb-card-progress-fill completed" style={{ width: `100%`, backgroundColor: '#16a34a' }}></div>
+                          </div>
                         </div>
                       )}
+                      <div className="tb-card-footer">
+                        <div className="tb-card-assignee">
+                          <div
+                            className="tb-card-avatar"
+                            style={{
+                              backgroundColor: stringToColor(task.assignee),
+                              color: "#fff"
+                            }}
+                          >
+                            {getInitials(task.assignee)}
+                          </div>
+                          <span className="tb-card-name">{task.assignee}</span>
+                        </div>
+                        <div className="tb-card-date-info">
+                          <CalendarIcon size={12} />
+                          <span>{formatDate(task.dueDate)}</span>
+                        </div>
+                        {task.subtasksCount > 0 && (
+                          <div className="tb-card-subtasks-count">
+                            <CheckSquare size={11} />
+                            <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Completed")}>
+                  + Add Task
+                </button>
               </div>
-              <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Completed")}>
-                + Add Task
-              </button>
-            </div>
             )}
 
             {/* Column 5: Overdue */}
             {(selectedStatus === "All Statuses" || selectedStatus === "Overdue") && (
-            <div
-              ref={colRefs["Overdue"]}
-              className={`tb-col overdue ${draggedOverCol === "Overdue" ? "drag-over" : ""}`}
-              onDragOver={e => handleDragOver(e, "Overdue")}
-              onDragLeave={handleDragLeave}
-              onDrop={e => handleDrop(e, "Overdue")}
-            >
-              <div className="tb-col-header">
-                <div className="tb-col-title-wrap">
-                  <h3 className="tb-col-title">Overdue</h3>
-                  <span className="tb-col-badge">{getTasksByStatus("Overdue").length}</span>
+              <div
+                ref={colRefs["Overdue"]}
+                className={`tb-col overdue ${draggedOverCol === "Overdue" ? "drag-over" : ""}`}
+                onDragOver={e => handleDragOver(e, "Overdue")}
+                onDragLeave={handleDragLeave}
+                onDrop={e => handleDrop(e, "Overdue")}
+              >
+                <div className="tb-col-header">
+                  <div className="tb-col-title-wrap">
+                    <h3 className="tb-col-title">Overdue</h3>
+                    <span className="tb-col-badge">{getTasksByStatus("Overdue").length}</span>
+                  </div>
+                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Overdue")}>
+                    <Plus size={16} />
+                  </button>
                 </div>
-                <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Overdue")}>
-                  <Plus size={16} />
-                </button>
-              </div>
-              <div className="tb-cards-container">
-                {getTasksByStatus("Overdue").map(task => (
-                  <div
-                    key={task.id}
-                    className="tb-card"
-                    draggable
-                    onDragStart={e => handleDragStart(e, task.id)}
-                    onClick={() => handleCardClick(task)}
-                  >
-                    <div className="tb-card-header">
-                      <span className="tb-card-id overdue">{task.id}</span>
-                      <span className="tb-card-prio overdue">OVERDUE</span>
-                    </div>
-                    <h4 className="tb-card-title">{task.title}</h4>
-                    <p className="tb-card-subtitle">{task.milestone}</p>
-                    {task.progress !== undefined && (
-                      <div className="tb-card-progress">
-                        <div className="tb-card-progress-header">
-                          <span style={{ fontSize: '10px', color: '#64748b' }}>Progress</span>
-                          <span style={{ fontSize: '11px', fontWeight: '700', color: '#ef4444' }}>{task.progress}%</span>
-                        </div>
-                        <div className="tb-card-progress-bar">
-                          <div className="tb-card-progress-fill overdue" style={{ width: `${task.progress}%`, backgroundColor: '#ef4444' }}></div>
-                        </div>
+                <div className="tb-cards-container">
+                  {getTasksByStatus("Overdue").map(task => (
+                    <div
+                      key={task.id}
+                      className="tb-card"
+                      draggable
+                      onDragStart={e => handleDragStart(e, task.id)}
+                      onClick={() => handleCardClick(task)}
+                    >
+                      <div className="tb-card-header">
+                        <span className="tb-card-id overdue">{task.id}</span>
+                        <span className="tb-card-prio overdue">OVERDUE</span>
                       </div>
-                    )}
-                    <div className="tb-card-footer">
-                      <div className="tb-card-assignee">
-                        <div
-                          className="tb-card-avatar"
-                          style={{
-                            backgroundColor: getAssigneeInfo(task.assignee).bg,
-                            color: getAssigneeInfo(task.assignee).color
-                          }}
-                        >
-                          {getInitials(task.assignee)}
-                        </div>
-                        <span className="tb-card-name">{task.assignee}</span>
-                      </div>
-                      <div className="tb-card-date-info urgent">
-                        <CalendarIcon size={12} />
-                        <span>{formatDate(task.dueDate)}</span>
-                      </div>
-                      {task.subtasksCount > 0 && (
-                        <div className="tb-card-subtasks-count">
-                          <CheckSquare size={11} />
-                          <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                      <h4 className="tb-card-title">{task.title}</h4>
+                      <p className="tb-card-subtitle">{task.milestone}</p>
+                      {task.progress !== undefined && (
+                        <div className="tb-card-progress">
+                          <div className="tb-card-progress-header">
+                            <span style={{ fontSize: '10px', color: '#64748b' }}>Progress</span>
+                            <span style={{ fontSize: '11px', fontWeight: '700', color: '#ef4444' }}>{task.progress}%</span>
+                          </div>
+                          <div className="tb-card-progress-bar">
+                            <div className="tb-card-progress-fill overdue" style={{ width: `${task.progress}%`, backgroundColor: '#ef4444' }}></div>
+                          </div>
                         </div>
                       )}
+                      <div className="tb-card-footer">
+                        <div className="tb-card-assignee">
+                          <div
+                            className="tb-card-avatar"
+                            style={{
+                              backgroundColor: stringToColor(task.assignee),
+                              color: "#fff"
+                            }}
+                          >
+                            {getInitials(task.assignee)}
+                          </div>
+                          <span className="tb-card-name">{task.assignee}</span>
+                        </div>
+                        <div className="tb-card-date-info urgent">
+                          <CalendarIcon size={12} />
+                          <span>{formatDate(task.dueDate)}</span>
+                        </div>
+                        {task.subtasksCount > 0 && (
+                          <div className="tb-card-subtasks-count">
+                            <CheckSquare size={11} />
+                            <span>{task.subtasksCompleted}/{task.subtasksCount}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
+                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Overdue")}>
+                  + Add Task
+                </button>
               </div>
-              <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Overdue")}>
-                + Add Task
-              </button>
-            </div>
             )}
           </div>
 
@@ -1121,7 +1248,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                 <label>Milestone</label>
                 <select value={newMilestone} onChange={e => setNewMilestone(e.target.value)}>
                   {derivedMilestones.map(m => (
-                    <option key={m} value={m}>{m}</option>
+                    <option key={m.value} value={m.value}>{m.label}</option>
                   ))}
                 </select>
               </div>
@@ -1130,10 +1257,9 @@ const TaskBoard = ({ userRole, onLogout }) => {
                 <div className="tb-form-group">
                   <label>Assignee</label>
                   <select value={newAssignee} onChange={e => setNewAssignee(e.target.value)}>
-                    {employeesList.map(emp => {
-                      const fullName = `${emp.fstNm || emp.firstName || ""} ${emp.lstNm || emp.lastName || ""}`.trim();
-                      return <option key={emp.empId} value={fullName}>{fullName}</option>;
-                    })}
+                    {assigneeOptions.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="tb-form-group">
@@ -1174,7 +1300,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                     min="0"
                     max="10"
                     value={newSubtasksCount}
-                    onChange={e => setNewSubtasksCount(e.target.value)}
+                    onChange={e => setNewSubtasksCount(Number(e.target.value))}
                   />
                 </div>
                 <div className="tb-form-group">
@@ -1262,99 +1388,16 @@ const TaskBoard = ({ userRole, onLogout }) => {
                 </div>
               )}
 
-              {selectedTask.subtasksCount > 0 && (
-                <div className="tb-modal-detail-row">
-                  <span className="tb-modal-detail-label">Subtasks Progress</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginTop: '8px', cursor: 'pointer' }} onClick={() => toggleSubtask()}>
-                    <div style={{
-                      width: "16px",
-                      height: "16px",
-                      border: "2px solid #cbd5e1",
-                      borderRadius: "4px",
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      backgroundColor: selectedTask.subtasksCompleted === selectedTask.subtasksCount ? "#10b981" : "transparent"
-                    }}>
-                      {selectedTask.subtasksCompleted === selectedTask.subtasksCount && <Check size={12} color="white" />}
-                    </div>
-                    <span style={{ fontSize: '13px', fontWeight: '600' }}>
-                      Completed {selectedTask.subtasksCompleted} of {selectedTask.subtasksCount} (Click to toggle)
-                    </span>
-                  </div>
-                </div>
-              )}
+              
             </div>
             <div className="tb-modal-footer" style={{ justifyContent: "space-between" }}>
+              {/* ─── Only Delete and Close remain ─── */}
               <button className="tb-btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handleDeleteTask(selectedTask.id)}>
                 <Trash2 size={14} /> Delete
               </button>
-              <div style={{ display: 'flex', gap: '10px' }}>
-                <button className="tb-btn-secondary" onClick={(e) => openEditProgressModal(selectedTask, e)}>Update Progress</button>
-                <button className="tb-btn-primary" onClick={() => setShowDetailModal(false)}>Close</button>
-              </div>
+              <button className="tb-btn-primary" onClick={() => setShowDetailModal(false)}>Close</button>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* ====== UPDATE PROGRESS MODAL ====== */}
-      {showEditModal && selectedTask && (
-        <div className="tb-modal-overlay" onClick={() => setShowEditModal(false)}>
-          <form className="tb-modal" onClick={e => e.stopPropagation()} onSubmit={handleSaveProgress}>
-            <div className="tb-modal-header">
-              <h3>Update Task: {selectedTask.id}</h3>
-              <button type="button" className="tb-modal-close-btn" onClick={() => setShowEditModal(false)}><X size={18} /></button>
-            </div>
-            <div className="tb-modal-body">
-              <div className="tb-form-row">
-                <div className="tb-form-group">
-                  <label>Priority</label>
-                  <select value={editPriority} onChange={e => setEditPriority(e.target.value)} disabled={editStatus === "Completed" || editStatus === "Overdue"}>
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
-                <div className="tb-form-group">
-                  <label>Status</label>
-                  <select value={editStatus} onChange={e => {
-                    setEditStatus(e.target.value);
-                    if (e.target.value === "Completed") setEditProgress(100);
-                    else if (e.target.value === "Not Started") setEditProgress(0);
-                  }}>
-                    <option value="Not Started">Not Started</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Under Review">Under Review</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Overdue">Overdue</option>
-                  </select>
-                </div>
-              </div>
-
-              {editStatus !== "Completed" && editStatus !== "Not Started" && (
-                <div className="tb-form-group" style={{ marginTop: "12px" }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '13px', fontWeight: '600' }}>
-                    <label>Progress</label>
-                    <span>{editProgress}%</span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="100"
-                    step="5"
-                    value={editProgress}
-                    onChange={e => setEditProgress(e.target.value)}
-                    style={{ cursor: "pointer", width: "100%" }}
-                  />
-                </div>
-              )}
-            </div>
-            <div className="tb-modal-footer">
-              <button type="button" className="tb-btn-secondary" onClick={() => setShowEditModal(false)}>Cancel</button>
-              <button type="submit" className="tb-btn-primary">Save Changes</button>
-            </div>
-          </form>
         </div>
       )}
     </div>

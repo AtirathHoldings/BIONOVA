@@ -25,8 +25,10 @@ import PublicHoliday from "./components/User/PublicHoliday";
 import ProjectDetails from "./components/User/ProjectDetails";
 import ProjectList from "./components/Projectmanager/ProjectList";
 import AssignAccess from "./components/Projectmanager/AssignAccess";
-import CreateIndividualTask from "./components/Projectmanager/IndividualTask";
+import ProjectAccess from "./components/Projectmanager/ProjectAccess";
+import Assignment from "./components/Assignment";
 import ResetPassword from "./components/ResetPassword";
+import AllProjectGanttChart from "./components/Projectmanager/AllProjectGanttChart";
 
 const AppContent = () => {
   const navigate = useNavigate();
@@ -60,7 +62,7 @@ const AppContent = () => {
   return (
     <Routes>
       <Route path="/" element={!isLoggedIn ? <Login onLogin={handleLogin} /> : <Navigate to="/dashboard" replace />} />
-      
+
       {/* Dashboards */}
       <Route path="/dashboard" element={isLoggedIn ? <AdminDashboard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/user-dashboard" element={isLoggedIn ? <UserDashboard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
@@ -83,14 +85,23 @@ const AppContent = () => {
       <Route path="/milestone-creation" element={isLoggedIn ? <MilestoneCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/task-board" element={isLoggedIn ? <TaskBoard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/my-tasks" element={isLoggedIn ? <MyTasks userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/all-project-gantt-chart" element={isLoggedIn ? <AllProjectGanttChart userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/employee-creation" element={isLoggedIn ? <EmployeeCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/department-creation" element={isLoggedIn ? <DepartmentCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/profile" element={isLoggedIn ? <Profile userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/public-holidays" element={isLoggedIn ? <PublicHoliday userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/assign-access" element={isLoggedIn ? <AssignAccess userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
-      <Route path="/individual-task" element={isLoggedIn ? <CreateIndividualTask userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route
+        path="/project-access"
+        element={
+          isLoggedIn
+            ? <ProjectAccess userRole={userRole} onLogout={handleLogout} />
+            : <Navigate to="/" replace />
+        }
+      />
+      <Route path="/assignment" element={isLoggedIn ? <Assignment userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/reset-password" element={<ResetPassword />} />
-      
+
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );

@@ -1,0 +1,605 @@
+/* src/styles/ProjectAccess.css */
+
+.pa-container {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-bottom: 24px;
+}
+
+/* ── Project Selector ── */
+.pa-project-selector {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.pa-project-selector-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.pa-project-selector-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pa-selected-project {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.pa-project-info {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pa-project-icon {
+  color: #2563eb;
+}
+
+.pa-project-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pa-project-code {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.pa-project-meta {
+  display: flex;
+  gap: 8px;
+  font-size: 12px;
+  color: #94a3b8;
+  margin-top: 4px;
+}
+
+.pa-project-access-count {
+  font-size: 14px;
+  font-weight: 600;
+  color: #2563eb;
+  padding: 4px 12px;
+  background: #eff6ff;
+  border-radius: 6px;
+}
+
+/* ── Project List ── */
+.pa-project-list {
+  margin-top: 16px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.pa-project-items {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.pa-project-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.pa-project-item:hover {
+  background: #f8fafc;
+}
+
+.pa-project-item.selected {
+  background: #eff6ff;
+}
+
+.pa-project-item:last-child {
+  border-bottom: none;
+}
+
+.pa-project-item-code {
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  padding: 2px 8px;
+  background: #dbeafe;
+  border-radius: 4px;
+  margin-right: 12px;
+}
+
+.pa-project-item-name {
+  font-size: 14px;
+  color: #1e293b;
+}
+
+/* ── Access Section ── */
+.pa-access-section {
+  background: white;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.pa-access-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.pa-access-list-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pa-access-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.pa-access-count {
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* ── Empty State ── */
+.pa-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #94a3b8;
+}
+
+.pa-empty-state h3 {
+  margin: 16px 0 8px;
+  font-size: 18px;
+  color: #475569;
+}
+
+.pa-empty-state p {
+  font-size: 14px;
+}
+
+.pa-empty-small {
+  padding: 30px 20px;
+  text-align: center;
+  color: #94a3b8;
+}
+
+.pa-empty-small p {
+  margin-bottom: 12px;
+}
+
+/* ── Table ── */
+.pa-table-container {
+  overflow-x: auto;
+}
+
+.pa-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.pa-table th {
+  padding: 12px 16px;
+  text-align: left;
+  background: #f8fafc;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.pa-table td {
+  padding: 12px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.pa-table tr:hover td {
+  background: #fafbfc;
+}
+
+.pa-table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ── Employee Info ── */
+.pa-employee-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pa-employee-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 600;
+  color: #475569;
+  flex-shrink: 0;
+}
+
+.pa-employee-name {
+  font-weight: 500;
+  color: #1e293b;
+}
+
+.pa-employee-details {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+/* ── Access Level ── */
+.pa-access-level {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pa-access-select {
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #e2e8f0;
+  outline: none;
+  cursor: pointer;
+  background: white;
+}
+
+.pa-access-blue { color: #3b82f6; border-color: #bfdbfe; background: #eff6ff; }
+.pa-access-orange { color: #f59e0b; border-color: #fde68a; background: #fffbeb; }
+.pa-access-purple { color: #8b5cf6; border-color: #ddd6fe; background: #faf5ff; }
+.pa-access-red { color: #ef4444; border-color: #fecaca; background: #fef2f2; }
+.pa-access-gray { color: #64748b; border-color: #e2e8f0; background: #f8fafc; }
+
+/* ── Badges ── */
+.pa-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.pa-badge-blue { background: #eff6ff; color: #3b82f6; }
+.pa-badge-orange { background: #fffbeb; color: #f59e0b; }
+.pa-badge-purple { background: #faf5ff; color: #8b5cf6; }
+.pa-badge-red { background: #fef2f2; color: #ef4444; }
+.pa-badge-gray { background: #f8fafc; color: #64748b; }
+
+/* ── Buttons ── */
+.pa-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: white;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #475569;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pa-btn-outline:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.pa-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: #2563eb;
+  border: none;
+  border-radius: 6px;
+  color: white;
+  font-weight: 500;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pa-btn-primary:hover {
+  background: #1d4ed8;
+}
+
+.pa-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.pa-btn-sm {
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
+.pa-btn-danger-sm {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 12px;
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  color: #dc2626;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.pa-btn-danger-sm:hover {
+  background: #fecaca;
+}
+
+/* ── Search Bar ── */
+.pa-search-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #f8fafc;
+  transition: all 0.2s;
+}
+
+.pa-search-bar:focus-within {
+  border-color: #2563eb;
+  background: white;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+.pa-search-bar input {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  width: 100%;
+  color: #1e293b;
+}
+
+/* ── Modal ── */
+.pa-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+}
+
+.pa-modal {
+  background: white;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 580px;
+  max-height: 90vh;
+  overflow: hidden;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+  animation: modalSlideIn 0.3s ease;
+}
+
+@keyframes modalSlideIn {
+  from { transform: translateY(20px) scale(0.95); opacity: 0; }
+  to { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+.pa-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.pa-modal-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.pa-modal-close {
+  background: none;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 4px;
+  transition: all 0.2s;
+}
+
+.pa-modal-close:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.pa-modal-body {
+  padding: 20px;
+  max-height: calc(90vh - 140px);
+  overflow-y: auto;
+}
+
+.pa-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: #f8fafc;
+}
+
+/* ── Form ── */
+.pa-form-group {
+  margin-bottom: 16px;
+}
+
+.pa-form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.pa-form-value {
+  padding: 8px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e293b;
+}
+
+.pa-form-select {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+  background: white;
+  transition: all 0.2s;
+}
+
+.pa-form-select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+}
+
+/* ── Employee List in Modal ── */
+.pa-employee-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-top: 8px;
+}
+
+.pa-employee-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.pa-employee-item:hover {
+  background: #f8fafc;
+}
+
+.pa-employee-item.selected {
+  background: #eff6ff;
+}
+
+.pa-employee-item:last-child {
+  border-bottom: none;
+}
+
+.pa-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.pa-selection-summary {
+  padding: 8px 12px;
+  background: #f8fafc;
+  border-radius: 6px;
+  font-size: 13px;
+  color: #475569;
+  margin-top: 8px;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .pa-selected-project {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .pa-project-access-count {
+    align-self: flex-start;
+  }
+  
+  .pa-access-list-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  
+  .pa-access-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .pa-modal {
+    max-width: 95%;
+  }
+  
+  .pa-table th,
+  .pa-table td {
+    padding: 8px 10px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .pa-project-info {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .pa-access-actions {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .pa-access-actions button {
+    justify-content: center;
+  }
+}

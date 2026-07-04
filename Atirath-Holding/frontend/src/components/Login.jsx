@@ -58,9 +58,12 @@ const Login = ({ onLogin }) => {
       if (data.success) {
         sessionStorage.setItem("isLoggedIn", "true");
         sessionStorage.setItem("userEmail", formData.email.trim());
-        sessionStorage.setItem("userRole", data.role || "user");
+        sessionStorage.setItem("userRole", data.role || "full_access");
         if (data.token) {
           sessionStorage.setItem("authToken", data.token);
+        }
+        if (data.empId) {
+          sessionStorage.setItem("empId", String(data.empId));
         }
         
         const email = formData.email.trim();
@@ -70,8 +73,9 @@ const Login = ({ onLogin }) => {
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(" ");
         sessionStorage.setItem("userName", formattedName);
+        localStorage.setItem("userName", formattedName);
         
-        onLogin(true, data.role || "user");
+        onLogin(true, data.role || "full_access");
       } else {
         setError(data.message || "Invalid Email or Password");
       }
