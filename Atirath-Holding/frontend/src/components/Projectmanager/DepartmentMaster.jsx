@@ -19,12 +19,12 @@ import {
   ChevronRight,
   ChevronDown
 } from "lucide-react";
-import Sidebar from "../Sidebar";
-import Header from "../Header";
-import AlertModal from "../AlertModal";
+import Sidebar from "../Sidebar.jsx";
+import Header from "../Header.jsx";
+import AlertModal from "../AlertModal.jsx";
 import "../../styles/DepartmentMaster.css";
 
-const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
 const getAuthHeaders = () => ({
   "Content-Type": "application/json",
@@ -82,6 +82,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
   const [showModal, setShowModal] = useState(false);
   const [deleteId, setDeleteId] = useState(null);
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
 
   const [alertConfig, setAlertConfig] = useState({
     isOpen: false,
@@ -94,8 +95,9 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     setAlertConfig({ isOpen: true, type, title, message });
   };
 
-  // Sorting
+  // Sorting & Search
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [tableSearchQuery, setTableSearchQuery] = useState("");
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -159,7 +161,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     const codeToCheck = form.code.trim().toUpperCase();
 
     const isDuplicate = departments.some(
-      (dept) => dept.code.toUpperCase() === codeToCheck && (!isEditing || dept.id !== editingId)
+      (dept) => dept.code && dept.code.toUpperCase() === codeToCheck && (!isEditing || dept.id !== editingId)
     );
 
     if (isDuplicate) {
@@ -168,7 +170,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     }
 
     const deptPayload = {
-      deptCd: codeToCheck,
+      deptCode: codeToCheck,
       deptNm: form.name.trim(),
       descr: form.description.trim(),
       sts: form.status === "Active"
@@ -200,7 +202,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
           else if (parsed.error && parsed.status) {
             errorMsg = `Server Error (${parsed.status}): ${parsed.error}.`;
           }
-        } catch(e) {
+        } catch (e) {
           errorMsg = errorText || errorMsg;
         }
         throw new Error(errorMsg);
@@ -254,7 +256,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
           } else if (parsed.error) {
             errorMsg = parsed.error;
           }
-        } catch(e) {
+        } catch (e) {
           errorMsg = errorText || errorMsg;
         }
         throw new Error(errorMsg);
@@ -271,7 +273,13 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     setDeleteId(null);
   };
 
-  const toggleDropdown = (id) => {
+  const toggleDropdown = (e, id) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setDropdownPos({
+      top: rect.bottom + window.scrollY,
+      right: window.innerWidth - rect.right
+    });
     setActiveDropdown((prev) => (prev === id ? null : id));
   };
 
@@ -290,28 +298,35 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     return 0;
   });
 
-  const currentItems = sortedDepartments;
+  let currentItems = sortedDepartments;
+  if (tableSearchQuery) {
+    const q = tableSearchQuery.toLowerCase();
+    currentItems = sortedDepartments.filter(dept => 
+      (dept.code || "").toLowerCase().includes(q) ||
+      (dept.name || "").toLowerCase().includes(q)
+    );
+  }
 
   return (
     <div className="dept-shell-container">
       <Sidebar userRole={userRole} onLogout={onLogout} />
 
       <div className="dept-shell">
-        <Header 
-          title="Department Master" 
-          showSearch={false} 
-          userName="Syed Mohammad Johny Basha" 
-          userRole="Web Developer" 
-          initials="SB" 
+        <Header
+          title="Department Master"
+          showSearch={false}
+          userName="Syed Mohammad Johny Basha"
+          userRole="Web Developer"
+          initials="SB"
         />
 
         {/* Breadcrumb Navigation */}
-       
+
         <main className="dept-main" style={{ padding: '24px' }}>
           {view === "form" ? (
             <div className="dept-content" style={{ paddingBottom: '80px', width: '100%', maxWidth: 'none' }}>
               <div className="dept-form-card" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                
+
                 {/* Form Header */}
                 <div style={{ padding: '20px 24px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
@@ -323,7 +338,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                         Enter department details in the form below
                       </p>
                     </div>
-                    
+
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
                       <button type="button" className="dept-nav-view-btn" onClick={() => { handleReset(); setIsEditing(false); setView("list"); }}>
                         <ArrowLeft size={15} /> Back to Department List
@@ -334,19 +349,19 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
 
                 {/* Form Body - UPDATED DEPARTMENT NAME (REVERTED TO NORMAL) AND TOGGLE (SCREENSHOT MATCH) */}
                 <div style={{ padding: '24px', display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
-                  
+
                   {/* Left Side: Inputs */}
                   <div style={{ flex: '1 1 400px', maxWidth: '700px' }}>
-                    
+
                     {/* --- Side by Side Wrapper --- */}
                     <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-                      
+
                       {/* Department Code Input */}
                       <div className="dept-form-item" style={{ flex: '1 1 200px', marginBottom: 0 }}>
                         <label>Department Code <span className="dept-req-star">*</span></label>
                         <div className="dept-input-icon-wrap">
                           <span className="dept-input-prefix-icon"><Calendar size={16} /></span>
-                          <input type="text" name="code" value={form.code} onChange={handleChange} placeholder="Enter department code" maxLength="10" disabled={isEditing} required />
+                          <input type="text" name="code" value={form.code} onChange={handleChange} placeholder="Enter department code" maxLength="10" required />
                         </div>
                         <div className="dept-input-helper-text" style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Department code must be unique.</div>
                       </div>
@@ -367,8 +382,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                     <div className="dept-form-item">
                       <label>Description (Optional)</label>
                       <div className="dept-input-icon-wrap">
-                        <span className="dept-input-prefix-icon"><FileText size={16} /></span>
-                        <textarea name="description" value={form.description} onChange={handleChange} placeholder="Enter description (optional)" maxLength="255" rows={4} />
+                        <textarea name="description" value={form.description} onChange={handleChange} placeholder="Enter description (optional)" maxLength="255" rows={4} style={{ paddingLeft: '14px' }} />
                       </div>
                     </div>
                   </div>
@@ -376,12 +390,12 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                   {/* Right Side: Status Toggle (SCREENSHOT STYLE) */}
                   <div style={{ width: '280px', paddingTop: '8px' }}>
                     <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      
+
                       <span style={{ fontSize: "16px", fontWeight: "600", color: "#334155" }}>Status:</span>
-                      
+
                       <label style={{ position: "relative", display: "inline-block", width: "48px", height: "26px", margin: 0 }}>
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={form.status === "Active"}
                           onChange={handleToggleStatus}
                           style={{ opacity: 0, width: 0, height: 0 }}
@@ -392,7 +406,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                           transition: ".3s", borderRadius: "34px"
                         }}>
                           <span style={{
-                            position: "absolute", height: "20px", width: "20px", 
+                            position: "absolute", height: "20px", width: "20px",
                             left: form.status === "Active" ? "25px" : "3px", bottom: "3px",
                             backgroundColor: "white", transition: ".3s", borderRadius: "50%",
                             boxShadow: "0 1px 3px rgba(0,0,0,0.15)"
@@ -400,9 +414,9 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                         </span>
                       </label>
 
-                      <span style={{ 
+                      <span style={{
                         fontSize: "16px", fontWeight: "600", minWidth: "50px",
-                        color: form.status === "Active" ? "#10b981" : "#64748b" 
+                        color: form.status === "Active" ? "#10b981" : "#64748b"
                       }}>
                         {form.status}
                       </span>
@@ -414,25 +428,36 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
 
                 {/* Form Footer Buttons */}
                 <div className="dept-form-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#fafbfc', borderTop: '1px solid #e2e8f0' }}>
-                  <button type="button" className="dept-btn secondary" onClick={() => { handleReset(); setIsEditing(false); setView("list"); }}>Cancel</button>
-                  <button type="button" className="dept-btn tertiary" onClick={handleReset}><RefreshCcw size={14} /> Reset</button>
                   <button type="button" className="dept-btn primary" onClick={handleSave}><Save size={14} /> {isEditing ? "Update Department" : "Save Department"}</button>
+                  <button type="button" className="dept-btn secondary" onClick={() => { handleReset(); setIsEditing(false); setView("list"); }}>Cancel</button>
                 </div>
               </div>
             </div>
           ) : (
             <div className="dept-content" style={{ width: '100%', maxWidth: 'none' }}>
               <div className="dept-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                
+
                 {/* Header with Title and Add New Button */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>Department List</h2>
                     <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>View and manage all departments</p>
                   </div>
-                  <button type="button" className="dept-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setView("form"); }}>
-                    <Plus size={16} /> Add New Department
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                      <input
+                        type="text"
+                        placeholder="Search departments..."
+                        value={tableSearchQuery}
+                        onChange={(e) => setTableSearchQuery(e.target.value)}
+                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                      />
+                    </div>
+                    <button type="button" className="dept-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setView("form"); }}>
+                      <Plus size={16} /> Add New Department
+                    </button>
+                  </div>
                 </div>
 
                 {/* Data Table */}
@@ -440,7 +465,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                   <table className="dept-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
                         <th className="sortable" onClick={() => handleSort("code")} style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department Code {sortConfig.key === "code" && (sortConfig.direction === "asc" ? "▲" : "▼")}</th>
                         <th className="sortable" onClick={() => handleSort("name")} style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department Name {sortConfig.key === "name" && (sortConfig.direction === "asc" ? "▲" : "▼")}</th>
                         <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
@@ -452,22 +477,22 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                       {currentItems.length > 0 ? (
                         currentItems.map((dept, index) => (
                           <tr key={dept.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td data-label="#" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{index + 1}</td>
+                            <td data-label="S.NO" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{index + 1}</td>
                             <td data-label="DEPARTMENT CODE" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{dept.code}</span></td>
                             <td data-label="DEPARTMENT NAME" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><strong>{dept.name}</strong></td>
                             <td data-label="DESCRIPTION" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{dept.description || "N/A"}</td>
                             <td data-label="STATUS" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: dept.status === 'Active' ? '#dcfce7' : '#fee2e2', color: dept.status === 'Active' ? '#166534' : '#991b1b' }}>{dept.status}</span></td>
                             <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 16px', textAlign: 'center' }}>
-                              <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={() => toggleDropdown(dept.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                              <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={(e) => toggleDropdown(e, dept.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                 <MoreVertical size={18} />
                               </button>
                               {activeDropdown === dept.id && (
                                 <>
-                                  <div className="dept-actions-dropdown-backdrop" onClick={() => setActiveDropdown(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }} />
-                                  <div className="dept-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
+                                  <div className="dept-actions-dropdown-backdrop" onClick={() => setActiveDropdown(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} />
+                                  <div className="dept-actions-dropdown-menu" style={{ position: 'fixed', right: `${dropdownPos.right}px`, top: `${dropdownPos.top}px`, backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 999, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("info", "Department Info", `Department Info:\nCode: ${dept.code}\nName: ${dept.name}\nDescription: ${dept.description}`); setActiveDropdown(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleEdit(dept)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Edit size={15} /> Edit </button>
-                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("success", "Saved", `Department record ${dept.code} saved successfully.`); setActiveDropdown(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Save size={15} /> Save </button>
+                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }} onClick={() => confirmDelete(dept.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Trash2 size={15} /> Delete </button>
                                   </div>
                                 </>
                               )}

@@ -8,7 +8,7 @@
  *   const result    = await apiPost('/api/companies', { name: 'XYZ' });
  */
 
-const BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL;
 
 function getAuthHeaders() {
   const token = sessionStorage.getItem('authToken');
@@ -67,4 +67,22 @@ export async function apiDelete(path) {
     headers: getAuthHeaders(),
   });
   return handleResponse(response);
+}
+
+export async function apiPatch(path, body) {
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'PATCH',
+    headers: getAuthHeaders(),
+    body: JSON.stringify(body),
+  });
+  return handleResponse(response);
+}
+
+export async function safeFetch(path, fallback = null) {
+  try {
+    return await apiGet(path);
+  } catch (err) {
+    console.warn(`safeFetch failed for ${path}:`, err);
+    return fallback;
+  }
 }

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import Sidebar from '../Sidebar';
+import Sidebar from '../Sidebar.jsx';
 import '../../styles/dashboard.css';
 import {
   Menu,
@@ -115,7 +115,7 @@ const Dashboard = ({ onLogout, userRole }) => {
 
     return (
         <div className="modern-dashboard">
-            <Sidebar userRole={userRole} sidebarOpen={sidebarOpen} />
+            <Sidebar userRole={userRole} onLogout={onLogout} sidebarOpen={sidebarOpen} />
             
             <div className={`dashboard-main ${!sidebarOpen ? 'expanded' : ''}`}>
                 {/* Top Header */}
@@ -155,7 +155,12 @@ const Dashboard = ({ onLogout, userRole }) => {
                 {/* Welcome Section */}
                 <div className="welcome-section">
                     <div className="welcome-content">
-                        <h1>Welcome back, {user.name.split(' ')[0]}!</h1>
+                        <h1>{(() => {
+                            const hr = new Date().getHours();
+                            if (hr >= 0 && hr < 12) return "Good Morning";
+                            if (hr >= 12 && hr < 16) return "Good Afternoon";
+                            return "Good Evening";
+                        })()}, {user.name.split(' ')[0]}!</h1>
                         <p>Here's what's happening with your projects today.</p>
                     </div>
                     <div className="date-card">

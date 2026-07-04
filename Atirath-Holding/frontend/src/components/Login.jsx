@@ -37,7 +37,7 @@ const Login = ({ onLogin }) => {
     setLoading(true);
 
     try {
-      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "http://localhost:8080";
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
       const response = await fetch(`${apiBaseUrl}/api/auth/login`, {
         method: 'POST',
         headers: {
@@ -58,13 +58,14 @@ const Login = ({ onLogin }) => {
       if (data.success) {
         sessionStorage.setItem("isLoggedIn", "true");
         sessionStorage.setItem("userEmail", formData.email.trim());
-        sessionStorage.setItem("userRole", data.role || "user");
-        // Store JWT token for authenticated API calls
+        sessionStorage.setItem("userRole", data.role || "full_access");
         if (data.token) {
           sessionStorage.setItem("authToken", data.token);
         }
+        if (data.empId) {
+          sessionStorage.setItem("empId", String(data.empId));
+        }
         
-        // Extract and format userName from email
         const email = formData.email.trim();
         const namePart = email.split("@")[0];
         const formattedName = namePart
@@ -72,8 +73,9 @@ const Login = ({ onLogin }) => {
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(" ");
         sessionStorage.setItem("userName", formattedName);
+        localStorage.setItem("userName", formattedName);
         
-        onLogin(true, data.role || "user");
+        onLogin(true, data.role || "full_access");
       } else {
         setError(data.message || "Invalid Email or Password");
       }
@@ -85,7 +87,7 @@ const Login = ({ onLogin }) => {
     }
   };
 
-  const handleForgotSubmit = (e) => {
+  const handleForgotSubmit = async (e) => {
     e.preventDefault();
     setError('');
     setSuccessMsg('');
@@ -97,11 +99,32 @@ const Login = ({ onLogin }) => {
 
     setLoading(true);
 
-    setTimeout(() => {
+    try {
+      const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+      const response = await fetch(`${apiBaseUrl}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({
+          email: resetEmail.trim()
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Server responded with an error status: " + response.status);
+      }
+
+      const data = await response.json();
+      setSuccessMsg(data.message || "Password reset link has been sent to your email.");
+      setResetEmail('');
+    } catch (err) {
+      console.error("Forgot password failed:", err);
+      setError("Could not connect to server. Please try again later.");
+    } finally {
       setLoading(false);
-      setSuccessMsg(`Password reset link has been sent to ${resetEmail}`);
-      setResetEmail(''); 
-    }, 800);
+    }
   };
 
   const switchView = (view) => {
@@ -117,22 +140,14 @@ const Login = ({ onLogin }) => {
       <div className="login-fullscreen-split">
         
         <div className="login-left">
-          <img src="/icon3.png.png" alt="Login Background" className="left-side-image" />
+          <img src="/icon3.png" alt="Login Background" className="left-side-image" />
         </div>
 
         <div className="login-right">
           <div className="login-body">
             
             <div className="brand-header-large">
-              <div className="brand-icon-placeholder">
-                <img src="/icon2.png" alt="A Logo" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'block'; }} className="brand-logo-icon" />
-                <i className="fas fa-leaf fallback-icon" style={{ display: 'none' }}></i>
-              </div>
-              <h2 className="brand-title-primary">ATIRATH HOLDINGS</h2>
-              <h2 className="brand-title-secondary">INDIA LIMITED</h2>
-              <div className="brand-tagline">
-                <span>Innovate</span><span>Cultivate</span><span>Elevate</span>
-              </div>
+              <img src="/login_logo.svg" alt="BIONOVA Logo" className="bionova-main-logo" style={{ width: '100%', maxWidth: '320px', height: 'auto' }} />
             </div>
 
             {error && (
@@ -152,7 +167,7 @@ const Login = ({ onLogin }) => {
                 <div className="input-group">
                   <label>Email</label>
                   <div className="input-wrapper">
-                    <i className="far fa-envelope"></i>
+                    <i className="far fa-envelope input-icon"></i>
                     <input
                       type="email" name="email" value={formData.email} onChange={handleChange}
                       placeholder="Enter your email" autoComplete="off"
@@ -163,19 +178,28 @@ const Login = ({ onLogin }) => {
                 <div className="input-group">
                   <label>Password</label>
                   <div className="input-wrapper password-wrapper">
-                    <i className="fas fa-lock" style={{opacity: 0.6}}></i>
+                    <i className="fas fa-lock input-icon"></i>
                     <input
-                      type={showPassword ? 'text' : 'password'} name="password"
-                      value={formData.password} onChange={handleChange} placeholder="Enter your password"
+                      type={showPassword ? 'text' : 'password'} 
+                      name="password"
+                      value={formData.password} 
+                      onChange={handleChange} 
+                      placeholder="Enter your password"
+                      className="password-input"
                     />
-                    <span className="password-toggle" onClick={() => setShowPassword(!showPassword)}>
+                    <button 
+                      type="button"
+                      className="password-toggle-btn" 
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
                       <i className={showPassword ? 'far fa-eye-slash' : 'far fa-eye'}></i>
-                    </span>
+                    </button>
                   </div>
                 </div>
 
-                <div className="forgot-link-wrapper" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '20px', marginTop: '-10px' }}>
-                  <span className="forgot-link" style={{ color: '#397e32', fontSize: '13px', cursor: 'pointer', fontWeight: '600' }} onClick={() => switchView('forgot')}>
+                <div className="forgot-link-wrapper">
+                  <span className="forgot-link" onClick={() => switchView('forgot')}>
                     Forgot Password?
                   </span>
                 </div>
@@ -194,7 +218,7 @@ const Login = ({ onLogin }) => {
                 <div className="input-group">
                   <label>Email Address</label>
                   <div className="input-wrapper">
-                    <i className="far fa-envelope"></i>
+                    <i className="far fa-envelope input-icon"></i>
                     <input
                       type="email" value={resetEmail}
                       onChange={(e) => { setResetEmail(e.target.value); setError(''); }}
@@ -207,7 +231,7 @@ const Login = ({ onLogin }) => {
                   {loading ? <><i className="fas fa-spinner fa-spin" style={{marginRight: '8px'}}></i> Sending...</> : "Send Reset Link"}
                 </button>
 
-                <div className="back-link" style={{ textAlign: 'center', marginTop: '20px', color: '#64748b', cursor: 'pointer', fontSize: '14px', fontWeight: '500' }} onClick={() => switchView('login')}>
+                <div className="back-link" onClick={() => switchView('login')}>
                   <i className="fas fa-arrow-left" style={{marginRight: '5px'}}></i> Back to Login
                 </div>
               </form>
