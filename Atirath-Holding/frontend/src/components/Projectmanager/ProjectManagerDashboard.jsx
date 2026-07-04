@@ -266,9 +266,12 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
           current: (dashboardData.forecastSummary?.currentProgress || 0).toFixed(2) + "%",
           planned: (dashboardData.forecastSummary?.plannedProgress || 0).toFixed(2) + "%",
           variance: (dashboardData.forecastSummary?.variance || 0).toFixed(2) + "%",
-          expected: dashboardData.forecastSummary?.expectedCompletionDate || "",
-          daysAhead: dashboardData.forecastSummary?.daysAhead + " Days Ahead",
+          expected: dashboardData.forecastSummary?.expectedCompletionDate || "—",
+          daysAhead: dashboardData.forecastSummary?.daysAhead != null
+            ? `${dashboardData.forecastSummary.daysAhead} Days Remaining`
+            : "—",
           atRisk: dashboardData.forecastSummary?.projectsAtRiskCount || 0,
+          atRiskPct: (dashboardData.forecastSummary?.projectsAtRiskPercentage || 0).toFixed(2) + "%",
           onTrack: {
             count: dashboardData.forecastSummary?.onTrackProjectsCount || 0,
             pct: (dashboardData.forecastSummary?.onTrackProjectsPercentage || 0).toFixed(2) + "%"
@@ -455,26 +458,49 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
           urgent: t.taskSts === "WIP" || (t.endDt && new Date(t.endDt) < now)
         };
       }).slice(0, 5),
-      forecast: {
-        current: avgProgress.toFixed(2) + "%",
-        planned: "50.00%",
-        variance: (avgProgress - 50.00).toFixed(2) + "%",
-        expected: formatDateStr(new Date(now.getTime() + 90 * 24 * 60 * 60 * 1000)),
-        daysAhead: "90 Days Ahead",
-        atRisk: delayedProjectsCount,
-        onTrack: {
-          count: filteredProjects.length - delayedProjectsCount,
-          pct: filteredProjects.length > 0 ? (((filteredProjects.length - delayedProjectsCount) / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%"
-        },
-        mayDelay: {
-          count: delayedProjectsCount,
-          pct: filteredProjects.length > 0 ? ((delayedProjectsCount / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%"
-        },
-        atRiskProjects: {
-          count: delayedProjectsCount,
-          pct: filteredProjects.length > 0 ? ((delayedProjectsCount / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%"
+      forecast: (() => {
+        // Expected completion = latest project end date, or today + remaining days estimate
+        const latestEndDate = filteredProjects.reduce((max, p) =>
+          p.endDt && (!max || new Date(p.endDt) > new Date(max)) ? p.endDt : max, null);
+        const expectedDate = latestEndDate ? new Date(latestEndDate) : null;
+        const daysLeft = expectedDate ? Math.ceil((expectedDate - now) / (1000 * 60 * 60 * 24)) : null;
+        const daysAheadStr = daysLeft !== null
+          ? (daysLeft >= 0 ? `${daysLeft} Days Remaining` : `${Math.abs(daysLeft)} Days Overdue`)
+          : "—";
+        // Planned progress = % of time elapsed between earliest start and latest end
+        const earliestStartDate = filteredProjects.reduce((min, p) =>
+          p.stDt && (!min || new Date(p.stDt) < new Date(min)) ? p.stDt : min, null);
+        let plannedPct = 0;
+        if (earliestStartDate && latestEndDate) {
+          const totalDuration = new Date(latestEndDate) - new Date(earliestStartDate);
+          const elapsed = now - new Date(earliestStartDate);
+          plannedPct = totalDuration > 0 ? Math.min(100, Math.max(0, (elapsed / totalDuration) * 100)) : 0;
         }
-      }
+        const atRiskPct = filteredProjects.length > 0
+          ? ((delayedProjectsCount / filteredProjects.length) * 100).toFixed(2) + "%"
+          : "0.00%";
+        return {
+          current: avgProgress.toFixed(2) + "%",
+          planned: plannedPct.toFixed(2) + "%",
+          variance: (avgProgress - plannedPct).toFixed(2) + "%",
+          expected: expectedDate ? formatDateStr(expectedDate) : "—",
+          daysAhead: daysAheadStr,
+          atRisk: delayedProjectsCount,
+          atRiskPct,
+          onTrack: {
+            count: filteredProjects.length - delayedProjectsCount,
+            pct: filteredProjects.length > 0 ? (((filteredProjects.length - delayedProjectsCount) / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%"
+          },
+          mayDelay: {
+            count: delayedProjectsCount,
+            pct: filteredProjects.length > 0 ? ((delayedProjectsCount / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%"
+          },
+          atRiskProjects: {
+            count: delayedProjectsCount,
+            pct: filteredProjects.length > 0 ? ((delayedProjectsCount / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%"
+          }
+        };
+      })()
     };
   };
 
@@ -807,7 +833,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                 <div>
                   <div className="pm-forecast-sub">Current Progress</div>
                   <div className="pm-forecast-val">{forecast.current}</div>
-                  <div className="pm-forecast-note">As on 29-May-2025</div>
+                  <div className="pm-forecast-note">As on {new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</div>
                 </div>
               </div>
 
@@ -859,7 +885,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                 <div>
                   <div className="pm-forecast-sub">Projects At Risk</div>
                   <div className="pm-forecast-val pm-text-orange">{forecast.atRisk}</div>
-                  <div className="pm-forecast-note">12.50% of Total</div>
+                  <div className="pm-forecast-note">{forecast.atRiskPct} of Total</div>
                 </div>
               </div>
 

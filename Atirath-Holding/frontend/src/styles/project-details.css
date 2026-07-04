@@ -61,17 +61,19 @@
 }
 
 .pd-image-wrapper {
-  width: 120px;
-  height: 120px;
+  width: 72px;
+  height: 72px;
   flex-shrink: 0;
   border-radius: 8px;
   overflow: hidden;
+  align-self: flex-start;
+  margin-top: 4px;
 }
 
 .pd-image-wrapper img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .pd-info-wrapper {
@@ -211,10 +213,18 @@
   color: var(--text-secondary);
   cursor: pointer;
   position: relative;
+  text-decoration: none !important;
+  outline: none;
+}
+
+.pd-tab:hover {
+  color: var(--primary-blue-dark);
+  text-decoration: none !important;
 }
 
 .pd-tab.active {
   color: var(--primary-blue-dark);
+  text-decoration: none !important;
 }
 
 .pd-tab.active::after {

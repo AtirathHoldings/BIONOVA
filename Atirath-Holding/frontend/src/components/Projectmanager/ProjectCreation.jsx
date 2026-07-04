@@ -48,6 +48,85 @@ const getLoggedInUser = () => {
   return "Admin";
 };
 
+const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = React.useRef(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const selected = options.find(o => String(o.value) === String(value));
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+      <div
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        style={{
+          padding: '10px 12px',
+          border: '1px solid #cbd5e1',
+          borderRadius: '6px',
+          backgroundColor: disabled ? '#f1f5f9' : 'white',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          fontSize: '14px',
+          ...style
+        }}
+      >
+        <span style={{ color: selected ? '#0f172a' : '#94a3b8' }}>
+          {selected ? selected.label : placeholder}
+        </span>
+        <span style={{ fontSize: '12px', color: '#64748b' }}>▼</span>
+      </div>
+      {isOpen && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, marginTop: '4px',
+          backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '6px',
+          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', zIndex: 1000
+        }}>
+          <div style={{ padding: '8px' }}>
+            <input
+              type="text" value={search} onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search..."
+              style={{ width: '100%', padding: '8px', border: '1px solid #e2e8f0', borderRadius: '4px', outline: 'none', fontSize: '14px' }}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </div>
+          <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
+            {filtered.length > 0 ? (
+              filtered.map(opt => (
+                <div
+                  key={opt.value}
+                  onClick={() => {
+                    onChange({ target: { name, value: opt.value } });
+                    setIsOpen(false);
+                    setSearch("");
+                  }}
+                  style={{ padding: '10px 12px', cursor: 'pointer', backgroundColor: String(value) === String(opt.value) ? '#f1f5f9' : 'transparent', fontSize: '14px' }}
+                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = String(value) === String(opt.value) ? '#f1f5f9' : 'transparent'}
+                >
+                  {opt.label}
+                </div>
+              ))
+            ) : (
+              <div style={{ padding: '10px 12px', color: '#64748b', fontSize: '14px', textAlign: 'center' }}>No results found</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const ProjectCreation = ({ userRole, onLogout }) => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
@@ -80,26 +159,26 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         .map(d => ({
           id: d.drftPrjId,
           _type: "draft",
-        projectCode: d.prjCd || "",
-        projectName: d.prjNm || "",
-        projectDescription: d.prjDesc || "",
-        projectObjective: d.prjObjtv || "",
-        expectedDeliverables: d.expDlvbls || "",
-        priority: d.prjPrty || "MEDIUM",
-        status: "DRAFT",
-        startDate: d.tentStDt || "",
-        endDate: d.tentEndDt || "",
-        totalProjectDays: d.noOfDays || "",
-        companyId: d.coyId || "",
-        plantId: d.pltId || "",
-        departmentId: d.deptId || "",
-        companyName: coyData.find(c => c.coyId === d.coyId)?.coyNm || "",
-        plantName: pltData.find(p => p.pltId === d.pltId)?.pltNm || "",
-        department: deptData.find(dep => dep.deptId === d.deptId)?.deptNm || "",
-        remarks: d.addlRem || "",
-        logo: d.logo || null,
-        createdBy: getLoggedInUser()
-      }));
+          projectCode: d.prjCd || "",
+          projectName: d.prjNm || "",
+          projectDescription: d.prjDesc || "",
+          projectObjective: d.prjObjtv || "",
+          expectedDeliverables: d.expDlvbls || "",
+          priority: d.prjPrty || "MEDIUM",
+          status: "DRAFT",
+          startDate: d.tentStDt || "",
+          endDate: d.tentEndDt || "",
+          totalProjectDays: d.noOfDays || "",
+          companyId: d.coyId || "",
+          plantId: d.pltId || "",
+          departmentId: d.deptId || "",
+          companyName: coyData.find(c => c.coyId === d.coyId)?.coyNm || "",
+          plantName: pltData.find(p => p.pltId === d.pltId)?.pltNm || "",
+          department: deptData.find(dep => dep.deptId === d.deptId)?.deptNm || "",
+          remarks: d.addlRem || "",
+          logo: d.logo || null,
+          createdBy: getLoggedInUser()
+        }));
       const statusOverrides = JSON.parse(localStorage.getItem("project_status_overrides") || "{}");
       const mappedLive = live.map(l => {
         const backendSts = l.prjSts || "LIVE";
@@ -131,7 +210,8 @@ const ProjectCreation = ({ userRole, onLogout }) => {
           createdBy: getLoggedInUser()
         };
       });
-      setProjects([...mappedDrafts]);
+      // ✅ FIX: Merge both drafts and live projects
+      setProjects([...mappedDrafts, ...mappedLive]);
     } catch (err) {
       console.error("Error fetching projects:", err);
     } finally {
@@ -210,6 +290,9 @@ const ProjectCreation = ({ userRole, onLogout }) => {
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
+
+  // ─── NEW: Status tab filter state ──────────────────────────────────────
+  const [statusTab, setStatusTab] = useState('All'); // 'All', 'Draft', 'Live'
 
   // ─── Input Change Handler ──────────────────────────────────────────────────
   const handleChange = (e) => {
@@ -306,17 +389,29 @@ const ProjectCreation = ({ userRole, onLogout }) => {
   };
 
   const handleBulletKeyDown = (e) => {
-    if (e.key === "Enter") {
+    if (e.key === "Enter" || e.key === ",") {
       e.preventDefault();
       const { name, value, selectionStart, selectionEnd } = e.target;
 
       const before = value.substring(0, selectionStart);
       const after = value.substring(selectionEnd);
-      const newValue = before + "\n• " + after;
+      
+      let insertion = "";
+      let offset = 0;
+      
+      if (e.key === "Enter") {
+        insertion = "\n• ";
+        offset = 3;
+      } else if (e.key === ",") {
+        insertion = ",\n• ";
+        offset = 4;
+      }
+
+      const newValue = before + insertion + after;
       setForm((prev) => ({ ...prev, [name]: newValue }));
 
       setTimeout(() => {
-        e.target.selectionStart = e.target.selectionEnd = selectionStart + 3;
+        e.target.selectionStart = e.target.selectionEnd = selectionStart + offset;
       }, 0);
     }
   };
@@ -699,23 +794,43 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     return sortable;
   }, [projects, sortConfig]);
 
-  // Filter calculations
+  // ─── Filter calculations with statusTab ──────────────────────────────────
   const filteredProjects = sortedProjects.filter(p => {
     const matchName = !activeFilters.projectName ||
       p.projectName?.toLowerCase().includes(activeFilters.projectName.toLowerCase());
     const matchCode = !activeFilters.projectCode ||
       p.projectCode?.toLowerCase().includes(activeFilters.projectCode.toLowerCase());
     const matchStatus = !activeFilters.status || p.status === activeFilters.status;
-    return matchName && matchCode && matchStatus;
+
+    // Tab filter
+    let tabMatch = true;
+    if (statusTab === 'Draft') {
+      tabMatch = p.status.toUpperCase() === 'DRAFT';
+    } else if (statusTab === 'Live') {
+      tabMatch = p.status.toUpperCase() === 'LIVE';
+    }
+    // 'All' – no filter
+
+    return matchName && matchCode && matchStatus && tabMatch;
   });
 
-  // Pagination calculations
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredProjects.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredProjects.length / itemsPerPage);
+  // Pagination removed
+  const currentItems = filteredProjects;
+  const indexOfFirstItem = 0; // Preserved for S.NO index rendering
 
-  const paginate = (pageNumber) => setCurrentPage(pageNumber);
+  const formatListText = (text) => {
+    if (!text) return "N/A";
+    let result = text;
+    // Force bullets onto new lines
+    if (result.includes("•")) {
+      result = result.split("•").filter(Boolean).map(s => "• " + s.trim()).join("\n");
+    }
+    // Dots mean new sentence
+    result = result.replace(/\.\s+/g, '.\n');
+    // Commas mean separation
+    result = result.replace(/,\s+/g, ',\n');
+    return result;
+  };
 
   const vibrantBlue = "#2563eb";
 
@@ -892,24 +1007,33 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       <div className="proj-form-layout-row columns-4">
                         <label className="proj-field-item">
                           <span>Company <b style={{ color: '#ef4444' }}>*</b></span>
-                          <select name="companyName" value={form.companyName} onChange={handleChange}>
-                            <option value="">Select Company</option>
-                            {companies.map(c => <option key={c.coyId} value={c.coyId}>{c.coyNm}</option>)}
-                          </select>
+                          <SearchableSelect 
+                            name="companyName" 
+                            value={form.companyName} 
+                            onChange={handleChange} 
+                            placeholder="Select Company"
+                            options={companies.map(c => ({ value: c.coyId, label: c.coyNm }))}
+                          />
                         </label>
                         <label className="proj-field-item">
                           <span>Plant <b style={{ color: '#ef4444' }}>*</b></span>
-                          <select name="plantName" value={form.plantName} onChange={handleChange}>
-                            <option value="">Select Plant</option>
-                            {plants.filter(p => !form.companyName || String(p.coyId) === String(form.companyName)).map(p => <option key={p.pltId} value={p.pltId}>{p.pltNm}</option>)}
-                          </select>
+                          <SearchableSelect 
+                            name="plantName" 
+                            value={form.plantName} 
+                            onChange={handleChange} 
+                            placeholder="Select Plant"
+                            options={plants.filter(p => !form.companyName || String(p.coyId) === String(form.companyName)).map(p => ({ value: p.pltId, label: p.pltNm }))}
+                          />
                         </label>
                         <label className="proj-field-item">
                           <span>Department <b style={{ color: '#ef4444' }}>*</b></span>
-                          <select name="department" value={form.department} onChange={handleChange}>
-                            <option value="">Select Department</option>
-                            {departments.map(d => <option key={d.deptId} value={d.deptId}>{d.deptNm}</option>)}
-                          </select>
+                          <SearchableSelect 
+                            name="department" 
+                            value={form.department} 
+                            onChange={handleChange} 
+                            placeholder="Select Department"
+                            options={departments.map(d => ({ value: d.deptId, label: d.deptNm }))}
+                          />
                         </label>
                         <label className="proj-field-item">
                           <span>Created By <b style={{ color: '#ef4444' }}>*</b></span>
@@ -934,14 +1058,14 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       </div>
                     </section>
 
-                    {/* 3. Additional Information */}
+                    {/* 3. Information */}
                     <section className="proj-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
-                      <h3 className="proj-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Additional Information</h3>
+                      <h3 className="proj-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}> Information</h3>
 
                       <div className="proj-form-layout-row columns-4">
                         <label className="proj-field-item" style={{ gridColumn: 'span 4' }}>
                           <span>Remarks</span>
-                          <textarea name="remarks" value={form.remarks} onChange={handleChange} placeholder="Any additional remarks" maxLength={255} rows={3} />
+                          <textarea name="remarks" value={form.remarks} onChange={handleChange} placeholder="Any remarks" maxLength={255} rows={3} />
                         </label>
                       </div>
                     </section>
@@ -956,6 +1080,12 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                     backgroundColor: '#fafbfc',
                     borderTop: '1px solid #e2e8f0'
                   }}>
+                    <button type="button" className="proj-btn primary" onClick={handleSave}>
+                      <Save size={14} /> {isEditing ? "Update Project" : "Save Project"}
+                    </button>
+                    <button type="button" className="proj-btn tertiary" onClick={handleResetForm}>
+                      <RefreshCcw size={14} /> Reset
+                    </button>
                     <button type="button" className="proj-btn secondary" onClick={() => {
                       setView("list");
                       handleResetForm();
@@ -963,12 +1093,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       setEditingId(null);
                     }}>
                       Cancel
-                    </button>
-                    <button type="button" className="proj-btn tertiary" onClick={handleResetForm}>
-                      <RefreshCcw size={14} /> Reset
-                    </button>
-                    <button type="button" className="proj-btn primary" onClick={handleSave}>
-                      <Save size={14} /> {isEditing ? "Update Project" : "Save Project"}
                     </button>
                   </div>
                 </div>
@@ -1010,12 +1134,70 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                   </button>
                 </div>
 
+                {/* ─── NEW: Status filter tabs ────────────────────────── */}
+                <div style={{
+                  padding: '8px 24px',
+                  borderBottom: '1px solid #e2e8f0',
+                  display: 'flex',
+                  gap: '8px',
+                  backgroundColor: '#fafbfc'
+                }}>
+                  <button
+                    onClick={() => setStatusTab('All')}
+                    style={{
+                      padding: '6px 16px',
+                      borderRadius: '20px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: statusTab === 'All' ? '#2563eb' : 'white',
+                      color: statusTab === 'All' ? 'white' : '#334155',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    All
+                  </button>
+                  <button
+                    onClick={() => setStatusTab('Draft')}
+                    style={{
+                      padding: '6px 16px',
+                      borderRadius: '20px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: statusTab === 'Draft' ? '#2563eb' : 'white',
+                      color: statusTab === 'Draft' ? 'white' : '#334155',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Draft
+                  </button>
+                  <button
+                    onClick={() => setStatusTab('Live')}
+                    style={{
+                      padding: '6px 16px',
+                      borderRadius: '20px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: statusTab === 'Live' ? '#2563eb' : 'white',
+                      color: statusTab === 'Live' ? 'white' : '#334155',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Live
+                  </button>
+                </div>
+
                 {/* Data Table Section Inside the Card */}
-                <div className="proj-table-container" style={{ overflowX: 'auto' }}>
+                <div className="proj-table-container" style={{ overflowX: 'auto', paddingBottom: '140px' }}>
                   <table className="proj-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2800px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                        <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
                         <th
                           className="sortable"
@@ -1056,7 +1238,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       {currentItems.length > 0 ? (
                         currentItems.map((project, index) => (
                           <tr key={project.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td data-label="#" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
+                            <td data-label="S.NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
                             <td data-label="LOGO" style={{ padding: '14px 20px' }}>
                               {project.logo ? (
                                 <img src={project.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
@@ -1076,8 +1258,8 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                             <td data-label="PLANT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.plantName || "N/A"}</td>
                             <td data-label="DEPARTMENT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.department || "N/A"}</td>
                             <td data-label="DESCRIPTION" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.projectDescription || "N/A"}</td>
-                            <td data-label="OBJECTIVE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.projectObjective || "N/A"}</td>
-                            <td data-label="DELIVERABLES" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.expectedDeliverables || "N/A"}</td>
+                            <td data-label="OBJECTIVE" style={{ padding: '14px 20px', fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{formatListText(project.projectObjective)}</td>
+                            <td data-label="DELIVERABLES" style={{ padding: '14px 20px', fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{formatListText(project.expectedDeliverables)}</td>
                             <td data-label="PRIORITY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{
                                 padding: '4px 10px',
@@ -1213,43 +1395,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                   </table>
                 </div>
 
-                {/* Pagination bar */}
-                {totalPages > 0 && (
-                  <div className="proj-table-pagination-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
-                    <span className="proj-pagination-info" style={{ fontSize: '14px', color: '#64748b' }}>
-                      Showing {filteredProjects.length > 0 ? indexOfFirstItem + 1 : 0} to{" "}
-                      {Math.min(indexOfLastItem, filteredProjects.length)} of{" "}
-                      {filteredProjects.length} entries
-                    </span>
-                    <div className="proj-pagination-controls" style={{ display: 'flex', gap: '4px' }}>
-                      <button
-                        type="button"
-                        className="proj-pag-btn"
-                        onClick={() => paginate(currentPage - 1)}
-                        disabled={currentPage === 1}
-                      >
-                        <ChevronLeft size={16} />
-                      </button>
-                      {Array.from({ length: totalPages }, (_, i) => (
-                        <button
-                          key={i + 1}
-                          className={`proj-pag-btn ${currentPage === i + 1 ? 'active' : ''}`}
-                          onClick={() => paginate(i + 1)}
-                        >
-                          {i + 1}
-                        </button>
-                      ))}
-                      <button
-                        type="button"
-                        className="proj-pag-btn"
-                        onClick={() => paginate(currentPage + 1)}
-                        disabled={currentPage === totalPages}
-                      >
-                        <ChevronRight size={16} />
-                      </button>
-                    </div>
-                  </div>
-                )}
+
               </div>
             </div>
           )}

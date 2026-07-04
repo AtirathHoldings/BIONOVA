@@ -2,7 +2,7 @@ import React from "react";
 import { CheckCircle2, AlertTriangle, AlertCircle, Info } from "lucide-react";
 import "../styles/alertModal.css";
 
-const AlertModal = ({ isOpen, type = "info", title, message, onClose }) => {
+const AlertModal = ({ isOpen, type = "info", title, message, onClose, onConfirm, confirmText, cancelText }) => {
   if (!isOpen) return null;
 
   // Icon mapping depending on alert type
@@ -85,9 +85,40 @@ const AlertModal = ({ isOpen, type = "info", title, message, onClose }) => {
             {renderMessage()}
           </div>
           <div className="custom-alert-footer">
-            <button className={`custom-alert-btn ${type}`} onClick={onClose}>
-              OK
-            </button>
+            {onConfirm ? (
+              <div style={{ display: "flex", gap: "12px", width: "100%" }}>
+                <button
+                  type="button"
+                  className="custom-alert-btn"
+                  onClick={onClose}
+                  style={{
+                    backgroundColor: "#f1f5f9",
+                    color: "#475569",
+                    border: "1px solid #e2e8f0",
+                    width: "50%"
+                  }}
+                >
+                  {cancelText || "Cancel"}
+                </button>
+                <button
+                  type="button"
+                  className={`custom-alert-btn ${type}`}
+                  onClick={() => {
+                    onConfirm();
+                    onClose();
+                  }}
+                  style={{
+                    width: "50%"
+                  }}
+                >
+                  {confirmText || "OK"}
+                </button>
+              </div>
+            ) : (
+              <button className={`custom-alert-btn ${type}`} onClick={onClose}>
+                OK
+              </button>
+            )}
           </div>
         </div>
       </div>

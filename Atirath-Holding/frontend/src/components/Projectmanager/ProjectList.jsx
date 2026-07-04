@@ -304,7 +304,7 @@ export default function ProjectList({ userRole, onLogout }) {
                 <table className="pl-table">
                   <thead>
                     <tr>
-                      <th>#</th>
+                      <th>S.No</th>
                       <th>Project Code</th>
                       <th>Project Name</th>
                       <th>Company</th>

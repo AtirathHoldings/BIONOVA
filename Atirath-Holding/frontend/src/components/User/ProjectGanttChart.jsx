@@ -11,25 +11,25 @@ const authHeaders = () => ({
 
 /* ═══ Status colour map ═══ */
 const SC = {
-  'Completed':   { bar:'#10b981', bg:'#d1fae5' },
-  'In Progress': { bar:'#3b82f6', bg:'#dbeafe' },
-  'Not Started': { bar:'#f97316', bg:'#ffedd5' },
-  'Overdue':     { bar:'#ef4444', bg:'#fee2e2' },
+  'Completed': { bar: '#10b981', bg: '#d1fae5' },
+  'In Progress': { bar: '#3b82f6', bg: '#dbeafe' },
+  'Not Started': { bar: '#f97316', bg: '#ffedd5' },
+  'Overdue': { bar: '#ef4444', bg: '#fee2e2' },
 };
 
 /* Row height — bigger when baseline is ON (2 bars per row) */
-const ROW_H_NORMAL   = 38;
+const ROW_H_NORMAL = 38;
 const ROW_H_BASELINE = 56;
 
 export default function ProjectGanttChart({ project, userRole, compact = false }) {
-  const [zoom,     setZoom]     = useState(100);
+  const [zoom, setZoom] = useState(100);
   const [viewMode, setViewMode] = useState('All');
-  const [groupBy,  setGroupBy]  = useState('Milestone');
+  const [groupBy, setGroupBy] = useState('Milestone');
   const [filterSt, setFilterSt] = useState('All');
   const [baseline, setBaseline] = useState(false);
-  const [activeRow,setActiveRow]= useState(null);
+  const [activeRow, setActiveRow] = useState(null);
   const [expandedMilestones, setExpandedMilestones] = useState(new Set());
-  
+
   const toggleExpand = (id) => {
     setExpandedMilestones(prev => {
       const next = new Set(prev);
@@ -38,7 +38,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
       return next;
     });
   };
-  
+
   const [loading, setLoading] = useState(true);
   const [ganttRows, setGanttRows] = useState([]);
   const [ganttDeps, setGanttDeps] = useState([]);
@@ -46,13 +46,13 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
   const [months, setMonths] = useState([]);
 
   // Dynamic marker line
-  const [markerOff, setMarkerOff] = useState(null); 
+  const [markerOff, setMarkerOff] = useState(null);
 
-  const tableBodyRef  = useRef(null);
-  const timelineRef   = useRef(null);
+  const tableBodyRef = useRef(null);
+  const timelineRef = useRef(null);
   const syncingScroll = useRef(false);
 
-  const DW    = 5 * (zoom / 100);
+  const DW = 5 * (zoom / 100);
   const ROW_H = baseline ? ROW_H_BASELINE : ROW_H_NORMAL;
 
   /* Helper to format Date string to DD-MMM-YY */
@@ -126,7 +126,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
     // Start timeline on the first of minDate's month
     const tStart = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
-    
+
     let monthCount = (maxDate.getFullYear() - tStart.getFullYear()) * 12 + (maxDate.getMonth() - tStart.getMonth()) + 2;
     if (monthCount < 6) monthCount = 6;
     if (monthCount > 36) monthCount = 36;
@@ -148,7 +148,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
   const mapItemsToGanttRows = (items, tStart) => {
     const projectItem = items.find(i => i.type === 'project');
     const milestones = items.filter(i => i.type === 'milestone').sort((a, b) => new Date(a.startDate) - new Date(b.startDate));
-    
+
     const result = [];
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -159,7 +159,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
       if (s === 'COMPLETED' || s === 'CLOSED') statusLabel = 'Completed';
       else if (s === 'WIP' || s === 'IN_PROGRESS' || s === 'LIVE' || s === 'UNDER_REVIEW' || s === 'SUBMIT_REVIEW') statusLabel = 'In Progress';
       else if (s === 'HOLD') statusLabel = 'Not Started';
-      
+
       if (statusLabel !== 'Completed' && item.endDate) {
         const end = new Date(item.endDate);
         if (!isNaN(end.getTime()) && end < today) {
@@ -268,7 +268,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           }
           const userTasks = taskRes.ok ? await taskRes.json() : [];
           const profile = profileRes.ok ? await profileRes.json() : null;
-          const isAdmin = profile?.email === 'siva@atirath.com';
+          const isAdmin = profile?.email === 'vsv.vempati@gmail.com';
 
           if (userRole === 'user' && !isAdmin && profile) {
             const userTaskIds = new Set(userTasks.map(t => `TSK-${t.taskId}`));
@@ -303,7 +303,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           let taskData = taskRes.ok ? await taskRes.json() : [];
           const empData = empRes.ok ? await empRes.json() : [];
           const profile = profileRes.ok ? await profileRes.json() : null;
-          const isAdmin = profile?.email === 'siva@atirath.com';
+          const isAdmin = profile?.email === 'vsv.vempati@gmail.com';
 
           if (userRole === 'user' && !isAdmin && profile) {
             taskData = taskData.filter(t => t.empId === profile.empId);
@@ -434,8 +434,8 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
   /* ── filter rows ── */
   let rows = [...ganttRows];
   if (viewMode === 'Milestones') rows = rows.filter(r => r.type === 'milestone');
-  if (viewMode === 'Tasks')      rows = rows.filter(r => r.type === 'task');
-  if (filterSt !== 'All')        rows = rows.filter(r => r.status === filterSt);
+  if (viewMode === 'Tasks') rows = rows.filter(r => r.type === 'task');
+  if (filterSt !== 'All') rows = rows.filter(r => r.status === filterSt);
 
   if (groupBy === 'Status') {
     const order = Object.keys(SC);
@@ -444,7 +444,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     rows = [];
     order.forEach(s => {
       if (grps[s]?.length) {
-        rows.push({ id:`grp-${s}`, type:'group', name:`● ${s}`, dur:'', start:'', end:'', prog:'', status:s, off:0, w:0, aOff:0, aW:0, aProg:0 });
+        rows.push({ id: `grp-${s}`, type: 'group', name: `● ${s}`, dur: '', start: '', end: '', prog: '', status: s, off: 0, w: 0, aOff: 0, aW: 0, aProg: 0 });
         rows.push(...grps[s]);
       }
     });
@@ -467,7 +467,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     const daysOff = Math.floor(pxOff / DW);
     const d = new Date(timelineStart);
     d.setDate(d.getDate() + daysOff);
-    return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }).replace(/ /g, '-');
+    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
   };
 
   /* ── click handlers ── */
@@ -476,13 +476,13 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     const x = e.clientX - rect.left;
     setMarkerOff(x);
   };
-  
+
   const handleBarClick = (e, rowId, idx) => {
     e.stopPropagation();
     setActiveRow(rowId);
     if (tableBodyRef.current) tableBodyRef.current.scrollTo({ top: idx * ROW_H - 80, behavior: 'smooth' });
   };
-  
+
   const handleRowClick = (row, idx) => {
     setActiveRow(row.id);
     if (timelineRef.current && row.off !== undefined) {
@@ -501,15 +501,15 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     const y1 = fi * ROW_H + (baseline ? 18 : ROW_H / 2);
     const x2 = tr.off * DW;
     const y2 = ti * ROW_H + (baseline ? 18 : ROW_H / 2);
-    return `M${x1},${y1} H${x1+6} V${y2} H${x2}`;
+    return `M${x1},${y1} H${x1 + 6} V${y2} H${x2}`;
   }).filter(Boolean);
 
   /* ── render a bar (planned or actual) ── */
   const renderBar = (row, i, isActual = false) => {
-    const off  = isActual ? row.aOff  : row.off;
-    const w    = isActual ? row.aW    : row.w;
+    const off = isActual ? row.aOff : row.off;
+    const w = isActual ? row.aW : row.w;
     const prog = isActual ? row.aProg : row.prog;
-    const col  = SC[row.status] || { bar:'#94a3b8', bg:'#f1f5f9' };
+    const col = SC[row.status] || { bar: '#94a3b8', bg: '#f1f5f9' };
 
     const topOffset = baseline
       ? (isActual ? ROW_H - 22 : 6)   // planned on top, actual on bottom
@@ -520,23 +520,23 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
     const barH = compact ? 16 : (baseline ? 14 : 16);
     // Use milestone colors universally for planned bars
-    const barColor  = isActual ? '#64748b' : cColor;
-    const bgColor   = isActual ? '#e2e8f0' : cColor;
-    const isActive  = activeRow === row.id;
-    const barW      = Math.max(w * DW, 6);
-    const fillProg  = 100; // Use solid bars universally based on user request
+    const barColor = isActual ? '#64748b' : cColor;
+    const bgColor = isActual ? '#e2e8f0' : cColor;
+    const isActive = activeRow === row.id;
+    const barW = Math.max(w * DW, 6);
+    const fillProg = 100; // Use solid bars universally based on user request
 
     return (
       <div
         key={isActual ? `act-${i}` : `pln-${i}`}
         style={{
-          position:'absolute',
+          position: 'absolute',
           top: i * ROW_H + topOffset,
           left: off * DW,
           width: barW,
           height: barH,
           borderRadius: 3,
-          cursor:'pointer',
+          cursor: 'pointer',
           zIndex: 3,
           outline: isActive && !isActual ? `2px solid ${barColor}` : 'none',
           outlineOffset: 1,
@@ -545,27 +545,27 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         title={`${row.name} — ${isActual ? 'Actual' : 'Planned'}: ${prog}%`}
       >
         {/* background */}
-        <div style={{position:'absolute',inset:0,borderRadius:3,background:bgColor}}/>
+        <div style={{ position: 'absolute', inset: 0, borderRadius: 3, background: bgColor }} />
         {/* fill */}
         <div style={{
-          position:'absolute',top:0,left:0,bottom:0,
-          width:`${fillProg}%`,minWidth:0,
-          background:barColor,borderRadius:3,
-          display:'flex',alignItems:'center',justifyContent:row.type === 'milestone' ? 'flex-start' : 'flex-end',
-          paddingRight:2,overflow:'hidden'
+          position: 'absolute', top: 0, left: 0, bottom: 0,
+          width: `${fillProg}%`, minWidth: 0,
+          background: barColor, borderRadius: 3,
+          display: 'flex', alignItems: 'center', justifyContent: row.type === 'milestone' ? 'flex-start' : 'flex-end',
+          paddingRight: 2, overflow: 'hidden'
         }}>
           {row.type === 'milestone' && (
-            <span style={{paddingLeft:4,color:'white',fontSize:10,fontWeight:'bold',whiteSpace:'nowrap'}}>
+            <span style={{ paddingLeft: 4, color: 'white', fontSize: 10, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
               {row.displayId}. {row.name}
             </span>
           )}
-          {prog===100 && <span style={{color:'white',fontSize:8,fontWeight:'bold'}}>✓</span>}
+          {prog === 100 && <span style={{ color: 'white', fontSize: 8, fontWeight: 'bold' }}>✓</span>}
         </div>
         {/* % label — only show on planned bar (right side) */}
         {!isActual && (
           <span style={{
-            position:'absolute',left:`calc(100% + 4px)`,top:'50%',transform:'translateY(-50%)',
-            fontSize:10,fontWeight:600,color:'#475569',whiteSpace:'nowrap'
+            position: 'absolute', left: `calc(100% + 4px)`, top: '50%', transform: 'translateY(-50%)',
+            fontSize: 10, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap'
           }}>{prog}%</span>
         )}
       </div>
@@ -599,25 +599,25 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
             <div className="gc-zoom">
               <span className="gc-lbl">Zoom</span>
-              <button className="gc-icn" onClick={() => setZoom(z => Math.max(30, z-10))}><ZoomOut size={13}/></button>
+              <button className="gc-icn" onClick={() => setZoom(z => Math.max(30, z - 10))}><ZoomOut size={13} /></button>
               <span className="gc-zoom-val">{zoom}%</span>
-              <button className="gc-icn" onClick={() => setZoom(z => Math.min(300, z+10))}><ZoomIn size={13}/></button>
+              <button className="gc-icn" onClick={() => setZoom(z => Math.min(300, z + 10))}><ZoomIn size={13} /></button>
             </div>
 
-            <button className="gc-today-btn" onClick={() => { 
+            <button className="gc-today-btn" onClick={() => {
               setMarkerOff(todayOffFixed);
-              if(scrollContainerRef.current) scrollContainerRef.current.scrollTo({ left: Math.max(0, todayOffFixed - 100), behavior: 'smooth' }); 
+              if (scrollContainerRef.current) scrollContainerRef.current.scrollTo({ left: Math.max(0, todayOffFixed - 100), behavior: 'smooth' });
             }}>
-              <Calendar size={13}/> Today
+              <Calendar size={13} /> Today
             </button>
           </div>
 
           <div className="gc-tb-right">
             <span className="gc-lbl">Baseline</span>
             <div className={`gc-tog ${baseline ? 'on' : ''}`} onClick={() => setBaseline(b => !b)}>
-              <div className="gc-tog-knob"/>
+              <div className="gc-tog-knob" />
             </div>
-            <button className="gc-filter-btn"><SlidersHorizontal size={13}/> Filters</button>
+            <button className="gc-filter-btn"><SlidersHorizontal size={13} /> Filters</button>
           </div>
         </div>
       )}
@@ -625,24 +625,24 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
       {/* ─── Baseline info banner ─── */}
       {baseline && (
         <div style={{
-          display:'flex', alignItems:'center', gap:20, padding:'6px 16px',
-          background:'#f0f9ff', borderBottom:'1px solid #bae6fd', fontSize:11,
+          display: 'flex', alignItems: 'center', gap: 20, padding: '6px 16px',
+          background: '#f0f9ff', borderBottom: '1px solid #bae6fd', fontSize: 11,
           flexWrap: 'wrap'
         }}>
-          <span style={{fontWeight:600, color:'#0369a1'}}>📊 Baseline Comparison Mode</span>
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <div style={{width:24,height:10,borderRadius:3,background:'#3b82f6'}}/>
-            <span style={{color:'#334155'}}>Planned Schedule (Project Plan)</span>
+          <span style={{ fontWeight: 600, color: '#0369a1' }}>📊 Baseline Comparison Mode</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 24, height: 10, borderRadius: 3, background: '#3b82f6' }} />
+            <span style={{ color: '#334155' }}>Planned Schedule (Project Plan)</span>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <div style={{width:24,height:10,borderRadius:3,background:'#94a3b8'}}/>
-            <span style={{color:'#334155'}}>Actual Progress (Employee Work)</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 24, height: 10, borderRadius: 3, background: '#94a3b8' }} />
+            <span style={{ color: '#334155' }}>Actual Progress (Employee Work)</span>
           </div>
-          <div style={{display:'flex',alignItems:'center',gap:6}}>
-            <div style={{width:24,height:10,borderRadius:3,background:'#f97316'}}/>
-            <span style={{color:'#f97316', fontWeight:500}}>Selected Date / Marker</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ width: 24, height: 10, borderRadius: 3, background: '#f97316' }} />
+            <span style={{ color: '#f97316', fontWeight: 500 }}>Selected Date / Marker</span>
           </div>
-          <span style={{color:'#64748b', fontStyle:'italic'}}>
+          <span style={{ color: '#64748b', fontStyle: 'italic' }}>
             — Compare planned vs actual to identify delays
           </span>
         </div>
@@ -654,75 +654,75 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         {/* LEFT: sticky table */}
         <div className="gc-left" style={{ width: compact ? 340 : (baseline ? 580 : 520), borderRight: '2px solid #e2e8f0', boxShadow: '2px 0 6px rgba(0,0,0,0.05)' }}>
           <div className="gc-left-hdr">
-            <table className="gc-tbl" style={{tableLayout:'fixed'}}><thead><tr>
+            <table className="gc-tbl" style={{ tableLayout: 'fixed' }}><thead><tr>
               {compact ? (
                 <>
-                  <th style={{width:260}}>Task Name</th>
-                  <th style={{width:80,textAlign:'center'}}>Duration</th>
+                  <th style={{ width: 260 }}>Task Name</th>
+                  <th style={{ width: 80, textAlign: 'center' }}>Duration</th>
                 </>
               ) : (
                 <>
-                  <th style={{width:32,textAlign:'center'}}>#</th>
-                  <th style={{width:180}}>Task / Milestone</th>
-                  <th style={{width:46,textAlign:'center'}}>Days</th>
-                  <th style={{width:82,textAlign:'center'}}>Start</th>
-                  <th style={{width:82,textAlign:'center'}}>End</th>
-                  <th style={{width:62,textAlign:'center',color: SC['In Progress']?.bar}}>Plan%</th>
-                  {baseline && <th style={{width:62,textAlign:'center',color:'#64748b'}}>Act%</th>}
+                  <th style={{ width: 32, textAlign: 'center' }}>S.No</th>
+                  <th style={{ width: 180 }}>Task / Milestone</th>
+                  <th style={{ width: 46, textAlign: 'center' }}>Days</th>
+                  <th style={{ width: 82, textAlign: 'center' }}>Start</th>
+                  <th style={{ width: 82, textAlign: 'center' }}>End</th>
+                  <th style={{ width: 62, textAlign: 'center', color: SC['In Progress']?.bar }}>Plan%</th>
+                  {baseline && <th style={{ width: 62, textAlign: 'center', color: '#64748b' }}>Act%</th>}
                 </>
               )}
             </tr></thead></table>
           </div>
           <div className="gc-left-body">
-            <table className="gc-tbl" style={{tableLayout:'fixed'}}><tbody>
+            <table className="gc-tbl" style={{ tableLayout: 'fixed' }}><tbody>
               {rows.map((row, i) => (
                 <tr
                   key={i}
-                  style={{ height: ROW_H, cursor:'pointer' }}
-                  className={`gc-tr ${row.type==='milestone'||row.type==='group'||row.type==='project'?'gc-ms':''} ${activeRow===row.id?'gc-active':''}`}
+                  style={{ height: ROW_H, cursor: 'pointer' }}
+                  className={`gc-tr ${row.type === 'milestone' || row.type === 'group' || row.type === 'project' ? 'gc-ms' : ''} ${activeRow === row.id ? 'gc-active' : ''}`}
                   onClick={() => handleRowClick(row, i)}
                 >
                   {compact ? (
                     <>
-                      <td style={{width:260}}>
-                        <div className="gc-name" style={{height:ROW_H, paddingLeft: row.type==='task'? 24 : 8}}>
-                          {row.type==='milestone' && (
-                            <span style={{marginRight:8, fontWeight:'bold', cursor:'pointer'}} onClick={(e)=>{ e.stopPropagation(); toggleExpand(row.id); }}>
+                      <td style={{ width: 260 }}>
+                        <div className="gc-name" style={{ height: ROW_H, paddingLeft: row.type === 'task' ? 24 : 8 }}>
+                          {row.type === 'milestone' && (
+                            <span style={{ marginRight: 8, fontWeight: 'bold', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); toggleExpand(row.id); }}>
                               {expandedMilestones.has(row.id) ? 'v' : '>'}
                             </span>
                           )}
-                          <span className="gc-name-text" style={{fontWeight: row.type==='milestone' ? 'bold' : 'normal', color: '#1e293b'}}>
+                          <span className="gc-name-text" style={{ fontWeight: row.type === 'milestone' ? 'bold' : 'normal', color: '#1e293b' }}>
                             {row.displayId ? `${row.displayId}. ` : ''}{row.name}
                           </span>
                         </div>
                       </td>
-                      <td style={{width:80,textAlign:'center'}}>{row.dur} {row.dur === 1 ? 'Day' : 'Days'}</td>
+                      <td style={{ width: 80, textAlign: 'center' }}>{row.dur} {row.dur === 1 ? 'Day' : 'Days'}</td>
                     </>
                   ) : (
                     <>
-                      <td style={{width:32,color:'#94a3b8',textAlign:'center',fontSize:11}}>{row.displayId || (row.type === 'project' ? 'P' : '')}</td>
-                      <td style={{width:180}}>
-                        <div className="gc-name" style={{height:ROW_H, paddingLeft: row.type==='task'? 24 : 8}}>
-                          {row.type==='milestone' && (
-                            <span style={{marginRight:8, fontWeight:'bold', cursor:'pointer'}} onClick={(e)=>{ e.stopPropagation(); toggleExpand(row.id); }}>
+                      <td style={{ width: 32, color: '#94a3b8', textAlign: 'center', fontSize: 11 }}>{row.displayId || (row.type === 'project' ? 'P' : '')}</td>
+                      <td style={{ width: 180 }}>
+                        <div className="gc-name" style={{ height: ROW_H, paddingLeft: row.type === 'task' ? 24 : 8 }}>
+                          {row.type === 'milestone' && (
+                            <span style={{ marginRight: 8, fontWeight: 'bold', cursor: 'pointer' }} onClick={(e) => { e.stopPropagation(); toggleExpand(row.id); }}>
                               {expandedMilestones.has(row.id) ? 'v' : '>'}
                             </span>
                           )}
-                          {(row.type==='milestone'||row.type==='group'||row.type==='project') && (
-                            <span style={{width:8,height:8,borderRadius:'50%',background:SC[row.status]?.bar,display:'inline-block',flexShrink:0, marginRight: 8}}/>
+                          {(row.type === 'milestone' || row.type === 'group' || row.type === 'project') && (
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: SC[row.status]?.bar, display: 'inline-block', flexShrink: 0, marginRight: 8 }} />
                           )}
                           <span className="gc-name-text" title={row.name}>{row.name}</span>
                         </div>
                       </td>
-                      <td style={{width:46,textAlign:'center'}}>{row.dur}</td>
-                      <td style={{width:82,textAlign:'center'}}>{row.start}</td>
-                      <td style={{width:82,textAlign:'center'}}>{row.end}</td>
-                      <td style={{width:62,textAlign:'center',fontWeight:600,color: SC[row.status]?.bar ?? '#334155'}}>
-                        {row.prog!==''?`${row.prog}%`:''}
+                      <td style={{ width: 46, textAlign: 'center' }}>{row.dur}</td>
+                      <td style={{ width: 82, textAlign: 'center' }}>{row.start}</td>
+                      <td style={{ width: 82, textAlign: 'center' }}>{row.end}</td>
+                      <td style={{ width: 62, textAlign: 'center', fontWeight: 600, color: SC[row.status]?.bar ?? '#334155' }}>
+                        {row.prog !== '' ? `${row.prog}%` : ''}
                       </td>
                       {baseline && (
-                        <td style={{width:62,textAlign:'center',fontWeight:600,color:'#64748b'}}>
-                          {row.aProg!==undefined&&row.prog!==''?`${row.aProg}%`:''}
+                        <td style={{ width: 62, textAlign: 'center', fontWeight: 600, color: '#64748b' }}>
+                          {row.aProg !== undefined && row.prog !== '' ? `${row.aProg}%` : ''}
                         </td>
                       )}
                     </>
@@ -737,32 +737,32 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         <div className="gc-right">
 
           {/* Sticky month/day header */}
-          <div className="gc-right-hdr" style={{width: timelineW}}>
+          <div className="gc-right-hdr" style={{ width: timelineW }}>
             <div className="gc-months-row">
-              {months.map((m,i)=>(
-                <div key={i} className="gc-month" style={{width:m.days*DW}}>{m.label}</div>
+              {months.map((m, i) => (
+                <div key={i} className="gc-month" style={{ width: m.days * DW }}>{m.label}</div>
               ))}
             </div>
             <div className="gc-days-row">
-              {months.map((m,i)=>{
-                const prevDays = months.slice(0,i).reduce((s,mm)=>s+mm.days,0);
+              {months.map((m, i) => {
+                const prevDays = months.slice(0, i).reduce((s, mm) => s + mm.days, 0);
                 return (
-                  <div key={i} className="gc-days-cell" style={{width:m.days*DW}}>
-                    {getWeeklyDays(m.year, m.month).map(d=>{
+                  <div key={i} className="gc-days-cell" style={{ width: m.days * DW }}>
+                    {getWeeklyDays(m.year, m.month).map(d => {
                       const dayOffPx = (prevDays + d - 1) * DW;
                       return (
-                        <span 
-                          key={d} 
+                        <span
+                          key={d}
                           className="gc-day-n"
-                          style={{ position:'absolute', left: dayOffPx + (DW/2), transform:'translateX(-50%)', cursor: 'pointer' }}
+                          style={{ position: 'absolute', left: dayOffPx + (DW / 2), transform: 'translateX(-50%)', cursor: 'pointer' }}
                           title="Click to place marker here"
                           onClick={(e) => {
                             e.stopPropagation();
                             setMarkerOff(dayOffPx);
-                            if(scrollContainerRef.current) scrollContainerRef.current.scrollTo({ left: Math.max(0, dayOffPx - 100), behavior: 'smooth' });
+                            if (scrollContainerRef.current) scrollContainerRef.current.scrollTo({ left: Math.max(0, dayOffPx - 100), behavior: 'smooth' });
                           }}
                         >
-                          {String(d).padStart(2,'0')}
+                          {String(d).padStart(2, '0')}
                         </span>
                       );
                     })}
@@ -773,17 +773,17 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           </div>
 
           {/* Bars area */}
-          <div className="gc-bars-area" style={{width:timelineW, height:rows.length*ROW_H, cursor:'crosshair'}} onClick={handleTimelineClick}>
+          <div className="gc-bars-area" style={{ width: timelineW, height: rows.length * ROW_H, cursor: 'crosshair' }} onClick={handleTimelineClick}>
 
             {/* Grid */}
-            <div className="gc-grid" style={{width:timelineW,height:rows.length*ROW_H}}>
-              {months.map((m,i)=>{
-                const left = months.slice(0,i).reduce((s,mm)=>s+mm.days*DW,0);
+            <div className="gc-grid" style={{ width: timelineW, height: rows.length * ROW_H }}>
+              {months.map((m, i) => {
+                const left = months.slice(0, i).reduce((s, mm) => s + mm.days * DW, 0);
                 return (
                   <React.Fragment key={i}>
-                    <div className="gc-grid-month" style={{left,height:rows.length*ROW_H}}/>
-                    {[7,14,21,28].filter(d=>d<m.days).map(d=>(
-                      <div key={d} className="gc-grid-week" style={{left:left+d*DW,height:rows.length*ROW_H}}/>
+                    <div className="gc-grid-month" style={{ left, height: rows.length * ROW_H }} />
+                    {[7, 14, 21, 28].filter(d => d < m.days).map(d => (
+                      <div key={d} className="gc-grid-week" style={{ left: left + d * DW, height: rows.length * ROW_H }} />
                     ))}
                   </React.Fragment>
                 );
@@ -791,46 +791,46 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
             </div>
 
             {/* Row alternating stripes */}
-            {rows.map((_,i)=>(
+            {rows.map((_, i) => (
               <div key={i} style={{
-                position:'absolute', top:i*ROW_H, left:0, right:0, height:ROW_H,
-                background: i%2===0 ? 'transparent' : 'rgba(248,250,252,0.6)'
-              }}/>
+                position: 'absolute', top: i * ROW_H, left: 0, right: 0, height: ROW_H,
+                background: i % 2 === 0 ? 'transparent' : 'rgba(248,250,252,0.6)'
+              }} />
             ))}
 
             {/* Dependency arrows */}
-            <svg style={{position:'absolute',top:0,left:0,width:timelineW,height:rows.length*ROW_H,pointerEvents:'none',zIndex:2,overflow:'visible'}}>
+            <svg style={{ position: 'absolute', top: 0, left: 0, width: timelineW, height: rows.length * ROW_H, pointerEvents: 'none', zIndex: 2, overflow: 'visible' }}>
               <defs>
                 <marker id="arr" viewBox="0 0 8 8" refX="6" refY="4" markerWidth="4" markerHeight="4" orient="auto">
-                  <path d="M0,0 L8,4 L0,8 Z" fill="#cbd5e1"/>
+                  <path d="M0,0 L8,4 L0,8 Z" fill="#cbd5e1" />
                 </marker>
               </defs>
-              {depPaths.map((d,i)=>(
-                <path key={i} d={d} fill="none" stroke="#cbd5e1" strokeWidth="1.2" markerEnd="url(#arr)"/>
+              {depPaths.map((d, i) => (
+                <path key={i} d={d} fill="none" stroke="#cbd5e1" strokeWidth="1.2" markerEnd="url(#arr)" />
               ))}
             </svg>
 
             {/* Marker / Today line */}
-            <div className="gc-today-line" style={{left:currentMarkerOff, height:rows.length*ROW_H, pointerEvents:'none', zIndex:5}}>
+            <div className="gc-today-line" style={{ left: currentMarkerOff, height: rows.length * ROW_H, pointerEvents: 'none', zIndex: 5 }}>
               <span className="gc-today-tag" style={{ background: markerOff !== null ? '#f59e0b' : '#3b82f6', transition: 'background 0.2s' }}>
                 {markerOff !== null ? getMarkerDateStr(markerOff) : 'Today'}
               </span>
             </div>
 
             {/* Row separators */}
-            {rows.map((_,i)=>(
-              <div key={`sep-${i}`} style={{position:'absolute',top:(i+1)*ROW_H-1,left:0,right:0,height:1,background:'#f1f5f9',zIndex:1}}/>
+            {rows.map((_, i) => (
+              <div key={`sep-${i}`} style={{ position: 'absolute', top: (i + 1) * ROW_H - 1, left: 0, right: 0, height: 1, background: '#f1f5f9', zIndex: 1 }} />
             ))}
 
             {/* ── PLANNED bars ── */}
             {rows.map((row, i) => {
-              if (row.type==='group' || !row.w) return null;
+              if (row.type === 'group' || !row.w) return null;
               return renderBar(row, i, false);
             })}
 
             {/* ── ACTUAL bars (only when baseline ON) ── */}
             {baseline && rows.map((row, i) => {
-              if (row.type==='group' || !row.aW) return null;
+              if (row.type === 'group' || !row.aW) return null;
               return renderBar(row, i, true);
             })}
           </div>
@@ -839,24 +839,24 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
       {/* ═══ LEGEND ═══ */}
       <div className="gc-legend">
-        {Object.entries(SC).map(([label,{bar}])=>(
+        {Object.entries(SC).map(([label, { bar }]) => (
           <div key={label} className="gc-leg-item">
-            <span style={{display:'inline-block',width:14,height:8,borderRadius:2,background:bar}}/>
+            <span style={{ display: 'inline-block', width: 14, height: 8, borderRadius: 2, background: bar }} />
             {label}
           </div>
         ))}
         <div className="gc-leg-item">
-          <span style={{display:'inline-block',width:16,height:0,borderTop:'2px dashed #f59e0b'}}/>
+          <span style={{ display: 'inline-block', width: 16, height: 0, borderTop: '2px dashed #f59e0b' }} />
           Date Marker
         </div>
         {baseline && (
           <>
             <div className="gc-leg-item">
-              <span style={{display:'inline-block',width:14,height:8,borderRadius:2,background:'#3b82f6',opacity:0.7}}/>
+              <span style={{ display: 'inline-block', width: 14, height: 8, borderRadius: 2, background: '#3b82f6', opacity: 0.7 }} />
               Planned (upper bar)
             </div>
             <div className="gc-leg-item">
-              <span style={{display:'inline-block',width:14,height:8,borderRadius:2,background:'#94a3b8'}}/>
+              <span style={{ display: 'inline-block', width: 14, height: 8, borderRadius: 2, background: '#94a3b8' }} />
               Actual / Employee (lower bar)
             </div>
           </>

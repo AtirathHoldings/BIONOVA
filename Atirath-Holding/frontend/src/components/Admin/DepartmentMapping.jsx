@@ -14,7 +14,7 @@ import {
   Plus,
   MoreVertical
 } from "lucide-react";
-import "../../styles/CompanyMaster.css";
+import "../../styles/DepartmentMapping.css";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL) + "/api";
 const getAuthToken = () => sessionStorage.getItem("authToken") || "";
@@ -22,6 +22,98 @@ const authHeaders = () => ({
   "Content-Type": "application/json",
   "Authorization": `Bearer ${getAuthToken()}`
 });
+
+const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled, onCreate }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const selected = options.find(o => String(o.value) === String(value));
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%', ...style }}>
+      <div 
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        style={{
+          padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
+          background: disabled ? '#f1f5f9' : 'white', cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '40px', fontSize: '14px', color: '#0f172a'
+        }}
+      >
+        <span>{selected ? selected.label : placeholder || "Select..."}</span>
+        <span style={{ fontSize: '12px', color: '#64748b' }}>▼</span>
+      </div>
+      {isOpen && !disabled && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, 
+          background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px',
+          marginTop: '4px', zIndex: 999, maxHeight: '250px', overflowY: 'auto',
+          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
+        }} onClick={e => e.stopPropagation()}>
+          <div style={{ padding: '8px', position: 'sticky', top: 0, background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 2 }}>
+            <input 
+              type="text" 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+              placeholder="Search..." 
+              style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+            />
+            {onCreate && (
+              <div 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setIsOpen(false);
+                  onCreate();
+                }}
+                style={{
+                  marginTop: '8px', padding: '8px 10px', cursor: 'pointer', fontSize: '13px',
+                  color: '#2563eb', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '6px',
+                  borderRadius: '4px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe'
+                }}
+                onMouseEnter={e => e.currentTarget.style.backgroundColor = '#dbeafe'}
+                onMouseLeave={e => e.currentTarget.style.backgroundColor = '#eff6ff'}
+              >
+                <Plus size={14} /> Create New
+              </div>
+            )}
+          </div>
+          <div style={{ padding: '4px 0' }}>
+            {filtered.map(opt => (
+              <div 
+                key={opt.value}
+                onClick={() => {
+                  onChange({ target: { name, value: opt.value } });
+                  setIsOpen(false);
+                  setSearch("");
+                }}
+                style={{
+                  padding: '8px 12px', cursor: 'pointer', fontSize: '14px',
+                  background: String(value) === String(opt.value) ? '#f1f5f9' : 'transparent',
+                  color: '#0f172a'
+                }}
+                onMouseEnter={e => e.currentTarget.style.background = '#f8fafc'}
+                onMouseLeave={e => e.currentTarget.style.background = String(value) === String(opt.value) ? '#f1f5f9' : 'transparent'}
+              >
+                {opt.label}
+              </div>
+            ))}
+            {filtered.length === 0 && (
+              <div style={{ padding: '8px 12px', fontSize: '14px', color: '#64748b', textAlign: 'center' }}>No options found</div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
 
 const DepartmentMapping = ({ onLogout, userRole }) => {
   const navigate = useNavigate();
@@ -37,7 +129,24 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
+  const [tableSearchQuery, setTableSearchQuery] = useState("");
   const [loading, setLoading] = useState(true);
+
+  // Department Creation Popup States
+  const [showDeptPopup, setShowDeptPopup] = useState(false);
+  const [newDeptData, setNewDeptData] = useState({ deptCode: "", deptNm: "", descr: "", sts: true });
+
+  // Close dropdowns on outside click or scroll
+  useEffect(() => {
+    const closeDropdown = () => setActiveDropdown(null);
+    window.addEventListener("scroll", closeDropdown, true);
+    window.addEventListener("click", closeDropdown);
+    return () => {
+      window.removeEventListener("scroll", closeDropdown, true);
+      window.removeEventListener("click", closeDropdown);
+    };
+  }, []);
 
   // Alert settings
   const [alertConfig, setAlertConfig] = useState({
@@ -102,7 +211,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
 
   // Find info helper
   const selectedDept = departments.find(d => String(d.deptId) === String(formData.deptId));
-  const deptCode = selectedDept ? selectedDept.deptCode : "";
+  const deptCode = selectedDept ? (selectedDept.deptCd || selectedDept.deptCode || "") : "";
   const deptNm = selectedDept ? selectedDept.deptNm : "";
   const deptDescr = selectedDept ? selectedDept.descr : "";
 
@@ -127,6 +236,68 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
       deptId: "",
       sts: true
     });
+  };
+
+  const handleCreateDept = async () => {
+    if (!newDeptData.deptCode.trim() || !newDeptData.deptNm.trim()) {
+      triggerAlert("error", "Validation Error", "Department Code and Name are required.");
+      return;
+    }
+
+    const codeToCheck = newDeptData.deptCode.trim().toUpperCase();
+    const isDuplicate = departments.some(dept => {
+      const apiCode = dept.deptCd || dept.deptCode || dept.code || "";
+      return apiCode.toUpperCase() === codeToCheck;
+    });
+
+    if (isDuplicate) {
+      triggerAlert("error", "Duplicate Error", "This Department Code already exists. Please use a unique code.");
+      return;
+    }
+
+    const payload = {
+      deptCode: codeToCheck,
+      deptNm: newDeptData.deptNm.trim(),
+      descr: newDeptData.descr ? newDeptData.descr.trim() : "",
+      sts: newDeptData.sts
+    };
+
+    try {
+      const res = await fetch(`${API_BASE}/departments`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify(payload)
+      });
+      if (res.ok) {
+        // Re-fetch all departments
+        const deptRes = await fetch(`${API_BASE}/departments`, { headers: authHeaders() });
+        if (deptRes.ok) {
+          const freshDepts = await deptRes.json();
+          setDepartments(freshDepts);
+          const newlyCreated = freshDepts.find(d => {
+            const apiCode = d.deptCd || d.deptCode || "";
+            return apiCode.toUpperCase() === newDeptData.deptCode.trim().toUpperCase();
+          });
+          if (newlyCreated) {
+            setFormData(prev => ({ ...prev, deptId: newlyCreated.deptId }));
+          }
+        }
+        triggerAlert("success", "Success", "Department created successfully!");
+        setShowDeptPopup(false);
+        setNewDeptData({ deptCode: "", deptNm: "", descr: "", sts: true });
+      } else {
+        let errData = {};
+        try {
+          errData = await res.json();
+        } catch (e) {
+          errData = { message: `Server returned status ${res.status}` };
+        }
+        triggerAlert("error", "Error", errData.message || "Failed to create department.");
+      }
+    } catch (err) {
+      console.error("Error creating department:", err);
+      triggerAlert("error", "Error", "A network error occurred.");
+    }
   };
 
   const handleSave = async () => {
@@ -215,8 +386,15 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
     }
   };
 
-  const toggleDropdown = (id) => {
-    setActiveDropdown(prev => (prev === id ? null : id));
+  const toggleDropdown = (e, id) => {
+    e.stopPropagation();
+    if (activeDropdown === id) {
+      setActiveDropdown(null);
+    } else {
+      const rect = e.currentTarget.getBoundingClientRect();
+      setDropdownPos({ top: rect.bottom + window.scrollY, right: window.innerWidth - rect.right });
+      setActiveDropdown(id);
+    }
   };
 
   // Helper names resolver
@@ -237,13 +415,23 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
 
   const getDeptCode = (id) => {
     const found = departments.find(d => String(d.deptId) === String(id));
-    return found ? found.deptCode : "N/A";
+    return found ? (found.deptCd || found.deptCode || "N/A") : "N/A";
   };
 
   const getDeptDescr = (id) => {
     const found = departments.find(d => String(d.deptId) === String(id));
     return found ? found.descr : "N/A";
   };
+
+  const filteredMappings = mappings.filter(mapping => {
+    if (!tableSearchQuery) return true;
+    const searchLower = tableSearchQuery.toLowerCase();
+    const coyNm = getCompanyName(mapping.coyId).toLowerCase();
+    const pltNm = getPlantName(mapping.pltId).toLowerCase();
+    const deptCodeStr = getDeptCode(mapping.deptId).toLowerCase();
+    const deptNmStr = getDeptName(mapping.deptId).toLowerCase();
+    return coyNm.includes(searchLower) || pltNm.includes(searchLower) || deptCodeStr.includes(searchLower) || deptNmStr.includes(searchLower);
+  });
 
   return (
     <div className="dept-map-shell-container" style={{ display: "flex", minHeight: "100vh", background: "#f8fafc" }}>
@@ -258,7 +446,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
           
           {view === "form" ? (
             /* ================= VIEW: FORM MODE ================= */
-            <div className="cc-form-card" style={{ backgroundColor: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
+            <div className="cc-form-card" style={{ backgroundColor: "white", borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
               {/* Form Title & Back Bar */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px", borderBottom: "1px solid #e2e8f0", backgroundColor: "#fafbfc" }}>
                 <div>
@@ -329,32 +517,37 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                   <div className="cc-form-layout-row columns-3">
                     <label className="cc-field-item">
                       <span>Company <b style={{ color: "#ef4444" }}>*</b></span>
-                      <select name="coyId" value={formData.coyId} onChange={handleInputChange} style={{ backgroundColor: "white" }}>
-                        <option value="" disabled hidden>Select Company</option>
-                        {companies.map(c => (
-                          <option key={c.coyId} value={c.coyId}>{c.coyNm}</option>
-                        ))}
-                      </select>
+                      <SearchableSelect 
+                        name="coyId" 
+                        value={formData.coyId} 
+                        onChange={handleInputChange} 
+                        placeholder="Select Company"
+                        options={companies.map(c => ({ value: c.coyId, label: c.coyNm }))}
+                      />
                     </label>
 
                     <label className="cc-field-item">
                       <span>Plant <b style={{ color: "#ef4444" }}>*</b></span>
-                      <select name="pltId" value={formData.pltId} onChange={handleInputChange} style={{ backgroundColor: "white" }} disabled={!formData.coyId}>
-                        <option value="" disabled hidden>{formData.coyId ? "Select Plant" : "Select Company First"}</option>
-                        {filteredPlants.map(p => (
-                          <option key={p.pltId} value={p.pltId}>{p.pltNm}</option>
-                        ))}
-                      </select>
+                      <SearchableSelect 
+                        name="pltId" 
+                        value={formData.pltId} 
+                        onChange={handleInputChange} 
+                        placeholder={formData.coyId ? "Select Plant" : "Select Company First"}
+                        options={filteredPlants.map(p => ({ value: p.pltId, label: p.pltNm }))}
+                        disabled={!formData.coyId}
+                      />
                     </label>
 
                     <label className="cc-field-item">
                       <span>Department <b style={{ color: "#ef4444" }}>*</b></span>
-                      <select name="deptId" value={formData.deptId} onChange={handleInputChange} style={{ backgroundColor: "white" }}>
-                        <option value="" disabled hidden>Select Department</option>
-                        {departments.map(d => (
-                          <option key={d.deptId} value={d.deptId}>{d.deptNm}</option>
-                        ))}
-                      </select>
+                      <SearchableSelect 
+                        name="deptId" 
+                        value={formData.deptId} 
+                        onChange={handleInputChange} 
+                        placeholder="Select Department"
+                        options={departments.map(d => ({ value: d.deptId, label: d.deptNm }))}
+                        onCreate={() => setShowDeptPopup(true)}
+                      />
                     </label>
                   </div>
                 </div>
@@ -387,14 +580,11 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
 
               {/* Form Action Buttons */}
               <div className="cc-form-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "12px", padding: "16px 24px", backgroundColor: "#fafbfc", borderTop: "1px solid #e2e8f0" }}>
-                <button type="button" className="cc-btn secondary" onClick={() => { setView("list"); handleResetForm(); setIsEditing(false); setEditingId(null); }}>
-                  Cancel
-                </button>
-                <button type="button" className="cc-btn tertiary" onClick={handleResetForm}>
-                  <RefreshCcw size={14} /> Reset
-                </button>
                 <button type="button" className="cc-btn primary" onClick={handleSave}>
                   <Save size={14} /> {isEditing ? "Update Mapping" : "Save Mapping"}
+                </button>
+                <button type="button" className="cc-btn secondary" onClick={() => { setView("list"); handleResetForm(); setIsEditing(false); setEditingId(null); }}>
+                  Cancel
                 </button>
               </div>
             </div>
@@ -411,18 +601,30 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                     View and manage department mappings with companies and plants
                   </p>
                 </div>
-                <button
-                  type="button"
-                  className="cc-btn-add-new"
-                  onClick={() => {
-                    handleResetForm();
-                    setIsEditing(false);
-                    setView("form");
-                  }}
-                  style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 20px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
-                >
-                  <Plus size={16} /> Add Department Mapping
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ position: 'relative' }}>
+                    <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                    <input
+                      type="text"
+                      placeholder="Search mappings..."
+                      value={tableSearchQuery}
+                      onChange={(e) => setTableSearchQuery(e.target.value)}
+                      style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    className="cc-btn-add-new"
+                    onClick={() => {
+                      handleResetForm();
+                      setIsEditing(false);
+                      setView("form");
+                    }}
+                    style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 20px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
+                  >
+                    <Plus size={16} /> Add Department Mapping
+                  </button>
+                </div>
               </div>
 
               {/* Data Table */}
@@ -430,7 +632,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                 <table className="cc-list-table" style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", minWidth: "1200px" }}>
                   <thead style={{ backgroundColor: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
                     <tr>
-                      <th style={{ width: "50px", padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>#</th>
+                      <th style={{ width: "50px", padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>S.NO</th>
                       <th style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Company</th>
                       <th style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Plant</th>
                       <th style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Department</th>
@@ -440,8 +642,8 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                     </tr>
                   </thead>
                   <tbody>
-                    {mappings.length > 0 ? (
-                      mappings.map((item, idx) => (
+                    {filteredMappings.length > 0 ? (
+                      filteredMappings.map((item, idx) => (
                         <tr key={item.mapId || idx} style={{ borderBottom: "1px solid #f1f5f9" }}>
                           <td style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>{idx + 1}</td>
                           <td style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}><strong>{getCompanyName(item.coyId)}</strong></td>
@@ -461,15 +663,13 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                             <button
                               type="button"
                               style={{ background: "none", border: "none", cursor: "pointer", color: "#64748b", padding: "4px 8px", borderRadius: "4px" }}
-                              onClick={() => toggleDropdown(item.mapId)}
+                              onClick={(e) => toggleDropdown(e, item.mapId)}
                             >
                               <MoreVertical size={18} />
                             </button>
 
                             {activeDropdown === item.mapId && (
-                              <>
-                                <div className="cc-actions-dropdown-backdrop" onClick={() => setActiveDropdown(null)} style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }} />
-                                <div className="cc-actions-dropdown-menu" style={{ position: "absolute", right: "30px", top: "8px", backgroundColor: "white", border: "1px solid #e2e8f0", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", zIndex: 10, display: "flex", flexDirection: "column", padding: "4px 0", minWidth: "140px" }}>
+                              <div className="cc-actions-dropdown-menu" style={{ position: "fixed", right: `${dropdownPos.right}px`, top: `${dropdownPos.top}px`, backgroundColor: "white", border: "1px solid #e2e8f0", borderRadius: "8px", boxShadow: "0 4px 12px rgba(0,0,0,0.15)", zIndex: 9999, display: "flex", flexDirection: "column", padding: "4px 0", minWidth: "140px" }}>
                                   <button
                                     type="button"
                                     style={{ padding: "10px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#334155", borderRadius: "4px", margin: "2px 4px" }}
@@ -499,7 +699,6 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                                     <Trash2 size={15} /> Delete
                                   </button>
                                 </div>
-                              </>
                             )}
                           </td>
                         </tr>
@@ -527,6 +726,80 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
         message={alertConfig.message}
         onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
       />
+
+      {showDeptPopup && (
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, bottom: 0,
+          backgroundColor: "rgba(15, 23, 42, 0.6)",
+          display: "flex", alignItems: "center", justifyContent: "center",
+          zIndex: 9999, backdropFilter: "blur(4px)"
+        }}>
+          <div style={{
+            backgroundColor: "white", borderRadius: "12px", width: "450px",
+            boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+            overflow: "hidden"
+          }}>
+            <div style={{ padding: "20px 24px", borderBottom: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between", alignItems: "center", backgroundColor: "#f8fafc" }}>
+              <h2 style={{ fontSize: "18px", fontWeight: "700", color: "#0f172a", margin: 0 }}>Create New Department</h2>
+              <button 
+                onClick={() => setShowDeptPopup(false)}
+                style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", padding: "4px" }}
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div style={{ padding: "24px", display: "flex", flexDirection: "column", gap: "16px" }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>Department Code <b style={{ color: "#ef4444" }}>*</b></label>
+                <input 
+                  type="text" 
+                  value={newDeptData.deptCode}
+                  onChange={(e) => setNewDeptData(p => ({...p, deptCode: e.target.value}))}
+                  style={{ padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "14px", outline: "none" }}
+                  placeholder="e.g. HR"
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>Department Name <b style={{ color: "#ef4444" }}>*</b></label>
+                <input 
+                  type="text" 
+                  value={newDeptData.deptNm}
+                  onChange={(e) => setNewDeptData(p => ({...p, deptNm: e.target.value}))}
+                  style={{ padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "14px", outline: "none" }}
+                  placeholder="e.g. Human Resources"
+                />
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                <label style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>Description</label>
+                <textarea 
+                  value={newDeptData.descr}
+                  onChange={(e) => setNewDeptData(p => ({...p, descr: e.target.value}))}
+                  style={{ padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "14px", outline: "none", minHeight: "80px", resize: "vertical" }}
+                  placeholder="Department details..."
+                />
+              </div>
+            </div>
+
+            <div style={{ padding: "16px 24px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", justifyContent: "flex-end", gap: "12px" }}>
+              <button 
+                type="button" 
+                onClick={() => setShowDeptPopup(false)}
+                style={{ padding: "8px 16px", borderRadius: "6px", fontSize: "14px", fontWeight: "500", backgroundColor: "white", border: "1px solid #cbd5e1", color: "#475569", cursor: "pointer" }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button" 
+                onClick={handleCreateDept}
+                style={{ padding: "8px 16px", borderRadius: "6px", fontSize: "14px", fontWeight: "500", backgroundColor: "#2563eb", border: "1px solid #2563eb", color: "white", cursor: "pointer" }}
+              >
+                Save Department
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -33,7 +33,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
   const { id } = useParams();
   const location = useLocation();
   const viewMode = location.state?.viewMode || 'full';
-  
+
   const [activeTab, setActiveTab] = useState(viewMode === 'milestones_only' ? 'Milestones & Tasks' : 'Overview');
   const [project, setProject] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -61,7 +61,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
 
         let targetRaw = null;
         let isDraft = false;
-        
+
         const stateType = location.state?.projectType;
         if (stateType === "live") {
           targetRaw = live.find(l => String(l.prjId) === String(id));
@@ -80,7 +80,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
             isDraft = true;
           }
         }
-        
+
         if (targetRaw) {
           const p = {
             id: isDraft ? targetRaw.drftPrjId : targetRaw.prjId,
@@ -100,7 +100,9 @@ const ProjectDetails = ({ userRole, onLogout }) => {
             budget: targetRaw.budget || "N/A",
             remarks: targetRaw.addlRem || "",
             logo: targetRaw.logo || null,
-            createdBy: targetRaw.createdBy || getLoggedInUser(),
+            createdBy: targetRaw.createdByName ||
+              targetRaw.createdBy ||
+              getLoggedInUser(),
             _type: isDraft ? "draft" : "live"
           };
           setProject(p);
@@ -113,14 +115,14 @@ const ProjectDetails = ({ userRole, onLogout }) => {
     };
 
     if (id) fetchProject();
-  }, [id]);
+  }, [id, location.state]);
 
   if (loading) {
-    return <div className="proj-shell-container" style={{display: 'flex', justifyContent: 'center', alignItems: 'center'}}>Loading Project Details...</div>;
+    return <div className="proj-shell-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading Project Details...</div>;
   }
 
   if (!project) {
-    return <div className="proj-shell-container" style={{display: 'flex', justifyContent: 'center', alignItems: 'center'}}>Project Not Found.</div>;
+    return <div className="proj-shell-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Project Not Found.</div>;
   }
 
   // Dynamic progress calculation
@@ -128,28 +130,28 @@ const ProjectDetails = ({ userRole, onLogout }) => {
     // Generate a pseudo-random seed based on project ID
     const seed = String(p.id).split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) + 123;
     const total = 20 + (seed % 30); // 20 to 50 tasks
-    
+
     // Ensure overall progress is always non-zero and realistic
     let overall = 15 + (seed % 80); // 15% to 94%
-    
+
     if (p.status === 'DRAFT') {
       overall = 10 + (seed % 20); // 10% to 29% for drafts
     }
-    
+
     const completed = Math.floor((overall / 100) * total);
     const remaining = total - completed;
-    
+
     const inProgress = Math.floor(remaining * 0.4);
     const overdue = seed % 4; // 0 to 3 overdue tasks
     const notStarted = Math.max(0, remaining - inProgress - overdue);
-    
+
     return { overall, completed, inProgress, notStarted, overdue, total: completed + inProgress + notStarted + overdue };
   };
 
   const progressData = calculateProgress(project);
-  
+
   const getPercentage = (val, total) => total > 0 ? ((val / total) * 100).toFixed(2) : 0;
-  
+
   const ang1 = (progressData.completed / progressData.total) * 360 || 0;
   const ang2 = ang1 + ((progressData.inProgress / progressData.total) * 360 || 0);
   const ang3 = ang2 + ((progressData.notStarted / progressData.total) * 360 || 0);
@@ -164,21 +166,21 @@ const ProjectDetails = ({ userRole, onLogout }) => {
   return (
     <div className="proj-shell-container">
       <Sidebar userRole={userRole} onLogout={onLogout} />
-      
+
       <div className="proj-shell" style={{ paddingBottom: '24px', minHeight: 'auto' }}>
-        <Header 
-          title="Project Details" 
-          showSearch={false} 
-          userName="Syed Mohammad Johny Basha" 
-          userRole="Web Developer" 
-          initials="SB" 
+        <Header
+          title="Project Details"
+          showSearch={false}
+          userName={sessionStorage.getItem("userName")}
+          userRole={sessionStorage.getItem("userRole")}
+          initials={sessionStorage.getItem("userInitials")}
         />
 
         <main className="pd-main-content">
           {/* Top Actions */}
           <div className="pd-top-actions" style={{ justifyContent: 'flex-start' }}>
-            <button 
-              className="pd-back-btn" 
+            <button
+              className="pd-back-btn"
               onClick={() => navigate(-1)}
               style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 16px', borderRadius: '6px', fontWeight: '500' }}
             >
@@ -186,27 +188,29 @@ const ProjectDetails = ({ userRole, onLogout }) => {
             </button>
           </div>
 
-          {/* Project Header Info - Only display full card in Overview, otherwise display simple header */}
-          {activeTab === 'Overview' ? (
+          {/* Project Header Info:
+               - DRAFT: always show full header card on all tabs
+               - LIVE: show full card on Overview only, minimal bar on other tabs */}
+          {(project.status === 'DRAFT' || activeTab === 'Overview') ? (
             <div className="pd-header-card">
               <div className="pd-image-wrapper">
                 <img src={project.logo || "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=300&q=80"} alt="Project Logo" />
               </div>
-              
+
               <div className="pd-info-wrapper">
                 <div className="pd-title-row">
                   <span className={`pd-badge ${project.status === 'LIVE' ? 'live' : project.status === 'DRAFT' ? 'draft' : ''}`}>{project.status}</span>
                   <h2>{project.projectName}</h2>
                 </div>
-                
+
                 <div className="pd-meta-tags">
                   <span className="pd-tag blue">{project.projectCode}</span>
                   <span className="pd-tag red">{project.priority} PRIORITY</span>
                   <span className="pd-tag gray">Created by {project.createdBy}</span>
                 </div>
-                
+
                 <p className="pd-description">{project.projectDescription || "No description provided."}</p>
-                
+
                 <div className="pd-details-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
                   <div className="pd-detail-item">
                     <span className="pd-label">Company</span>
@@ -228,7 +232,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
                     <span className="pd-label">Tentative Start Date</span>
                     <span className="pd-value">{project.startDate || "N/A"}</span>
                   </div>
-                  
+
                   <div className="pd-detail-item mt-2">
                     <span className="pd-label">Tentative End Date</span>
                     <span className="pd-value">{project.endDate || "N/A"}</span>
@@ -255,14 +259,14 @@ const ProjectDetails = ({ userRole, onLogout }) => {
               {/* Project Progress Right Sidebar */}
               <div className="pd-progress-wrapper">
                 <h3 className="pd-progress-title">Project Progress</h3>
-                
+
                 <div className="pd-doughnut-chart" style={{ background: dynamicGradient }}>
                   <div className="pd-doughnut-inner">
                     <span className="pd-percentage">{progressData.overall}%</span>
                     <span className="pd-progress-label">Overall Progress</span>
                   </div>
                 </div>
-                
+
                 <div className="pd-progress-legend">
                   <div className="pd-legend-item">
                     <div className="pd-legend-left"><span className="pd-dot completed"></span> Completed</div>
@@ -300,8 +304,8 @@ const ProjectDetails = ({ userRole, onLogout }) => {
           {/* Tabs */}
           <div className="pd-tabs-container">
             {tabs.map(tab => (
-              <button 
-                key={tab} 
+              <button
+                key={tab}
                 className={`pd-tab ${activeTab === tab ? 'active' : ''}`}
                 onClick={() => setActiveTab(tab)}
               >

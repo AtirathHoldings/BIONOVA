@@ -46,6 +46,74 @@ const getAuthHeaders = () => ({
   "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
 });
 
+const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const selected = options.find(o => String(o.value) === String(value));
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%', ...style }}>
+      <div 
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        style={{
+          padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px',
+          background: disabled ? '#f1f5f9' : 'white', cursor: disabled ? 'not-allowed' : 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', height: '40px', fontSize: '14px', color: '#0f172a'
+        }}
+      >
+        <span>{selected ? selected.label : placeholder || "Select..."}</span>
+        <span style={{ fontSize: '12px', color: '#64748b' }}>▼</span>
+      </div>
+      {isOpen && !disabled && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, 
+          background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px',
+          marginTop: '4px', zIndex: 999, maxHeight: '250px', overflowY: 'auto',
+          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
+        }} onClick={e => e.stopPropagation()}>
+          <div style={{ padding: '8px', position: 'sticky', top: 0, background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 2 }}>
+            <input 
+              type="text" 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+              placeholder="Search..." 
+              style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+            />
+          </div>
+          <div style={{ padding: '4px 0' }}>
+            {filtered.map(opt => (
+              <div 
+                key={opt.value}
+                onClick={() => {
+                  onChange({ target: { name, value: opt.value } });
+                  setIsOpen(false);
+                  setSearch("");
+                }}
+                style={{ padding: '8px 16px', cursor: 'pointer', background: String(value) === String(opt.value) ? '#f1f5f9' : 'white', fontSize: '14px', color: '#334155' }}
+                onMouseOver={e => e.target.style.background = '#f8fafc'}
+                onMouseOut={e => e.target.style.background = String(value) === String(opt.value) ? '#f1f5f9' : 'white'}
+              >
+                {opt.label}
+              </div>
+            ))}
+            {filtered.length === 0 && <div style={{ padding: '8px 16px', color: '#64748b', fontSize: '13px', textAlign: 'center' }}>No results found</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const CompanyCreation = ({ onLogout, userRole }) => {
   const navigate = useNavigate();
 
@@ -54,7 +122,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   const [loading, setLoading] = useState(false);
 
   const fetchCompanies = async () => {
-    setLoading(true);
+    // setLoading(true);
     try {
       const response = await fetch(`${apiBaseUrl}/api/companies`, { headers: getAuthHeaders() });
       if (response.ok) {
@@ -75,7 +143,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     } catch (error) {
       console.error("Error fetching companies:", error);
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
   };
 
@@ -130,6 +198,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
   // Table action dropdown trigger state
   const [activeDropdown, setActiveDropdown] = useState(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
 
   // Deactivation confirmation modal state
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
@@ -148,6 +217,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
   // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [tableSearchQuery, setTableSearchQuery] = useState("");
 
   const validateField = (name, value) => {
     let error = "";
@@ -384,7 +454,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       wrkDaysPerWk: formData.workingDaysPerWeek ? Number(formData.workingDaysPerWeek) : null
     };
 
-    setLoading(true);
+    // setLoading(true);
     fetch(isEditing ? `${apiBaseUrl}/api/companies/${editingId}` : `${apiBaseUrl}/api/companies`, {
       method: isEditing ? "PUT" : "POST",
       headers: getAuthHeaders(),
@@ -429,7 +499,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
         console.error("Save company failed:", err);
         triggerAlert("error", "Error", err.message || "Could not connect to server or save company.");
       })
-      .finally(() => setLoading(false));
+      .finally(() => { /* setLoading(false) */ });
   };
 
   const handleEdit = (company) => {
@@ -464,8 +534,16 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     setView("form");
   };
 
-  const toggleDropdown = (id) => {
-    setActiveDropdown(prev => (prev === id ? null : id));
+  const toggleDropdown = (id, event) => {
+    if (activeDropdown === id) {
+      setActiveDropdown(null);
+    } else {
+      if (event) {
+        const rect = event.currentTarget.getBoundingClientRect();
+        setDropdownPos({ top: rect.bottom, right: window.innerWidth - rect.right });
+      }
+      setActiveDropdown(id);
+    }
   };
 
   const triggerDeactivate = (id) => {
@@ -501,7 +579,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       wrkDaysPerWk: company.wrkDaysPerWk ? Number(company.wrkDaysPerWk) : null
     };
 
-    setLoading(true);
+    // setLoading(true);
     try {
       const response = await fetch(`${apiBaseUrl}/api/companies/${deactivateTargetId}`, {
         method: "PUT",
@@ -515,7 +593,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       console.error("Deactivate company failed:", err);
       triggerAlert("error", "Error", "Could not deactivate company.");
     } finally {
-      setLoading(false);
+      // setLoading(false);
     }
 
     setShowDeactivateModal(false);
@@ -531,7 +609,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       confirmText: "Delete",
       cancelText: "Cancel",
       onConfirm: async () => {
-        setLoading(true);
+        // setLoading(true);
         try {
           const response = await fetch(`${apiBaseUrl}/api/companies/${id}`, {
             method: "DELETE",
@@ -568,7 +646,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
           console.error("Delete company failed:", err);
           triggerAlert("error", "Error", err.message || "Could not delete company.");
         } finally {
-          setLoading(false);
+          // setLoading(false);
         }
       }
     });
@@ -586,6 +664,18 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
   const sortedCompanies = React.useMemo(() => {
     let sortable = [...companies];
+
+    if (tableSearchQuery) {
+      const q = tableSearchQuery.toLowerCase();
+      sortable = sortable.filter(company => 
+        (company.coyNm && company.coyNm.toLowerCase().includes(q)) ||
+        (company.coyCd && company.coyCd.toLowerCase().includes(q)) ||
+        (company.cin && company.cin.toLowerCase().includes(q)) ||
+        (company.panNum && company.panNum.toLowerCase().includes(q)) ||
+        (company.gstNum && company.gstNum.toLowerCase().includes(q))
+      );
+    }
+
     if (sortConfig.key !== null) {
       sortable.sort((a, b) => {
         let valA = "";
@@ -728,13 +818,16 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         </label>
                         <label className="cc-field-item">
                           <span>Under / Subsidiary <b style={{ color: '#ef4444' }}>*</b></span>
-                          <select name="under" value={formData.under} onChange={handleInputChange} style={{ backgroundColor: 'white' }}>
-                            <option value="" disabled hidden>Select Parent Company</option>
-                            {companies.map((c) => (
-                              <option key={c.coyId} value={c.coyId}>{c.coyNm}</option>
-                            ))}
-                            <option value="Independent" style={{ fontWeight: "bold" }}>Independent (No Parent)</option>
-                          </select>
+                          <SearchableSelect 
+                            name="under" 
+                            value={formData.under} 
+                            onChange={handleInputChange} 
+                            placeholder="Select Parent Company"
+                            options={[
+                              ...companies.map(c => ({ value: c.coyId, label: c.coyNm })),
+                              { value: "Independent", label: "Independent (No Parent)" }
+                            ]}
+                          />
                           {formErrors.under && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.under}</span>}
                         </label>
                         <label className="cc-field-item">
@@ -782,16 +875,16 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         </label>
                         <label className="cc-field-item">
                           <span>Working Days Per Week <b style={{ color: '#ef4444' }}>*</b></span>
-                          <select
+                          <SearchableSelect
                             name="workingDaysPerWeek"
                             value={formData.workingDaysPerWeek}
                             onChange={handleInputChange}
-                            style={{ backgroundColor: 'white' }}
-                          >
-                            <option value="" disabled hidden>Select working days</option>
-                            <option value="5">5 days per week</option>
-                            <option value="6">6 days per week</option>
-                          </select>
+                            placeholder="Select working days"
+                            options={[
+                              { value: "5", label: "5 days per week" },
+                              { value: "6", label: "6 days per week" }
+                            ]}
+                          />
                           {formErrors.workingDaysPerWeek && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.workingDaysPerWeek}</span>}
                         </label>
                       </div>
@@ -822,12 +915,13 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                       <div className="cc-form-layout-row columns-4" style={{ marginTop: '20px' }}>
                         <label className="cc-field-item">
                           <span>State <b style={{ color: '#ef4444' }}>*</b></span>
-                          <select name="state" value={formData.state} onChange={handleStateChange} style={{ backgroundColor: 'white' }}>
-                            <option value="" disabled hidden>Select State</option>
-                            {states.map((s) => (
-                              <option key={s.stId} value={s.stId}>{s.stNm}</option>
-                            ))}
-                          </select>
+                          <SearchableSelect 
+                            name="state" 
+                            value={formData.state} 
+                            onChange={handleStateChange} 
+                            placeholder="Select State"
+                            options={states.map(s => ({ value: s.stId, label: s.stNm }))}
+                          />
                           {formErrors.state && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.state}</span>}
                         </label>
                         <label className="cc-field-item">
@@ -860,7 +954,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         </label>
                         <label className="cc-field-item">
                           <span>Website URL</span>
-                          <input type="url" name="website" value={formData.website} onChange={handleInputChange} placeholder="https://www.example.com" maxLength={100} />
+                          <input type="url" name="website" value={formData.website} onChange={handleInputChange}  maxLength={100} />
                           {formErrors.website && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.website}</span>}
                         </label>
                       </div>
@@ -883,6 +977,9 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                     backgroundColor: '#fafbfc',
                     borderTop: '1px solid #e2e8f0'
                   }}>
+                    <button type="button" className="cc-btn primary" onClick={handleSave}>
+                      <Save size={14} /> {isEditing ? "Update Company" : "Save Company"}
+                    </button>
                     <button type="button" className="cc-btn secondary" onClick={() => {
                       setView("list");
                       handleResetForm();
@@ -890,12 +987,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                       setEditingId(null);
                     }}>
                       Cancel
-                    </button>
-                    <button type="button" className="cc-btn tertiary" onClick={handleResetForm}>
-                      <RefreshCcw size={14} /> Reset
-                    </button>
-                    <button type="button" className="cc-btn primary" onClick={handleSave}>
-                      <Save size={14} /> {isEditing ? "Update Company" : "Save Company"}
                     </button>
                   </div>
                 </div>
@@ -921,24 +1012,39 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                       View and manage all company records
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="cc-btn-add-new"
-                    onClick={() => {
-                      handleResetForm();
-                      setIsEditing(false);
-                      setView("form");
-                    }}
-                  >
-                    <Plus size={16} /> Add New Company
-                  </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                    <div style={{ position: 'relative' }}>
+                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                      <input
+                        type="text"
+                        placeholder="Search companies..."
+                        value={tableSearchQuery}
+                        onChange={(e) => {
+                          setTableSearchQuery(e.target.value);
+                          setCurrentPage(1); // Reset to first page on search
+                        }}
+                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      className="cc-btn-add-new"
+                      onClick={() => {
+                        handleResetForm();
+                        setIsEditing(false);
+                        setView("form");
+                      }}
+                    >
+                      <Plus size={16} /> Add New Company
+                    </button>
+                  </div>
                 </div>
 
                 <div className="cc-table-container" style={{ overflowX: 'auto' }}>
                   <table className="cc-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>#</th>
+                        <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
                         <th
                           className="sortable"
@@ -1037,7 +1143,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                               <button
                                 type="button"
                                 style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
-                                onClick={() => toggleDropdown(company.coyId)}
+                                onClick={(e) => toggleDropdown(company.coyId, e)}
                                 onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                                 onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                               >
@@ -1049,9 +1155,9 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                   <div
                                     className="cc-actions-dropdown-backdrop"
                                     onClick={() => setActiveDropdown(null)}
-                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }}
+                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9998 }}
                                   />
-                                  <div className="cc-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
+                                  <div className="cc-actions-dropdown-menu" style={{ position: 'fixed', right: `${dropdownPos.right}px`, top: `${dropdownPos.top + 4}px`, backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 9999, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
                                     <button
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}

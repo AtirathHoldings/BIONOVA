@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Edit2, Trash2, Info, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
 import Sidebar from "../Sidebar";
 import Header from "../Header";
+import AlertModal from "../AlertModal";
 import { useNavigate } from 'react-router-dom';
 import '../../styles/PublicHoliday.css';
 import { apiGet, apiPost, apiPut, apiDelete } from "../../utils/api";
@@ -72,6 +73,20 @@ const PublicHoliday = ({ userRole, onLogout }) => {
   const [editId, setEditId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  const [alertConfig, setAlertConfig] = useState({
+    isOpen: false,
+    type: "info",
+    title: "",
+    message: "",
+    onConfirm: null,
+    confirmText: "",
+    cancelText: ""
+  });
+
+  const triggerAlert = (type, title, message, onConfirm = null, confirmText = "", cancelText = "") => {
+    setAlertConfig({ isOpen: true, type, title, message, onConfirm, confirmText, cancelText });
+  };
+
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const [rowsPerPage, setRowsPerPage] = useState(10);
@@ -109,6 +124,7 @@ const PublicHoliday = ({ userRole, onLogout }) => {
       setHolidays(mapped);
     } catch (err) {
       console.error("Error fetching holidays data:", err);
+      triggerAlert("error", "Error", "Failed to fetch holidays data: " + err.message);
     } finally {
       setIsLoading(false);
     }
@@ -165,20 +181,57 @@ const PublicHoliday = ({ userRole, onLogout }) => {
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm("Are you sure you want to delete this holiday?")) {
-      try {
-        await apiDelete(`/api/calendar/${id}`);
-        await fetchData();
-      } catch (err) {
-        console.error("Error deleting holiday:", err);
-        alert("Failed to delete holiday: " + err.message);
-      }
-    }
+    triggerAlert(
+      "warning",
+      "Confirm Delete",
+      "Are you sure you want to delete this holiday?",
+      async () => {
+        try {
+          await apiDelete(`/api/calendar/${id}`);
+          await fetchData();
+          triggerAlert("success", "Success", "Holiday deleted successfully.");
+        } catch (err) {
+          console.error("Error deleting holiday:", err);
+          triggerAlert("error", "Error", "Failed to delete holiday: " + err.message);
+        }
+      },
+      "Delete",
+      "Cancel"
+    );
   };
 
   const handleSave = async () => {
     if (!formData.name || !formData.date) {
-      alert("Please fill in the required fields (Holiday Date and Name).");
+      triggerAlert("error", "Validation Error", "Please fill in the required fields (Holiday Date and Name).");
+      return;
+    }
+
+    // Check client-side duplicate
+    const isDuplicate = holidays.some(h => {
+      if (editId && h.id === editId) return false;
+      if (h.date !== formData.date) return false;
+
+      const hMandatory = h.mandatory;
+      const formMandatory = formData.mandatory;
+      if (hMandatory !== formMandatory) return false;
+
+      const hCalType = h.calType || "";
+      const formCalType = formData.mandatory ? "" : (formData.calType || "");
+      if (hCalType !== formCalType) return false;
+
+      const hCoyId = h.coyId ? String(h.coyId) : "";
+      const formCoyId = (!formData.mandatory && (formData.calType === "COMPANY" || formData.calType === "PLANT") && formData.coyId) ? String(formData.coyId) : "";
+      if (hCoyId !== formCoyId) return false;
+
+      const hPltId = h.pltId ? String(h.pltId) : "";
+      const formPltId = (!formData.mandatory && formData.calType === "PLANT" && formData.pltId) ? String(formData.pltId) : "";
+      if (hPltId !== formPltId) return false;
+
+      return true;
+    });
+
+    if (isDuplicate) {
+      triggerAlert("error", "Duplicate Error", "A holiday with the same date and scope already exists.");
       return;
     }
 
@@ -202,7 +255,7 @@ const PublicHoliday = ({ userRole, onLogout }) => {
       setDrawerOpen(false);
     } catch (err) {
       console.error("Error saving holiday:", err);
-      alert("Failed to save holiday: " + err.message);
+      triggerAlert("error", "Error", "Failed to save holiday: " + err.message);
     }
   };
 
@@ -487,6 +540,16 @@ const PublicHoliday = ({ userRole, onLogout }) => {
           </div>
         </main>
       </div>
+      <AlertModal
+        isOpen={alertConfig.isOpen}
+        type={alertConfig.type}
+        title={alertConfig.title}
+        message={alertConfig.message}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false, onConfirm: null }))}
+        onConfirm={alertConfig.onConfirm}
+        confirmText={alertConfig.confirmText}
+        cancelText={alertConfig.cancelText}
+      />
     </div>
   );
 };

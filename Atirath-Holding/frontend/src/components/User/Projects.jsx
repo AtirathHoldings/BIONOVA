@@ -46,7 +46,7 @@ const MyProjects = ({ userRole, onLogout }) => {
   const [tasks, setTasks] = useState([]);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
-  
+
   const projectsPerPage = 5;
 
   useEffect(() => {
@@ -65,7 +65,7 @@ const MyProjects = ({ userRole, onLogout }) => {
 
         setProfile(profRes);
         const empId = profRes?.empId;
-        const isAdmin = profRes?.email === 'siva@atirath.com';
+        const isAdmin = profRes?.email === 'vsv.vempati@gmail.com';
 
         // Filter tasks to only user tasks
         const userTasks = (taskRes || []).filter(t => isAdmin || t.empId === empId);
@@ -186,82 +186,82 @@ const MyProjects = ({ userRole, onLogout }) => {
           {/* ========== FULL PAGE: Project List ========== */}
           {!selectedProject && (
             <div className="mp-left-panel full-width">
-            {/* Search + Filter */}
-            <div className="mp-list-toolbar">
-              <div className="mp-search-box">
-                <Search size={14} />
-                <input
-                  type="text"
-                  placeholder="Search projects..."
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                />
-              </div>
-              <div className="mp-filter-wrap">
-                <button className="mp-filter-btn" onClick={() => setShowFilterDrop(!showFilterDrop)}>
-                  {statusFilter} <ChevronDown size={14} />
-                </button>
-                {showFilterDrop && (
-                  <div className="mp-filter-dropdown">
-                    {["All Projects", "In Progress", "Completed", "On Hold"].map(s => (
-                      <div key={s} className={`mp-filter-item ${statusFilter === s ? "active" : ""}`}
-                        onClick={() => { setStatusFilter(s); setShowFilterDrop(false); setCurrentPage(1); }}>
-                        {s}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Project Cards */}
-            <div className="mp-card-list">
-              {paged.map(proj => (
-                <div
-                  key={proj.id}
-                  className={`mp-project-card ${selectedProject?.id === proj.id ? "selected" : ""}`}
-                  onClick={() => { setSelectedProject(proj); setActiveTab("Overview"); }}
-                >
-                  <img src={proj.image} alt={proj.name} className="mp-card-img" />
-                  <div className="mp-card-info">
-                    <div className="mp-card-header-row">
-                      <div>
-                        <div className="mp-card-name">{proj.name}</div>
-                        <div className="mp-card-sub">{proj.company} | {proj.plant}</div>
-                        <div className="mp-card-role">Role: <strong>{proj.role}</strong></div>
-                      </div>
-                      <div className="mp-card-circle">
-                        <CircularProgress pct={proj.progress} color={progressColor(proj.progress)} />
-                      </div>
-                    </div>
-                    <div className="mp-card-footer">
-                      <div className="mp-card-stat">
-                        <span className="mp-stat-label">Tasks Assigned</span>
-                        <span className="mp-stat-value">{proj.tasksAssigned}</span>
-                      </div>
-                      <div className="mp-card-stat">
-                        <span className="mp-stat-label">Open Tasks</span>
-                        <span className="mp-stat-value">{proj.openTasks}</span>
-                      </div>
-                      <span className={`mp-status-badge mp-status-${proj.status.toLowerCase().replace(/ /g, "-")}`}>
-                        {proj.status}
-                      </span>
-                    </div>
-                  </div>
+              {/* Search + Filter */}
+              <div className="mp-list-toolbar">
+                <div className="mp-search-box">
+                  <Search size={14} />
+                  <input
+                    type="text"
+                    placeholder="Search projects..."
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
                 </div>
-              ))}
-            </div>
+                <div className="mp-filter-wrap">
+                  <button className="mp-filter-btn" onClick={() => setShowFilterDrop(!showFilterDrop)}>
+                    {statusFilter} <ChevronDown size={14} />
+                  </button>
+                  {showFilterDrop && (
+                    <div className="mp-filter-dropdown">
+                      {["All Projects", "In Progress", "Completed", "On Hold"].map(s => (
+                        <div key={s} className={`mp-filter-item ${statusFilter === s ? "active" : ""}`}
+                          onClick={() => { setStatusFilter(s); setShowFilterDrop(false); setCurrentPage(1); }}>
+                          {s}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-            {/* Pagination */}
-            <div className="mp-pagination">
-              <span>Showing 1 to {filtered.length} of {filtered.length} projects</span>
-              <div className="mp-pag-controls">
-                <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft size={14} /></button>
-                <span className="mp-pag-page">{currentPage}</span>
-                <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight size={14} /></button>
+              {/* Project Cards */}
+              <div className="mp-card-list">
+                {paged.map(proj => (
+                  <div
+                    key={proj.id}
+                    className={`mp-project-card ${selectedProject?.id === proj.id ? "selected" : ""}`}
+                    onClick={() => { setSelectedProject(proj); setActiveTab("Overview"); }}
+                  >
+                    <img src={proj.image} alt={proj.name} className="mp-card-img" />
+                    <div className="mp-card-info">
+                      <div className="mp-card-header-row">
+                        <div>
+                          <div className="mp-card-name">{proj.name}</div>
+                          <div className="mp-card-sub">{proj.company} | {proj.plant}</div>
+                          <div className="mp-card-role">Role: <strong>{proj.role}</strong></div>
+                        </div>
+                        <div className="mp-card-circle">
+                          <CircularProgress pct={proj.progress} color={progressColor(proj.progress)} />
+                        </div>
+                      </div>
+                      <div className="mp-card-footer">
+                        <div className="mp-card-stat">
+                          <span className="mp-stat-label">Tasks Assigned</span>
+                          <span className="mp-stat-value">{proj.tasksAssigned}</span>
+                        </div>
+                        <div className="mp-card-stat">
+                          <span className="mp-stat-label">Open Tasks</span>
+                          <span className="mp-stat-value">{proj.openTasks}</span>
+                        </div>
+                        <span className={`mp-status-badge mp-status-${proj.status.toLowerCase().replace(/ /g, "-")}`}>
+                          {proj.status}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Pagination */}
+              <div className="mp-pagination">
+                <span>Showing 1 to {filtered.length} of {filtered.length} projects</span>
+                <div className="mp-pag-controls">
+                  <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}><ChevronLeft size={14} /></button>
+                  <span className="mp-pag-page">{currentPage}</span>
+                  <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}><ChevronRight size={14} /></button>
+                </div>
               </div>
             </div>
-          </div>
           )}
 
           {/* ========== FULL PAGE: Project Detail ========== */}
