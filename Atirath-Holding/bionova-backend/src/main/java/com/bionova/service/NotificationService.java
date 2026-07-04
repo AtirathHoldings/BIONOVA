@@ -91,7 +91,7 @@ public class NotificationService {
         }
 
         Employee employee = (task.getEmpId() != null) ? employeeRepository.findById(task.getEmpId()).orElse(null) : null;
-        String recipientEmail = (employee != null) ? employee.getEmail() : "vsv.vempati@gmail.com";
+        String recipientEmail = (employee != null) ? employee.getEmail() : "siva@atirath.com";
         String recipientName = (employee != null) ? employee.getFirstName() + " " + employee.getLastName() : "Admin";
 
         SimpleMailMessage message = new SimpleMailMessage();
@@ -154,7 +154,7 @@ public class NotificationService {
         ProjectLive project = projectLiveRepository.findById(ms.getPrjId()).orElse(null);
         String prjName = (project != null) ? project.getPrjNm() : "Unknown Project";
 
-        String recipientEmail = "vsv.vempati@gmail.com";
+        String recipientEmail = "siva@atirath.com";
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
@@ -188,7 +188,7 @@ public class NotificationService {
         System.out.println("Sent milestone status update notification to: " + recipientEmail);
 
         // Save App Notification
-        Employee manager = employeeRepository.findByEmail("vsv.vempati@gmail.com").orElse(null);
+        Employee manager = employeeRepository.findByEmail("siva@atirath.com").orElse(null);
         AppNotification appNotification = new AppNotification();
         appNotification.setEmpId(manager != null ? manager.getEmpId() : null);
         appNotification.setTitle("Milestone Update: " + ms.getMlstnCd());
@@ -208,7 +208,7 @@ public class NotificationService {
             return false;
         }
 
-        String recipientEmail = "vsv.vempati@gmail.com";
+        String recipientEmail = "siva@atirath.com";
 
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(fromEmail);
@@ -243,7 +243,7 @@ public class NotificationService {
         System.out.println("Sent project status update notification to: " + recipientEmail);
 
         // Save App Notification
-        Employee manager = employeeRepository.findByEmail("vsv.vempati@gmail.com").orElse(null);
+        Employee manager = employeeRepository.findByEmail("siva@atirath.com").orElse(null);
         AppNotification appNotification = new AppNotification();
         appNotification.setEmpId(manager != null ? manager.getEmpId() : null);
         appNotification.setTitle("Project Update: " + project.getPrjNm());
@@ -286,7 +286,7 @@ public class NotificationService {
                 .filter(m -> !"CLOSED".equalsIgnoreCase(m.getMlstnSts()))
                 .collect(Collectors.toList());
 
-        Employee manager = employeeRepository.findByEmail("vsv.vempati@gmail.com").orElse(null);
+        Employee manager = employeeRepository.findByEmail("siva@atirath.com").orElse(null);
         Long managerId = (manager != null) ? manager.getEmpId() : null;
 
         for (MilestoneLive ms : activeMilestones) {
@@ -380,7 +380,7 @@ public class NotificationService {
         System.out.println("Saved AppNotification reminder for " + entityTyp + " ID: " + entityId);
 
         // 2. Send Email Reminder
-        String recipientEmail = "vsv.vempati@gmail.com";
+        String recipientEmail = "siva@atirath.com";
         if (empId != null) {
             Employee employee = employeeRepository.findById(empId).orElse(null);
             if (employee != null && employee.getEmail() != null) {

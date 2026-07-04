@@ -70,9 +70,9 @@ public class ProjectDraftController {
 
         draft.setPrjSts("DRAFT");
 
-        // Auto-compute tentative days (inclusive: start=day1, so Jul2→Jul26 = 25 days)
+        // Auto-compute tentative days
         if (draft.getTentStDt() != null && draft.getTentEndDt() != null) {
-            long days = ChronoUnit.DAYS.between(draft.getTentStDt(), draft.getTentEndDt()) + 1;
+            long days = ChronoUnit.DAYS.between(draft.getTentStDt(), draft.getTentEndDt());
             draft.setNoOfDays((int) days);
         }
 
@@ -113,9 +113,9 @@ public class ProjectDraftController {
         draft.setLogo(details.getLogo());
         draft.setAddlRem(details.getAddlRem());
 
-        // Recompute no_of_days (inclusive: start=day1, so Jul2→Jul26 = 25 days)
+        // Recompute no_of_days
         if (draft.getTentStDt() != null && draft.getTentEndDt() != null) {
-            long days = ChronoUnit.DAYS.between(draft.getTentStDt(), draft.getTentEndDt()) + 1;
+            long days = ChronoUnit.DAYS.between(draft.getTentStDt(), draft.getTentEndDt());
             draft.setNoOfDays((int) days);
         }
 

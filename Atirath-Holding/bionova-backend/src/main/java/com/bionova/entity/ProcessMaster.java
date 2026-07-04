@@ -45,6 +45,14 @@ public class ProcessMaster {
     @Column(name = "r_id")
     private Integer rId;
 
+    /**
+     * Role performing the action:
+     *   CHECKER  = first-level checker (employee checks own work)
+     *   REVIEWER = second-level reviewer (manager/reviewer approves)
+     */
+    @Column(name = "actor_role", length = 10)
+    private String actorRole;  // 'CHECKER' | 'REVIEWER'
+
     /** Decision made: YES = approve, NO = reject */
     @Column(name = "prcs_sts", length = 3)
     private String prcsSts;    // 'YES' | 'NO'

@@ -76,10 +76,7 @@ public class ProjectPromotionService {
         live.setPrjPrty(draft.getPrjPrty());
         live.setPrjSts("LIVE");
         live.setStDt(draft.getTentStDt());
-        java.time.LocalDate prjAdjustedEndDt = calendarService.calculateEndDate(
-                draft.getTentStDt(), draft.getNoOfDays() != null ? draft.getNoOfDays() : 0,
-                excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
-        live.setEndDt(prjAdjustedEndDt);
+        live.setEndDt(draft.getTentEndDt());
         live.setNoOfDays(draft.getNoOfDays());
         live.setCoyId(draft.getCoyId());
         live.setPltId(draft.getPltId());
@@ -90,7 +87,7 @@ public class ProjectPromotionService {
 
         // Compute working days for the project range
         int prjWrkDays = calendarService.countWorkingDaysWithExternal(
-                draft.getTentStDt(), prjAdjustedEndDt,
+                draft.getTentStDt(), draft.getTentEndDt(),
                 excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
         live.setWrkDays(prjWrkDays);
 
@@ -116,19 +113,16 @@ public class ProjectPromotionService {
             ml.setMlstnDepTyp(md.getMlstnDepTyp());
             ml.setMlstnDepMId(md.getMlstnDepMId());
             ml.setStDt(md.getTentStDt());
-            java.time.LocalDate msAdjustedEndDt = calendarService.calculateEndDate(
-                    md.getTentStDt(), md.getMlstnDays() != null ? md.getMlstnDays() : 0,
-                    excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
-            ml.setEndDt(msAdjustedEndDt);
+            ml.setEndDt(md.getTentEndDt());
             ml.setChkId(md.getChkId());
             ml.setAddlRem(md.getAddlRem());
             ml.setMlstnSts("LIVE");
             ml.setSts(true);
 
             // Compute milestone working days
-            if (md.getTentStDt() != null && msAdjustedEndDt != null) {
+            if (md.getTentStDt() != null && md.getTentEndDt() != null) {
                 int msWrkDays = calendarService.countWorkingDaysWithExternal(
-                        md.getTentStDt(), msAdjustedEndDt,
+                        md.getTentStDt(), md.getTentEndDt(),
                         excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
                 ml.setWrkDays(msWrkDays);
             }
@@ -156,19 +150,16 @@ public class ProjectPromotionService {
                 tl.setChkId(td.getChkId());
                 tl.setNoteTxt(td.getNoteTxt());
                 tl.setStDt(td.getTentStDt());
-                java.time.LocalDate taskAdjustedEndDt = calendarService.calculateEndDate(
-                        td.getTentStDt(), td.getNoOfDays() != null ? td.getNoOfDays() : 0,
-                        excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
-                tl.setEndDt(taskAdjustedEndDt);
+                tl.setEndDt(td.getTentEndDt());
                 tl.setPrcsFlg(td.getPrcsFlg());
                 tl.setPrcsYesActn(td.getPrcsYesActn());
                 tl.setTaskSts("OPEN");
                 tl.setAddlRem(td.getAddlRem());
 
                 // Compute task working days
-                if (td.getTentStDt() != null && taskAdjustedEndDt != null) {
+                if (td.getTentStDt() != null && td.getTentEndDt() != null) {
                     int taskWrkDays = calendarService.countWorkingDaysWithExternal(
-                            td.getTentStDt(), taskAdjustedEndDt,
+                            td.getTentStDt(), td.getTentEndDt(),
                             excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
                     tl.setWrkDays(taskWrkDays);
                 }
@@ -221,8 +212,10 @@ public class ProjectPromotionService {
                     lc.setTaskId(savedTask.getTaskId());
                     lc.setIsLive(true);
                     lc.setOrdrId(dc.getOrdrId());
+                    lc.setStepType(dc.getStepType());
                     lc.setEmpId(dc.getEmpId());
                     lc.setRId(dc.getRId());
+                    lc.setStepLabel(dc.getStepLabel());
                     processConfigRepository.save(lc);
                     totalProcessConfigs++;
                 }

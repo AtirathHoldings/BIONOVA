@@ -42,8 +42,8 @@ public class MilestoneLiveController {
         if (employee == null) {
             return false;
         }
-        // Since role column is removed, we treat vsv.vempati@gmail.com as admin
-        return "vsv.vempati@gmail.com".equalsIgnoreCase(employee.getEmail());
+        // Since role column is removed, we treat siva@atirath.com as admin
+        return "siva@atirath.com".equalsIgnoreCase(employee.getEmail());
     }
 
     @GetMapping
@@ -106,11 +106,11 @@ public class MilestoneLiveController {
             milestone.setSts(true);
         }
 
-        // Auto-compute dates or days (inclusive: start=day1)
+        // Auto-compute dates or days
         if (milestone.getStDt() != null && milestone.getMlstnDays() != null) {
-            milestone.setEndDt(milestone.getStDt().plusDays(milestone.getMlstnDays() - 1));
+            milestone.setEndDt(milestone.getStDt().plusDays(milestone.getMlstnDays()));
         } else if (milestone.getStDt() != null && milestone.getEndDt() != null) {
-            long days = java.time.temporal.ChronoUnit.DAYS.between(milestone.getStDt(), milestone.getEndDt()) + 1;
+            long days = java.time.temporal.ChronoUnit.DAYS.between(milestone.getStDt(), milestone.getEndDt());
             milestone.setMlstnDays((int) days);
         }
 
@@ -153,15 +153,15 @@ public class MilestoneLiveController {
         milestone.setMlstnDepTyp(details.getMlstnDepTyp());
         milestone.setMlstnDepMId(details.getMlstnDepMId());
 
-        // Auto-compute dates or days based on changes (inclusive)
+        // Auto-compute dates or days based on changes
         if (details.getStDt() != null && details.getMlstnDays() != null) {
             milestone.setStDt(details.getStDt());
             milestone.setMlstnDays(details.getMlstnDays());
-            milestone.setEndDt(details.getStDt().plusDays(details.getMlstnDays() - 1));
+            milestone.setEndDt(details.getStDt().plusDays(details.getMlstnDays()));
         } else if (details.getStDt() != null && details.getEndDt() != null) {
             milestone.setStDt(details.getStDt());
             milestone.setEndDt(details.getEndDt());
-            long days = java.time.temporal.ChronoUnit.DAYS.between(details.getStDt(), details.getEndDt()) + 1;
+            long days = java.time.temporal.ChronoUnit.DAYS.between(details.getStDt(), details.getEndDt());
             milestone.setMlstnDays((int) days);
         } else {
             milestone.setMlstnDays(details.getMlstnDays());

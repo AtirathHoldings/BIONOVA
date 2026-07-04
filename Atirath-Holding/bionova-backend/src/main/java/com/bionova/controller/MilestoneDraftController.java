@@ -157,16 +157,11 @@ public class MilestoneDraftController {
             milestone.setSts(true);
         }
 
-        // Auto-compute dates or days (inclusive: start=day1)
-        if (milestone.getTentEndDt() != null) {
-            if (milestone.getTentStDt() != null && milestone.getMlstnDays() == null) {
-                long days = java.time.temporal.ChronoUnit.DAYS.between(milestone.getTentStDt(), milestone.getTentEndDt()) + 1;
-                milestone.setMlstnDays((int) days);
-            }
-        } else if (milestone.getTentStDt() != null && milestone.getMlstnDays() != null) {
-            milestone.setTentEndDt(milestone.getTentStDt().plusDays(milestone.getMlstnDays() - 1));
+        // Auto-compute dates or days
+        if (milestone.getTentStDt() != null && milestone.getMlstnDays() != null) {
+            milestone.setTentEndDt(milestone.getTentStDt().plusDays(milestone.getMlstnDays()));
         } else if (milestone.getTentStDt() != null && milestone.getTentEndDt() != null) {
-            long days = java.time.temporal.ChronoUnit.DAYS.between(milestone.getTentStDt(), milestone.getTentEndDt()) + 1;
+            long days = java.time.temporal.ChronoUnit.DAYS.between(milestone.getTentStDt(), milestone.getTentEndDt());
             milestone.setMlstnDays((int) days);
         }
 
@@ -209,19 +204,15 @@ public class MilestoneDraftController {
         milestone.setMlstnDepTyp(details.getMlstnDepTyp());
         milestone.setMlstnDepMId(details.getMlstnDepMId());
 
-        // Auto-compute dates or days based on changes (inclusive)
-        if (details.getTentEndDt() != null) {
+        // Auto-compute dates or days based on changes
+        if (details.getTentStDt() != null && details.getMlstnDays() != null) {
             milestone.setTentStDt(details.getTentStDt());
             milestone.setMlstnDays(details.getMlstnDays());
-            milestone.setTentEndDt(details.getTentEndDt());
-        } else if (details.getTentStDt() != null && details.getMlstnDays() != null) {
-            milestone.setTentStDt(details.getTentStDt());
-            milestone.setMlstnDays(details.getMlstnDays());
-            milestone.setTentEndDt(details.getTentStDt().plusDays(details.getMlstnDays() - 1));
+            milestone.setTentEndDt(details.getTentStDt().plusDays(details.getMlstnDays()));
         } else if (details.getTentStDt() != null && details.getTentEndDt() != null) {
             milestone.setTentStDt(details.getTentStDt());
             milestone.setTentEndDt(details.getTentEndDt());
-            long days = java.time.temporal.ChronoUnit.DAYS.between(details.getTentStDt(), details.getTentEndDt()) + 1;
+            long days = java.time.temporal.ChronoUnit.DAYS.between(details.getTentStDt(), details.getTentEndDt());
             milestone.setMlstnDays((int) days);
         } else {
             milestone.setMlstnDays(details.getMlstnDays());

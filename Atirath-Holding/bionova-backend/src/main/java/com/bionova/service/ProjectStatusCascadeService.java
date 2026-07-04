@@ -100,25 +100,4 @@ public class ProjectStatusCascadeService {
             projectLiveRepository.save(project);
         }
     }
-
-    /**
-     * Recursively cascades the REWORK status to all downstream tasks that depend on the given task.
-     * This ensures that if a task is rejected, any tasks relying on its completion are also reset.
-     */
-    @Transactional
-    public void cascadeReworkDownstream(Long taskId) {
-        List<TaskLive> downstreamTasks = taskLiveRepository.findByDepTaskId(taskId);
-        for (TaskLive dt : downstreamTasks) {
-            if (!"REWORK".equals(dt.getTaskSts()) && !"OPEN".equals(dt.getTaskSts())) {
-                dt.setTaskSts("REWORK");
-                taskLiveRepository.save(dt);
-                
-                // Recursively cascade status change downstream
-                cascadeReworkDownstream(dt.getTaskId());
-                
-                // Recalculate status of the milestone and project containing the downstream task
-                cascadeStatusFromTask(dt.getTaskId());
-            }
-        }
-    }
 }

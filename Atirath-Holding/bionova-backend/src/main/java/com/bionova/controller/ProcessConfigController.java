@@ -9,29 +9,30 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Process Config Controller — define WHO approves each task step (Draft & Live).
+ *
+ * ── DRAFT TASK ─────────────────────────────────────────────────────────────
+ * POST   /api/process-config/draft-task/{drftTaskId}       → add a step
+ * GET    /api/process-config/draft-task/{drftTaskId}       → list all steps
+ * PUT    /api/process-config/{pcId}                        → update a step
+ * DELETE /api/process-config/{pcId}                        → remove a step
+ *
+ * ── LIVE TASK ──────────────────────────────────────────────────────────────
+ * GET    /api/process-config/live-task/{taskId}            → list live steps
+ *        (live configs are auto-created during promotion; view only)
+ *
+ * ── EXAMPLE SETUP ──────────────────────────────────────────────────────────
+ * Task TSK001 has prcsFlg=true, so add:
+ *   Step 1: CHECKER  → emp_id=5  (quality checker)
+ *   Step 2: REVIEWER → r_id=1    (manager sign-off)
+ */
 @RestController
 @RequestMapping("/api/process-config")
 public class ProcessConfigController {
 
     @Autowired
     private ProcessConfigRepository processConfigRepo;
-
-    @Autowired
-    private com.bionova.repository.ReviewerMasterRepository reviewerMasterRepo;
-
-    private Integer getRoleIdForOrder(Integer ordrId) {
-        String roleName = (ordrId != null && ordrId == 1) ? "Reviewer" : "Approver";
-        return reviewerMasterRepo.findAll().stream()
-                .filter(r -> roleName.equalsIgnoreCase(r.getRNm()))
-                .findFirst()
-                .map(com.bionova.entity.ReviewerMaster::getRId)
-                .orElseGet(() -> {
-                    com.bionova.entity.ReviewerMaster rm = new com.bionova.entity.ReviewerMaster();
-                    rm.setRNm(roleName);
-                    rm = reviewerMasterRepo.save(rm);
-                    return rm.getRId();
-                });
-    }
 
     // ── GET single ─────────────────────────────────────────────────────────
 
@@ -52,20 +53,27 @@ public class ProcessConfigController {
 
     /**
      * Add a process step to a Draft Task.
+     *
+     * Body examples:
+     *   CHECKER step:  { "ordrId": 1, "stepType": "CHECKER",  "empId": 5,    "stepLabel": "Quality Check" }
+     *   REVIEWER step: { "ordrId": 2, "stepType": "REVIEWER", "rId": 1,      "stepLabel": "Manager Approval" }
      */
     @PostMapping("/draft-task/{drftTaskId}")
     public ResponseEntity<?> addDraftStep(
             @PathVariable Long drftTaskId,
             @RequestBody ProcessConfig config) {
 
-        // Validate empId is set (since normal employees are assigned as reviewers/approvers)
-        if (config.getEmpId() == null) {
+        // Validate stepType
+        if (!List.of("CHECKER", "REVIEWER").contains(config.getStepType())) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "empId must be provided to assign an employee."));
+                    .body(Map.of("message", "stepType must be 'CHECKER' or 'REVIEWER'."));
         }
 
-        // Set rId automatically based on ordrId
-        config.setRId(getRoleIdForOrder(config.getOrdrId()));
+        // Validate at least one of empId or rId is set
+        if (config.getEmpId() == null && config.getRId() == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Either empId (for CHECKER) or rId (for REVIEWER) must be provided."));
+        }
 
         // Prevent duplicate step order for same task
         if (config.getOrdrId() != null &&
@@ -77,8 +85,7 @@ public class ProcessConfigController {
         config.setTaskId(drftTaskId);
         config.setIsLive(false);
 
-        ProcessConfig saved = processConfigRepo.save(config);
-        return ResponseEntity.ok(saved);
+        return ResponseEntity.ok(processConfigRepo.save(config));
     }
 
     // ── LIVE TASK Process Config (read-only — cloned during promotion) ──────
@@ -98,6 +105,11 @@ public class ProcessConfigController {
         ProcessConfig config = processConfigRepo.findById(pcId)
                 .orElseThrow(() -> new RuntimeException("Process config not found: " + pcId));
 
+        if (!List.of("CHECKER", "REVIEWER").contains(details.getStepType())) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "stepType must be 'CHECKER' or 'REVIEWER'."));
+        }
+
         // Check for duplicate ordrId if changing it
         if (details.getOrdrId() != null &&
                 !details.getOrdrId().equals(config.getOrdrId()) &&
@@ -107,11 +119,12 @@ public class ProcessConfigController {
         }
 
         config.setOrdrId(details.getOrdrId());
+        config.setStepType(details.getStepType());
         config.setEmpId(details.getEmpId());
-        config.setRId(getRoleIdForOrder(details.getOrdrId()));
+        config.setRId(details.getRId());
+        config.setStepLabel(details.getStepLabel());
 
-        ProcessConfig saved = processConfigRepo.save(config);
-        return ResponseEntity.ok(saved);
+        return ResponseEntity.ok(processConfigRepo.save(config));
     }
 
     // ── DELETE ──────────────────────────────────────────────────────────────

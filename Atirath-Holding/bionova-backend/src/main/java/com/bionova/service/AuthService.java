@@ -42,7 +42,7 @@ public class AuthService {
                         .orElse(null);
 
         if (employee == null) {
-            return new LoginResponse(false, "User Not Found", null, null, null);
+            return new LoginResponse(false, "User Not Found", null, null);
         }
 
         String rawPassword    = request.getPassword();
@@ -56,24 +56,24 @@ public class AuthService {
         }
 
         if (!matches) {
-            return new LoginResponse(false, "Invalid Password", null, null, null);
+            return new LoginResponse(false, "Invalid Password", null, null);
         }
 
-        // Determine role:
-        // - If employee has an RBAC mapping → use the mapped role name
-        // - If no mapping exists → "full_access" (all screens visible, filter after RBAC setup)
-        String role = "full_access";
+        // Determine user role based on DB mapping, fall back to "admin" or "user"
+        String role = "user";
         List<RoleBasedEmployeeMapping> mappings = employeeMappingRepository.findByEmpId(employee.getEmpId());
         if (!mappings.isEmpty()) {
             List<RoleBasedAccessControl> rbacList = rbacRepository.findByRoleId(mappings.get(0).getRoleId());
             if (!rbacList.isEmpty()) {
                 role = rbacList.get(0).getRoleNm();
             }
+        } else if ("siva@atirath.com".equalsIgnoreCase(employee.getEmail())) {
+            role = "admin";
         }
 
         // Generate JWT
         String token = jwtUtil.generateToken(employee.getEmail(), role);
 
-        return new LoginResponse(true, "Login Success", role, token, employee.getEmpId());
+        return new LoginResponse(true, "Login Success", role, token);
     }
 }

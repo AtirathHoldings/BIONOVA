@@ -113,51 +113,40 @@ public class ProjectAccessControlService {
                     }
                 }
 
-                // 2. Reviewer & Approver (resolved via rId from reviewer_master)
+                // 2. Approver / Checker (stepType = CHECKER in ProcessConfig)
                 List<ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
-                ProcessConfig reviewerConfig = null;
-                ProcessConfig approverConfig = null;
-                
-                for (ProcessConfig c : configs) {
-                    if (c.getRId() != null) {
-                        ReviewerMaster rm = reviewerMasterRepository.findById(c.getRId()).orElse(null);
-                        if (rm != null) {
-                            if ("Reviewer".equalsIgnoreCase(rm.getRNm())) {
-                                reviewerConfig = c;
-                            } else if ("Approver".equalsIgnoreCase(rm.getRNm())) {
-                                approverConfig = c;
-                            }
-                        }
+                ProcessConfig checkerConfig = configs.stream()
+                        .filter(c -> "CHECKER".equalsIgnoreCase(c.getStepType()))
+                        .findFirst()
+                        .orElse(null);
+                if (checkerConfig != null && checkerConfig.getEmpId() != null) {
+                    Employee checkerEmp = employeeRepository.findById(checkerConfig.getEmpId()).orElse(null);
+                    if (checkerEmp != null) {
+                        PacEmployeeDto checker = new PacEmployeeDto(
+                                checkerEmp.getEmpId(),
+                                checkerEmp.getEmpCode(),
+                                checkerEmp.getFirstName() + " " + (checkerEmp.getLastName() != null ? checkerEmp.getLastName() : ""),
+                                checkerEmp.getPhotoUrl(),
+                                List.of("View", "Update")
+                        );
+                        row.setApprover(checker);
+                        uniqueEmployeeIds.add(checkerEmp.getEmpId());
                     }
                 }
 
-                if (reviewerConfig != null && reviewerConfig.getEmpId() != null) {
-                    Employee reviewerEmp = employeeRepository.findById(reviewerConfig.getEmpId()).orElse(null);
-                    if (reviewerEmp != null) {
-                        PacEmployeeDto reviewer = new PacEmployeeDto(
-                                reviewerEmp.getEmpId(),
-                                reviewerEmp.getEmpCode(),
-                                reviewerEmp.getFirstName() + " " + (reviewerEmp.getLastName() != null ? reviewerEmp.getLastName() : ""),
-                                reviewerEmp.getPhotoUrl(),
-                                List.of("View", "Update")
-                        );
+                // 3. Reviewer (stepType = REVIEWER in ProcessConfig)
+                ProcessConfig reviewerConfig = configs.stream()
+                        .filter(c -> "REVIEWER".equalsIgnoreCase(c.getStepType()))
+                        .findFirst()
+                        .orElse(null);
+                if (reviewerConfig != null && reviewerConfig.getRId() != null) {
+                    ReviewerMaster reviewerMaster = reviewerMasterRepository.findById(reviewerConfig.getRId()).orElse(null);
+                    if (reviewerMaster != null && reviewerMaster.getRNm() != null) {
+                        PacEmployeeDto reviewer = getReviewerDto(reviewerMaster.getRNm());
                         row.setReviewer(reviewer);
-                        uniqueEmployeeIds.add(reviewerEmp.getEmpId());
-                    }
-                }
-
-                if (approverConfig != null && approverConfig.getEmpId() != null) {
-                    Employee approverEmp = employeeRepository.findById(approverConfig.getEmpId()).orElse(null);
-                    if (approverEmp != null) {
-                        PacEmployeeDto approver = new PacEmployeeDto(
-                                approverEmp.getEmpId(),
-                                approverEmp.getEmpCode(),
-                                approverEmp.getFirstName() + " " + (approverEmp.getLastName() != null ? approverEmp.getLastName() : ""),
-                                approverEmp.getPhotoUrl(),
-                                List.of("View", "Update")
-                        );
-                        row.setApprover(approver);
-                        uniqueEmployeeIds.add(approverEmp.getEmpId());
+                        if (reviewer.getEmpId() != null) {
+                            uniqueEmployeeIds.add(reviewer.getEmpId());
+                        }
                     }
                 }
 

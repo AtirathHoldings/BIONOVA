@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
         title        = "CBG / Atirath Holding API",
         version      = "v1.0",
         description  = "REST API documentation for CBG Backend. All endpoints except /api/auth/login require a Bearer JWT token.",
-        contact      = @Contact(name = "Atirath Holding", email = "vsv.vempati@gmail.com")
+        contact      = @Contact(name = "Atirath Holding", email = "siva@atirath.com")
     ),
     security = @SecurityRequirement(name = "BearerAuth")
 )

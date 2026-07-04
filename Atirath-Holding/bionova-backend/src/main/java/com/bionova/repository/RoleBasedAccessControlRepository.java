@@ -14,7 +14,7 @@ public interface RoleBasedAccessControlRepository extends JpaRepository<RoleBase
     List<RoleBasedAccessControl> findByRoleId(Integer roleId);
     void deleteByRoleId(Integer roleId);
 
-    @Query("SELECT new com.bionova.dto.RoleDto(r.roleId, r.roleNm, SUM(CASE WHEN (r.viewFlg = true OR r.addFlg = true OR r.editFlg = true OR r.deleteFlg = true) THEN 1L ELSE 0L END), MAX(r.createdBy)) FROM RoleBasedAccessControl r GROUP BY r.roleId, r.roleNm")
+    @Query("SELECT DISTINCT new com.bionova.dto.RoleDto(r.roleId, r.roleNm) FROM RoleBasedAccessControl r")
     List<RoleDto> findDistinctRoles();
 
     @Query("SELECT COALESCE(MAX(r.roleId), 0) FROM RoleBasedAccessControl r")

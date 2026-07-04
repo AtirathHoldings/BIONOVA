@@ -7,31 +7,15 @@ import 'package:cbg_app/Pages/task_details_screen.dart';
 import 'package:cbg_app/Pages/profile_screen.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:cbg_app/Pages/notification_screen.dart';
-import 'package:shared_preferences/shared_preferences.dart';
-import 'package:cbg_app/services/notification_service.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
-
-  // Initialize Notification Service and Background Sync
-  try {
-    await NotificationService.initialize();
-    await NotificationService.startBackgroundSync();
-    await NotificationService.triggerImmediateCheck(); // <-- ఇమ్మీడియట్ చెక్ యాడ్ చేశాం
-  } catch (e) {
-    debugPrint("Failed to initialize Notification Service: $e");
-  }
-  
-  final prefs = await SharedPreferences.getInstance();
-  final hasToken = prefs.containsKey('authToken') && prefs.getString('authToken') != null;
-  
-  runApp(MyApp(hasToken: hasToken));
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
-  final bool hasToken;
-  const MyApp({super.key, required this.hasToken});
+  const MyApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -48,11 +32,10 @@ class MyApp extends StatelessWidget {
         ),
         scaffoldBackgroundColor: AppColors.background,
       ),
-      home: hasToken
-          ? MainScreen(key: MainScreen.navigatorKey)
-          : const SignInPage(),
+      home: const SignInPage(),
       routes: {
         '/signin': (context) => const SignInPage(),
+        // ✅ CHANGE: Added key
         '/main': (context) => MainScreen(
           key: MainScreen.navigatorKey,
         ),

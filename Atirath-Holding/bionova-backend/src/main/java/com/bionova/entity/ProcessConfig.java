@@ -11,10 +11,10 @@ import lombok.Setter;
  * isLive = true   → task_id = task_live_master.task_id        (execution)
  *
  * Each row is ONE step in the approval chain for a task.
- * Example: Task needs REVIEWER first (step 1), then APPROVER (step 2).
+ * Example: Task needs CHECKER first (step 1), then REVIEWER (step 2).
  *
- *   ordr_id=1, step_type='REVIEWER', emp_id=5,  r_id=null
- *   ordr_id=2, step_type='APPROVER', emp_id=8,  r_id=null
+ *   ordr_id=1, step_type='CHECKER',  emp_id=5,  r_id=null
+ *   ordr_id=2, step_type='REVIEWER', emp_id=null, r_id=1
  *
  * During Draft → Live promotion, these config rows are cloned
  * with isLive=true linked to the new live task_id.
@@ -48,6 +48,14 @@ public class ProcessConfig {
     @Column(name = "ordr_id", nullable = false)
     private Integer ordrId;
 
+    /**
+     * Type of approver at this step:
+     *   CHECKER  = first-level (validates work quality)
+     *   REVIEWER = second-level (managerial sign-off)
+     */
+    @Column(name = "step_type", nullable = false, length = 10)
+    private String stepType;  // 'CHECKER' | 'REVIEWER'
+
     /** FK → employee_master.emp_id (checker employee, if CHECKER step) */
     @Column(name = "emp_id")
     private Long empId;
@@ -56,19 +64,7 @@ public class ProcessConfig {
     @Column(name = "r_id")
     private Integer rId;
 
-    public String getStepType() {
-        return (ordrId != null && ordrId == 1) ? "REVIEWER" : "APPROVER";
-    }
-
-    public void setStepType(String stepType) {
-        // No-op
-    }
-
-    public String getStepLabel() {
-        return (ordrId != null && ordrId == 1) ? "Reviewer" : "Approver";
-    }
-
-    public void setStepLabel(String stepLabel) {
-        // No-op
-    }
+    /** Optional label for this step (e.g. "Quality Check", "Manager Approval") */
+    @Column(name = "step_label", length = 100)
+    private String stepLabel;
 }

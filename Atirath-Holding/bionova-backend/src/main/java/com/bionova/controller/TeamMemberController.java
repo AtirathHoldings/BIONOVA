@@ -52,7 +52,7 @@ public class TeamMemberController {
     }
 
     private boolean isAdmin(Employee emp) {
-        return emp != null && "vsv.vempati@gmail.com".equalsIgnoreCase(emp.getEmail());
+        return emp != null && "siva@atirath.com".equalsIgnoreCase(emp.getEmail());
     }
 
     // ─────────────────────────────────────────────────────────────────────────

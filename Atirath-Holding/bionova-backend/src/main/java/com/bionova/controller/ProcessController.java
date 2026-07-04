@@ -21,19 +21,19 @@ import java.util.Map;
  *
  *   OPEN  ──────(employee starts)──────► WIP
  *   WIP   ──────(employee submits)──────► SUBMIT_REVIEW
- *   SUBMIT_REVIEW ─(REVIEWER: YES)──────► UNDER_REVIEW
- *   SUBMIT_REVIEW ─(REVIEWER: NO)───────► REWORK
+ *   SUBMIT_REVIEW ─(CHECKER: YES)──────► UNDER_REVIEW
+ *   SUBMIT_REVIEW ─(CHECKER: NO)───────► REWORK
  *   REWORK ─────(employee resubmits)───► SUBMIT_REVIEW
- *   UNDER_REVIEW ─(APPROVER: YES)───────► COMPLETED
- *   UNDER_REVIEW ─(APPROVER: NO)────────► REWORK
+ *   UNDER_REVIEW ─(REVIEWER: YES)──────► COMPLETED
+ *   UNDER_REVIEW ─(REVIEWER: NO)───────► REWORK
  *
  * ─── Endpoints ──────────────────────────────────────────────────────────────
  *
  *   POST  /api/process/task/{taskId}/start             → OPEN → WIP
  *   POST  /api/process/task/{taskId}/submit            → WIP  → SUBMIT_REVIEW
  *   POST  /api/process/task/{taskId}/resubmit          → REWORK → SUBMIT_REVIEW
- *   POST  /api/process/task/{taskId}/checker-action    → REVIEWER YES/NO
- *   POST  /api/process/task/{taskId}/reviewer-action   → APPROVER YES/NO
+ *   POST  /api/process/task/{taskId}/checker-action    → CHECKER YES/NO
+ *   POST  /api/process/task/{taskId}/reviewer-action   → REVIEWER YES/NO
  *   GET   /api/process/task/{taskId}                   → full process history
  */
 @RestController
@@ -43,8 +43,6 @@ public class ProcessController {
     @Autowired private ProcessMasterRepository processRepo;
     @Autowired private TaskLiveRepository      taskLiveRepo;
     @Autowired private ChecklistMasterRepository checklistRepo;
-    @Autowired private com.bionova.repository.ReviewerMasterRepository reviewerMasterRepo;
-    @Autowired private com.bionova.service.ProjectStatusCascadeService projectStatusCascadeService;
 
     // ── GET history ─────────────────────────────────────────────────────────
 
@@ -76,7 +74,7 @@ public class ProcessController {
         task.setTaskSts("WIP");
         taskLiveRepo.save(task);
 
-        ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", "YES");
+        ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "CHECKER", "YES");
         event.setRemarks("Task started — moved to WIP");
         processRepo.save(event);
 
@@ -114,20 +112,14 @@ public class ProcessController {
             }
         }
 
-        String targetStatus = Boolean.TRUE.equals(task.getPrcsFlg()) ? "SUBMIT_REVIEW" : "COMPLETED";
-        task.setTaskSts(targetStatus);
-        if ("COMPLETED".equals(targetStatus)) {
-            task.setActCmpDt(java.time.LocalDate.now());
-        }
+        task.setTaskSts("SUBMIT_REVIEW");
         taskLiveRepo.save(task);
 
-        ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", "YES");
-        event.setRemarks(getString(body, "remarks", "COMPLETED".equals(targetStatus) ? "Task completed directly (no review process required)" : "Submitted for review"));
+        ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "CHECKER", "YES");
+        event.setRemarks(getString(body, "remarks", "Submitted for review"));
         processRepo.save(event);
 
-        projectStatusCascadeService.cascadeStatusFromTask(taskId);
-
-        return ResponseEntity.ok(Map.of("taskSts", targetStatus, "message", "COMPLETED".equals(targetStatus) ? "Task completed successfully." : "Task submitted for review."));
+        return ResponseEntity.ok(Map.of("taskSts", "SUBMIT_REVIEW", "message", "Task submitted for review."));
     }
 
     // ── RESUBMIT after REWORK (REWORK → SUBMIT_REVIEW) ────────────────────
@@ -162,17 +154,17 @@ public class ProcessController {
         task.setTaskSts("SUBMIT_REVIEW");
         taskLiveRepo.save(task);
 
-        ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", "YES");
+        ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "CHECKER", "YES");
         event.setRemarks(getString(body, "remarks", "Resubmitted after rework"));
         processRepo.save(event);
 
         return ResponseEntity.ok(Map.of("taskSts", "SUBMIT_REVIEW", "message", "Task resubmitted for review."));
     }
 
-    // ── REVIEWER ACTION (SUBMIT_REVIEW → UNDER_REVIEW | REWORK) ────────────
+    // ── CHECKER ACTION (SUBMIT_REVIEW → UNDER_REVIEW | REWORK) ────────────
 
     /**
-     * First-level reviewer approves or rejects.
+     * First-level checker approves or rejects.
      * Body:
      * {
      *   "empId": 2,
@@ -190,7 +182,7 @@ public class ProcessController {
 
         if (!"SUBMIT_REVIEW".equals(task.getTaskSts())) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Task must be in SUBMIT_REVIEW status for reviewer action. Current: " + task.getTaskSts()));
+                    .body(Map.of("message", "Task must be in SUBMIT_REVIEW status for checker action. Current: " + task.getTaskSts()));
         }
 
         String decision = getString(body, "decision", "").toUpperCase();
@@ -199,34 +191,29 @@ public class ProcessController {
                     .body(Map.of("message", "Decision must be 'YES' or 'NO'."));
         }
 
-        String newStatus = "YES".equals(decision) ? "UNDER_REVIEW" : "REASSIGN";
+        String newStatus = "YES".equals(decision) ? "UNDER_REVIEW" : "REWORK";
         task.setTaskSts(newStatus);
         taskLiveRepo.save(task);
 
-        ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", decision);
+        ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "CHECKER", decision);
         event.setRemarks(getString(body, "remarks",
-                "YES".equals(decision) ? "Reviewer approved — sent to approver" : "Reviewer rejected — reassignment required"));
+                "YES".equals(decision) ? "Checker approved — sent to reviewer" : "Checker rejected — rework required"));
         processRepo.save(event);
 
-        if ("REASSIGN".equals(newStatus)) {
-            projectStatusCascadeService.cascadeReworkDownstream(taskId);
-        }
-        projectStatusCascadeService.cascadeStatusFromTask(taskId);
-
         String message = "YES".equals(decision)
-                ? "Reviewer approved. Task moved to UNDER_REVIEW."
-                : "Reviewer rejected. Task moved to REASSIGN.";
+                ? "Checker approved. Task moved to UNDER_REVIEW."
+                : "Checker rejected. Task moved to REWORK.";
 
         return ResponseEntity.ok(Map.of("taskSts", newStatus, "message", message));
     }
 
-    // ── APPROVER ACTION (UNDER_REVIEW → COMPLETED | REWORK) ───────────────
+    // ── REVIEWER ACTION (UNDER_REVIEW → COMPLETED | REWORK) ───────────────
 
     /**
-     * Second-level approver approves or rejects.
+     * Second-level reviewer approves or rejects.
      * Body:
      * {
-     *   "empId": 1,                 // approver employee ID
+     *   "rId": 1,                   // reviewer ID
      *   "decision": "YES",          // "YES" → COMPLETED | "NO" → REWORK
      *   "remarks": "Approved"
      * }
@@ -241,7 +228,7 @@ public class ProcessController {
 
         if (!"UNDER_REVIEW".equals(task.getTaskSts())) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Task must be in UNDER_REVIEW status for approver action. Current: " + task.getTaskSts()));
+                    .body(Map.of("message", "Task must be in UNDER_REVIEW status for reviewer action. Current: " + task.getTaskSts()));
         }
 
         String decision = getString(body, "decision", "").toUpperCase();
@@ -250,7 +237,7 @@ public class ProcessController {
                     .body(Map.of("message", "Decision must be 'YES' or 'NO'."));
         }
 
-        String newStatus = "YES".equals(decision) ? "COMPLETED" : "REASSIGN";
+        String newStatus = "YES".equals(decision) ? "COMPLETED" : "REWORK";
         task.setTaskSts(newStatus);
 
         // Record actual completion date when task is COMPLETED
@@ -261,52 +248,28 @@ public class ProcessController {
 
         Integer rId = body.get("rId") != null
                 ? Integer.valueOf(body.get("rId").toString()) : null;
-        if (rId == null) {
-            rId = getRoleIdForRole("APPROVER");
-        }
-        Long empId = body.get("empId") != null
-                ? Long.valueOf(body.get("empId").toString()) : null;
 
         ProcessMaster event = new ProcessMaster();
         event.setTaskId(taskId);
         event.setOrdrId(nextOrder(taskId));
-        event.setEmpId(empId);
         event.setRId(rId);
+        event.setActorRole("REVIEWER");
         event.setPrcsSts(decision);
         event.setRemarks(getString(body, "remarks",
-                "YES".equals(decision) ? "Approver approved — COMPLETED" : "Approver rejected — reassignment required"));
+                "YES".equals(decision) ? "Reviewer approved — COMPLETED" : "Reviewer rejected — rework required"));
 
         // Update running counts from history
         applyCountsFromHistory(taskId, event, decision);
         processRepo.save(event);
 
-        if ("REASSIGN".equals(newStatus)) {
-            projectStatusCascadeService.cascadeReworkDownstream(taskId);
-        }
-        projectStatusCascadeService.cascadeStatusFromTask(taskId);
-
         String message = "YES".equals(decision)
-                ? "Approver approved. Task COMPLETED! 🎉"
-                : "Approver rejected. Task moved to REASSIGN.";
+                ? "Reviewer approved. Task COMPLETED! 🎉"
+                : "Reviewer rejected. Task moved to REWORK.";
 
         return ResponseEntity.ok(Map.of("taskSts", newStatus, "message", message));
     }
 
     // ── Helpers ─────────────────────────────────────────────────────────────
-
-    private Integer getRoleIdForRole(String role) {
-        String roleName = "REVIEWER".equalsIgnoreCase(role) ? "Reviewer" : "Approver";
-        return reviewerMasterRepo.findAll().stream()
-                .filter(r -> roleName.equalsIgnoreCase(r.getRNm()))
-                .findFirst()
-                .map(com.bionova.entity.ReviewerMaster::getRId)
-                .orElseGet(() -> {
-                    com.bionova.entity.ReviewerMaster rm = new com.bionova.entity.ReviewerMaster();
-                    rm.setRNm(roleName);
-                    rm = reviewerMasterRepo.save(rm);
-                    return rm.getRId();
-                });
-    }
 
     private TaskLive getTask(Long taskId) {
         return taskLiveRepo.findById(taskId)
@@ -323,6 +286,7 @@ public class ProcessController {
         ProcessMaster e = new ProcessMaster();
         e.setTaskId(taskId);
         e.setOrdrId(order);
+        e.setActorRole(role);
         e.setPrcsSts(decision);
 
         if (body.get("empId") != null) {
@@ -330,9 +294,6 @@ public class ProcessController {
         }
         if (body.get("rId") != null) {
             e.setRId(Integer.valueOf(body.get("rId").toString()));
-        }
-        if (e.getRId() == null) {
-            e.setRId(getRoleIdForRole(role));
         }
 
         applyCountsFromHistory(taskId, e, decision);

@@ -33,7 +33,4 @@ public class RoleBasedAccessControl {
 
     @Column(name = "delete_flg")
     private Boolean deleteFlg = false;
-
-    @Column(name = "created_by", length = 100)
-    private String createdBy;
 }

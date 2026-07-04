@@ -46,8 +46,8 @@ public class TaskLiveController {
         if (employee == null) {
             return false;
         }
-        // Since role column is removed, we treat vsv.vempati@gmail.com as admin
-        return "vsv.vempati@gmail.com".equalsIgnoreCase(employee.getEmail());
+        // Since role column is removed, we treat siva@atirath.com as admin
+        return "siva@atirath.com".equalsIgnoreCase(employee.getEmail());
     }
 
     @GetMapping
@@ -129,11 +129,11 @@ public class TaskLiveController {
             task.setTaskSts("OPEN");
         }
 
-        // Auto-compute dates or days (inclusive: start=day1)
+        // Auto-compute dates or days
         if (task.getStDt() != null && task.getNoOfDays() != null) {
-            task.setEndDt(task.getStDt().plusDays(task.getNoOfDays() - 1));
+            task.setEndDt(task.getStDt().plusDays(task.getNoOfDays()));
         } else if (task.getStDt() != null && task.getEndDt() != null) {
-            long days = java.time.temporal.ChronoUnit.DAYS.between(task.getStDt(), task.getEndDt()) + 1;
+            long days = java.time.temporal.ChronoUnit.DAYS.between(task.getStDt(), task.getEndDt());
             task.setNoOfDays((int) days);
         }
 
@@ -189,15 +189,15 @@ public class TaskLiveController {
         task.setTaskDepTyp(details.getTaskDepTyp());
         task.setDepTaskId(details.getDepTaskId());
 
-        // Auto-compute dates or days based on changes (inclusive)
+        // Auto-compute dates or days based on changes
         if (details.getStDt() != null && details.getNoOfDays() != null) {
             task.setStDt(details.getStDt());
             task.setNoOfDays(details.getNoOfDays());
-            task.setEndDt(details.getStDt().plusDays(details.getNoOfDays() - 1));
+            task.setEndDt(details.getStDt().plusDays(details.getNoOfDays()));
         } else if (details.getStDt() != null && details.getEndDt() != null) {
             task.setStDt(details.getStDt());
             task.setEndDt(details.getEndDt());
-            long days = java.time.temporal.ChronoUnit.DAYS.between(details.getStDt(), details.getEndDt()) + 1;
+            long days = java.time.temporal.ChronoUnit.DAYS.between(details.getStDt(), details.getEndDt());
             task.setNoOfDays((int) days);
         } else {
             task.setNoOfDays(details.getNoOfDays());

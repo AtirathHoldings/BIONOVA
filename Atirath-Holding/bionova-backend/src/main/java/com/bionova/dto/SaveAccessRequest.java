@@ -9,5 +9,4 @@ public class SaveAccessRequest {
     private Integer roleId;
     private String customRoleName;
     private List<ScreenPermissionDto> permissions;
-    private String createdBy;
 }
