@@ -22,20 +22,23 @@ public class AuthService {
     private final JwtUtil jwtUtil;
     private final RoleBasedEmployeeMappingRepository employeeMappingRepository;
     private final RoleBasedAccessControlRepository rbacRepository;
+    private final EmployeeSettingsService employeeSettingsService;
 
     public AuthService(EmployeeRepository employeeRepository,
                        PasswordEncoder passwordEncoder,
                        JwtUtil jwtUtil,
                        RoleBasedEmployeeMappingRepository employeeMappingRepository,
-                       RoleBasedAccessControlRepository rbacRepository) {
+                       RoleBasedAccessControlRepository rbacRepository,
+                       EmployeeSettingsService employeeSettingsService) {
         this.employeeRepository = employeeRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.employeeMappingRepository = employeeMappingRepository;
         this.rbacRepository = rbacRepository;
+        this.employeeSettingsService = employeeSettingsService;
     }
 
-    public LoginResponse login(LoginRequest request) {
+    public LoginResponse login(LoginRequest request, String userAgent) {
 
         Employee employee =
                 employeeRepository.findByEmail(request.getEmail())
@@ -71,9 +74,66 @@ public class AuthService {
             }
         }
 
-        // Generate JWT
-        String token = jwtUtil.generateToken(employee.getEmail(), role);
+        // Generate JWT (embed empId so RBAC guard can identify the employee)
+        String token = jwtUtil.generateToken(employee.getEmail(), role, employee.getEmpId());
+
+        // Record Login Activity
+        String determinedDevice = determineDeviceInfo(userAgent, request.getDeviceInfo());
+        employeeSettingsService.recordLoginActivity(employee.getEmpId(), determinedDevice);
 
         return new LoginResponse(true, "Login Success", role, token, employee.getEmpId());
+    }
+
+    private String determineDeviceInfo(String userAgent, String requestDeviceInfo) {
+        if (requestDeviceInfo != null && !requestDeviceInfo.trim().isEmpty()) {
+            return requestDeviceInfo.trim();
+        }
+        if (userAgent == null || userAgent.isEmpty()) {
+            return "Unknown Device";
+        }
+        
+        String ua = userAgent.toLowerCase();
+        
+        // Check for Mobile App (Flutter / Dart / OkHttp / Swift)
+        if (ua.contains("dart") || ua.contains("flutter") || ua.contains("okhttp") || ua.contains("retrofit") || ua.contains("android-app") || ua.contains("mobile-app")) {
+            if (ua.contains("android")) {
+                return "Android App";
+            } else if (ua.contains("iphone") || ua.contains("ipad") || ua.contains("darwin") || ua.contains("cfnetwork")) {
+                return "iOS App";
+            }
+            return "Mobile App";
+        }
+        
+        // Determine OS
+        String os = "Unknown OS";
+        if (ua.contains("windows")) {
+            os = "Windows";
+        } else if (ua.contains("macintosh") || ua.contains("mac os")) {
+            os = "Mac";
+        } else if (ua.contains("linux")) {
+            os = "Linux";
+        } else if (ua.contains("android")) {
+            os = "Android";
+            if (ua.contains("chrome")) return "Chrome - Android";
+            return "Mobile Browser - Android";
+        } else if (ua.contains("iphone") || ua.contains("ipad")) {
+            os = "iOS";
+            if (ua.contains("safari")) return "Safari - iOS";
+            return "Mobile Browser - iOS";
+        }
+        
+        // Determine Browser
+        String browser = "Browser";
+        if (ua.contains("edg/")) {
+            browser = "Edge";
+        } else if (ua.contains("chrome") || ua.contains("crios")) {
+            browser = "Chrome";
+        } else if (ua.contains("firefox") || ua.contains("fxios")) {
+            browser = "Firefox";
+        } else if (ua.contains("safari") && !ua.contains("chrome")) {
+            browser = "Safari";
+        }
+        
+        return browser + " - " + os;
     }
 }

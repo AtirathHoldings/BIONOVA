@@ -9,6 +9,7 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "milestone_draft_master")
 @org.hibernate.annotations.Check(constraints = "mlstn_dep_typ IN ('INDEPENDENT','SEQUENTIAL','PARALLEL') AND mlstn_sts IN ('DRAFT')")
+@EntityListeners(com.bionova.config.AuditListener.class)
 @Getter
 @Setter
 public class MilestoneDraft {
@@ -21,7 +22,7 @@ public class MilestoneDraft {
     @Column(name = "drft_prj_id", nullable = false)
     private Long drftPrjId;
 
-    @Column(name = "mlstn_cd", unique = true, length = 10)
+    @Column(name = "mlstn_cd", length = 10)
     private String mlstnCd;
 
     @Column(name = "mlstn_ttl", nullable = false, length = 100)
@@ -47,9 +48,6 @@ public class MilestoneDraft {
 
     @Column(name = "tent_end_dt")
     private LocalDate tentEndDt;
-
-    @Column(name = "chk_id")
-    private Integer chkId;
 
     @Column(name = "file_url", length = 255)
     private String fileUrl;

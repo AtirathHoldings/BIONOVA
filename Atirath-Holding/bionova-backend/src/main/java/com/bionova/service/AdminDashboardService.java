@@ -1,292 +1,133 @@
 package com.bionova.service;
 
 import com.bionova.dto.AdminDashboardResponse;
-import com.bionova.entity.MilestoneLive;
-import com.bionova.entity.ProjectLive;
-import com.bionova.entity.TaskLive;
-import com.bionova.repository.*;
-import org.springframework.beans.factory.annotation.Autowired;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * Calls the Supabase stored procedure get_admin_dashboard()
+ * which replaces 6 separate repository queries with a single DB round-trip.
+ *
+ * Procedure returns JSON:
+ *   employeeCount, departmentCount, companyCount, plantCount,
+ *   activeProjectsCount, criticalAlertsCount,
+ *   projectStatus   { total, onTrack, atRisk, delayed, completed }
+ *   milestoneProgress { total, completed, progress, overdue }
+ *   taskOverview    { total, completed, progress, todo, overdue }
+ *   topProjects     [ { projectId, projectName, projectCode, progressPercent } ]
+ *   upcomingDeadlines [ { title, projectName, dueDate, timeLeft, isCritical } ]
+ *   systemActivities  [ { description, actor, timestamp } ]
+ */
 @Service
 public class AdminDashboardService {
 
-    @Autowired
-    private EmployeeRepository employeeRepository;
+    @PersistenceContext
+    private EntityManager entityManager;
 
-    @Autowired
-    private DepartmentRepository departmentRepository;
-
-    @Autowired
-    private ProjectLiveRepository projectLiveRepository;
-
-    @Autowired
-    private MilestoneLiveRepository milestoneLiveRepository;
-
-    @Autowired
-    private TaskLiveRepository taskLiveRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AdminDashboardResponse getDashboardData() {
-        LocalDate today = LocalDate.now();
+        // Single stored procedure call — replaces all previous repository calls
+        Object result = entityManager
+                .createNativeQuery("SELECT get_admin_dashboard()")
+                .getSingleResult();
 
-        // 1. Workforce Strength (Employee Count)
-        long employeeCount = employeeRepository.count();
-
-        // 2. Active Departments
-        long departmentCount = departmentRepository.count();
-
-        // Fetch all live projects, milestones, tasks
-        List<ProjectLive> projects = projectLiveRepository.findAll();
-        List<MilestoneLive> milestones = milestoneLiveRepository.findAll();
-        List<TaskLive> tasks = taskLiveRepository.findAll();
-
-        long activeProjectsCount = projects.size();
-
-        // 3. Project Status Overview
-        long completedProjects = 0;
-        long delayedProjects = 0;
-        long atRiskProjects = 0;
-        long inProgressProjects = 0;
-        long onTrackProjects = 0;
-
-        for (ProjectLive prj : projects) {
-            String status = prj.getPrjSts();
-            LocalDate endDt = prj.getEndDt();
-
-            if ("CLOSED".equalsIgnoreCase(status)) {
-                completedProjects++;
-            } else {
-                // Active projects (LIVE, HOLD, etc.)
-                if (endDt != null) {
-                    if (endDt.isBefore(today)) {
-                        delayedProjects++;
-                    } else if (endDt.isBefore(today.plusDays(7))) {
-                        atRiskProjects++;
-                    } else {
-                        onTrackProjects++;
-                        inProgressProjects++;
-                    }
-                } else {
-                    onTrackProjects++;
-                }
-            }
+        try {
+            JsonNode root = objectMapper.readTree(result.toString());
+            return mapToResponse(root);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse get_admin_dashboard() response", e);
         }
+    }
 
+    private AdminDashboardResponse mapToResponse(JsonNode root) {
+        JsonNode projStatus = root.path("projectStatus");
+        JsonNode msProgress = root.path("milestoneProgress");
+        JsonNode taskOv     = root.path("taskOverview");
+
+        // projectStatusOverview map
         Map<String, Long> projectStatusOverview = new HashMap<>();
-        projectStatusOverview.put("Total Projects", activeProjectsCount);
-        projectStatusOverview.put("On Track", onTrackProjects);
-        projectStatusOverview.put("In Progress", inProgressProjects);
-        projectStatusOverview.put("At Risk", atRiskProjects);
-        projectStatusOverview.put("Delayed", delayedProjects);
-        projectStatusOverview.put("Completed", completedProjects);
+        projectStatusOverview.put("Total Projects", projStatus.path("total").asLong());
+        projectStatusOverview.put("On Track",       projStatus.path("onTrack").asLong());
+        projectStatusOverview.put("At Risk",         projStatus.path("atRisk").asLong());
+        projectStatusOverview.put("Delayed",         projStatus.path("delayed").asLong());
+        projectStatusOverview.put("Completed",       projStatus.path("completed").asLong());
 
-        // 4. Milestone Progress
-        long totalMilestones = milestones.size();
-        long completedMilestones = 0;
-        long inProgressMilestones = 0;
-        long overdueMilestones = 0;
-
-        for (MilestoneLive ms : milestones) {
-            String status = ms.getMlstnSts();
-            LocalDate endDt = ms.getEndDt();
-
-            if ("COMPLETED".equalsIgnoreCase(status) || "CLOSED".equalsIgnoreCase(status)) {
-                completedMilestones++;
-            } else {
-                inProgressMilestones++;
-                if (endDt != null && endDt.isBefore(today)) {
-                    overdueMilestones++;
-                }
-            }
-        }
-
+        // milestoneProgress map
         Map<String, Object> milestoneProgress = new HashMap<>();
-        milestoneProgress.put("total", totalMilestones);
-        milestoneProgress.put("completed", completedMilestones);
-        milestoneProgress.put("progress", inProgressMilestones);
-        milestoneProgress.put("overdue", overdueMilestones);
+        milestoneProgress.put("total",     msProgress.path("total").asLong());
+        milestoneProgress.put("completed", msProgress.path("completed").asLong());
+        milestoneProgress.put("progress",  msProgress.path("progress").asLong());
+        milestoneProgress.put("overdue",   msProgress.path("overdue").asLong());
+        milestoneProgress.put("percentage",      msProgress.path("percentage").asDouble());
+        milestoneProgress.put("progressPercent", msProgress.path("progressPercent").asDouble());
 
-        // 5. Task Status Overview
-        long totalTasks = tasks.size();
-        long completedTasks = 0;
-        long inProgressTasks = 0;
-        long todoTasks = 0;
-        long overdueTasks = 0;
-
-        for (TaskLive task : tasks) {
-            String status = task.getTaskSts();
-            LocalDate endDt = task.getEndDt();
-
-            if ("COMPLETED".equalsIgnoreCase(status)) {
-                completedTasks++;
-            } else {
-                if ("WIP".equalsIgnoreCase(status) || "SUBMIT_REVIEW".equalsIgnoreCase(status) || "UNDER_REVIEW".equalsIgnoreCase(status)) {
-                    inProgressTasks++;
-                } else {
-                    todoTasks++;
-                }
-
-                if (endDt != null && endDt.isBefore(today)) {
-                    overdueTasks++;
-                }
-            }
-        }
-
+        // taskOverview map
         Map<String, Object> taskOverview = new HashMap<>();
-        taskOverview.put("total", totalTasks);
-        taskOverview.put("completed", completedTasks);
-        taskOverview.put("progress", inProgressTasks);
-        taskOverview.put("todo", todoTasks);
-        taskOverview.put("overdue", overdueTasks);
+        taskOverview.put("total",     taskOv.path("total").asLong());
+        taskOverview.put("completed", taskOv.path("completed").asLong());
+        taskOverview.put("progress",  taskOv.path("progress").asLong());
+        taskOverview.put("todo",      taskOv.path("todo").asLong());
+        taskOverview.put("overdue",   taskOv.path("overdue").asLong());
 
-        // 6. Critical Alerts Count (Delayed projects + Overdue tasks)
-        long criticalAlertsCount = delayedProjects + overdueTasks;
-
-        // 7. System Activity Log (Mock some standard activities if none exist, or query database updates)
-        List<AdminDashboardResponse.ActivityDto> systemActivities = new ArrayList<>();
-        
-        // Dynamically add activities based on recent projects
-        List<ProjectLive> sortedProjects = projects.stream()
-                .sorted((p1, p2) -> p2.getPrjId().compareTo(p1.getPrjId()))
-                .limit(3)
-                .collect(Collectors.toList());
-
-        for (ProjectLive prj : sortedProjects) {
-            String suffix = prj.getPrjCd() != null ? " (" + prj.getPrjCd() + ")" : "";
-            systemActivities.add(AdminDashboardResponse.ActivityDto.builder()
-                    .description("Project \"" + prj.getPrjNm() + suffix + "\" initiated in Live status")
-                    .actor("System Admin")
-                    .timestamp("Recent")
-                    .build());
-        }
-
-        // Add some completed milestone activities
-        List<MilestoneLive> completedMss = milestones.stream()
-                .filter(ms -> "COMPLETED".equalsIgnoreCase(ms.getMlstnSts()))
-                .limit(2)
-                .collect(Collectors.toList());
-
-        for (MilestoneLive ms : completedMss) {
-            systemActivities.add(AdminDashboardResponse.ActivityDto.builder()
-                    .description("Milestone \"" + ms.getMlstnTtl() + "\" marked as COMPLETED")
-                    .actor("Project Manager")
-                    .timestamp("Recent")
-                    .build());
-        }
-
-        // No fallback — if no activities, return empty list
-
-        // 8. Upcoming Deadlines
-        List<AdminDashboardResponse.DeadlineDto> upcomingDeadlines = new ArrayList<>();
-        
-        // Scan for pending tasks ending in the next 14 days
-        List<TaskLive> pendingTasks = tasks.stream()
-                .filter(t -> !"COMPLETED".equalsIgnoreCase(t.getTaskSts()))
-                .filter(t -> t.getEndDt() != null)
-                .sorted(Comparator.comparing(TaskLive::getEndDt))
-                .limit(5)
-                .collect(Collectors.toList());
-
-        for (TaskLive t : pendingTasks) {
-            long daysLeft = ChronoUnit.DAYS.between(today, t.getEndDt());
-            String timeLeftText = daysLeft < 0 ? "Overdue" : daysLeft + " Days Left";
-            boolean isCritical = daysLeft <= 2;
-
-            // Find project name for this task
-            String prjName = "Live Project";
-            Optional<MilestoneLive> msOpt = milestones.stream()
-                    .filter(m -> m.getMId().equals(t.getMId()))
-                    .findFirst();
-            if (msOpt.isPresent()) {
-                Long prjId = msOpt.get().getPrjId();
-                Optional<ProjectLive> prjOpt = projects.stream()
-                        .filter(p -> p.getPrjId().equals(prjId))
-                        .findFirst();
-                if (prjOpt.isPresent()) {
-                    ProjectLive prj = prjOpt.get();
-                    String suffix = prj.getPrjCd() != null ? " (" + prj.getPrjCd() + ")" : "";
-                    prjName = prj.getPrjNm() + suffix;
-                }
-            }
-
-            String taskSuffix = t.getTaskCd() != null ? " (" + t.getTaskCd() + ")" : "";
-            upcomingDeadlines.add(AdminDashboardResponse.DeadlineDto.builder()
-                    .title(t.getTaskNm() + taskSuffix)
-                    .projectName(prjName)
-                    .dueDate(t.getEndDt())
-                    .timeLeft(timeLeftText)
-                    .isCritical(isCritical)
-                    .build());
-        }
-
-        // No fallback — if no deadlines, return empty list
-
-        // 9. Top Projects Tracker (calculating progress percent dynamically)
+        // topProjects list
         List<AdminDashboardResponse.ProjectProgressDto> topProjects = new ArrayList<>();
-        
-        for (ProjectLive prj : projects) {
-            // Find milestones for this project
-            List<Long> msIds = milestones.stream()
-                    .filter(m -> m.getPrjId().equals(prj.getPrjId()))
-                    .map(MilestoneLive::getMId)
-                    .collect(Collectors.toList());
-
-            long totalPrjTasks = 0;
-            long completedPrjTasks = 0;
-
-            if (!msIds.isEmpty()) {
-                List<TaskLive> prjTasks = tasks.stream()
-                        .filter(t -> msIds.contains(t.getMId()))
-                        .collect(Collectors.toList());
-                totalPrjTasks = prjTasks.size();
-                completedPrjTasks = prjTasks.stream()
-                        .filter(t -> "COMPLETED".equalsIgnoreCase(t.getTaskSts()))
-                        .count();
-            }
-
-            double progressPercent = 0.0;
-            if (totalPrjTasks > 0) {
-                progressPercent = Math.round(((double) completedPrjTasks / totalPrjTasks) * 100.0);
-            } else if ("CLOSED".equalsIgnoreCase(prj.getPrjSts())) {
-                progressPercent = 100.0;
-            } else {
-                progressPercent = 0.0; // fallback default of 0.0 instead of 45.0
-            }
-
+        for (JsonNode p : root.path("topProjects")) {
             topProjects.add(AdminDashboardResponse.ProjectProgressDto.builder()
-                    .projectId(prj.getPrjId())
-                    .projectName(prj.getPrjNm())
-                    .projectCode(prj.getPrjCd())
-                    .progressPercent(progressPercent)
+                    .projectId(p.path("projectId").asLong())
+                    .projectName(p.path("projectName").asText())
+                    .projectCode(p.path("projectCode").asText())
+                    .progressPercent(p.path("progressPercent").asDouble())
                     .build());
         }
 
-        // Sort by progress percent descending
-        topProjects.sort((p1, p2) -> Double.compare(p2.getProgressPercent(), p1.getProgressPercent()));
-        
-        // Limit to top 5
-        if (topProjects.size() > 5) {
-            topProjects = topProjects.subList(0, 5);
+        // upcomingDeadlines list
+        List<AdminDashboardResponse.DeadlineDto> upcomingDeadlines = new ArrayList<>();
+        for (JsonNode d : root.path("upcomingDeadlines")) {
+            String dueDateStr = d.path("dueDate").asText(null);
+            LocalDate dueDate = (dueDateStr != null && !dueDateStr.isBlank())
+                    ? LocalDate.parse(dueDateStr) : null;
+            upcomingDeadlines.add(AdminDashboardResponse.DeadlineDto.builder()
+                    .title(d.path("title").asText())
+                    .projectName(d.path("projectName").asText())
+                    .dueDate(dueDate)
+                    .timeLeft(d.path("timeLeft").asText())
+                    .isCritical(d.path("isCritical").asBoolean())
+                    .build());
         }
 
-        // No fallback — if no projects, return empty list
+        // systemActivities list
+        List<AdminDashboardResponse.ActivityDto> systemActivities = new ArrayList<>();
+        for (JsonNode a : root.path("systemActivities")) {
+            systemActivities.add(AdminDashboardResponse.ActivityDto.builder()
+                    .description(a.path("description").asText())
+                    .actor(a.path("actor").asText())
+                    .timestamp(a.path("timestamp").asText())
+                    .build());
+        }
 
         return AdminDashboardResponse.builder()
-                .employeeCount(employeeCount)
-                .departmentCount(departmentCount)
-                .activeProjectsCount(activeProjectsCount)
-                .criticalAlertsCount(criticalAlertsCount)
+                .employeeCount(root.path("employeeCount").asLong())
+                .departmentCount(root.path("departmentCount").asLong())
+                .companyCount(root.path("companyCount").asLong())
+                .plantCount(root.path("plantCount").asLong())
+                .activeProjectsCount(root.path("activeProjectsCount").asLong())
+                .criticalAlertsCount(root.path("criticalAlertsCount").asLong())
                 .projectStatusOverview(projectStatusOverview)
                 .milestoneProgress(milestoneProgress)
                 .taskOverview(taskOverview)
-                .systemActivities(systemActivities)
-                .upcomingDeadlines(upcomingDeadlines)
                 .topProjects(topProjects)
+                .upcomingDeadlines(upcomingDeadlines)
+                .systemActivities(systemActivities)
                 .build();
     }
 }

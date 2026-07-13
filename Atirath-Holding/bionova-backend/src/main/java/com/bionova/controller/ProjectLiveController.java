@@ -4,13 +4,18 @@ import com.bionova.entity.Employee;
 import com.bionova.entity.MilestoneLive;
 import com.bionova.entity.ProjectLive;
 import com.bionova.entity.TaskLive;
+import com.bionova.entity.TaskStatusMaster;
+import com.bionova.entity.ScreenMaster;
 import com.bionova.repository.EmployeeRepository;
 import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
 import com.bionova.repository.RoleBasedEmployeeMappingRepository;
+import com.bionova.repository.RoleBasedAccessControlRepository;
+import com.bionova.repository.ScreenMasterRepository;
 import com.bionova.service.ProjectPromotionService;
 import com.bionova.service.ActivityLogService;
+import com.bionova.service.ProjectLeadLagService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,6 +24,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/project-live")
@@ -31,25 +37,113 @@ public class ProjectLiveController {
     @Autowired private EmployeeRepository               employeeRepository;
     @Autowired private ActivityLogService               activityLogService;
     @Autowired private RoleBasedEmployeeMappingRepository rbacMappingRepository;
+    @Autowired private ProjectLeadLagService            leadLagService;
     @Autowired private com.bionova.repository.ChecklistMasterRepository checklistMasterRepository;
     @Autowired private com.bionova.repository.AttachmentMasterRepository attachmentMasterRepository;
     @Autowired private com.bionova.repository.ProcessConfigRepository processConfigRepository;
     @Autowired private com.bionova.service.ProjectStatusCascadeService projectStatusCascadeService;
+    @Autowired private RoleBasedAccessControlRepository rbacRepository;
+    @Autowired private ScreenMasterRepository screenMasterRepository;
+    @Autowired private com.bionova.repository.ProjectAccessRepository projectAccessRepository;
+    @Autowired private com.bionova.repository.PlantRepository plantRepository;
+    @Autowired private com.bionova.repository.CompanyRepository companyRepository;
 
     /**
-     * Determines if the employee should see ALL projects (PM / Admin view).
-     *
+     * Determines if the employee has access to the Project module.
      * Rules:
-     *  - No RBAC mapping configured yet (full_access mode) → see all projects.
-     *  - RBAC mapping exists → restricted to own assigned projects (user view).
-     *
-     * This means: after RBAC is set up, only employees whose role grants
-     * project-level access (via PAC) will see all projects; others see only theirs.
+     *  - No RBAC mapping configured yet (full_access mode) -> true
+     *  - Admin, Manager, PM, or full_access role -> true
+     *  - Mapped role has view_flg = true for any screen in the "Project" group -> true
      */
-    private boolean isAdminOrManager(Employee employee) {
+    private void enrichProject(ProjectLive prj) {
+        if (prj == null) return;
+        
+        String clientName = "";
+        String location = "";
+        if (prj.getCoyId() != null) {
+            var coy = companyRepository.findById(prj.getCoyId().longValue()).orElse(null);
+            if (coy != null) {
+                clientName = coy.getCoyNm();
+                location = coy.getCtVlg();
+            }
+        }
+        if (clientName == null || clientName.isEmpty()) {
+            List<com.bionova.entity.CompanyMaster> allCompanies = companyRepository.findAll();
+            if (!allCompanies.isEmpty()) {
+                clientName = allCompanies.get(0).getCoyNm();
+                location = allCompanies.get(0).getCtVlg();
+            } else {
+                clientName = "";
+                location = "";
+            }
+        }
+        prj.setClientName(clientName);
+
+        String plantName = "";
+        if (prj.getPltId() != null) {
+            var plt = plantRepository.findById(prj.getPltId().longValue()).orElse(null);
+            if (plt != null) {
+                plantName = plt.getPltNm();
+            }
+        }
+        if (plantName == null || plantName.isEmpty()) {
+            List<com.bionova.entity.PlantMaster> allPlants = plantRepository.findAll();
+            if (!allPlants.isEmpty()) {
+                plantName = allPlants.get(0).getPltNm();
+            } else {
+                plantName = "";
+            }
+        }
+        prj.setPlantName(plantName);
+        prj.setLocation(location);
+    }
+
+    private void enrichProjects(List<ProjectLive> projects) {
+        if (projects == null) return;
+        for (ProjectLive prj : projects) {
+            enrichProject(prj);
+        }
+    }
+
+    private boolean hasProjectModuleAccess(Employee employee) {
         if (employee == null) return false;
-        // If no RBAC mapping → still in full_access mode → treat as manager (see all)
-        return rbacMappingRepository.findByEmpId(employee.getEmpId()).isEmpty();
+        
+        var mappings = rbacMappingRepository.findByEmpId(employee.getEmpId());
+        if (mappings.isEmpty()) {
+            return true;
+        }
+        
+        for (var mapping : mappings) {
+            var rbacs = rbacRepository.findByRoleId(mapping.getRoleId());
+            if (!rbacs.isEmpty()) {
+                String roleNm = rbacs.get(0).getRoleNm();
+                if (roleNm != null) {
+                    String lowerRole = roleNm.toLowerCase();
+                    if (lowerRole.contains("admin") || lowerRole.contains("manager") || lowerRole.contains("pm") || lowerRole.contains("full_access")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        List<ScreenMaster> screens = screenMasterRepository.findAll();
+        Set<Integer> projectScreenIds = new java.util.HashSet<>();
+        for (ScreenMaster sm : screens) {
+            if ("Project".equalsIgnoreCase(sm.getGroupNm())) {
+                projectScreenIds.add(sm.getScreenId());
+            }
+        }
+        
+        for (var mapping : mappings) {
+            var rbacs = rbacRepository.findByRoleId(mapping.getRoleId());
+            for (var rbac : rbacs) {
+                if (projectScreenIds.contains(rbac.getScreenId()) && Boolean.TRUE.equals(rbac.getViewFlg())) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     // ── GET ────────────────────────────────────────────────────────────────
@@ -57,15 +151,21 @@ public class ProjectLiveController {
     @GetMapping
     public List<ProjectLive> getAll() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return employeeRepository.findByEmail(email)
+        List<ProjectLive> list = employeeRepository.findByEmail(email)
                 .map(employee -> {
-                    if (isAdminOrManager(employee)) {
+                    if (hasProjectModuleAccess(employee)) {
                         return projectLiveRepository.findAll();
                     } else {
-                        return projectLiveRepository.findProjectsByEmpId(employee.getEmpId());
+                        List<ProjectLive> projects = projectLiveRepository.findProjectsByEmpId(employee.getEmpId());
+                        List<ProjectLive> accessedProjects = projectAccessRepository.findProjectsByEmpId(employee.getEmpId());
+                        Set<ProjectLive> allProjects = new java.util.LinkedHashSet<>(projects);
+                        allProjects.addAll(accessedProjects);
+                        return new java.util.ArrayList<>(allProjects);
                     }
                 })
                 .orElse(List.of());
+        enrichProjects(list);
+        return list;
     }
 
     @GetMapping("/by-employee/{empId}")
@@ -76,9 +176,11 @@ public class ProjectLiveController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Unauthorized"));
         }
 
-        if (isAdminOrManager(employee) || 
+        if (hasProjectModuleAccess(employee) || 
             employee.getEmpId().equals(empId)) {
-            return ResponseEntity.ok(projectLiveRepository.findProjectsByEmpId(empId));
+            List<ProjectLive> list = projectLiveRepository.findProjectsByEmpId(empId);
+            enrichProjects(list);
+            return ResponseEntity.ok(list);
         } else {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied"));
         }
@@ -87,7 +189,10 @@ public class ProjectLiveController {
     @GetMapping("/{id}")
     public ResponseEntity<ProjectLive> getById(@PathVariable Long id) {
         return projectLiveRepository.findById(id)
-                .map(ResponseEntity::ok)
+                .map(prj -> {
+                    enrichProject(prj);
+                    return ResponseEntity.ok(prj);
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 
@@ -96,24 +201,116 @@ public class ProjectLiveController {
         return milestoneLiveRepository.findByPrjId(id);
     }
 
-    @GetMapping("/milestones/{mId}/tasks")
-    public List<TaskLive> getTasks(@PathVariable Long mId) {
-        return taskLiveRepository.findByMilestoneId(mId);
+    private void populateReviewerAndApprover(TaskLive task) {
+        if (task == null) return;
+        List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
+        for (com.bionova.entity.ProcessConfig pc : configs) {
+            if (pc.getOrdrId() == 1) {
+                task.setReviewer(pc.getEmpId());
+            } else if (pc.getOrdrId() == 2) {
+                task.setApprover(pc.getEmpId());
+            }
+        }
     }
 
-    // ── PROMOTE: Draft → Live ──────────────────────────────────────────────
+    private void populateReviewerAndApprover(List<TaskLive> tasks) {
+        if (tasks == null) return;
+        for (TaskLive task : tasks) {
+            populateReviewerAndApprover(task);
+        }
+    }
+
+    @GetMapping("/milestones/{mId}/tasks")
+    public List<TaskLive> getTasks(@PathVariable Long mId) {
+        List<TaskLive> tasks = taskLiveRepository.findByMilestoneId(mId);
+        populateReviewerAndApprover(tasks);
+        return tasks;
+    }
+
+    // ── Lead / Lag / On Time ───────────────────────────────────────────────
+
+    /**
+     * GET /api/project-live/{id}/lead-lag-status
+     * Full Lead/Lag detail for a single project:
+     *   - expectedProgress, actualProgress, variance
+     *   - leadLagStatus (LEAD / ON_TIME / LAG)
+     *   - daysVariance, leadLagColor, leadLagLabel
+     */
+    @GetMapping("/{id}/lead-lag-status")
+    public ResponseEntity<?> getLeadLagStatus(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(leadLagService.getLeadLagDetail(id));
+        } catch (RuntimeException e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    /**
+     * GET /api/project-live/lead-lag-summary
+     * Summary across ALL live projects:
+     *   - leadCount, onTimeCount, lagCount, totalLive
+     *   - projects[]: per-project compact status rows
+     * Used by Project Dashboard overview cards.
+     */
+    @GetMapping("/lead-lag-summary")
+    public ResponseEntity<?> getLeadLagSummary() {
+        return ResponseEntity.ok(leadLagService.getAllProjectsLeadLagSummary());
+    }
+
+    /**
+     * GET /api/project-live/check-ready/{drftPrjId}
+     *
+     * Pre-flight check before promoting a draft to Live.
+     * Returns:
+     *   { "ready": true }                         -- safe to promote
+     *   { "ready": false, "warnings": [...] }     -- show warnings to user
+     */
+    @GetMapping("/check-ready/{drftPrjId}")
+    public ResponseEntity<?> checkReady(@PathVariable Long drftPrjId) {
+        java.util.List<String> warnings = new java.util.ArrayList<>();
+
+        // Already live?
+        if (promotionService.isAlreadyLive(drftPrjId)) {
+            warnings.add("This project has already been promoted to Live.");
+            return ResponseEntity.ok(java.util.Map.of("ready", false, "warnings", warnings));
+        }
+
+        // Count milestones
+        long milestoneCount = promotionService.countMilestones(drftPrjId);
+        if (milestoneCount == 0) {
+            warnings.add("No milestones found. Please add at least one milestone before going live.");
+        }
+
+        // Count tasks (only meaningful if milestones exist)
+        if (milestoneCount > 0) {
+            long taskCount = promotionService.countTasks(drftPrjId);
+            if (taskCount == 0) {
+                warnings.add("No tasks found. Please add at least one task to a milestone before going live.");
+            }
+        }
+
+        boolean ready = warnings.isEmpty();
+        java.util.Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("ready", ready);
+        if (!ready) {
+            response.put("warnings", warnings);
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    // ── PROMOTE: Draft -> Live ─────────────────────────────────────────────
 
     /**
      * POST /api/project-live/promote/{drftPrjId}
      *
      * Body (JSON):
      * {
-     *   "excludeSat": false,       -- exclude Saturdays
-     *   "excludeSun": true,        -- exclude Sundays
-     *   "includeMandatory": true,  -- include public/national holidays
-     *   "coyHolidays": true,       -- include company-specific holidays
-     *   "pltHolidays": true,       -- include plant-specific holidays
-     *   "extHolidays": true        -- include external-specific holidays
+     *   "excludeSat": false,
+     *   "excludeSun": true,
+     *   "includeMandatory": true,
+     *   "coyHolidays": true,
+     *   "pltHolidays": true,
+     *   "extHolidays": true
      * }
      */
     @PostMapping("/promote/{drftPrjId}")
@@ -185,11 +382,11 @@ public class ProjectLiveController {
                 .orElseThrow(() -> new RuntimeException("Task not found: " + taskId));
 
         String newStatus = body.get("taskSts");
-        if (!List.of("OPEN","WIP","SUBMIT_REVIEW","UNDER_REVIEW","COMPLETED","REWORK").contains(newStatus)) {
+        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","COMPLETED","REASSIGN","REWORK","OVER_DUE").contains(newStatus)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid status. Allowed: OPEN, WIP, SUBMIT_REVIEW, UNDER_REVIEW, COMPLETED, REWORK"));
+                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE"));
         }
-        task.setTaskSts(newStatus);
+        task.setTaskSts(TaskStatusMaster.getByName(newStatus));
         TaskLive saved = taskLiveRepository.save(task);
         projectStatusCascadeService.cascadeStatusFromTask(taskId);
         return ResponseEntity.ok(saved);

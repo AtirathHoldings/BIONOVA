@@ -144,8 +144,8 @@ public class MilestoneDraftController {
     @PostMapping
     public ResponseEntity<?> create(@RequestBody MilestoneDraft milestone) {
         if (milestone.getMlstnCd() != null && !milestone.getMlstnCd().trim().isEmpty()) {
-            if (milestoneDraftRepository.existsByMlstnCd(milestone.getMlstnCd())) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists."));
+            if (milestoneDraftRepository.existsByMlstnCdAndDrftPrjId(milestone.getMlstnCd(), milestone.getDrftPrjId())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists in this project."));
             }
         }
 
@@ -196,8 +196,9 @@ public class MilestoneDraftController {
                 .orElseThrow(() -> new RuntimeException("Milestone not found: " + id));
 
         if (details.getMlstnCd() != null && !details.getMlstnCd().trim().isEmpty()) {
-            if (milestoneDraftRepository.existsByMlstnCdAndDrftMIdNot(details.getMlstnCd(), id)) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists."));
+            Long prjId = details.getDrftPrjId() != null ? details.getDrftPrjId() : milestone.getDrftPrjId();
+            if (milestoneDraftRepository.existsByMlstnCdAndDrftPrjIdAndDrftMIdNot(details.getMlstnCd(), prjId, id)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists in this project."));
             }
             milestone.setMlstnCd(details.getMlstnCd());
         }
@@ -229,7 +230,6 @@ public class MilestoneDraftController {
             milestone.setTentEndDt(details.getTentEndDt());
         }
 
-        milestone.setChkId(details.getChkId());
         milestone.setFileUrl(details.getFileUrl());
         milestone.setAddlRem(details.getAddlRem());
         milestone.setSts(details.getSts());

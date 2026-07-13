@@ -53,22 +53,8 @@ public class CalendarService {
 
         List<CalendarMaster> allHolidays = new ArrayList<>();
 
-        // 1. Public / national holidays (no scope — applies to everyone)
         if (includeMandatory) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findMandatoryHolidaysBetween(startDate, endDate));
-        }
-
-        // 2. Company-specific holidays
-        if (coyId != null) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findCompanyHolidaysBetween(coyId, startDate, endDate));
-        }
-
-        // 3. Plant-specific holidays  ← BUG FIX: was missing when coyId was also set
-        if (pltId != null) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findPlantHolidaysBetween(pltId, startDate, endDate));
+            allHolidays.addAll(calendarMasterRepository.findByCalDtBetween(startDate, endDate));
         }
 
         // Collect unique holiday dates
@@ -112,31 +98,7 @@ public class CalendarService {
         List<CalendarMaster> allHolidays = new ArrayList<>();
 
         if (includeMandatory) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findMandatoryHolidaysBetween(startDate, endDate));
-        }
-
-        if (coyId != null) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findCompanyHolidaysBetween(coyId, startDate, endDate));
-        }
-
-        if (pltId != null) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findPlantHolidaysBetween(pltId, startDate, endDate));
-        }
-
-        // External calendar with company fallback
-        if (includeExternal && coyId != null) {
-            List<CalendarMaster> externalHols =
-                    calendarMasterRepository.findExternalHolidaysBetween(coyId, startDate, endDate);
-            if (!externalHols.isEmpty()) {
-                allHolidays.addAll(externalHols);
-            } else {
-                // Fallback: use company calendar for external (as per image note)
-                allHolidays.addAll(
-                        calendarMasterRepository.findCompanyHolidaysBetween(coyId, startDate, endDate));
-            }
+            allHolidays.addAll(calendarMasterRepository.findByCalDtBetween(startDate, endDate));
         }
 
         Set<LocalDate> holidayDates = allHolidays.stream()
@@ -209,29 +171,7 @@ public class CalendarService {
         List<CalendarMaster> allHolidays = new ArrayList<>();
 
         if (includeMandatory) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findMandatoryHolidaysBetween(startDate, estimatedMaxEnd));
-        }
-
-        if (coyId != null) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findCompanyHolidaysBetween(coyId, startDate, estimatedMaxEnd));
-        }
-
-        if (pltId != null) {
-            allHolidays.addAll(
-                    calendarMasterRepository.findPlantHolidaysBetween(pltId, startDate, estimatedMaxEnd));
-        }
-
-        if (includeExternal && coyId != null) {
-            List<CalendarMaster> externalHols =
-                    calendarMasterRepository.findExternalHolidaysBetween(coyId, startDate, estimatedMaxEnd);
-            if (!externalHols.isEmpty()) {
-                allHolidays.addAll(externalHols);
-            } else {
-                allHolidays.addAll(
-                        calendarMasterRepository.findCompanyHolidaysBetween(coyId, startDate, estimatedMaxEnd));
-            }
+            allHolidays.addAll(calendarMasterRepository.findByCalDtBetween(startDate, estimatedMaxEnd));
         }
 
         Set<LocalDate> holidayDates = allHolidays.stream()

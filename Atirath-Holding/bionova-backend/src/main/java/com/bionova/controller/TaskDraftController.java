@@ -3,6 +3,7 @@ package com.bionova.controller;
 import com.bionova.entity.MilestoneDraft;
 import com.bionova.entity.ProjectDraft;
 import com.bionova.entity.TaskDraft;
+import com.bionova.entity.TaskStatusMaster;
 import com.bionova.repository.MilestoneDraftRepository;
 import com.bionova.repository.ProjectDraftRepository;
 import com.bionova.repository.TaskDraftRepository;
@@ -46,16 +47,16 @@ public class TaskDraftController {
 
     @PostMapping
     public ResponseEntity<?> create(@RequestBody TaskDraft task) {
-        if (task.getTaskCd() != null && !task.getTaskCd().trim().isEmpty()) {
-            if (taskDraftRepository.existsByTaskCd(task.getTaskCd())) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Task code already exists."));
-            }
-        }
-
         MilestoneDraft milestone = milestoneDraftRepository.findById(task.getDrftMId())
                 .orElseThrow(() -> new RuntimeException("Milestone not found with ID: " + task.getDrftMId()));
 
-        task.setTaskSts("DRAFT");
+        if (task.getTaskCd() != null && !task.getTaskCd().trim().isEmpty()) {
+            if (taskDraftRepository.existsByTaskCdAndProject(task.getTaskCd(), milestone.getDrftPrjId())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Task code already exists in this project."));
+            }
+        }
+
+        task.setTaskSts(TaskStatusMaster.DRAFT);
         if (task.getSts() == null) {
             task.setSts(true);
         }
@@ -110,8 +111,11 @@ public class TaskDraftController {
                 .orElseThrow(() -> new RuntimeException("Task not found: " + id));
 
         if (details.getTaskCd() != null && !details.getTaskCd().trim().isEmpty()) {
-            if (taskDraftRepository.existsByTaskCdAndDrftTaskIdNot(details.getTaskCd(), id)) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Task code already exists."));
+            Long mId = details.getDrftMId() != null ? details.getDrftMId() : task.getDrftMId();
+            MilestoneDraft milestone = milestoneDraftRepository.findById(mId)
+                    .orElseThrow(() -> new RuntimeException("Milestone not found: " + mId));
+            if (taskDraftRepository.existsByTaskCdAndProjectAndDrftTaskIdNot(details.getTaskCd(), milestone.getDrftPrjId(), id)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Task code already exists in this project."));
             }
             task.setTaskCd(details.getTaskCd());
         }
@@ -147,7 +151,6 @@ public class TaskDraftController {
         }
 
         task.setChkFlg(details.getChkFlg());
-        task.setChkId(details.getChkId());
         task.setFilePath(details.getFilePath());
         task.setNoteTxt(details.getNoteTxt());
         task.setPrcsFlg(details.getPrcsFlg());

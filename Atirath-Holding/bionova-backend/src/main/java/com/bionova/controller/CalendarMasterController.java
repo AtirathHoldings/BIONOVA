@@ -30,33 +30,8 @@ public class CalendarMasterController {
         return calendarMasterRepository.findAll();
     }
 
-    /** GET holidays by company */
-    @GetMapping("/by-company/{coyId}")
-    public List<CalendarMaster> getByCompany(@PathVariable Integer coyId) {
-        return calendarMasterRepository.findByCoyId(coyId);
-    }
 
-    /** GET holidays by company + plant */
-    @GetMapping("/by-company/{coyId}/plant/{pltId}")
-    public List<CalendarMaster> getByCompanyAndPlant(
-            @PathVariable Integer coyId,
-            @PathVariable Integer pltId) {
-        return calendarMasterRepository.findByCoyIdAndPltId(coyId, pltId);
-    }
 
-    /** GET holidays by year */
-    @GetMapping("/by-year/{year}")
-    public List<CalendarMaster> getByYear(@PathVariable Integer year) {
-        return calendarMasterRepository.findByCalYr(year);
-    }
-
-    /** GET holidays by company + year */
-    @GetMapping("/by-company/{coyId}/year/{year}")
-    public List<CalendarMaster> getByCompanyAndYear(
-            @PathVariable Integer coyId,
-            @PathVariable Integer year) {
-        return calendarMasterRepository.findByCoyIdAndCalYr(coyId, year);
-    }
 
     /**
      * GET working days preview:
@@ -97,21 +72,58 @@ public class CalendarMasterController {
     /** POST – add a holiday (auto-fills cal_yr from cal_dt) */
     @PostMapping
     public ResponseEntity<?> create(@RequestBody CalendarMaster holiday) {
-        if (holiday.getCalDt() != null && holiday.getCalYr() == null) {
-            holiday.setCalYr(holiday.getCalDt().getYear());
-        }
-
-        // Check for duplicate holiday on same date and scope
         if (holiday.getCalDt() != null) {
+            LocalDate today = LocalDate.now();
+            int currentYear = today.getYear();
+            int holidayYear = holiday.getCalDt().getYear();
+            
+            if (holidayYear < currentYear) {
+                return ResponseEntity.badRequest().body("Cannot save holidays for past years.");
+            }
+            if (holidayYear > currentYear) {
+                return ResponseEntity.badRequest().body("Holidays can only be saved up to December of the current year.");
+            }
+            
+            // Check for duplicate holiday on same date
             List<CalendarMaster> existing = calendarMasterRepository.findByCalDt(holiday.getCalDt());
             for (CalendarMaster ext : existing) {
                 if (isDuplicateHoliday(ext, holiday)) {
-                    return ResponseEntity.badRequest().body("A holiday with the same date and scope already exists.");
+                    return ResponseEntity.badRequest().body("A holiday with the same date already exists.");
                 }
             }
         }
 
-        return ResponseEntity.ok(calendarMasterRepository.save(holiday));
+        CalendarMaster savedHoliday = calendarMasterRepository.save(holiday);
+
+        // If isRegular is true, create for next year automatically
+        if (Boolean.TRUE.equals(holiday.getIsRegular()) && holiday.getCalDt() != null) {
+            int currentYear = LocalDate.now().getYear();
+            int nextYear = holiday.getCalDt().getYear() + 1;
+            
+            if (nextYear <= currentYear + 1) {
+                CalendarMaster nextYearHoliday = new CalendarMaster();
+                nextYearHoliday.setCalDt(holiday.getCalDt().plusYears(1));
+
+                nextYearHoliday.setHolidayNm(holiday.getHolidayNm());
+                nextYearHoliday.setHolTyp(holiday.getHolTyp());
+                nextYearHoliday.setAddedBy(holiday.getAddedBy());
+                nextYearHoliday.setIsRegular(holiday.getIsRegular());
+                
+                boolean isDuplicate = false;
+                List<CalendarMaster> existingNextYear = calendarMasterRepository.findByCalDt(nextYearHoliday.getCalDt());
+                for (CalendarMaster ext : existingNextYear) {
+                    if (isDuplicateHoliday(ext, nextYearHoliday)) {
+                        isDuplicate = true;
+                        break;
+                    }
+                }
+                if (!isDuplicate) {
+                    calendarMasterRepository.save(nextYearHoliday);
+                }
+            }
+        }
+
+        return ResponseEntity.ok(savedHoliday);
     }
 
     /** PUT – update holiday */
@@ -125,25 +137,31 @@ public class CalendarMasterController {
 
         // Check for duplicate holiday on same date and scope, excluding self
         if (details.getCalDt() != null) {
+            LocalDate today = LocalDate.now();
+            int currentYear = today.getYear();
+            int holidayYear = details.getCalDt().getYear();
+            
+            if (holidayYear < currentYear) {
+                return ResponseEntity.badRequest().body("Cannot save holidays for past years.");
+            }
+            if (holidayYear > currentYear) {
+                return ResponseEntity.badRequest().body("Holidays can only be saved up to December of the current year.");
+            }
+
             List<CalendarMaster> existing = calendarMasterRepository.findByCalDt(details.getCalDt());
             for (CalendarMaster ext : existing) {
                 if (!ext.getClId().equals(id) && isDuplicateHoliday(ext, details)) {
-                    return ResponseEntity.badRequest().body("A holiday with the same date and scope already exists.");
+                    return ResponseEntity.badRequest().body("A holiday with the same date already exists.");
                 }
             }
         }
 
         holiday.setCalDt(details.getCalDt());
         holiday.setHolidayNm(details.getHolidayNm());
-        holiday.setCoyId(details.getCoyId());
-        holiday.setPltId(details.getPltId());
-        holiday.setCalType(details.getCalType());
         holiday.setHolTyp(details.getHolTyp());
         holiday.setAddedBy(details.getAddedBy());
+        holiday.setIsRegular(details.getIsRegular());
 
-        if (details.getCalDt() != null) {
-            holiday.setCalYr(details.getCalDt().getYear());
-        }
 
         return ResponseEntity.ok(calendarMasterRepository.save(holiday));
     }
@@ -152,24 +170,6 @@ public class CalendarMasterController {
         String holTyp1 = h1.getHolTyp() != null ? h1.getHolTyp() : "";
         String holTyp2 = h2.getHolTyp() != null ? h2.getHolTyp() : "";
         if (!holTyp1.equals(holTyp2)) {
-            return false;
-        }
-
-        String calType1 = h1.getCalType() != null ? h1.getCalType() : "";
-        String calType2 = h2.getCalType() != null ? h2.getCalType() : "";
-        if (!calType1.equals(calType2)) {
-            return false;
-        }
-
-        Integer coyId1 = h1.getCoyId() != null ? h1.getCoyId() : 0;
-        Integer coyId2 = h2.getCoyId() != null ? h2.getCoyId() : 0;
-        if (!coyId1.equals(coyId2)) {
-            return false;
-        }
-
-        Integer pltId1 = h1.getPltId() != null ? h1.getPltId() : 0;
-        Integer pltId2 = h2.getPltId() != null ? h2.getPltId() : 0;
-        if (!pltId1.equals(pltId2)) {
             return false;
         }
 

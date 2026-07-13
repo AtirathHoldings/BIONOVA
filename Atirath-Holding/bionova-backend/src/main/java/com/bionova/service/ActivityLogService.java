@@ -14,11 +14,15 @@ public class ActivityLogService {
     private ActivityLogRepository activityLogRepository;
 
     public void logStatusChange(String entityTyp, Long entityId, String statusFrom, String statusTo) {
+        logActivity(entityTyp, entityId, statusFrom, statusTo);
+    }
+
+    public void logActivity(String entityTyp, Long entityId, String actionFrom, String actionTo) {
         ActivityLog log = new ActivityLog();
         log.setEntityTyp(entityTyp);
         log.setEntityId(entityId);
-        log.setStatusFrom(statusFrom != null ? statusFrom : "N/A");
-        log.setStatusTo(statusTo);
+        log.setStatusFrom(actionFrom != null ? actionFrom : "N/A");
+        log.setStatusTo(actionTo != null ? actionTo : "N/A");
         log.setLogDt(LocalDateTime.now());
         activityLogRepository.save(log);
     }

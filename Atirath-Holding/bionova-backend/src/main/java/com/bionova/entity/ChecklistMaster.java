@@ -28,8 +28,11 @@ public class ChecklistMaster {
     private Integer chkId;
 
     /** FK to task (draft task_id or live task_id — distinguished by isLive flag) */
-    @Column(name = "task_id", nullable = false)
+    @Column(name = "task_id")
     private Long taskId;
+
+    @Column(name = "emp_task_id")
+    private Long empTaskId;
 
     /** true = this belongs to the live task; false = draft task */
     @Column(name = "is_live", nullable = false)

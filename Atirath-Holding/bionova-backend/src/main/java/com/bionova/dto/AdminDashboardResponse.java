@@ -16,6 +16,8 @@ import java.util.Map;
 public class AdminDashboardResponse {
     private long employeeCount;
     private long departmentCount;
+    private long companyCount;
+    private long plantCount;
     private long activeProjectsCount;
     private long criticalAlertsCount;
     private Map<String, Long> projectStatusOverview;

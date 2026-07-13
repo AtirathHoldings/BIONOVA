@@ -2,17 +2,27 @@ package com.bionova.controller;
 
 import com.bionova.dto.UserDashboardResponseDto;
 import com.bionova.dto.UserDashboardResponseDto.*;
-import com.bionova.entity.*;
-import com.bionova.repository.*;
+import com.bionova.entity.Employee;
+import com.bionova.repository.EmployeeRepository;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
+/**
+ * REST controller for User Dashboard.
+ * Maps data returned by get_user_dashboard(p_emp_id) stored procedure.
+ */
 @RestController
 @RequestMapping("/api/user-dashboard")
 public class UserDashboardController {
@@ -21,25 +31,12 @@ public class UserDashboardController {
     private EmployeeRepository employeeRepository;
 
     @Autowired
-    private TaskLiveRepository taskLiveRepository;
+    private com.bionova.service.ProjectLeadLagService leadLagService;
 
-    @Autowired
-    private MilestoneLiveRepository milestoneLiveRepository;
+    @PersistenceContext
+    private EntityManager entityManager;
 
-    @Autowired
-    private ProjectLiveRepository projectLiveRepository;
-
-    @Autowired
-    private CompanyRepository companyRepository;
-
-    @Autowired
-    private PlantRepository plantRepository;
-
-    @Autowired
-    private DepartmentRepository departmentRepository;
-
-    @Autowired
-    private com.bionova.repository.DesignationRepository designationRepository;
+    private final ObjectMapper objectMapper = new ObjectMapper();
 
     @GetMapping
     public ResponseEntity<?> getDashboardData() {
@@ -50,192 +47,218 @@ public class UserDashboardController {
             return ResponseEntity.notFound().build();
         }
 
-        // 1. Profile Details
-        String fullName = employee.getFirstName() + " " + (employee.getLastName() != null ? employee.getLastName() : "");
-        String role = getRoleName(employee.getDesigId());
-        String department = "Projects Department";
-        if (employee.getDeptId() != null) {
-            department = departmentRepository.findById(employee.getDeptId().longValue())
-                    .map(DepartmentMaster::getDeptNm)
-                    .orElse("Projects Department");
+        Object result = entityManager
+                .createNativeQuery("SELECT get_user_dashboard(:empId)")
+                .setParameter("empId", employee.getEmpId())
+                .getSingleResult();
+
+        try {
+            JsonNode root = objectMapper.readTree(result.toString());
+            return ResponseEntity.ok(mapToResponse(root));
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse get_user_dashboard() response", e);
         }
+    }
 
-        // 2. Fetch User Tasks
-        List<TaskLive> allMyTasks = taskLiveRepository.findByEmpId(employee.getEmpId());
-        LocalDate today = LocalDate.now();
+    private UserDashboardResponseDto mapToResponse(JsonNode root) {
+        JsonNode profile = root.path("profile");
+        JsonNode summary = root.path("summary");
+        JsonNode counts = root.path("taskStatusCounts");
 
-        // 3. Counts
-        int myTasksCount = allMyTasks.size();
-        int completedTasksCount = (int) allMyTasks.stream()
-                .filter(t -> "COMPLETED".equalsIgnoreCase(t.getTaskSts()))
-                .count();
-
-        int overdueTasksCount = (int) allMyTasks.stream()
-                .filter(t -> !"COMPLETED".equalsIgnoreCase(t.getTaskSts()) && t.getEndDt() != null && t.getEndDt().isBefore(today))
-                .count();
-
-        int dueTodayCount = (int) allMyTasks.stream()
-                .filter(t -> !"COMPLETED".equalsIgnoreCase(t.getTaskSts()) && t.getEndDt() != null && t.getEndDt().isEqual(today))
-                .count();
-
-        // Fetch User Projects
-        List<ProjectLive> myProjectsList = projectLiveRepository.findProjectsByEmpId(employee.getEmpId());
-        int myProjectsCount = myProjectsList.size();
-
-        // 4. To-Do List (Pending/Due Today/Overdue tasks, limit 5)
-        List<TodoTaskDto> todoList = allMyTasks.stream()
-                .filter(t -> !"COMPLETED".equalsIgnoreCase(t.getTaskSts()))
-                .filter(t -> t.getStDt() != null && !t.getStDt().isAfter(today))
-                .sorted(Comparator.comparing(TaskLive::getEndDt, Comparator.nullsLast(Comparator.naturalOrder())))
-                .limit(5)
-                .map(t -> {
-                    String prjCodeName = "";
-                    if (t.getMId() != null) {
-                        MilestoneLive ms = milestoneLiveRepository.findById(t.getMId()).orElse(null);
-                        if (ms != null) {
-                            ProjectLive prj = projectLiveRepository.findById(ms.getPrjId()).orElse(null);
-                            if (prj != null) {
-                                prjCodeName = prj.getPrjCd() + " • " + ms.getMlstnTtl();
-                            }
-                        }
-                    }
-                    boolean isOverdue = t.getEndDt() != null && t.getEndDt().isBefore(today);
-                    boolean isDueToday = t.getEndDt() != null && t.getEndDt().isEqual(today);
-                    String priority = calculatePriority(t);
-                    return new TodoTaskDto(t.getTaskId(), t.getTaskNm(), prjCodeName, priority, t.getEndDt(), isOverdue, isDueToday);
-                })
-                .collect(Collectors.toList());
-
-        // 5. Upcoming Tasks (Active tasks due in the future, limit 5)
-        List<UpcomingTaskDto> upcomingTasks = allMyTasks.stream()
-                .filter(t -> !"COMPLETED".equalsIgnoreCase(t.getTaskSts()))
-                .filter(t -> t.getStDt() != null && t.getStDt().isAfter(today))
-                .sorted(Comparator.comparing(TaskLive::getEndDt))
-                .limit(5)
-                .map(t -> {
-                    String prjCode = "";
-                    if (t.getMId() != null) {
-                        MilestoneLive ms = milestoneLiveRepository.findById(t.getMId()).orElse(null);
-                        if (ms != null) {
-                            ProjectLive prj = projectLiveRepository.findById(ms.getPrjId()).orElse(null);
-                            if (prj != null) {
-                                prjCode = prj.getPrjCd();
-                            }
-                        }
-                    }
-                    String priority = calculatePriority(t);
-                    return new UpcomingTaskDto(t.getTaskId(), t.getTaskNm(), prjCode, t.getEndDt(), priority);
-                })
-                .collect(Collectors.toList());
-
-        // 6. User Projects mapping
-        List<UserProjectDto> myProjectsDtos = new ArrayList<>();
-        for (ProjectLive prj : myProjectsList) {
-            String clientName = "Atirath Bio Energy Pvt. Ltd.";
-            if (prj.getCoyId() != null) {
-                clientName = companyRepository.findById(prj.getCoyId().longValue())
-                        .map(CompanyMaster::getCoyNm)
-                        .orElse("Atirath Bio Energy Pvt. Ltd.");
-            }
-
-            String plantName = "Nalgonda Plant";
-            if (prj.getPltId() != null) {
-                plantName = plantRepository.findById(prj.getPltId().longValue())
-                        .map(PlantMaster::getPltNm)
-                        .orElse("Nalgonda Plant");
-            }
-
-            // Calculate progress of this project's tasks assigned to this employee
-            List<TaskLive> prjTasks = allMyTasks.stream()
-                    .filter(t -> {
-                        if (t.getMId() == null) return false;
-                        return milestoneLiveRepository.findById(t.getMId())
-                                .map(ms -> prj.getPrjId().equals(ms.getPrjId()))
-                                .orElse(false);
-                    })
-                    .collect(Collectors.toList());
-
-            int totalPrjTasks = prjTasks.size();
-            int completedPrjTasks = (int) prjTasks.stream().filter(t -> "COMPLETED".equalsIgnoreCase(t.getTaskSts())).count();
-            double progress = totalPrjTasks > 0 ? Math.round(((double) completedPrjTasks / totalPrjTasks) * 100.0) : 0.0;
-
-            myProjectsDtos.add(new UserProjectDto(
-                    prj.getPrjId(),
-                    prj.getPrjNm(),
-                    prj.getPrjCd(),
-                    clientName,
-                    plantName,
-                    role,
-                    progress,
-                    totalPrjTasks,
-                    totalPrjTasks - completedPrjTasks,
-                    "In Progress"
+        // 1. To-Do List Mapping
+        List<TodoTaskDto> todoList = new ArrayList<>();
+        for (JsonNode t : root.path("todoList")) {
+            todoList.add(new TodoTaskDto(
+                    t.path("taskId").asLong(),
+                    t.path("taskNm").asText(),
+                    t.path("project").asText("Internal"),
+                    t.path("priority").asText("Medium"),
+                    parseDate(t.path("endDt").asText(null)),
+                    t.path("status").asText("Open"),
+                    t.path("isOverdue").asBoolean(),
+                    t.path("isDueToday").asBoolean(),
+                    t.path("badge").asText("Executor"),
+                    mapEmployees(t.path("employees"))
             ));
         }
 
-        // 7. Task Status Distribution (Donut Chart)
+        // 2. Upcoming Tasks Mapping
+        List<UpcomingTaskDto> upcomingTasks = new ArrayList<>();
+        for (JsonNode t : root.path("upcomingTasks")) {
+            upcomingTasks.add(new UpcomingTaskDto(
+                    t.path("taskId").asLong(),
+                    t.path("taskNm").asText(),
+                    t.path("prjCd").asText("Internal"),
+                    parseDate(t.path("stDt").asText(null)),
+                    parseDate(t.path("endDt").asText(null)),
+                    t.path("durationDays").asInt(0),
+                    t.path("priority").asText("Medium"),
+                    mapEmployees(t.path("employees"))
+            ));
+        }
+
+        // 3. My Projects Mapping
+        List<UserProjectDto> myProjects = new ArrayList<>();
+        for (JsonNode p : root.path("myProjects")) {
+            Long projectId = p.path("projectId").asLong(0);
+
+            // Fetch Lead/Lag status for this project
+            String leadLagStatus = "ON_TIME";
+            String leadLagLabel  = "On Time";
+            String leadLagColor  = "#f59e0b";
+            int    daysVariance  = 0;
+            if (projectId > 0) {
+                try {
+                    java.util.Map<String, Object> ll = leadLagService.getLeadLagDetail(projectId);
+                    leadLagStatus = (String) ll.getOrDefault("leadLagStatus", "ON_TIME");
+                    leadLagLabel  = (String) ll.getOrDefault("leadLagLabel",  "On Time");
+                    leadLagColor  = (String) ll.getOrDefault("leadLagColor",  "#f59e0b");
+                    Object dv = ll.get("daysVariance");
+                    if (dv instanceof Number n) daysVariance = n.intValue();
+                } catch (Exception ignored) { /* project not live yet */ }
+            }
+
+            myProjects.add(new UserProjectDto(
+                    projectId,
+                    p.path("projectName").asText(),
+                    p.path("projectCode").asText(),
+                    p.path("clientName").asText(""),
+                    p.path("plantName").asText(""),
+                    p.path("location").asText(""),
+                    p.path("role").asText(profile.path("role").asText("Site Engineer")),
+                    p.path("progress").asDouble(),
+                    p.path("tasksAssigned").asInt(),
+                    p.path("openTasks").asInt(),
+                    p.path("status").asText("In Progress"),
+                    p.path("logo").asText(null),
+                    parseDate(p.path("dueDate").asText(null)),
+                    leadLagStatus,
+                    leadLagLabel,
+                    leadLagColor,
+                    daysVariance
+            ));
+        }
+
+        // 4. Task Status Counts (Donut Chart) Mapping
         Map<String, Integer> taskStatusCounts = new HashMap<>();
-        int wipCount = 0;
-        int underReviewCount = 0;
-        int pendingCount = 0;
-        int overdueCount = 0;
+        taskStatusCounts.put("Completed",    counts.path("Completed").asInt());
+        taskStatusCounts.put("In Progress",  counts.path("In Progress").asInt());
+        taskStatusCounts.put("Under Review", counts.path("Under Review").asInt());
+        taskStatusCounts.put("Overdue",      counts.path("Overdue").asInt());
+        taskStatusCounts.put("Open",         counts.path("Open").asInt());
+        taskStatusCounts.put("Reassigned",   counts.path("Reassigned").asInt());
+        taskStatusCounts.put("Rework",       counts.path("Rework").asInt());
+        taskStatusCounts.put("Draft",        counts.path("Draft").asInt());
 
-        for (TaskLive t : allMyTasks) {
-            if ("COMPLETED".equalsIgnoreCase(t.getTaskSts())) {
-                continue; // handled below
-            }
-            if (t.getEndDt() != null && t.getEndDt().isBefore(today)) {
-                overdueCount++;
-            } else if ("WIP".equalsIgnoreCase(t.getTaskSts())) {
-                wipCount++;
-            } else if ("UNDER_REVIEW".equalsIgnoreCase(t.getTaskSts()) || "SUBMIT_REVIEW".equalsIgnoreCase(t.getTaskSts())) {
-                underReviewCount++;
-            } else {
-                pendingCount++;
-            }
+        // 5. Recent Activity Feed Mapping
+        List<RecentActivityDto> recentActivity = new ArrayList<>();
+        for (JsonNode act : root.path("recentActivity")) {
+            recentActivity.add(new RecentActivityDto(
+                    act.path("logId").asLong(),
+                    act.path("entityTyp").asText(),
+                    act.path("entityId").asLong(),
+                    act.path("statusFrom").asText(),
+                    act.path("statusTo").asText(),
+                    act.path("logDt").asText(),
+                    act.path("message").asText(),
+                    act.path("projectName").asText()
+            ));
         }
 
-        taskStatusCounts.put("Completed", completedTasksCount);
-        taskStatusCounts.put("In Progress", wipCount);
-        taskStatusCounts.put("Under Review", underReviewCount);
-        taskStatusCounts.put("Pending", pendingCount);
-        taskStatusCounts.put("Overdue", overdueCount);
+        // 6. Assemble DTO
+        UserDashboardResponseDto dto = new UserDashboardResponseDto();
+        dto.setFullName(profile.path("fullName").asText("User"));
+        dto.setRole(profile.path("role").asText("Site Engineer"));
+        dto.setDepartment(profile.path("department").asText("Projects Department"));
+        dto.setPhotoUrl(profile.path("photoUrl").asText(null));
 
-        double overallCompletionPercentage = myTasksCount > 0 ? Math.round(((double) completedTasksCount / myTasksCount) * 100.0) : 0.0;
+        int myProjectsCount = summary.path("myProjectsCount").asInt();
+        int myTasksCount = summary.path("myTasksCount").asInt();
+        int dueTodayCount = summary.path("dueTodayCount").asInt();
+        int overdueTasksCount = summary.path("overdueTasksCount").asInt();
+        int completedTasksCount = summary.path("completedTasksCount").asInt();
 
-        UserDashboardResponseDto response = new UserDashboardResponseDto(
-                fullName,
-                role,
-                department,
-                myProjectsCount,
-                myTasksCount,
-                dueTodayCount,
-                overdueTasksCount,
-                completedTasksCount,
-                todoList,
-                upcomingTasks,
-                myProjectsDtos,
-                taskStatusCounts,
-                overallCompletionPercentage
+        dto.setMyProjectsCount(myProjectsCount);
+        dto.setMyTasksCount(myTasksCount);
+        dto.setDueTodayCount(dueTodayCount);
+        dto.setOverdueTasksCount(overdueTasksCount);
+        dto.setCompletedTasksCount(completedTasksCount);
+
+        JsonNode trendsNode = root.path("metricsTrends");
+        dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), myTasksCount + completedTasksCount + overdueTasksCount));
+        dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), counts.path("Open").asInt()));
+        dto.setInProgressCard(mapMetricCard(trendsNode.path("inProgress"), counts.path("In Progress").asInt()));
+        dto.setOverdueTasksCard(mapMetricCard(trendsNode.path("overdueTasks"), overdueTasksCount));
+        dto.setCompletedTasksCard(mapMetricCard(trendsNode.path("completedTasks"), completedTasksCount));
+        dto.setMyProjectsCard(mapMetricCard(trendsNode.path("myProjects"), myProjectsCount));
+
+        dto.setTodoList(todoList);
+        dto.setUpcomingTasks(upcomingTasks);
+        dto.setMyProjects(myProjects);
+        dto.setTaskStatusCounts(taskStatusCounts);
+        dto.setOverallCompletionPercentage(summary.path("overallCompletion").asDouble());
+
+        JsonNode performanceNode = root.path("performance");
+        dto.setProductivity(mapPerformanceMetric(performanceNode.path("productivity")));
+        dto.setTaskCompletion(mapPerformanceMetric(performanceNode.path("taskCompletion")));
+        dto.setQualityScore(mapPerformanceMetric(performanceNode.path("qualityScore")));
+
+        dto.setRecentActivity(recentActivity);
+
+        return dto;
+    }
+
+    private MetricCardDto mapMetricCard(JsonNode cardNode, int currentCount) {
+        if (cardNode == null || cardNode.isMissingNode()) {
+            return new MetricCardDto(currentCount, 0, new ArrayList<>());
+        }
+        List<Integer> trend = new ArrayList<>();
+        JsonNode trendNode = cardNode.path("trend");
+        if (trendNode.isArray()) {
+            for (JsonNode val : trendNode) {
+                trend.add(val.asInt());
+            }
+        }
+        return new MetricCardDto(
+                currentCount,
+                cardNode.path("weeklyChange").asInt(0),
+                trend
         );
-
-        return ResponseEntity.ok(response);
     }
 
-    private String getRoleName(Integer desigId) {
-        if (desigId == null) return "Site Engineer";
-        return designationRepository.findById(desigId)
-                .map(com.bionova.entity.DesignationMaster::getDesigNm)
-                .orElse("Site Engineer");
+    private List<EmployeeAvatarDto> mapEmployees(JsonNode empNodes) {
+        List<EmployeeAvatarDto> list = new ArrayList<>();
+        if (empNodes != null && empNodes.isArray()) {
+            for (JsonNode n : empNodes) {
+                list.add(new EmployeeAvatarDto(
+                        n.path("empId").asLong(),
+                        n.path("fullName").asText(),
+                        n.path("photoUrl").asText(null),
+                        n.path("role").asText("Executor")
+                ));
+            }
+        }
+        return list;
     }
 
-    private String calculatePriority(TaskLive t) {
-        if (t.getEndDt() != null && t.getEndDt().isBefore(LocalDate.now().plusDays(2))) {
-            return "High";
+    private PerformanceMetricDto mapPerformanceMetric(JsonNode node) {
+        if (node == null || node.isMissingNode()) {
+            return new PerformanceMetricDto(100, "Excellent");
         }
-        if (t.getEndDt() != null && t.getEndDt().isBefore(LocalDate.now().plusDays(5))) {
-            return "Medium";
+        return new PerformanceMetricDto(
+                node.path("score").asInt(100),
+                node.path("rating").asText("Excellent")
+        );
+    }
+
+    private LocalDate parseDate(String dateStr) {
+        if (dateStr == null || dateStr.isBlank() || dateStr.equals("null")) {
+            return null;
         }
-        return "Low";
+        try {
+            return LocalDate.parse(dateStr);
+        } catch (Exception e) {
+            return null;
+        }
     }
 }

@@ -48,4 +48,19 @@ public class AppNotificationController {
                 })
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    @PatchMapping("/read-all")
+    public ResponseEntity<?> markAllAsRead() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return employeeRepository.findByEmail(email)
+                .map(employee -> {
+                    List<AppNotification> unread = notificationRepository.findByEmpIdAndIsReadFalse(employee.getEmpId());
+                    for (AppNotification notification : unread) {
+                        notification.setIsRead(true);
+                    }
+                    notificationRepository.saveAll(unread);
+                    return ResponseEntity.ok(Map.of("message", "All notifications marked as read"));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
 }

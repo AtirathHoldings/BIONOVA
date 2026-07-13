@@ -9,21 +9,18 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "employee_individual_task_master")
 @org.hibernate.annotations.Check(
-        constraints =
-                "priority IN ('HIGH','MEDIUM','NORMAL','LOW') " +
-                        "AND task_asgn_to IN ('INTERNAL','EXTERNAL') " +
-                        "AND task_sts IN ('DRAFT','ASSIGNED','OPEN','WIP','SUBMIT_REVIEW','UNDER_REVIEW','COMPLETED','REASSIGN')"
+        constraints = "task_asgn_to IN ('INTERNAL','EXTERNAL')"
 )
 @Getter
 @Setter
-public class EmployeeIndividualTask {
+public class Assignment {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "emp_task_id", columnDefinition = "smallserial")
     private Long empTaskId;
 
-    @Column(name = "task_cd", nullable = false, unique = true, length = 10)
+    @Column(name = "task_cd", nullable = false, length = 10)
     private String taskCd;
 
     @Column(name = "task_nm", nullable = false, length = 100)
@@ -47,8 +44,9 @@ public class EmployeeIndividualTask {
     @Column(name = "end_dt")
     private LocalDate endDt;
 
-    @Column(name = "priority", length = 10)
-    private String priority;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "priority", referencedColumnName = "priority_id")
+    private TaskPriorityMaster priority;
 
     @Column(name = "chk_flg")
     private Boolean chkFlg = false;
@@ -62,14 +60,9 @@ public class EmployeeIndividualTask {
     @Column(name = "prcs_yes_actn", length = 200)
     private String prcsYesActn;
 
-    @Column(name = "reviewer_id")
-    private Integer reviewerId;
-
-    @Column(name = "approver_id")
-    private Long approverId;
-
-    @Column(name = "task_sts", length = 20)
-    private String taskSts = "DRAFT";
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "task_sts", referencedColumnName = "status_id")
+    private TaskStatusMaster taskSts = TaskStatusMaster.DRAFT;
 
     @Column(name = "remarks", length = 255)
     private String remarks;
@@ -77,4 +70,28 @@ public class EmployeeIndividualTask {
     @Column(name = "sts")
     private Boolean sts = true;
 
+    @Transient
+    private Long reviewer;
+
+    @Transient
+    private Long approver;
+
+    @Transient
+    private String reviewerNm;
+
+    @Transient
+    private String approverNm;
+
+    public TaskPriorityMaster getPriority() {
+        if (taskSts != null && "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm())) {
+            return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(stDt, endDt, null, taskSts, null);
+        }
+        return TaskPriorityMaster.calculatePriority(stDt, endDt, null, taskSts, null);
+    }
+
+    @PrePersist
+    @PreUpdate
+    public void preSave() {
+        this.priority = getPriority();
+    }
 }

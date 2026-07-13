@@ -8,8 +8,8 @@ import java.time.LocalDate;
 
 @Entity
 @Table(name = "project_live_master")
-@org.hibernate.annotations.Check(constraints =
-    "prj_prty IN ('HIGH','MEDIUM','NORMAL','LOW') AND prj_sts IN ('LIVE','HOLD','CLOSED')")
+@org.hibernate.annotations.Check(constraints = "prj_sts IN ('LIVE','HOLD','CLOSED')")
+@EntityListeners(com.bionova.config.AuditListener.class)
 @Getter
 @Setter
 public class ProjectLive {
@@ -34,8 +34,9 @@ public class ProjectLive {
     @Column(name = "dept_id")
     private Integer deptId;
 
-    @Column(name = "prj_prty", length = 10)
-    private String prjPrty;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "prj_prty", referencedColumnName = "priority_id")
+    private TaskPriorityMaster prjPrty;
 
     @Column(name = "prj_sts", length = 20)
     private String prjSts = "LIVE";
@@ -70,4 +71,28 @@ public class ProjectLive {
 
     @Column(name = "addl_rem", length = 255)
     private String addlRem;
+
+    /**
+     * Lead / On Time / Lag status for this project.
+     * Values: "LEAD", "ON_TIME", "LAG"
+     * Recalculated every time a task is completed.
+     */
+    @Column(name = "lead_lag_sts", length = 10)
+    private String leadLagSts;
+
+    /**
+     * Actual completion date — set when all milestones/tasks are COMPLETED.
+     * Used to determine LEAD (before endDt) or LAG (after endDt).
+     */
+    @Column(name = "act_cmp_dt")
+    private java.time.LocalDate actCmpDt;
+
+    @Transient
+    private String location;
+
+    @Transient
+    private String clientName;
+
+    @Transient
+    private String plantName;
 }

@@ -37,8 +37,14 @@ public class ProcessConfig {
      *   isLive=false → drft_task_id (task_draft_master)
      *   isLive=true  → task_id      (task_live_master)
      */
-    @Column(name = "task_id", nullable = false)
+    @Column(name = "task_id")
     private Long taskId;
+
+    @Column(name = "ext_emp_id")
+    private Long extEmpId;
+
+    @Column(name = "emp_task_id")
+    private Long empTaskId;
 
     /** false = draft config  |  true = live config */
     @Column(name = "is_live", nullable = false)

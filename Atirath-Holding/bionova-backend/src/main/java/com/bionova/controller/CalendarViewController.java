@@ -9,6 +9,8 @@ import com.bionova.repository.CalendarMasterRepository;
 import com.bionova.repository.EmployeeRepository;
 import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
+import com.bionova.repository.AssignmentRepository;
+import com.bionova.entity.Assignment;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -34,6 +36,9 @@ public class CalendarViewController {
     @Autowired
     private EmployeeRepository employeeRepository;
 
+    @Autowired
+    private AssignmentRepository employeeIndividualTaskRepository;
+
     /**
      * Fetch calendar feed (Holidays, Tasks, and Milestones) for the logged-in employee.
      * Supports weekly, monthly, and day-wise filtering.
@@ -58,13 +63,22 @@ public class CalendarViewController {
             startDate = refDate;
             endDate = refDate;
         } else if ("week".equalsIgnoreCase(viewType)) {
-            // Start of week (Monday) to end of week (Sunday)
-            startDate = refDate.minusDays(refDate.getDayOfWeek().getValue() - 1);
+            // Start of week (Sunday) to end of week (Saturday)
+            int dayOfWeek = refDate.getDayOfWeek().getValue();
+            int daysFromSunday = (dayOfWeek == 7) ? 0 : dayOfWeek;
+            startDate = refDate.minusDays(daysFromSunday);
             endDate = startDate.plusDays(6);
         } else {
-            // Month view (default)
-            startDate = refDate.withDayOfMonth(1);
-            endDate = refDate.withDayOfMonth(refDate.lengthOfMonth());
+            // Month view (default) - include previous month's prefix days and next month's suffix days in the grid
+            LocalDate firstOfMonth = refDate.withDayOfMonth(1);
+            int firstDayOfWeekVal = firstOfMonth.getDayOfWeek().getValue();
+            int daysFromSunday = (firstDayOfWeekVal == 7) ? 0 : firstDayOfWeekVal;
+            startDate = firstOfMonth.minusDays(daysFromSunday);
+
+            LocalDate lastOfMonth = refDate.withDayOfMonth(refDate.lengthOfMonth());
+            int lastDayOfWeekVal = lastOfMonth.getDayOfWeek().getValue();
+            int daysToSaturday = (lastDayOfWeekVal == 7) ? 6 : (6 - lastDayOfWeekVal);
+            endDate = lastOfMonth.plusDays(daysToSaturday);
         }
 
         List<CalendarEventDto> events = new ArrayList<>();
@@ -82,7 +96,7 @@ public class CalendarViewController {
                     hol.getCalDt(),
                     null,
                     hol.getHolTyp(),
-                    hol.getCalType(),
+                    null,
                     "Holiday: " + hol.getHolidayNm()
             ));
         }
@@ -102,7 +116,27 @@ public class CalendarViewController {
                         "TASK",
                         task.getEndDt(),
                         null,
-                        task.getTaskSts(),
+                        task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN",
+                        task.getTaskCd(),
+                        task.getTaskDesc()
+                ));
+            }
+
+            // 2b. Fetch & Map Individual Tasks assigned to this employee in the date range
+            List<Assignment> allIndividualTasks = employeeIndividualTaskRepository.findByEmpId(employee.getEmpId());
+            
+            List<Assignment> rangeIndTasks = allIndividualTasks.stream()
+                    .filter(t -> t.getEndDt() != null && !t.getEndDt().isBefore(startDate) && !t.getEndDt().isAfter(endDate))
+                    .collect(Collectors.toList());
+
+            for (Assignment task : rangeIndTasks) {
+                events.add(new CalendarEventDto(
+                        "IND-TASK-" + task.getEmpTaskId(),
+                        task.getTaskNm(),
+                        "TASK",
+                        task.getEndDt(),
+                        null,
+                        task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "DRAFT",
                         task.getTaskCd(),
                         task.getTaskDesc()
                 ));

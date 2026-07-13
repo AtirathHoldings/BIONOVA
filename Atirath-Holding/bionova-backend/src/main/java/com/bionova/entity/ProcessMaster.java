@@ -12,11 +12,9 @@ import java.time.LocalDateTime;
  *
  * Flow:
  *   Task OPEN → WIP (employee starts work)
- *   Employee submits → SUBMIT_REVIEW
- *   Checker reviews → YES → UNDER_REVIEW (goes to reviewer)
- *                   → NO  → REWORK
+ *   Employee submits → UNDER_REVIEW
  *   Reviewer reviews → YES → COMPLETED
- *                    → NO  → REWORK
+ *                    → NO  → REWORK or REASSIGN
  */
 @Entity
 @Table(name = "process_master")
@@ -33,9 +31,14 @@ public class ProcessMaster {
     @Column(name = "ordr_id", nullable = false)
     private Integer ordrId;
 
-    /** FK → task_live_master.task_id */
-    @Column(name = "task_id", nullable = false)
+    @Column(name = "task_id")
     private Long taskId;
+
+    @Column(name = "ext_emp_id")
+    private Long extEmpId;
+
+    @Column(name = "emp_task_id")
+    private Long empTaskId;
 
     /** FK → employee_master.emp_id (the checker/employee submitting) */
     @Column(name = "emp_id")

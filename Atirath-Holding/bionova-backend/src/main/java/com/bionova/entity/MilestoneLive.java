@@ -10,6 +10,7 @@ import java.time.LocalDate;
 @Table(name = "milestone_live_master")
 @org.hibernate.annotations.Check(constraints =
     "mlstn_dep_typ IN ('INDEPENDENT','SEQUENTIAL','PARALLEL') AND mlstn_sts IN ('LIVE','HOLD','COMPLETED','CLOSED')")
+@EntityListeners(com.bionova.config.AuditListener.class)
 @Getter
 @Setter
 public class MilestoneLive {
@@ -25,7 +26,7 @@ public class MilestoneLive {
     @Column(name = "prj_id", nullable = false)
     private Long prjId;
 
-    @Column(name = "mlstn_cd", unique = true, length = 10)
+    @Column(name = "mlstn_cd", length = 10)
     private String mlstnCd;
 
     @Column(name = "mlstn_ttl", nullable = false, length = 100)
@@ -55,9 +56,6 @@ public class MilestoneLive {
 
     @Column(name = "end_dt")
     private LocalDate endDt;
-
-    @Column(name = "chk_id")
-    private Integer chkId;
 
     @Column(name = "addl_rem", length = 255)
     private String addlRem;

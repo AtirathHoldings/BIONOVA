@@ -26,6 +26,7 @@ import java.time.LocalDateTime;
  */
 @Entity
 @Table(name = "attachments_master")
+@EntityListeners(com.bionova.config.AuditListener.class)
 @Getter
 @Setter
 public class AttachmentMaster {

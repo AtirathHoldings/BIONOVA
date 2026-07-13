@@ -29,7 +29,10 @@ public class DataInitializer implements CommandLineRunner {
                 "        IF (TG_TABLE_NAME = 'task_live_master') THEN " +
                 "            IF (OLD.task_sts IS DISTINCT FROM NEW.task_sts) THEN " +
                 "                INSERT INTO activity_log_transaction (entity_typ, entity_id, status_from, status_to, log_dt) " +
-                "                VALUES ('TASK', OLD.task_id, COALESCE(OLD.task_sts, 'N/A'), NEW.task_sts, CURRENT_TIMESTAMP); " +
+                "                VALUES ('TASK', OLD.task_id, " +
+                "                        COALESCE((SELECT status_nm FROM task_status_master WHERE status_id = OLD.task_sts), 'N/A'), " +
+                "                        (SELECT status_nm FROM task_status_master WHERE status_id = NEW.task_sts), " +
+                "                        CURRENT_TIMESTAMP); " +
                 "            END IF; " +
                 "        ELSIF (TG_TABLE_NAME = 'milestone_live_master') THEN " +
                 "            IF (OLD.mlstn_sts IS DISTINCT FROM NEW.mlstn_sts) THEN " +

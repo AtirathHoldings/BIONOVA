@@ -9,6 +9,7 @@ import java.util.List;
 @Repository
 public interface MilestoneDraftRepository extends JpaRepository<MilestoneDraft, Long> {
     List<MilestoneDraft> findByDrftPrjId(Long drftPrjId);
-    boolean existsByMlstnCd(String mlstnCd);
-    boolean existsByMlstnCdAndDrftMIdNot(String mlstnCd, Long drftMId);
+    long countByDrftPrjId(Long drftPrjId);
+    boolean existsByMlstnCdAndDrftPrjId(String mlstnCd, Long drftPrjId);
+    boolean existsByMlstnCdAndDrftPrjIdAndDrftMIdNot(String mlstnCd, Long drftPrjId, Long drftMId);
 }

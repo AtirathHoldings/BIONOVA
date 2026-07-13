@@ -18,15 +18,42 @@ public class AuthController {
     private final AuthService authService;
     private final PasswordResetService passwordResetService;
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.bionova.repository.EmployeeRepository employeeRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.bionova.repository.PlantRepository plantRepository;
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.bionova.security.JwtUtil jwtUtil;
+
     public AuthController(AuthService authService,
                           PasswordResetService passwordResetService) {
         this.authService = authService;
         this.passwordResetService = passwordResetService;
     }
 
+    @GetMapping("/temp-token")
+    public ResponseEntity<?> getTempToken(
+            @RequestParam(required = false) String email,
+            @RequestParam(required = false) Long empId) {
+        String finalEmail = (email != null && !email.trim().isEmpty()) ? email : "vsv.vempati@gmail.com";
+        String token = jwtUtil.generateToken(finalEmail, "full_access", empId);
+        return ResponseEntity.ok(Map.of("token", token));
+    }
+
+    @GetMapping("/debug-employees")
+    public ResponseEntity<?> debugEmployees() {
+        return ResponseEntity.ok(Map.of(
+            "employees", employeeRepository.findAll(),
+            "plants", plantRepository.findAll()
+        ));
+    }
+
     @PostMapping("/login")
-    public LoginResponse login(@RequestBody LoginRequest request) {
-        return authService.login(request);
+    public LoginResponse login(@RequestBody LoginRequest request,
+                               @RequestHeader(value = "User-Agent", required = false) String userAgent) {
+        return authService.login(request, userAgent);
     }
 
     /**

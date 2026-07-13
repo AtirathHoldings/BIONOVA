@@ -7,7 +7,6 @@ import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "activity_log_transaction")
-@org.hibernate.annotations.Check(constraints = "entity_typ IN ('PROJECT','MILESTONE','TASK')")
 @Getter
 @Setter
 public class ActivityLog {

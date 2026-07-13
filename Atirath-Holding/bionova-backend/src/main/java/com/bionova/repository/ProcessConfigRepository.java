@@ -14,4 +14,9 @@ public interface ProcessConfigRepository extends JpaRepository<ProcessConfig, In
 
     /** Check if a step order already exists for the same task+context */
     boolean existsByTaskIdAndIsLiveAndOrdrId(Long taskId, Boolean isLive, Integer ordrId);
+
+    List<ProcessConfig> findByEmpTaskIdOrderByOrdrIdAsc(Long empTaskId);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByEmpTaskId(Long empTaskId);
 }

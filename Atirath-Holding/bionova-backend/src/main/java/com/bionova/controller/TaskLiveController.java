@@ -4,10 +4,16 @@ import com.bionova.entity.Employee;
 import com.bionova.entity.MilestoneLive;
 import com.bionova.entity.ProjectLive;
 import com.bionova.entity.TaskLive;
+import com.bionova.entity.TaskStatusMaster;
+import com.bionova.entity.ScreenMaster;
 import com.bionova.repository.EmployeeRepository;
 import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
+import com.bionova.repository.RoleBasedEmployeeMappingRepository;
+import com.bionova.repository.RoleBasedAccessControlRepository;
+import com.bionova.repository.ScreenMasterRepository;
+import com.bionova.repository.ProcessConfigRepository;
 import com.bionova.service.ActivityLogService;
 import com.bionova.service.ProjectStatusCascadeService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -19,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/task-live")
@@ -42,26 +49,119 @@ public class TaskLiveController {
     @Autowired
     private ProjectStatusCascadeService projectStatusCascadeService;
 
-    private boolean isAdminOrManager(Employee employee) {
-        if (employee == null) {
-            return false;
+    @Autowired
+    private RoleBasedEmployeeMappingRepository rbacMappingRepository;
+
+    @Autowired
+    private RoleBasedAccessControlRepository rbacRepository;
+
+    @Autowired
+    private ScreenMasterRepository screenMasterRepository;
+
+    @Autowired
+    private ProcessConfigRepository processConfigRepository;
+
+    /**
+     * Determines if the employee has access to the Project module.
+     * Rules:
+     *  - No RBAC mapping configured yet (full_access mode) -> true
+     *  - Admin, Manager, PM, or full_access role -> true
+     *  - Mapped role has view_flg = true for any screen in the "Project" group -> true
+     */
+    private boolean hasProjectModuleAccess(Employee employee) {
+        if (employee == null) return false;
+        
+        var mappings = rbacMappingRepository.findByEmpId(employee.getEmpId());
+        if (mappings.isEmpty()) {
+            return true;
         }
-        // Since role column is removed, we treat vsv.vempati@gmail.com as admin
-        return "vsv.vempati@gmail.com".equalsIgnoreCase(employee.getEmail());
+        
+        for (var mapping : mappings) {
+            var rbacs = rbacRepository.findByRoleId(mapping.getRoleId());
+            if (!rbacs.isEmpty()) {
+                String roleNm = rbacs.get(0).getRoleNm();
+                if (roleNm != null) {
+                    String lowerRole = roleNm.toLowerCase();
+                    if (lowerRole.contains("admin") || lowerRole.contains("manager") || lowerRole.contains("pm") || lowerRole.contains("full_access")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        List<ScreenMaster> screens = screenMasterRepository.findAll();
+        Set<Integer> projectScreenIds = new java.util.HashSet<>();
+        for (ScreenMaster sm : screens) {
+            if ("Project".equalsIgnoreCase(sm.getGroupNm())) {
+                projectScreenIds.add(sm.getScreenId());
+            }
+        }
+        
+        for (var mapping : mappings) {
+            var rbacs = rbacRepository.findByRoleId(mapping.getRoleId());
+            for (var rbac : rbacs) {
+                if (projectScreenIds.contains(rbac.getScreenId()) && Boolean.TRUE.equals(rbac.getViewFlg())) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    private boolean isReviewerOrApproverForTask(Long taskId, Long empId) {
+        List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(taskId, true);
+        for (com.bionova.entity.ProcessConfig pc : configs) {
+            if (empId.equals(pc.getEmpId())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void populateReviewerAndApprover(TaskLive task) {
+        if (task == null) return;
+        List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
+        for (com.bionova.entity.ProcessConfig pc : configs) {
+            if (pc.getOrdrId() == 1) {
+                task.setReviewer(pc.getEmpId());
+                if (pc.getEmpId() != null) {
+                    employeeRepository.findById(pc.getEmpId()).ifPresent(emp -> {
+                        task.setReviewerNm(emp.getFirstName() + " " + emp.getLastName());
+                    });
+                }
+            } else if (pc.getOrdrId() == 2) {
+                task.setApprover(pc.getEmpId());
+                if (pc.getEmpId() != null) {
+                    employeeRepository.findById(pc.getEmpId()).ifPresent(emp -> {
+                        task.setApproverNm(emp.getFirstName() + " " + emp.getLastName());
+                    });
+                }
+            }
+        }
+    }
+
+    private void populateReviewerAndApprover(List<TaskLive> tasks) {
+        if (tasks == null) return;
+        for (TaskLive task : tasks) {
+            populateReviewerAndApprover(task);
+        }
     }
 
     @GetMapping
     public List<TaskLive> getAll() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return employeeRepository.findByEmail(email)
+        List<TaskLive> tasks = employeeRepository.findByEmail(email)
                 .map(employee -> {
-                    if (isAdminOrManager(employee)) {
+                    if (hasProjectModuleAccess(employee)) {
                         return taskLiveRepository.findAll();
                     } else {
-                        return taskLiveRepository.findByEmpId(employee.getEmpId());
+                        return taskLiveRepository.findTasksForEmployee(employee.getEmpId());
                     }
                 })
                 .orElse(List.of());
+        populateReviewerAndApprover(tasks);
+        return tasks;
     }
 
     @GetMapping("/{id}")
@@ -74,8 +174,10 @@ public class TaskLiveController {
 
         return taskLiveRepository.findById(id)
                 .map(task -> {
-                    if (isAdminOrManager(employee) || 
-                        employee.getEmpId().equals(task.getEmpId())) {
+                    if (hasProjectModuleAccess(employee) || 
+                        employee.getEmpId().equals(task.getEmpId()) ||
+                        isReviewerOrApproverForTask(task.getTaskId(), employee.getEmpId())) {
+                        populateReviewerAndApprover(task);
                         return ResponseEntity.ok(task);
                     } else {
                         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied to this task"));
@@ -87,15 +189,17 @@ public class TaskLiveController {
     @GetMapping("/by-milestone/{mId}")
     public List<TaskLive> getByMilestone(@PathVariable Long mId) {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
-        return employeeRepository.findByEmail(email)
+        List<TaskLive> tasks = employeeRepository.findByEmail(email)
                 .map(employee -> {
-                    if (isAdminOrManager(employee)) {
+                    if (hasProjectModuleAccess(employee)) {
                         return taskLiveRepository.findByMilestoneId(mId);
                     } else {
-                        return taskLiveRepository.findByMilestoneIdAndEmpId(mId, employee.getEmpId());
+                        return taskLiveRepository.findByMilestoneIdAndEmployeeOrReviewer(mId, employee.getEmpId());
                     }
                 })
                 .orElse(List.of());
+        populateReviewerAndApprover(tasks);
+        return tasks;
     }
 
     @GetMapping("/by-employee/{empId}")
@@ -106,9 +210,11 @@ public class TaskLiveController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Unauthorized"));
         }
 
-        if (isAdminOrManager(employee) || 
-            employee.getEmpId().equals(empId)) {
-            return ResponseEntity.ok(taskLiveRepository.findByEmpId(empId));
+        if (hasProjectModuleAccess(employee) || 
+            employee.getEmpId().equals(empId)) { 
+            List<TaskLive> tasks = taskLiveRepository.findTasksForEmployee(empId);
+            populateReviewerAndApprover(tasks);
+            return ResponseEntity.ok(tasks);
         } else {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied"));
         }
@@ -116,17 +222,17 @@ public class TaskLiveController {
 
     @PostMapping
     public ResponseEntity<?> create(@RequestBody TaskLive task) {
-        if (task.getTaskCd() != null && !task.getTaskCd().trim().isEmpty()) {
-            if (taskLiveRepository.existsByTaskCd(task.getTaskCd())) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Task code already exists."));
-            }
-        }
-
         MilestoneLive milestone = milestoneLiveRepository.findById(task.getMId())
                 .orElseThrow(() -> new RuntimeException("Milestone not found with ID: " + task.getMId()));
 
+        if (task.getTaskCd() != null && !task.getTaskCd().trim().isEmpty()) {
+            if (taskLiveRepository.existsByTaskCdAndProject(task.getTaskCd(), milestone.getPrjId())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Task code already exists in this project."));
+            }
+        }
+
         if (task.getTaskSts() == null) {
-            task.setTaskSts("OPEN");
+            task.setTaskSts(TaskStatusMaster.OPEN);
         }
 
         // Auto-compute dates or days (inclusive: start=day1)
@@ -173,8 +279,11 @@ public class TaskLiveController {
                 .orElseThrow(() -> new RuntimeException("Task not found: " + id));
 
         if (details.getTaskCd() != null && !details.getTaskCd().trim().isEmpty()) {
-            if (taskLiveRepository.existsByTaskCdAndTaskIdNot(details.getTaskCd(), id)) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Task code already exists."));
+            Long mId = details.getMId() != null ? details.getMId() : task.getMId();
+            MilestoneLive milestone = milestoneLiveRepository.findById(mId)
+                    .orElseThrow(() -> new RuntimeException("Milestone not found: " + mId));
+            if (taskLiveRepository.existsByTaskCdAndProjectAndTaskIdNot(details.getTaskCd(), milestone.getPrjId(), id)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Task code already exists in this project."));
             }
             task.setTaskCd(details.getTaskCd());
         }
@@ -206,7 +315,6 @@ public class TaskLiveController {
         }
 
         task.setChkFlg(details.getChkFlg());
-        task.setChkId(details.getChkId());
         task.setAttaFlg(details.getAttaFlg());
         task.setAttaFileId(details.getAttaFileId());
         task.setNoteTxt(details.getNoteTxt());
@@ -257,11 +365,11 @@ public class TaskLiveController {
                 .orElseThrow(() -> new RuntimeException("Task not found: " + id));
 
         String newStatus = body.get("taskSts");
-        if (!List.of("OPEN","WIP","SUBMIT_REVIEW","UNDER_REVIEW","COMPLETED","REWORK").contains(newStatus)) {
+        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","COMPLETED","REASSIGN","REWORK","OVER_DUE").contains(newStatus)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid status. Allowed: OPEN, WIP, SUBMIT_REVIEW, UNDER_REVIEW, COMPLETED, REWORK"));
+                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE"));
         }
-        task.setTaskSts(newStatus);
+        task.setTaskSts(TaskStatusMaster.getByName(newStatus));
         TaskLive saved = taskLiveRepository.save(task);
         projectStatusCascadeService.cascadeStatusFromTask(id);
         return ResponseEntity.ok(saved);

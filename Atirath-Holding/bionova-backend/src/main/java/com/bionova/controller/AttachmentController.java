@@ -3,6 +3,7 @@ package com.bionova.controller;
 import com.bionova.entity.AttachmentMaster;
 import com.bionova.repository.AttachmentMasterRepository;
 import com.bionova.service.SupabaseStorageService;
+import com.bionova.service.ActivityLogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -48,12 +49,18 @@ public class AttachmentController {
     @Autowired
     private SupabaseStorageService storageService;
 
+    @Autowired
+    private ActivityLogService activityLogService;
+
     // ── GET single ─────────────────────────────────────────────────────────
 
     @GetMapping("/{fileId}")
     public ResponseEntity<AttachmentMaster> getById(@PathVariable Integer fileId) {
         return attachmentRepo.findById(fileId)
-                .map(ResponseEntity::ok)
+                .map(attachment -> {
+                    activityLogService.logActivity("DOCUMENT", fileId.longValue(), "N/A", "DOWNLOADED");
+                    return ResponseEntity.ok(attachment);
+                })
                 .orElse(ResponseEntity.notFound().build());
     }
 

@@ -69,10 +69,10 @@ public class ProjectForecastingController {
             if (weight <= 0) weight = 1;
 
             double taskProg = 0.0;
-            String sts = task.getTaskSts() != null ? task.getTaskSts() : "OPEN";
+            String sts = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN";
             if ("COMPLETED".equals(sts)) {
                 taskProg = 100.0;
-            } else if ("SUBMIT_REVIEW".equals(sts) || "UNDER_REVIEW".equals(sts)) {
+            } else if ("UNDER_REVIEW".equals(sts)) {
                 taskProg = 90.0;
             } else if ("WIP".equals(sts)) {
                 taskProg = 50.0;

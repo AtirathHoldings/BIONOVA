@@ -50,6 +50,12 @@ public class NotificationService {
     @Autowired
     private JavaMailSender mailSender;
 
+    @Autowired
+    private ProjectStatusCascadeService projectStatusCascadeService;
+
+    @Autowired
+    private com.bionova.repository.AssignmentRepository assignmentRepository;
+
     @Value("${spring.mail.username}")
     private String fromEmail;
 
@@ -266,17 +272,50 @@ public class NotificationService {
 
         // 1. Process Tasks
         List<TaskLive> activeTasks = taskLiveRepository.findAll().stream()
-                .filter(t -> !"COMPLETED".equalsIgnoreCase(t.getTaskSts()))
-                .filter(t -> !"CLOSED".equalsIgnoreCase(t.getTaskSts()))
+                .filter(t -> {
+                    String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "";
+                    return !"COMPLETED".equalsIgnoreCase(sts) && !"CLOSED".equalsIgnoreCase(sts);
+                })
                 .collect(Collectors.toList());
 
+        LocalDate today = LocalDate.now();
         for (TaskLive task : activeTasks) {
             try {
+                if (task.getEndDt() != null && today.isAfter(task.getEndDt())) {
+                    String sts = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
+                    if (!"OVER_DUE".equals(sts)) {
+                        task.setTaskSts(com.bionova.entity.TaskStatusMaster.OVER_DUE);
+                        taskLiveRepository.save(task);
+                        projectStatusCascadeService.cascadeStatusFromTask(task.getTaskId());
+                    }
+                }
                 if (shouldSendReminder("TASK", task.getTaskId(), task.getStDt(), task.getEndDt())) {
                     sendReminderNotification("TASK", task.getTaskId(), task.getTaskCd(), task.getTaskNm(), task.getEmpId(), task.getEndDt());
                 }
             } catch (Exception e) {
                 System.err.println("Error checking task reminder for ID " + task.getTaskId() + ": " + e.getMessage());
+            }
+        }
+
+        // 1.5. Process Individual Tasks (Assignments)
+        List<com.bionova.entity.Assignment> activeAssignments = assignmentRepository.findAll().stream()
+                .filter(a -> {
+                    String sts = a.getTaskSts() != null ? a.getTaskSts().getStatusNm() : "";
+                    return !"COMPLETED".equalsIgnoreCase(sts);
+                })
+                .collect(Collectors.toList());
+
+        for (com.bionova.entity.Assignment assignment : activeAssignments) {
+            try {
+                if (assignment.getEndDt() != null && today.isAfter(assignment.getEndDt())) {
+                    String sts = assignment.getTaskSts() != null ? assignment.getTaskSts().getStatusNm() : "";
+                    if (!"OVER_DUE".equals(sts)) {
+                        assignment.setTaskSts(com.bionova.entity.TaskStatusMaster.OVER_DUE);
+                        assignmentRepository.save(assignment);
+                    }
+                }
+            } catch (Exception e) {
+                System.err.println("Error checking assignment status/reminder for ID " + assignment.getEmpTaskId() + ": " + e.getMessage());
             }
         }
 

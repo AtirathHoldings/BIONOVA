@@ -8,7 +8,8 @@ import java.time.LocalDate;
 
 @Entity
 @Table(name = "project_draft_master")
-@org.hibernate.annotations.Check(constraints = "prj_prty IN ('HIGH','MEDIUM','NORMAL','LOW') AND prj_sts IN ('DRAFT')")
+@org.hibernate.annotations.Check(constraints = "prj_sts IN ('DRAFT')")
+@EntityListeners(com.bionova.config.AuditListener.class)
 @Getter
 @Setter
 public class ProjectDraft {
@@ -30,8 +31,9 @@ public class ProjectDraft {
     @Column(name = "dept_id")
     private Integer deptId;
 
-    @Column(name = "prj_prty", length = 10)
-    private String prjPrty;
+    @ManyToOne(fetch = FetchType.EAGER)
+    @JoinColumn(name = "prj_prty", referencedColumnName = "priority_id")
+    private TaskPriorityMaster prjPrty;
 
     @Column(name = "prj_sts", length = 20)
     private String prjSts;

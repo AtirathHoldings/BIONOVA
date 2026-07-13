@@ -36,15 +36,26 @@ public class ProjectAccessControlService {
     @Autowired
     private ReviewerMasterRepository reviewerMasterRepository;
 
+    @Autowired
+    private ExternalEmployeeRepository externalEmployeeRepository;
+
     public ProjectAccessControlResponseDto getProjectAccessControl(Long prjId) {
         ProjectLive project = projectLiveRepository.findById(prjId)
                 .orElseThrow(() -> new RuntimeException("Project not found: " + prjId));
 
-        String companyName = "BIONOVA Holdings";
+        String companyName = "";
         if (project.getCoyId() != null) {
             CompanyMaster company = companyRepository.findById(project.getCoyId().longValue()).orElse(null);
             if (company != null) {
                 companyName = company.getCoyNm();
+            }
+        }
+        if (companyName == null || companyName.isEmpty()) {
+            List<CompanyMaster> allCompanies = companyRepository.findAll();
+            if (!allCompanies.isEmpty()) {
+                companyName = allCompanies.get(0).getCoyNm();
+            } else {
+                companyName = "";
             }
         }
 
@@ -97,7 +108,7 @@ public class ProjectAccessControlService {
                     row.setAssignedOn("N/A");
                 }
 
-                // 1. Assignee (empId)
+                // 1. Assignee (empId or extEmpId)
                 if (task.getEmpId() != null) {
                     Employee assigneeEmp = employeeRepository.findById(task.getEmpId()).orElse(null);
                     if (assigneeEmp != null) {
@@ -110,6 +121,19 @@ public class ProjectAccessControlService {
                         );
                         row.setAssignee(assignee);
                         uniqueEmployeeIds.add(assigneeEmp.getEmpId());
+                    }
+                } else if (task.getExtEmpId() != null) {
+                    ExternalEmployee extEmp = externalEmployeeRepository.findById(task.getExtEmpId()).orElse(null);
+                    if (extEmp != null) {
+                        PacEmployeeDto assignee = new PacEmployeeDto(
+                                extEmp.getExtEmpId(),
+                                extEmp.getExtEmpCode(),
+                                extEmp.getExtEmpNm(),
+                                extEmp.getPhotoPath(),
+                                List.of("View", "Edit", "Update")
+                        );
+                        row.setAssignee(assignee);
+                        uniqueEmployeeIds.add(extEmp.getExtEmpId());
                     }
                 }
 

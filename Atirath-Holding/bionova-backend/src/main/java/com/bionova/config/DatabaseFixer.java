@@ -39,6 +39,22 @@ public class DatabaseFixer implements CommandLineRunner {
                 System.out.println("Dropping global unique index: " + index);
                 jdbcTemplate.execute("DROP INDEX IF EXISTS " + index);
             }
+
+            try {
+                jdbcTemplate.execute("ALTER TABLE checklist_master ALTER COLUMN task_id DROP NOT NULL");
+                System.out.println("SUCCESS: Dropped NOT NULL constraint on checklist_master.task_id");
+            } catch (Exception e) {}
+
+            try {
+                jdbcTemplate.execute("ALTER TABLE process_config ALTER COLUMN task_id DROP NOT NULL");
+                System.out.println("SUCCESS: Dropped NOT NULL constraint on process_config.task_id");
+            } catch (Exception e) {}
+
+            try {
+                jdbcTemplate.execute("ALTER TABLE process_master ALTER COLUMN task_id DROP NOT NULL");
+                System.out.println("SUCCESS: Dropped NOT NULL constraint on process_master.task_id");
+            } catch (Exception e) {}
+            
         } catch (Exception e) {
             System.err.println("Error running database fixer: " + e.getMessage());
         }

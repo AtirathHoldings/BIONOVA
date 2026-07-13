@@ -30,6 +30,7 @@ import java.util.Map;
  *   PUT    /api/checklists/{chkId}                  → update item (draft only)
  *   DELETE /api/checklists/{chkId}                  → delete item
  */
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 @RestController
 @RequestMapping("/api/checklists")
 public class ChecklistController {
@@ -116,6 +117,58 @@ public class ChecklistController {
 
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(Map.of("created", saved.size(), "items", saved));
+    }
+
+    // ── INDIVIDUAL TASK Checklist ───────────────────────────────────────────
+
+    @PostMapping("/assignments/{empTaskId}/bulk")
+    public ResponseEntity<?> bulkCreateForIndividualTask(
+            @PathVariable Long empTaskId,
+            @RequestBody List<ChecklistMaster> items) {
+
+        if (items == null || items.isEmpty()) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Request body must be a non-empty list."));
+        }
+
+        List<ChecklistMaster> saved = new ArrayList<>();
+        int seq = 1;
+        for (ChecklistMaster item : items) {
+            if (item.getChkNm() == null || item.getChkNm().isBlank()) continue;
+            
+            // Inline split logic for empTaskId
+            String rawNm = item.getChkNm();
+            String desc = item.getChkDesc();
+            String[] parts = Arrays.stream(rawNm.split(","))
+                    .map(String::trim)
+                    .filter(s -> !s.isEmpty())
+                    .toArray(String[]::new);
+
+            for (int i = 0; i < parts.length; i++) {
+                ChecklistMaster row = new ChecklistMaster();
+                row.setEmpTaskId(empTaskId);
+                row.setTaskId(null); 
+                row.setIsLive(false); // Does not matter as it uses empTaskId
+                row.setChkNm(parts[i]);
+                row.setChkDesc(desc);
+                // If it's a split item, only the first part gets the real code, or they just get sequential codes if we want.
+                // Since frontend passes chkCd, let's use it for the first token at least, or append an index for subsequent tokens.
+                row.setChkCd(i == 0 ? item.getChkCd() : (item.getChkCd() != null ? item.getChkCd() + "-" + i : null));
+                row.setChkSts(false);
+                row.setSts(true);
+                row.setSeqNo(seq + i);
+                saved.add(checklistRepo.save(row));
+            }
+            seq += parts.length;
+        }
+
+        return ResponseEntity.status(HttpStatus.CREATED)
+                .body(Map.of("created", saved.size(), "items", saved));
+    }
+
+    @GetMapping("/assignments/{empTaskId}")
+    public List<ChecklistMaster> getIndividualTaskItems(@PathVariable Long empTaskId) {
+        return expandCommaRows(checklistRepo.findByEmpTaskId(empTaskId));
     }
 
     // ── LIVE TASK Checklist ─────────────────────────────────────────────────

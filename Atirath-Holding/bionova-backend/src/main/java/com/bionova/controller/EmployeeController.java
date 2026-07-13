@@ -19,6 +19,12 @@ public class EmployeeController {
     @Autowired
     private com.bionova.repository.DesignationRepository designationRepository;
 
+    @Autowired
+    private com.bionova.repository.CompanyRepository companyRepository;
+
+    @Autowired
+    private com.bionova.repository.PlantRepository plantRepository;
+
     private void populateDesignation(Employee employee) {
         if (employee.getDesigId() != null) {
             designationRepository.findById(employee.getDesigId())
@@ -48,10 +54,52 @@ public class EmployeeController {
         }
     }
 
+    private void populateCompanyAndPlant(Employee employee) {
+        if (employee == null) return;
+        if (employee.getCoyId() != null) {
+            companyRepository.findById(employee.getCoyId().longValue())
+                .ifPresent(c -> employee.setCoyNm(c.getCoyNm()));
+        }
+        if (employee.getPltId() != null) {
+            plantRepository.findById(employee.getPltId().longValue())
+                .ifPresent(p -> employee.setPltNm(p.getPltNm()));
+        }
+    }
+
+    private void populateCompanyAndPlantNames(List<Employee> employees) {
+        if (employees == null || employees.isEmpty()) return;
+        
+        List<com.bionova.entity.CompanyMaster> companies = companyRepository.findAll();
+        Map<Long, String> coyMap = companies.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                com.bionova.entity.CompanyMaster::getCoyId,
+                com.bionova.entity.CompanyMaster::getCoyNm,
+                (v1, v2) -> v1
+            ));
+
+        List<com.bionova.entity.PlantMaster> plants = plantRepository.findAll();
+        Map<Long, String> pltMap = plants.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                com.bionova.entity.PlantMaster::getPltId,
+                com.bionova.entity.PlantMaster::getPltNm,
+                (v1, v2) -> v1
+            ));
+
+        for (Employee emp : employees) {
+            if (emp.getCoyId() != null) {
+                emp.setCoyNm(coyMap.get(emp.getCoyId().longValue()));
+            }
+            if (emp.getPltId() != null) {
+                emp.setPltNm(pltMap.get(emp.getPltId().longValue()));
+            }
+        }
+    }
+
     @GetMapping("/employees")
     public List<Employee> getEmployees() {
         List<Employee> list = employeeRepository.findAll();
         populateDesignations(list);
+        populateCompanyAndPlantNames(list);
         return list;
     }
 
@@ -60,6 +108,7 @@ public class EmployeeController {
         return employeeRepository.findById(id)
                 .map(emp -> {
                     populateDesignation(emp);
+                    populateCompanyAndPlant(emp);
                     return ResponseEntity.ok(emp);
                 })
                 .orElse(ResponseEntity.notFound().build());
@@ -75,6 +124,7 @@ public class EmployeeController {
         return employeeRepository.findByEmail(email)
                 .map(emp -> {
                     populateDesignation(emp);
+                    populateCompanyAndPlant(emp);
                     return ResponseEntity.ok(emp);
                 })
                 .orElse(ResponseEntity.notFound().build());
@@ -164,6 +214,7 @@ public class EmployeeController {
 
         Employee saved = employeeRepository.save(employee);
         populateDesignation(saved);
+        populateCompanyAndPlant(saved);
         return ResponseEntity.ok(saved);
     }
     @PutMapping("/employees/{id}")
@@ -227,6 +278,7 @@ public class EmployeeController {
 
         Employee updated = employeeRepository.save(employee);
         populateDesignation(updated);
+        populateCompanyAndPlant(updated);
         return ResponseEntity.ok(updated);
     }
 

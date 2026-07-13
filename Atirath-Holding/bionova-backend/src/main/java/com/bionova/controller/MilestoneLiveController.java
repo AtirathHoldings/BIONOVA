@@ -4,10 +4,14 @@ import com.bionova.entity.Employee;
 import com.bionova.entity.MilestoneLive;
 import com.bionova.entity.ProjectLive;
 import com.bionova.entity.TaskLive;
+import com.bionova.entity.ScreenMaster;
 import com.bionova.repository.EmployeeRepository;
 import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
+import com.bionova.repository.RoleBasedEmployeeMappingRepository;
+import com.bionova.repository.RoleBasedAccessControlRepository;
+import com.bionova.repository.ScreenMasterRepository;
 import com.bionova.service.ActivityLogService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -18,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/api/milestone-live")
@@ -38,12 +43,61 @@ public class MilestoneLiveController {
     @Autowired
     private ActivityLogService activityLogService;
 
-    private boolean isAdminOrManager(Employee employee) {
-        if (employee == null) {
-            return false;
+    @Autowired
+    private RoleBasedEmployeeMappingRepository rbacMappingRepository;
+
+    @Autowired
+    private RoleBasedAccessControlRepository rbacRepository;
+
+    @Autowired
+    private ScreenMasterRepository screenMasterRepository;
+
+    /**
+     * Determines if the employee has access to the Project module.
+     * Rules:
+     *  - No RBAC mapping configured yet (full_access mode) -> true
+     *  - Admin, Manager, PM, or full_access role -> true
+     *  - Mapped role has view_flg = true for any screen in the "Project" group -> true
+     */
+    private boolean hasProjectModuleAccess(Employee employee) {
+        if (employee == null) return false;
+        
+        var mappings = rbacMappingRepository.findByEmpId(employee.getEmpId());
+        if (mappings.isEmpty()) {
+            return true;
         }
-        // Since role column is removed, we treat vsv.vempati@gmail.com as admin
-        return "vsv.vempati@gmail.com".equalsIgnoreCase(employee.getEmail());
+        
+        for (var mapping : mappings) {
+            var rbacs = rbacRepository.findByRoleId(mapping.getRoleId());
+            if (!rbacs.isEmpty()) {
+                String roleNm = rbacs.get(0).getRoleNm();
+                if (roleNm != null) {
+                    String lowerRole = roleNm.toLowerCase();
+                    if (lowerRole.contains("admin") || lowerRole.contains("manager") || lowerRole.contains("pm") || lowerRole.contains("full_access")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        List<ScreenMaster> screens = screenMasterRepository.findAll();
+        Set<Integer> projectScreenIds = new java.util.HashSet<>();
+        for (ScreenMaster sm : screens) {
+            if ("Project".equalsIgnoreCase(sm.getGroupNm())) {
+                projectScreenIds.add(sm.getScreenId());
+            }
+        }
+        
+        for (var mapping : mappings) {
+            var rbacs = rbacRepository.findByRoleId(mapping.getRoleId());
+            for (var rbac : rbacs) {
+                if (projectScreenIds.contains(rbac.getScreenId()) && Boolean.TRUE.equals(rbac.getViewFlg())) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
     }
 
     @GetMapping
@@ -51,7 +105,7 @@ public class MilestoneLiveController {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return employeeRepository.findByEmail(email)
                 .map(employee -> {
-                    if (isAdminOrManager(employee)) {
+                    if (hasProjectModuleAccess(employee)) {
                         return milestoneLiveRepository.findAll();
                     } else {
                         return milestoneLiveRepository.findMilestonesByEmpId(employee.getEmpId());
@@ -68,7 +122,7 @@ public class MilestoneLiveController {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Unauthorized"));
         }
 
-        if (isAdminOrManager(employee) || 
+        if (hasProjectModuleAccess(employee) || 
             employee.getEmpId().equals(empId)) {
             return ResponseEntity.ok(milestoneLiveRepository.findMilestonesByEmpId(empId));
         } else {
@@ -91,8 +145,8 @@ public class MilestoneLiveController {
     @PostMapping
     public ResponseEntity<?> create(@RequestBody MilestoneLive milestone) {
         if (milestone.getMlstnCd() != null && !milestone.getMlstnCd().trim().isEmpty()) {
-            if (milestoneLiveRepository.existsByMlstnCd(milestone.getMlstnCd())) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists."));
+            if (milestoneLiveRepository.existsByMlstnCdAndPrjId(milestone.getMlstnCd(), milestone.getPrjId())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists in this project."));
             }
         }
 
@@ -140,8 +194,9 @@ public class MilestoneLiveController {
                 .orElseThrow(() -> new RuntimeException("Milestone not found: " + id));
 
         if (details.getMlstnCd() != null && !details.getMlstnCd().trim().isEmpty()) {
-            if (milestoneLiveRepository.existsByMlstnCdAndMIdNot(details.getMlstnCd(), id)) {
-                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists."));
+            Long prjId = details.getPrjId() != null ? details.getPrjId() : milestone.getPrjId();
+            if (milestoneLiveRepository.existsByMlstnCdAndPrjIdAndMIdNot(details.getMlstnCd(), prjId, id)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists in this project."));
             }
             milestone.setMlstnCd(details.getMlstnCd());
         }
@@ -169,7 +224,6 @@ public class MilestoneLiveController {
             milestone.setEndDt(details.getEndDt());
         }
 
-        milestone.setChkId(details.getChkId());
         milestone.setAddlRem(details.getAddlRem());
         milestone.setSts(details.getSts());
         if (details.getMlstnSts() != null) {

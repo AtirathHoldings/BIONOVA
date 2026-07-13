@@ -112,7 +112,7 @@ public class GanttChartController {
             } else if (!msTasks.isEmpty()) {
                 double taskProgressSum = 0.0;
                 for (TaskLive task : msTasks) {
-                    taskProgressSum += getTaskProgressValue(task.getTaskSts());
+                    taskProgressSum += getTaskProgressValue(task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN");
                 }
                 milestoneProgress = taskProgressSum / msTasks.size();
             }
@@ -149,7 +149,7 @@ public class GanttChartController {
 
             // Create Task Gantt Items
             for (TaskLive task : msTasks) {
-                double taskProgress = getTaskProgressValue(task.getTaskSts());
+                double taskProgress = getTaskProgressValue(task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN");
                 String assigneeName = task.getEmpId() != null ? employeeNameMap.get(task.getEmpId()) : null;
 
                 // Fetch Task Baseline Dates (from draft task if available)
@@ -171,7 +171,7 @@ public class GanttChartController {
                         task.getEndDt(),
                         taskProgress,
                         "MS-" + ms.getMId(),
-                        task.getTaskSts(),
+                        task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN",
                         task.getTaskCd(),
                         assigneeName,
                         task.getDepTaskId() != null ? "TSK-" + task.getDepTaskId() : null,
@@ -231,7 +231,6 @@ public class GanttChartController {
         switch (status.toUpperCase()) {
             case "COMPLETED":
                 return 1.0;
-            case "SUBMIT_REVIEW":
             case "UNDER_REVIEW":
                 return 0.8;
             case "WIP":

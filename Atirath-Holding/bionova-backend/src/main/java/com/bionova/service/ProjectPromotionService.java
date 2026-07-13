@@ -33,6 +33,7 @@ public class ProjectPromotionService {
     @Autowired private AttachmentMasterRepository   attachmentMasterRepository;
     @Autowired private ProcessConfigRepository      processConfigRepository;
     @Autowired private CalendarService              calendarService;
+    @Autowired private AppNotificationRepository    appNotificationRepository;
 
     /**
      * Promote a draft project to Live.
@@ -63,6 +64,22 @@ public class ProjectPromotionService {
             throw new RuntimeException("This project has already been promoted to Live.");
         }
 
+        // ── Validate: at least 1 milestone and 1 task required ───────────
+        long milestoneCount = milestoneDraftRepository.countByDrftPrjId(drftPrjId);
+        if (milestoneCount == 0) {
+            throw new RuntimeException(
+                "Cannot promote to Live: Project has no milestones. " +
+                "Please add at least one milestone before going live.");
+        }
+
+        long taskCount = taskDraftRepository.countTasksByDrftPrjId(drftPrjId);
+        if (taskCount == 0) {
+            throw new RuntimeException(
+                "Cannot promote to Live: Project has milestones but no tasks. " +
+                "Please add at least one task to a milestone before going live.");
+        }
+
+        Map<Long, Long> draftToLiveTaskIdMap = new HashMap<>();
         Integer coyId = coyHolidays  ? draft.getCoyId() : null;
         Integer pltId = pltHolidays  ? draft.getPltId() : null;
 
@@ -80,7 +97,11 @@ public class ProjectPromotionService {
                 draft.getTentStDt(), draft.getNoOfDays() != null ? draft.getNoOfDays() : 0,
                 excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
         live.setEndDt(prjAdjustedEndDt);
-        live.setNoOfDays(draft.getNoOfDays());
+        if (draft.getTentStDt() != null && prjAdjustedEndDt != null) {
+            live.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(draft.getTentStDt(), prjAdjustedEndDt) + 1);
+        } else {
+            live.setNoOfDays(draft.getNoOfDays());
+        }
         live.setCoyId(draft.getCoyId());
         live.setPltId(draft.getPltId());
         live.setPrjObjtv(draft.getPrjObjtv());
@@ -111,7 +132,6 @@ public class ProjectPromotionService {
             ml.setMlstnCd(md.getMlstnCd());
             ml.setMlstnTtl(md.getMlstnTtl());
             ml.setMlstnDesc(md.getMlstnDesc());
-            ml.setMlstnDays(md.getMlstnDays());
             ml.setMlstnDepFlg(md.getMlstnDepFlg());
             ml.setMlstnDepTyp(md.getMlstnDepTyp());
             ml.setMlstnDepMId(md.getMlstnDepMId());
@@ -120,7 +140,11 @@ public class ProjectPromotionService {
                     md.getTentStDt(), md.getMlstnDays() != null ? md.getMlstnDays() : 0,
                     excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
             ml.setEndDt(msAdjustedEndDt);
-            ml.setChkId(md.getChkId());
+            if (md.getTentStDt() != null && msAdjustedEndDt != null) {
+                ml.setMlstnDays((int) java.time.temporal.ChronoUnit.DAYS.between(md.getTentStDt(), msAdjustedEndDt) + 1);
+            } else {
+                ml.setMlstnDays(md.getMlstnDays());
+            }
             ml.setAddlRem(md.getAddlRem());
             ml.setMlstnSts("LIVE");
             ml.setSts(true);
@@ -151,18 +175,21 @@ public class ProjectPromotionService {
                 tl.setTaskDepFlg(td.getTaskDepFlg());
                 tl.setTaskDepTyp(td.getTaskDepTyp());
                 tl.setDepTaskId(td.getDepTaskId());
-                tl.setNoOfDays(td.getNoOfDays());
                 tl.setChkFlg(td.getChkFlg());
-                tl.setChkId(td.getChkId());
                 tl.setNoteTxt(td.getNoteTxt());
                 tl.setStDt(td.getTentStDt());
                 java.time.LocalDate taskAdjustedEndDt = calendarService.calculateEndDate(
                         td.getTentStDt(), td.getNoOfDays() != null ? td.getNoOfDays() : 0,
                         excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
                 tl.setEndDt(taskAdjustedEndDt);
+                if (td.getTentStDt() != null && taskAdjustedEndDt != null) {
+                    tl.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(td.getTentStDt(), taskAdjustedEndDt) + 1);
+                } else {
+                    tl.setNoOfDays(td.getNoOfDays());
+                }
                 tl.setPrcsFlg(td.getPrcsFlg());
                 tl.setPrcsYesActn(td.getPrcsYesActn());
-                tl.setTaskSts("OPEN");
+                tl.setTaskSts(TaskStatusMaster.OPEN);
                 tl.setAddlRem(td.getAddlRem());
 
                 // Compute task working days
@@ -174,6 +201,7 @@ public class ProjectPromotionService {
                 }
 
                 TaskLive savedTask = taskLiveRepository.save(tl);
+                draftToLiveTaskIdMap.put(td.getDrftTaskId(), savedTask.getTaskId());
                 totalTasks++;
 
                 // ── 5. Clone Checklists for this task ──────────────────────
@@ -225,6 +253,30 @@ public class ProjectPromotionService {
                     lc.setRId(dc.getRId());
                     processConfigRepository.save(lc);
                     totalProcessConfigs++;
+
+                    if (lc.getEmpId() != null) {
+                        AppNotification notification = new AppNotification();
+                        notification.setEmpId(lc.getEmpId());
+                        String role = (lc.getOrdrId() == 1) ? "Reviewer" : "Approver";
+                        notification.setTitle("Assigned as " + role + ": " + savedTask.getTaskCd());
+                        notification.setMessage("You have been assigned as the " + role + " for task '" + savedTask.getTaskNm() + "'.");
+                        notification.setEntityTyp("TASK");
+                        notification.setEntityId(savedTask.getTaskId());
+                        appNotificationRepository.save(notification);
+                    }
+                }
+            }
+        }
+
+        // ── 7.5. Map depTaskId to Live Task IDs and set status to DRAFT if there is a dependency ──
+        for (Map.Entry<Long, Long> entry : draftToLiveTaskIdMap.entrySet()) {
+            Long liveTaskId = entry.getValue();
+            TaskLive liveTask = taskLiveRepository.findById(liveTaskId).orElse(null);
+            if (liveTask != null && liveTask.getDepTaskId() != null) {
+                Long liveDepTaskId = draftToLiveTaskIdMap.get(liveTask.getDepTaskId());
+                if (liveDepTaskId != null) {
+                    liveTask.setDepTaskId(liveDepTaskId);
+                    taskLiveRepository.save(liveTask);
                 }
             }
         }
@@ -242,5 +294,19 @@ public class ProjectPromotionService {
         result.put("attachmentsPromoted", totalAttachments);
         result.put("processConfigsPromoted", totalProcessConfigs);
         return result;
+    }
+
+    // ── Helper methods for pre-flight check ───────────────────────────────
+
+    public boolean isAlreadyLive(Long drftPrjId) {
+        return projectLiveRepository.findByDrftPrjId(drftPrjId).isPresent();
+    }
+
+    public long countMilestones(Long drftPrjId) {
+        return milestoneDraftRepository.countByDrftPrjId(drftPrjId);
+    }
+
+    public long countTasks(Long drftPrjId) {
+        return taskDraftRepository.countTasksByDrftPrjId(drftPrjId);
     }
 }

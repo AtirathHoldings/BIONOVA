@@ -11,4 +11,6 @@ public interface ProcessMasterRepository extends JpaRepository<ProcessMaster, In
 
     /** All process events for a task, ordered by step */
     List<ProcessMaster> findByTaskIdOrderByOrdrIdAsc(Long taskId);
+
+    List<ProcessMaster> findByEmpTaskIdOrderByOrdrIdAsc(Long empTaskId);
 }

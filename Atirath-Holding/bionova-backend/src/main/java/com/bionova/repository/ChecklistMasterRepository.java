@@ -24,4 +24,11 @@ public interface ChecklistMasterRepository extends JpaRepository<ChecklistMaster
 
     /** Check code uniqueness scoped to a specific task */
     boolean existsByTaskIdAndIsLiveAndChkCd(Long taskId, Boolean isLive, String chkCd);
+
+    List<ChecklistMaster> findByEmpTaskId(Long empTaskId);
+
+    long countByEmpTaskIdAndChkStsAndSts(Long empTaskId, Boolean chkSts, Boolean sts);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByEmpTaskId(Long empTaskId);
 }

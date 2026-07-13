@@ -3,6 +3,7 @@ package com.bionova.service;
 import com.bionova.entity.MilestoneLive;
 import com.bionova.entity.ProjectLive;
 import com.bionova.entity.TaskLive;
+import com.bionova.entity.TaskStatusMaster;
 import com.bionova.repository.MilestoneLiveRepository;
 import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
@@ -24,10 +25,25 @@ public class ProjectStatusCascadeService {
     @Autowired
     private ProjectLiveRepository projectLiveRepository;
 
+    @Autowired
+    private ProjectLeadLagService projectLeadLagService;
+
     @Transactional
     public void cascadeStatusFromTask(Long taskId) {
         TaskLive task = taskLiveRepository.findById(taskId).orElse(null);
         if (task == null) return;
+
+        // Release downstream sequential tasks if this task is completed
+        if (task.getTaskSts() != null && "COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+            List<TaskLive> downstreamTasks = taskLiveRepository.findByDepTaskId(taskId);
+            for (TaskLive dt : downstreamTasks) {
+                String dtSts = dt.getTaskSts() != null ? dt.getTaskSts().getStatusNm() : "";
+                if ("DRAFT".equalsIgnoreCase(dtSts) || "".equalsIgnoreCase(dtSts)) {
+                    dt.setTaskSts(TaskStatusMaster.OPEN);
+                    taskLiveRepository.save(dt);
+                }
+            }
+        }
 
         Long milestoneId = task.getMId();
         if (milestoneId == null) return;
@@ -41,11 +57,11 @@ public class ProjectStatusCascadeService {
         boolean anyStarted = false;
 
         for (TaskLive t : milestoneTasks) {
-            String sts = t.getTaskSts() != null ? t.getTaskSts() : "OPEN";
+            String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "OPEN";
             if (!"COMPLETED".equals(sts)) {
                 allCompleted = false;
             }
-            if ("WIP".equals(sts) || "SUBMIT_REVIEW".equals(sts) || "UNDER_REVIEW".equals(sts) || "COMPLETED".equals(sts)) {
+            if ("WIP".equals(sts) || "UNDER_REVIEW".equals(sts) || "COMPLETED".equals(sts)) {
                 anyStarted = true;
             }
         }
@@ -99,6 +115,9 @@ public class ProjectStatusCascadeService {
             project.setPrjSts(targetProjectStatus);
             projectLiveRepository.save(project);
         }
+
+        // Recalculate Lead/Lag/OnTime status for this project
+        projectLeadLagService.recalculateAndPersist(projectId);
     }
 
     /**
@@ -109,8 +128,9 @@ public class ProjectStatusCascadeService {
     public void cascadeReworkDownstream(Long taskId) {
         List<TaskLive> downstreamTasks = taskLiveRepository.findByDepTaskId(taskId);
         for (TaskLive dt : downstreamTasks) {
-            if (!"REWORK".equals(dt.getTaskSts()) && !"OPEN".equals(dt.getTaskSts())) {
-                dt.setTaskSts("REWORK");
+            String sts = dt.getTaskSts() != null ? dt.getTaskSts().getStatusNm() : "OPEN";
+            if (!"OPEN".equals(sts)) {
+                dt.setTaskSts(TaskStatusMaster.OPEN);
                 taskLiveRepository.save(dt);
                 
                 // Recursively cascade status change downstream

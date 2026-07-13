@@ -24,16 +24,35 @@ public class JwtUtil {
     }
 
     /**
-     * Generate a JWT token for the given email and role.
+     * Generate a JWT token for the given email, role, and empId.
      */
-    public String generateToken(String email, String role) {
+    public String generateToken(String email, String role, Long empId) {
         return Jwts.builder()
                 .subject(email)
                 .claim("role", role)
+                .claim("empId", empId)
                 .issuedAt(new Date())
                 .expiration(new Date(System.currentTimeMillis() + expiration))
                 .signWith(secretKey)
                 .compact();
+    }
+
+    /**
+     * Generate a JWT token for the given email and role (no empId - for backward compat).
+     */
+    public String generateToken(String email, String role) {
+        return generateToken(email, role, null);
+    }
+
+    /**
+     * Extract the empId claim from a token (may be null if not present).
+     */
+    public Long extractEmpId(String token) {
+        Object empId = extractClaims(token).get("empId");
+        if (empId instanceof Integer) return ((Integer) empId).longValue();
+        if (empId instanceof Long) return (Long) empId;
+        if (empId instanceof Number) return ((Number) empId).longValue();
+        return null;
     }
 
     /**

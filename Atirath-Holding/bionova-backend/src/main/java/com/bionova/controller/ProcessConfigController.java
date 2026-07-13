@@ -1,7 +1,11 @@
 package com.bionova.controller;
 
 import com.bionova.entity.ProcessConfig;
+import com.bionova.entity.AppNotification;
 import com.bionova.repository.ProcessConfigRepository;
+import com.bionova.repository.TaskLiveRepository;
+import com.bionova.repository.AssignmentRepository;
+import com.bionova.repository.AppNotificationRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -9,6 +13,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 import java.util.Map;
 
+@CrossOrigin(origins = "*", allowedHeaders = "*")
 @RestController
 @RequestMapping("/api/process-config")
 public class ProcessConfigController {
@@ -18,6 +23,15 @@ public class ProcessConfigController {
 
     @Autowired
     private com.bionova.repository.ReviewerMasterRepository reviewerMasterRepo;
+
+    @Autowired
+    private TaskLiveRepository taskLiveRepo;
+
+    @Autowired
+    private AssignmentRepository assignmentRepo;
+
+    @Autowired
+    private AppNotificationRepository appNotificationRepo;
 
     private Integer getRoleIdForOrder(Integer ordrId) {
         String roleName = (ordrId != null && ordrId == 1) ? "Reviewer" : "Approver";
@@ -81,6 +95,33 @@ public class ProcessConfigController {
         return ResponseEntity.ok(saved);
     }
 
+    // ── INDIVIDUAL TASK Process Config ──────────────────────────────────────
+
+    @PostMapping("/assignments/{empTaskId}")
+    public ResponseEntity<?> addIndividualTaskStep(
+            @PathVariable Long empTaskId,
+            @RequestBody ProcessConfig config) {
+
+        if (config.getEmpId() == null && config.getExtEmpId() == null) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "empId or extEmpId must be provided to assign a reviewer/approver."));
+        }
+
+        config.setRId(getRoleIdForOrder(config.getOrdrId()));
+        config.setEmpTaskId(empTaskId);
+        config.setTaskId(null); 
+        config.setIsLive(false); // Does not matter as it uses empTaskId
+
+        ProcessConfig saved = processConfigRepo.save(config);
+        sendAssignmentNotification(saved);
+        return ResponseEntity.ok(saved);
+    }
+
+    @GetMapping("/assignments/{empTaskId}")
+    public List<ProcessConfig> getIndividualTaskSteps(@PathVariable Long empTaskId) {
+        return processConfigRepo.findByEmpTaskIdOrderByOrdrIdAsc(empTaskId);
+    }
+
     // ── LIVE TASK Process Config (read-only — cloned during promotion) ──────
 
     /** Get all process steps for a Live Task (cloned from draft during promotion) */
@@ -111,6 +152,7 @@ public class ProcessConfigController {
         config.setRId(getRoleIdForOrder(details.getOrdrId()));
 
         ProcessConfig saved = processConfigRepo.save(config);
+        sendAssignmentNotification(saved);
         return ResponseEntity.ok(saved);
     }
 
@@ -120,5 +162,36 @@ public class ProcessConfigController {
     public ResponseEntity<Void> delete(@PathVariable Integer pcId) {
         processConfigRepo.deleteById(pcId);
         return ResponseEntity.ok().build();
+    }
+
+    private void sendAssignmentNotification(ProcessConfig config) {
+        if (config.getEmpId() == null) {
+            return;
+        }
+        String role = (config.getOrdrId() != null && config.getOrdrId() == 1) ? "Reviewer" : "Approver";
+        
+        if (config.getEmpTaskId() != null) {
+            // Assignment
+            assignmentRepo.findById(config.getEmpTaskId()).ifPresent(task -> {
+                AppNotification notification = new AppNotification();
+                notification.setEmpId(config.getEmpId());
+                notification.setTitle("Assigned as " + role + ": " + task.getTaskCd());
+                notification.setMessage("You have been assigned as the " + role + " for assignment '" + task.getTaskNm() + "'.");
+                notification.setEntityTyp("ASSIGNMENT");
+                notification.setEntityId(task.getEmpTaskId());
+                appNotificationRepo.save(notification);
+            });
+        } else if (config.getTaskId() != null && Boolean.TRUE.equals(config.getIsLive())) {
+            // Live task
+            taskLiveRepo.findById(config.getTaskId()).ifPresent(task -> {
+                AppNotification notification = new AppNotification();
+                notification.setEmpId(config.getEmpId());
+                notification.setTitle("Assigned as " + role + ": " + task.getTaskCd());
+                notification.setMessage("You have been assigned as the " + role + " for task '" + task.getTaskNm() + "'.");
+                notification.setEntityTyp("TASK");
+                notification.setEntityId(task.getTaskId());
+                appNotificationRepo.save(notification);
+            });
+        }
     }
 }

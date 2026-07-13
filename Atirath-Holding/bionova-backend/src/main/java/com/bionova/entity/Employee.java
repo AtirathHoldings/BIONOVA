@@ -95,4 +95,10 @@ public class Employee {
 
     @Transient
     private String role;
+
+    @Transient
+    private String coyNm;
+
+    @Transient
+    private String pltNm;
 }
