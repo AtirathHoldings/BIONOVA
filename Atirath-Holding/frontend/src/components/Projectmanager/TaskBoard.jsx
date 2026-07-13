@@ -165,9 +165,11 @@ const mapPriorityFromApi = (prjPrty) => {
 };
 
 const mapBackendTask = (t, projects, milestones, employees) => {
-  const milestone = (milestones || []).find(m => String(m.mId) === String(t.mId));
-  const project = milestone ? (projects || []).find(p => String(p.prjId) === String(milestone.prjId)) : null;
-  const employee = (employees || []).find(e => String(e.empId) === String(t.empId));
+  const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id);
+  const milestone = (milestones || []).find(m => (m.mId || m.mid || m.id) && String(m.mId || m.mid || m.id) === tMId);
+  const pId = t.prjId || t.prjid || t.projectId || milestone?.prjId || milestone?.prjid || milestone?.project?.prjId || milestone?.projectId || t.project?.prjId || t.project?.id;
+  const project = pId ? (projects || []).find(p => (p.prjId || p.id || p.prjid) && String(p.prjId || p.id || p.prjid) === String(pId)) : null;
+  const employee = (employees || []).find(e => (e.empId || e.id) && String(e.empId || e.id) === String(t.empId));
 
   let status = "Not Started";
   if (t.taskSts === "COMPLETED") {
@@ -201,24 +203,24 @@ const mapBackendTask = (t, projects, milestones, employees) => {
   const assigneeName = employee ? `${employee.fstNm || employee.firstName || ""} ${employee.lstNm || employee.lastName || ""}`.trim() || "Unassigned" : "Unassigned";
 
   return {
-    id: t.taskCd || `TSK-${t.taskId}`,
-    taskId: t.taskId,
-    title: t.taskNm,
-    project: project ? project.prjNm : "Unknown Project",
-    projectId: project ? project.prjId : null,
-    milestone: milestone ? `${milestone.mlstnCd || "ML-???"} ${milestone.mlstnTtl || ""}` : "Unknown Milestone",
-    milestoneId: t.mId,
+    id: t.taskCd || t.taskcd || `TSK-${t.taskId || t.taskid}`,
+    taskId: t.taskId || t.taskid,
+    title: t.taskNm || t.tasknm,
+    project: project ? (project.prjNm || project.name || project.prjnm) : "Unknown Project",
+    projectId: project ? (project.prjId || project.id || project.prjid) : null,
+    milestone: milestone ? `${milestone.mlstnCd || milestone.mlstncd || "ML-???"} ${milestone.mlstnTtl || milestone.mlstnttl || ""}` : "Unknown Milestone",
+    milestoneId: t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id,
     assignee: assigneeName,
-    empId: t.empId,
+    empId: t.empId || t.empid,
     progress: progress,
-    dueDate: t.endDt || "",
-    startDate: t.stDt || "",
-    subtasksCount: t.wrkDays || 3,
-    subtasksCompleted: status === "Completed" ? (t.wrkDays || 3) : 0,
-    priority: status === "Completed" ? "Completed" : status === "Overdue" ? "Overdue" : mapPriorityFromApi(project ? project.prjPrty : "Medium"),
-    taskType: t.taskAsgnTo === "EXTERNAL" ? "External" : "Internal",
+    dueDate: t.endDt || t.enddt || "",
+    startDate: t.stDt || t.stdt || "",
+    subtasksCount: t.wrkDays || t.wrkdays || 3,
+    subtasksCompleted: status === "Completed" ? (t.wrkDays || t.wrkdays || 3) : 0,
+    priority: status === "Completed" ? "Completed" : status === "Overdue" ? "Overdue" : mapPriorityFromApi(project ? (project.prjPrty || project.prjprty) : "Medium"),
+    taskType: (t.taskAsgnTo || t.taskasgnto) === "EXTERNAL" ? "External" : "Internal",
     status: status,
-    description: t.taskDesc || "",
+    description: t.taskDesc || t.taskdesc || "",
     rawTask: t
   };
 };
@@ -226,6 +228,7 @@ const mapBackendTask = (t, projects, milestones, employees) => {
 // ─── Main Component ────────────────────────────────────────────────────────
 const TaskBoard = ({ userRole, onLogout }) => {
   const [tasks, setTasks] = useState([]);
+  const [allTasks, setAllTasks] = useState([]);
   const [apiLoaded, setApiLoaded] = useState(false);
   const [employeesList, setEmployeesList] = useState([]);
   const [milestonesRaw, setMilestonesRaw] = useState([]);
@@ -258,10 +261,10 @@ const TaskBoard = ({ userRole, onLogout }) => {
       setDepartmentsList(departments);
       setDesignationsList(designations);
 
-      const empId = profileRes?.empId;
-      const isAdmin = profileRes?.email === 'vsv.vempati@gmail.com';
+      const userTasks = liveTasks || [];
 
-      const userTasks = (liveTasks || []).filter(t => isAdmin || t.empId === empId);
+      const allMapped = (liveTasks || []).map(t => mapBackendTask(t, liveProjects, liveMilestones, liveEmployees));
+      setAllTasks(allMapped);
 
       const mapped = userTasks.map(t => mapBackendTask(t, liveProjects, liveMilestones, liveEmployees));
       setTasks(mapped);
@@ -341,7 +344,10 @@ const TaskBoard = ({ userRole, onLogout }) => {
 
   // ─── Derived data for dropdowns ──────────────────────────────────────
   const derivedMilestones = milestonesRaw
-    .filter(m => selectedProjectId === "All" || String(m.prjId || m.prj_id || m.drftPrjId || m.id) === String(selectedProjectId))
+    .filter(m => {
+      const mPrjId = String(m.prjId || m.prjid || m.project?.prjId || m.projectId || m.prj_id || m.drftPrjId);
+      return selectedProjectId === "All" || mPrjId === String(selectedProjectId);
+    })
     .map(m => ({
       value: `${m.mlstnCd || "ML-???"} ${m.mlstnTtl || ""}`,
       label: `${m.mlstnCd || "ML-???"} ${m.mlstnTtl || ""}`
@@ -374,37 +380,27 @@ const TaskBoard = ({ userRole, onLogout }) => {
   }));
 
   // ─── Filter and sorting ──────────────────────────────────────────────
-  const filteredTasks = tasks.filter((task) => {
+  const baseFilteredTasks = tasks.filter((task) => {
     const matchProject = selectedProjectId === "All" || String(task.projectId) === String(selectedProjectId);
     const matchMilestone = selectedMilestone === "All Milestones" || task.milestone === selectedMilestone;
     const matchAssignee = selectedAssignee === "All Employees" || task.assignee === selectedAssignee;
     const matchTaskType = selectedTaskType === "All" || task.taskType === selectedTaskType;
     const matchPriority = selectedPriority === "All" || task.priority === selectedPriority;
-    const matchStatus = selectedStatus === "All Statuses" || task.status === selectedStatus;
     const matchSearch =
       task.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
       task.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (task.description && task.description.toLowerCase().includes(searchQuery.toLowerCase()));
 
-    return matchProject && matchMilestone && matchAssignee && matchTaskType && matchPriority && matchStatus && matchSearch;
+    return matchProject && matchMilestone && matchAssignee && matchTaskType && matchPriority && matchSearch;
   });
 
-  const activeProject = projectsRaw.find(p => selectedProjectId !== "All" ? String(p.prjId) === String(selectedProjectId) : true) || projectsRaw[0];
-  const activePlant = activeProject ? plantsList.find(pl => pl.pltId === activeProject.pltId)?.pltNm : null;
-  const activeDept = activeProject ? departmentsList.find(d => d.deptId === activeProject.deptId)?.deptNm : null;
+  const filteredTasks = baseFilteredTasks.filter(task => {
+    return selectedStatus === "All Statuses" || task.status === selectedStatus;
+  });
 
-  // ─── Metrics ──────────────────────────────────────────────────────────
-  const projectTasks = tasks.filter(task => selectedProjectId === "All" || String(task.projectId) === String(selectedProjectId));
-  const totalTasksCount = projectTasks.filter(t => t.status !== "Under Review").length;
-  const notStartedCount = projectTasks.filter(t => t.status === "Not Started").length;
-  const inProgressCount = projectTasks.filter(t => t.status === "In Progress" || t.status === "Under Review").length;
-  const completedCount = projectTasks.filter(t => t.status === "Completed").length;
-  const overdueCount = projectTasks.filter(t => t.status === "Overdue").length;
-
-  const notStartedPct = totalTasksCount > 0 ? ((notStartedCount / totalTasksCount) * 100).toFixed(2) : "0.00";
-  const inProgressPct = totalTasksCount > 0 ? ((inProgressCount / totalTasksCount) * 100).toFixed(2) : "0.00";
-  const completedPct = totalTasksCount > 0 ? ((completedCount / totalTasksCount) * 100).toFixed(2) : "0.00";
-  const overduePct = totalTasksCount > 0 ? ((overdueCount / totalTasksCount) * 100).toFixed(2) : "0.00";
+  const projectsToDisplay = selectedProjectId === "All" 
+    ? projectsRaw 
+    : projectsRaw.filter(p => String(p.prjId || p.prjid || p.id) === String(selectedProjectId));
 
   // ─── Drag & drop handlers ────────────────────────────────────────────
   const handleDragStart = (e, taskId) => {
@@ -577,66 +573,6 @@ const TaskBoard = ({ userRole, onLogout }) => {
 
         <main className="tb-main">
 
-          {/* Project Summary Card */}
-          <div className="tb-proj-summary-card">
-            <div className="tb-proj-left">
-              <img src={plantImage} alt="Plant Construction" className="tb-proj-thumbnail" />
-              <div className="tb-proj-info">
-                <div className="tb-proj-title-row">
-                  <h2 className="tb-proj-title">{activeProject ? activeProject.prjNm : "No Projects Found"}</h2>
-                  <span className="tb-badge live">{activeProject ? (activeProject.prjSts || "LIVE") : "N/A"}</span>
-                  <span className="tb-badge proj-code">{activeProject ? activeProject.prjCd : "N/A"}</span>
-                </div>
-                <div className="tb-proj-meta-row">
-                  <div className="tb-proj-meta-item">
-                    <User size={13} />
-                    <span>{activePlant || "N/A"}</span>
-                  </div>
-                  <div className="tb-proj-meta-item">
-                    <Layers size={13} />
-                    <span>Department: {activeDept || "Projects"}</span>
-                  </div>
-                  <div className="tb-proj-meta-item">
-                    <CalendarIcon size={13} />
-                    <span>{activeProject ? `${activeProject.stDt || "N/A"} to ${activeProject.endDt || "N/A"}` : "N/A"}</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Metrics */}
-            <div className="tb-proj-metrics">
-              <div className="tb-proj-metric-item" onClick={() => setSelectedStatus("All Statuses")} style={{ cursor: "pointer" }}>
-                <span className="tb-proj-metric-label">Total Tasks</span>
-                <span className="tb-proj-metric-val">{totalTasksCount}</span>
-              </div>
-              <div className="tb-proj-metric-item completed" onClick={() => setSelectedStatus("Completed")} style={{ cursor: "pointer" }}>
-                <span className="tb-proj-metric-label">Completed</span>
-                <span className="tb-proj-metric-val">
-                  {completedCount} <span>({completedPct}%)</span>
-                </span>
-              </div>
-              <div className="tb-proj-metric-item in-progress" onClick={() => setSelectedStatus("In Progress")} style={{ cursor: "pointer" }}>
-                <span className="tb-proj-metric-label">In Progress</span>
-                <span className="tb-proj-metric-val">
-                  {inProgressCount} <span>({inProgressPct}%)</span>
-                </span>
-              </div>
-              <div className="tb-proj-metric-item not-started" onClick={() => setSelectedStatus("Not Started")} style={{ cursor: "pointer" }}>
-                <span className="tb-proj-metric-label">Not Started</span>
-                <span className="tb-proj-metric-val">
-                  {notStartedCount} <span>({notStartedPct}%)</span>
-                </span>
-              </div>
-              <div className="tb-proj-metric-item overdue" onClick={() => setSelectedStatus("Overdue")} style={{ cursor: "pointer" }}>
-                <span className="tb-proj-metric-label">Overdue</span>
-                <span className="tb-proj-metric-val">
-                  {overdueCount} <span>({overduePct}%)</span>
-                </span>
-              </div>
-            </div>
-          </div>
-
           {/* ===== ROW 1: Filter Dropdowns + Search ===== */}
           <div className="tb-filter-toolbar">
             <div className="tb-filters-group">
@@ -653,8 +589,8 @@ const TaskBoard = ({ userRole, onLogout }) => {
                   options={[
                     { value: "All", label: "All Projects" },
                     ...projectsRaw.map(p => ({
-                      value: p.prjId,
-                      label: `${p.prjCd} - ${p.prjNm}`
+                      value: p.prjId || p.id,
+                      label: `${p.prjCd || 'PRJ'} - ${p.prjNm || p.name}`
                     }))
                   ]}
                   placeholder="Select Project"
@@ -676,37 +612,6 @@ const TaskBoard = ({ userRole, onLogout }) => {
                 />
               </div>
 
-              {/* Assignee */}
-              <div className="tb-filter-field">
-                <label>Assignee</label>
-                <SearchableSelect
-                  name="assignee"
-                  value={selectedAssignee}
-                  onChange={(e) => setSelectedAssignee(e.target.value)}
-                  options={[
-                    { value: "All Employees", label: "All Employees" },
-                    ...assigneeOptions
-                  ]}
-                  placeholder="Search Assignee"
-                />
-              </div>
-
-              {/* Task Type */}
-              <div className="tb-filter-field">
-                <label>Task Type</label>
-                <SearchableSelect
-                  name="taskType"
-                  value={selectedTaskType}
-                  onChange={(e) => setSelectedTaskType(e.target.value)}
-                  options={[
-                    { value: "All", label: "All" },
-                    { value: "Internal", label: "Internal" },
-                    { value: "External", label: "External" }
-                  ]}
-                  placeholder="Select Type"
-                />
-              </div>
-
               {/* Priority */}
               <div className="tb-filter-field">
                 <label>Priority</label>
@@ -716,32 +621,13 @@ const TaskBoard = ({ userRole, onLogout }) => {
                   onChange={(e) => setSelectedPriority(e.target.value)}
                   options={[
                     { value: "All", label: "All" },
+                    { value: "Critical", label: "Critical" },
                     { value: "High", label: "High" },
                     { value: "Medium", label: "Medium" },
-                    { value: "Low", label: "Low" },
-                    { value: "Completed", label: "Completed" },
-                    { value: "Overdue", label: "Overdue" }
+                    { value: "Normal", label: "Normal" },
+                    { value: "Low", label: "Low" }
                   ]}
                   placeholder="Select Priority"
-                />
-              </div>
-
-              {/* Status */}
-              <div className="tb-filter-field">
-                <label>Status</label>
-                <SearchableSelect
-                  name="status"
-                  value={selectedStatus}
-                  onChange={(e) => setSelectedStatus(e.target.value)}
-                  options={[
-                    { value: "All Statuses", label: "All Statuses" },
-                    { value: "Not Started", label: "Not Started" },
-                    { value: "In Progress", label: "In Progress" },
-                    { value: "Under Review", label: "Under Review" },
-                    { value: "Completed", label: "Completed" },
-                    { value: "Overdue", label: "Overdue" }
-                  ]}
-                  placeholder="Select Status"
                 />
               </div>
 
@@ -760,11 +646,91 @@ const TaskBoard = ({ userRole, onLogout }) => {
               </div>
             </div>
 
-            <div className="tb-toolbar-actions" style={{ alignSelf: "flex-end", height: "38px", display: "flex", alignItems: "center" }}>
-              <button className="tb-btn-white"><SlidersHorizontal size={14} /> Filters</button>
-              <button className="tb-btn-white"><Grid size={14} /> View</button>
-            </div>
+            
           </div>
+
+          {/* Project Summary Cards */}
+          {selectedProjectId !== "All" && (
+            <div className="tb-projects-wrapper" style={{ paddingBottom: '15px' }}>
+              {projectsToDisplay.map((proj) => {
+                const activePlant = plantsList.find(pl => pl.pltId === proj.pltId)?.pltNm || "N/A";
+                const activeDept = departmentsList.find(d => d.deptId === proj.deptId)?.deptNm || "Projects";
+                
+                const pTasks = allTasks.filter(t => String(t.projectId) === String(proj.prjId || proj.prjid || proj.id));
+                const totalTasksCount = pTasks.filter(t => t.status !== "Under Review").length;
+                const notStartedCount = pTasks.filter(t => t.status === "Not Started").length;
+                const inProgressCount = pTasks.filter(t => t.status === "In Progress" || t.status === "Under Review").length;
+                const completedCount = pTasks.filter(t => t.status === "Completed").length;
+                const overdueCount = pTasks.filter(t => t.status === "Overdue").length;
+
+                const notStartedPct = totalTasksCount > 0 ? ((notStartedCount / totalTasksCount) * 100).toFixed(2) : "0.00";
+                const inProgressPct = totalTasksCount > 0 ? ((inProgressCount / totalTasksCount) * 100).toFixed(2) : "0.00";
+                const completedPct = totalTasksCount > 0 ? ((completedCount / totalTasksCount) * 100).toFixed(2) : "0.00";
+                const overduePct = totalTasksCount > 0 ? ((overdueCount / totalTasksCount) * 100).toFixed(2) : "0.00";
+
+                return (
+                  <div key={proj.prjId} className="tb-proj-summary-card">
+                    <div className="tb-proj-left">
+                      <img src={plantImage} alt="Plant Construction" className="tb-proj-thumbnail" />
+                      <div className="tb-proj-info">
+                        <div className="tb-proj-title-row">
+                          <h2 className="tb-proj-title">{proj.prjNm || "Unknown Project"}</h2>
+                          <span className="tb-badge live">{proj.prjSts || "LIVE"}</span>
+                          <span className="tb-badge proj-code">{proj.prjCd || "N/A"}</span>
+                        </div>
+                        <div className="tb-proj-meta-row">
+                          <div className="tb-proj-meta-item">
+                            <User size={13} />
+                            <span>{activePlant}</span>
+                          </div>
+                          <div className="tb-proj-meta-item">
+                            <Layers size={13} />
+                            <span>Department: {activeDept}</span>
+                          </div>
+                          <div className="tb-proj-meta-item">
+                            <CalendarIcon size={13} />
+                            <span>{`${proj.stDt || "N/A"} to ${proj.endDt || "N/A"}`}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Metrics */}
+                    <div className="tb-proj-metrics">
+                      <div className="tb-proj-metric-item" onClick={() => setSelectedStatus("All Statuses")} style={{ cursor: "pointer" }}>
+                        <span className="tb-proj-metric-label">Total Tasks</span>
+                        <span className="tb-proj-metric-val">{totalTasksCount}</span>
+                      </div>
+                      <div className="tb-proj-metric-item completed" onClick={() => setSelectedStatus("Completed")} style={{ cursor: "pointer" }}>
+                        <span className="tb-proj-metric-label">Completed</span>
+                        <span className="tb-proj-metric-val">
+                          {completedCount} <span>({completedPct}%)</span>
+                        </span>
+                      </div>
+                      <div className="tb-proj-metric-item in-progress" onClick={() => setSelectedStatus("In Progress")} style={{ cursor: "pointer" }}>
+                        <span className="tb-proj-metric-label">In Progress</span>
+                        <span className="tb-proj-metric-val">
+                          {inProgressCount} <span>({inProgressPct}%)</span>
+                        </span>
+                      </div>
+                      <div className="tb-proj-metric-item not-started" onClick={() => setSelectedStatus("Not Started")} style={{ cursor: "pointer" }}>
+                        <span className="tb-proj-metric-label">Not Started</span>
+                        <span className="tb-proj-metric-val">
+                          {notStartedCount} <span>({notStartedPct}%)</span>
+                        </span>
+                      </div>
+                      <div className="tb-proj-metric-item overdue" onClick={() => setSelectedStatus("Overdue")} style={{ cursor: "pointer" }}>
+                        <span className="tb-proj-metric-label">Overdue</span>
+                        <span className="tb-proj-metric-val">
+                          {overdueCount} <span>({overduePct}%)</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           {/* ===== ROW 2: Status Tab Pills ===== */}
           <div className="tb-status-tabs">
@@ -795,8 +761,8 @@ const TaskBoard = ({ userRole, onLogout }) => {
                   style={selectedStatus === tab.value ? { background: tab.color, color: "#fff" } : {}}
                 >
                   {tab.value === "All Statuses"
-                    ? tasks.length
-                    : tasks.filter(t => t.status === tab.value).length}
+                    ? baseFilteredTasks.length
+                    : baseFilteredTasks.filter(t => t.status === tab.value).length}
                 </span>
               </button>
             ))}
@@ -811,27 +777,21 @@ const TaskBoard = ({ userRole, onLogout }) => {
             {(selectedStatus === "All Statuses" || selectedStatus === "Not Started") && (
               <div
                 ref={colRefs["Not Started"]}
-                className={`tb-col not-started ${draggedOverCol === "Not Started" ? "drag-over" : ""}`}
-                onDragOver={e => handleDragOver(e, "Not Started")}
-                onDragLeave={handleDragLeave}
-                onDrop={e => handleDrop(e, "Not Started")}
+                className={`tb-col not-started`}
+                
               >
                 <div className="tb-col-header">
                   <div className="tb-col-title-wrap">
                     <h3 className="tb-col-title">Not Started</h3>
                     <span className="tb-col-badge">{getTasksByStatus("Not Started").length}</span>
                   </div>
-                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Not Started")}>
-                    <Plus size={16} />
-                  </button>
                 </div>
                 <div className="tb-cards-container">
                   {getTasksByStatus("Not Started").map(task => (
                     <div
                       key={task.id}
                       className="tb-card"
-                      draggable
-                      onDragStart={e => handleDragStart(e, task.id)}
+                      
                       onClick={() => handleCardClick(task)}
                     >
                       <div className="tb-card-header">
@@ -867,9 +827,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                     </div>
                   ))}
                 </div>
-                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Not Started")}>
-                  + Add Task
-                </button>
+
               </div>
             )}
 
@@ -877,27 +835,21 @@ const TaskBoard = ({ userRole, onLogout }) => {
             {(selectedStatus === "All Statuses" || selectedStatus === "In Progress") && (
               <div
                 ref={colRefs["In Progress"]}
-                className={`tb-col in-progress ${draggedOverCol === "In Progress" ? "drag-over" : ""}`}
-                onDragOver={e => handleDragOver(e, "In Progress")}
-                onDragLeave={handleDragLeave}
-                onDrop={e => handleDrop(e, "In Progress")}
+                className={`tb-col in-progress`}
+                
               >
                 <div className="tb-col-header">
                   <div className="tb-col-title-wrap">
                     <h3 className="tb-col-title">In Progress</h3>
                     <span className="tb-col-badge">{getTasksByStatus("In Progress").length}</span>
                   </div>
-                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("In Progress")}>
-                    <Plus size={16} />
-                  </button>
                 </div>
                 <div className="tb-cards-container">
                   {getTasksByStatus("In Progress").map(task => (
                     <div
                       key={task.id}
                       className="tb-card"
-                      draggable
-                      onDragStart={e => handleDragStart(e, task.id)}
+                      
                       onClick={() => handleCardClick(task)}
                     >
                       <div className="tb-card-header">
@@ -944,9 +896,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                     </div>
                   ))}
                 </div>
-                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("In Progress")}>
-                  + Add Task
-                </button>
+
               </div>
             )}
 
@@ -954,27 +904,21 @@ const TaskBoard = ({ userRole, onLogout }) => {
             {(selectedStatus === "All Statuses" || selectedStatus === "Under Review") && (
               <div
                 ref={colRefs["Under Review"]}
-                className={`tb-col under-review ${draggedOverCol === "Under Review" ? "drag-over" : ""}`}
-                onDragOver={e => handleDragOver(e, "Under Review")}
-                onDragLeave={handleDragLeave}
-                onDrop={e => handleDrop(e, "Under Review")}
+                className={`tb-col under-review`}
+                
               >
                 <div className="tb-col-header">
                   <div className="tb-col-title-wrap">
                     <h3 className="tb-col-title">Under Review</h3>
                     <span className="tb-col-badge">{getTasksByStatus("Under Review").length}</span>
                   </div>
-                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Under Review")}>
-                    <Plus size={16} />
-                  </button>
                 </div>
                 <div className="tb-cards-container">
                   {getTasksByStatus("Under Review").map(task => (
                     <div
                       key={task.id}
                       className="tb-card"
-                      draggable
-                      onDragStart={e => handleDragStart(e, task.id)}
+                      
                       onClick={() => handleCardClick(task)}
                     >
                       <div className="tb-card-header">
@@ -1021,9 +965,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                     </div>
                   ))}
                 </div>
-                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Under Review")}>
-                  + Add Task
-                </button>
+
               </div>
             )}
 
@@ -1031,27 +973,21 @@ const TaskBoard = ({ userRole, onLogout }) => {
             {(selectedStatus === "All Statuses" || selectedStatus === "Completed") && (
               <div
                 ref={colRefs["Completed"]}
-                className={`tb-col completed ${draggedOverCol === "Completed" ? "drag-over" : ""}`}
-                onDragOver={e => handleDragOver(e, "Completed")}
-                onDragLeave={handleDragLeave}
-                onDrop={e => handleDrop(e, "Completed")}
+                className={`tb-col completed`}
+                
               >
                 <div className="tb-col-header">
                   <div className="tb-col-title-wrap">
                     <h3 className="tb-col-title">Completed</h3>
                     <span className="tb-col-badge">{getTasksByStatus("Completed").length}</span>
                   </div>
-                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Completed")}>
-                    <Plus size={16} />
-                  </button>
                 </div>
                 <div className="tb-cards-container">
                   {getTasksByStatus("Completed").map(task => (
                     <div
                       key={task.id}
                       className="tb-card"
-                      draggable
-                      onDragStart={e => handleDragStart(e, task.id)}
+                      
                       onClick={() => handleCardClick(task)}
                     >
                       <div className="tb-card-header">
@@ -1098,9 +1034,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                     </div>
                   ))}
                 </div>
-                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Completed")}>
-                  + Add Task
-                </button>
+
               </div>
             )}
 
@@ -1108,27 +1042,21 @@ const TaskBoard = ({ userRole, onLogout }) => {
             {(selectedStatus === "All Statuses" || selectedStatus === "Overdue") && (
               <div
                 ref={colRefs["Overdue"]}
-                className={`tb-col overdue ${draggedOverCol === "Overdue" ? "drag-over" : ""}`}
-                onDragOver={e => handleDragOver(e, "Overdue")}
-                onDragLeave={handleDragLeave}
-                onDrop={e => handleDrop(e, "Overdue")}
+                className={`tb-col overdue`}
+                
               >
                 <div className="tb-col-header">
                   <div className="tb-col-title-wrap">
                     <h3 className="tb-col-title">Overdue</h3>
                     <span className="tb-col-badge">{getTasksByStatus("Overdue").length}</span>
                   </div>
-                  <button className="tb-btn-add-circle" title="Add Task" onClick={() => openAddTaskModal("Overdue")}>
-                    <Plus size={16} />
-                  </button>
                 </div>
                 <div className="tb-cards-container">
                   {getTasksByStatus("Overdue").map(task => (
                     <div
                       key={task.id}
                       className="tb-card"
-                      draggable
-                      onDragStart={e => handleDragStart(e, task.id)}
+                      
                       onClick={() => handleCardClick(task)}
                     >
                       <div className="tb-card-header">
@@ -1175,9 +1103,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                     </div>
                   ))}
                 </div>
-                <button className="tb-btn-add-task-col" onClick={() => openAddTaskModal("Overdue")}>
-                  + Add Task
-                </button>
+
               </div>
             )}
           </div>
@@ -1215,122 +1141,12 @@ const TaskBoard = ({ userRole, onLogout }) => {
                 </div>
               </div>
             </div>
-
-            <div className="tb-legend-right">
-              <Hand size={15} />
-              <span>Drag and drop tasks to update status</span>
-            </div>
           </div>
         </main>
       </div>
 
       {/* ====== ADD TASK MODAL ====== */}
-      {showAddModal && (
-        <div className="tb-modal-overlay" onClick={() => setShowAddModal(false)}>
-          <form className="tb-modal" onClick={e => e.stopPropagation()} onSubmit={handleCreateTask}>
-            <div className="tb-modal-header">
-              <h3>Create Task in: {targetColumn}</h3>
-              <button type="button" className="tb-modal-close-btn" onClick={() => setShowAddModal(false)}><X size={18} /></button>
-            </div>
-            <div className="tb-modal-body">
-              <div className="tb-form-group">
-                <label>Task Title *</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Foundation Grouting"
-                  value={newTitle}
-                  onChange={e => setNewTitle(e.target.value)}
-                />
-              </div>
 
-              <div className="tb-form-group">
-                <label>Milestone</label>
-                <select value={newMilestone} onChange={e => setNewMilestone(e.target.value)}>
-                  {derivedMilestones.map(m => (
-                    <option key={m.value} value={m.value}>{m.label}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="tb-form-row">
-                <div className="tb-form-group">
-                  <label>Assignee</label>
-                  <select value={newAssignee} onChange={e => setNewAssignee(e.target.value)}>
-                    {assigneeOptions.map(opt => (
-                      <option key={opt.value} value={opt.value}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="tb-form-group">
-                  <label>Task Type</label>
-                  <select value={newTaskType} onChange={e => setNewTaskType(e.target.value)}>
-                    <option value="Internal">Internal</option>
-                    <option value="External">External</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="tb-form-row">
-                <div className="tb-form-group">
-                  <label>Priority</label>
-                  <select value={newPriority} onChange={e => setNewPriority(e.target.value)} disabled={targetColumn === "Completed" || targetColumn === "Overdue"}>
-                    <option value="High">High</option>
-                    <option value="Medium">Medium</option>
-                    <option value="Low">Low</option>
-                  </select>
-                </div>
-                <div className="tb-form-group">
-                  <label>Status</label>
-                  <select value={targetColumn} onChange={e => setTargetColumn(e.target.value)}>
-                    <option value="Not Started">Not Started</option>
-                    <option value="In Progress">In Progress</option>
-                    <option value="Under Review">Under Review</option>
-                    <option value="Completed">Completed</option>
-                    <option value="Overdue">Overdue</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="tb-form-row">
-                <div className="tb-form-group">
-                  <label>Subtasks Count</label>
-                  <input
-                    type="number"
-                    min="0"
-                    max="10"
-                    value={newSubtasksCount}
-                    onChange={e => setNewSubtasksCount(Number(e.target.value))}
-                  />
-                </div>
-                <div className="tb-form-group">
-                  <label>Due Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={newDueDate}
-                    onChange={e => setNewDueDate(e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="tb-form-group">
-                <label>Description</label>
-                <input
-                  type="text"
-                  placeholder="Task scope details..."
-                  value={newDescription}
-                  onChange={e => setNewDescription(e.target.value)}
-                />
-              </div>
-            </div>
-            <div className="tb-modal-footer">
-              <button type="button" className="tb-btn-secondary" onClick={() => setShowAddModal(false)}>Cancel</button>
-              <button type="submit" className="tb-btn-primary">Create Task</button>
-            </div>
-          </form>
-        </div>
-      )}
 
       {/* ====== DETAIL MODAL ====== */}
       {showDetailModal && selectedTask && (
@@ -1390,11 +1206,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
 
               
             </div>
-            <div className="tb-modal-footer" style={{ justifyContent: "space-between" }}>
-              {/* ─── Only Delete and Close remain ─── */}
-              <button className="tb-btn-danger" style={{ display: 'flex', alignItems: 'center', gap: '6px' }} onClick={() => handleDeleteTask(selectedTask.id)}>
-                <Trash2 size={14} /> Delete
-              </button>
+            <div className="tb-modal-footer" style={{ justifyContent: "flex-end" }}>
               <button className="tb-btn-primary" onClick={() => setShowDetailModal(false)}>Close</button>
             </div>
           </div>

@@ -184,7 +184,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     if (actionName === 'Create Project') navigate('/project-creation');
     else if (actionName === 'Add Milestone') navigate('/milestone-creation');
     else if (actionName === 'Create Task') navigate('/task-board');
-    else if (actionName === 'Open Gantt Chart') navigate('/project-list');
+    else if (actionName === 'Open Gantt Chart') navigate('/all-project-gantt-chart');
     else if (actionName === 'Run Forecast') navigate('/project-list');
     else alert(`${actionName} functionality will be implemented here.`);
   };
@@ -292,35 +292,39 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     
     let filteredProjects = [...projectsList];
     if (currentProject !== "All Projects") {
-      filteredProjects = filteredProjects.filter(p => p.prjNm === currentProject);
+      filteredProjects = filteredProjects.filter(p => (p.prjNm || p.prjnm) === currentProject);
     }
     if (currentDept !== "All Departments") {
-      const targetDept = departmentsList.find(d => d.deptNm === currentDept);
+      const targetDept = departmentsList.find(d => (d.deptNm || d.deptnm) === currentDept);
       if (targetDept) {
-        filteredProjects = filteredProjects.filter(p => p.deptId === targetDept.deptId);
+        filteredProjects = filteredProjects.filter(p => (p.deptId || p.deptid) === (targetDept.deptId || targetDept.deptid));
       } else {
         filteredProjects = [];
       }
     }
     if (currentStatus !== "All Status") {
-      filteredProjects = filteredProjects.filter(p => p.prjSts === currentStatus);
+      filteredProjects = filteredProjects.filter(p => (p.prjSts || p.prjsts) === currentStatus);
     }
 
-    const projectIds = filteredProjects.map(p => p.prjId);
-    const filteredMilestones = milestonesList.filter(m => projectIds.includes(m.prjId));
-    const milestoneIds = filteredMilestones.map(m => m.mId);
-    const filteredTasks = tasksList.filter(t => milestoneIds.includes(t.milestoneId));
+    const projectIds = filteredProjects.map(p => p.prjId || p.prjid || p.id);
+    const filteredMilestones = milestonesList.filter(m => projectIds.includes(m.prjId || m.prjid));
+    const milestoneIds = filteredMilestones.map(m => m.mId || m.mid || m.id);
+    const filteredTasks = tasksList.filter(t => milestoneIds.includes(t.milestoneId || t.mid || t.mId || t.drftMId || t.drft_m_id));
 
     const getProjectProgress = (p) => {
-      const ms = milestonesList.filter(m => m.prjId === p.prjId);
-      const msIds = ms.map(m => m.mId);
-      const t = tasksList.filter(task => msIds.includes(task.milestoneId));
+      const pId = p.prjId || p.prjid || p.id;
+      const ms = milestonesList.filter(m => (m.prjId || m.prjid) === pId);
+      const msIds = ms.map(m => m.mId || m.mid || m.id);
+      const t = tasksList.filter(task => msIds.includes(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id));
       
       if (t.length > 0) {
-        const completed = t.filter(task => task.taskSts === "COMPLETED").length;
+        const completed = t.filter(task => (task.taskSts || task.tasksts || "").toUpperCase() === "COMPLETED").length;
         return (completed / t.length) * 100;
       } else if (ms.length > 0) {
-        const completed = ms.filter(m => m.mlstnSts === "COMPLETED" || m.mlstnSts === "CLOSED").length;
+        const completed = ms.filter(m => {
+          const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
+          return status === "COMPLETED" || status === "CLOSED";
+        }).length;
         return (completed / ms.length) * 100;
       }
       return 0;
@@ -330,45 +334,63 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       ? (filteredProjects.reduce((sum, p) => sum + getProjectProgress(p), 0) / filteredProjects.length)
       : 0;
 
-    const liveProjectsCount = filteredProjects.filter(p => p.prjSts === "LIVE").length;
+    const liveProjectsCount = filteredProjects.filter(p => (p.prjSts || p.prjsts) === "LIVE").length;
     const delayedProjectsCount = filteredProjects.filter(p => {
       const progress = getProjectProgress(p);
-      return p.endDt && new Date(p.endDt) < now && progress < 100;
+      const end = p.endDt || p.enddt;
+      return end && new Date(end) < now && progress < 100;
     }).length;
 
     const next30Days = new Date();
     next30Days.setDate(now.getDate() + 30);
 
     const upcomingMs = filteredMilestones.filter(m => {
-      if (m.mlstnSts === "COMPLETED" || m.mlstnSts === "CLOSED") return false;
-      const end = m.endDt ? new Date(m.endDt) : null;
-      return end && end >= now && end <= next30Days;
+      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
+      if (status === "COMPLETED" || status === "CLOSED") return false;
+      const start = m.stDt || m.stdt ? new Date(m.stDt || m.stdt) : null;
+      return start && start >= now && start <= next30Days;
+    }).sort((a, b) => {
+      const dateA = new Date(a.stDt || a.stdt || 0);
+      const dateB = new Date(b.stDt || b.stdt || 0);
+      return dateA - dateB;
     });
 
     const overdueT = filteredTasks.filter(t => {
-      if (t.taskSts === "COMPLETED") return false;
-      const end = t.endDt ? new Date(t.endDt) : null;
+      const status = (t.taskSts || t.tasksts || "").toUpperCase();
+      if (status === "COMPLETED") return false;
+      const end = t.endDt || t.enddt ? new Date(t.endDt || t.enddt) : null;
       return end && end < now;
     });
 
     const msTotal = filteredMilestones.length;
-    const msCompleted = filteredMilestones.filter(m => m.mlstnSts === "COMPLETED" || m.mlstnSts === "CLOSED").length;
+    const msCompleted = filteredMilestones.filter(m => {
+      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
+      return status === "COMPLETED" || status === "CLOSED";
+    }).length;
     const msDelayed = filteredMilestones.filter(m => {
-      if (m.mlstnSts === "COMPLETED" || m.mlstnSts === "CLOSED") return false;
-      const end = m.endDt ? new Date(m.endDt) : null;
+      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
+      if (status === "COMPLETED" || status === "CLOSED") return false;
+      const end = m.endDt || m.enddt ? new Date(m.endDt || m.enddt) : null;
       return end && end < now;
     }).length;
     const msInProgress = filteredMilestones.filter(m => {
-      if (m.mlstnSts === "COMPLETED" || m.mlstnSts === "CLOSED") return false;
-      const end = m.endDt ? new Date(m.endDt) : null;
-      return (!end || end >= now) && m.mlstnSts === "WIP";
+      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
+      if (status === "COMPLETED" || status === "CLOSED") return false;
+      const end = m.endDt || m.enddt ? new Date(m.endDt || m.enddt) : null;
+      return (!end || end >= now) && status === "WIP";
     }).length;
     const msNotStarted = Math.max(0, msTotal - msCompleted - msDelayed - msInProgress);
 
     const tTotal = filteredTasks.length;
-    const tCompleted = filteredTasks.filter(t => t.taskSts === "COMPLETED").length;
-    const tInProgress = filteredTasks.filter(t => t.taskSts === "WIP" || t.taskSts === "IN_PROGRESS").length;
-    const tUnderReview = filteredTasks.filter(t => t.taskSts === "UNDER_REVIEW" || t.taskSts === "SUBMIT_REVIEW").length;
+    const tCompleted = filteredTasks.filter(t => (t.taskSts || t.tasksts || "").toUpperCase() === "COMPLETED").length;
+    const tInProgress = filteredTasks.filter(t => {
+      const s = (t.taskSts || t.tasksts || "").toUpperCase();
+      return s === "WIP" || s === "IN_PROGRESS";
+    }).length;
+    const tUnderReview = filteredTasks.filter(t => {
+      const s = (t.taskSts || t.tasksts || "").toUpperCase();
+      return s === "UNDER_REVIEW" || s === "SUBMIT_REVIEW";
+    }).length;
     const tOverdue = overdueT.length;
     const tNotStarted = Math.max(0, tTotal - tCompleted - tInProgress - tUnderReview - tOverdue);
 
@@ -379,8 +401,8 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       return `${d.getDate()}-${months[d.getMonth()]}-${d.getFullYear()}`;
     };
 
-    const minDate = filteredProjects.reduce((min, p) => !min || (p.stDt && new Date(p.stDt) < new Date(min)) ? p.stDt : min, null);
-    const maxDate = filteredProjects.reduce((max, p) => !max || (p.endDt && new Date(p.endDt) > new Date(max)) ? p.endDt : max, null);
+    const minDate = filteredProjects.reduce((min, p) => !min || ((p.stDt || p.stdt) && new Date(p.stDt || p.stdt) < new Date(min)) ? (p.stDt || p.stdt) : min, null);
+    const maxDate = filteredProjects.reduce((max, p) => !max || ((p.endDt || p.enddt) && new Date(p.endDt || p.enddt) > new Date(max)) ? (p.endDt || p.enddt) : max, null);
     const dateRangeStr = minDate && maxDate ? `${formatDateStr(minDate)} ~ ${formatDateStr(maxDate)}` : "All Dates";
 
     return {
@@ -423,39 +445,46 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
         ]
       },
       delayedMilestones: filteredMilestones.filter(m => {
-        if (m.mlstnSts === "COMPLETED" || m.mlstnSts === "CLOSED") return false;
-        const end = m.endDt ? new Date(m.endDt) : null;
+        const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
+        if (status === "COMPLETED" || status === "CLOSED") return false;
+        const end = m.endDt || m.enddt ? new Date(m.endDt || m.enddt) : null;
         return end && end < now;
       }).map(m => {
-        const prj = filteredProjects.find(p => p.prjId === m.prjId);
-        const delayDays = Math.ceil((now - new Date(m.endDt)) / (1000 * 60 * 60 * 24));
+        const prjId = m.prjId || m.prjid || m.id;
+        const prj = filteredProjects.find(p => (p.prjId || p.prjid || p.id) === prjId);
+        const mEnd = m.endDt || m.enddt;
+        const delayDays = Math.ceil((now - new Date(mEnd)) / (1000 * 60 * 60 * 24));
         return {
-          name: m.mlstnTtl,
-          project: prj ? prj.prjCd : "N/A",
+          name: m.mlstnTtl || m.mlstnttl,
+          project: prj ? (prj.prjCd || prj.prjcd || "N/A") : "N/A",
           delay: delayDays > 0 ? delayDays : 0
         };
       }).sort((a, b) => b.delay - a.delay).slice(0, 5),
       upcomingMilestones: upcomingMs.map(m => {
-        const prj = filteredProjects.find(p => p.prjId === m.prjId);
+        const prjId = m.prjId || m.prjid || m.id;
+        const prj = filteredProjects.find(p => (p.prjId || p.prjid || p.id) === prjId);
         return {
-          name: m.mlstnTtl,
-          project: prj ? prj.prjCd : "N/A",
-          date: formatDateStr(m.endDt),
-          status: m.mlstnSts || "Pending"
+          name: m.mlstnTtl || m.mlstnttl,
+          project: prj ? (prj.prjCd || prj.prjcd || "N/A") : "N/A",
+          date: formatDateStr(m.stDt || m.stdt),
+          status: m.mlstnSts || m.mlstnsts || "Pending"
         };
       }).slice(0, 5),
-      highPriorityTasks: filteredTasks.filter(t => t.taskSts !== "COMPLETED").map(t => {
+      highPriorityTasks: filteredTasks.filter(t => (t.taskSts || t.tasksts || "").toUpperCase() !== "COMPLETED").map(t => {
         const prj = filteredProjects.find(p => {
-          const ms = milestonesList.find(mil => mil.mId === t.milestoneId);
-          return ms && ms.prjId === p.prjId;
+          const mId = t.milestoneId || t.mid || t.mId || t.drftMId || t.drft_m_id;
+          const ms = milestonesList.find(mil => (mil.mId || mil.mid || mil.id) === mId);
+          const prjId = ms ? (ms.prjId || ms.prjid || ms.id) : null;
+          return prjId && (p.prjId || p.prjid || p.id) === prjId;
         });
-        const emp = employeesList.find(e => e.empId === t.empId);
+        const empId = t.empId || t.empid;
+        const emp = employeesList.find(e => (e.empId || e.empid) === empId);
         return {
-          task: t.taskNm,
-          project: prj ? prj.prjCd : "N/A",
-          assignee: emp ? `${emp.fstNm || ""} ${emp.lstNm || ""}`.trim() : "Unassigned",
-          due: formatDateStr(t.endDt),
-          urgent: t.taskSts === "WIP" || (t.endDt && new Date(t.endDt) < now)
+          task: t.taskNm || t.tasknm,
+          project: prj ? (prj.prjCd || prj.prjcd || "N/A") : "N/A",
+          assignee: emp ? `${emp.fstNm || emp.firstName || ""} ${emp.lstNm || emp.lastName || ""}`.trim() : "Unassigned",
+          due: formatDateStr(t.endDt || t.enddt),
+          urgent: (t.taskSts || t.tasksts || "").toUpperCase() === "WIP" || ((t.endDt || t.enddt) && new Date(t.endDt || t.enddt) < now)
         };
       }).slice(0, 5),
       forecast: (() => {
@@ -618,22 +647,18 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
             <button className="pm-export-btn" onClick={handleExportData}><Download size={14}/> Export</button>
           </div>
 
-          {/* ===== KPI STAT CARDS ===== */}
           <div className="pm-stats-container pm-card">
             {stats.map((s, i) => (
-              <React.Fragment key={i}>
-                <div className={`pm-stat-item pm-stat-${s.color}`}>
-                  <div className="pm-stat-icon-box filled">
-                    <s.icon size={24} color="white" />
-                  </div>
-                  <div className="pm-stat-info">
-                    <div className="pm-stat-value">{s.value}</div>
-                    <div className="pm-stat-label">{s.label}</div>
-                    <div className="pm-stat-sub">{s.sub}</div>
-                  </div>
+              <div key={i} className={`pm-stat-item pm-stat-${s.color}`}>
+                <div className="pm-stat-icon-box filled">
+                  <s.icon size={24} color="white" />
                 </div>
-                {i < stats.length - 1 && <div className="pm-stat-divider" />}
-              </React.Fragment>
+                <div className="pm-stat-info">
+                  <div className="pm-stat-value">{s.value}</div>
+                  <div className="pm-stat-label">{s.label}</div>
+                  <div className="pm-stat-sub">{s.sub}</div>
+                </div>
+              </div>
             ))}
           </div>
 
@@ -750,7 +775,6 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                   ))}
                 </tbody>
               </table>
-              <a href="#" className="pm-view-link" onClick={e => { e.preventDefault(); navigate('/project-list'); }}>View All Delayed Milestones <ArrowRight size={14}/></a>
             </div>
 
             {/* Upcoming Milestones */}
@@ -764,7 +788,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                   <tr>
                     <th>Milestone</th>
                     <th>Project</th>
-                    <th>Due Date</th>
+                    <th>Start Date</th>
                     <th>Status</th>
                   </tr>
                 </thead>
@@ -783,7 +807,6 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                   ))}
                 </tbody>
               </table>
-              <a href="#" className="pm-view-link" onClick={e => { e.preventDefault(); navigate('/project-list'); }}>View All Upcoming Milestones <ArrowRight size={14}/></a>
             </div>
 
             {/* High Priority Tasks */}
@@ -816,7 +839,6 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                   ))}
                 </tbody>
               </table>
-              <a href="#" className="pm-view-link" onClick={e => { e.preventDefault(); navigate('/project-list'); }}>View All High Priority Tasks <ArrowRight size={14}/></a>
             </div>
 
           </div>

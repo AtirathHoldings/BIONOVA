@@ -8,6 +8,7 @@ import {
 import '../styles/Assignment.css';
 import '../styles/CompanyMaster.css';
 import AlertModal from './AlertModal';
+import GoLiveCalendar from './Projectmanager/GoLiveCalendar';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
@@ -16,7 +17,7 @@ const getAuthHeaders = () => ({
   "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
 });
 
-const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled }) => {
+const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled, forceOpen, isMulti }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const wrapperRef = React.useRef(null);
@@ -29,15 +30,34 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
-  const selected = options.find(o => String(o.value) === String(value));
+  useEffect(() => {
+    if (forceOpen) {
+      setIsOpen(true);
+    }
+  }, [forceOpen]);
+
+  const filtered = options.filter(o => 
+    o.label.toLowerCase().includes(search.toLowerCase()) && 
+    (isMulti ? !(value || []).includes(String(o.value)) : true)
+  );
+  
+  const selected = isMulti ? null : options.find(o => String(o.value) === String(value));
+
+  const handleClear = (e, valToRemove) => {
+    e.stopPropagation();
+    if (isMulti) {
+      onChange({ target: { name, value: (value || []).filter(v => String(v) !== String(valToRemove)) } });
+    } else {
+      onChange({ target: { name, value: '' } });
+    }
+  };
 
   return (
     <div ref={wrapperRef} style={{ position: 'relative', width: '100%', margin: 0 }}>
       <div
         onClick={() => !disabled && setIsOpen(!isOpen)}
         style={{
-          padding: '10px 12px',
+          padding: '6px 12px',
           border: '1px solid #cbd5e1',
           borderRadius: '6px',
           backgroundColor: disabled ? '#f1f5f9' : 'white',
@@ -46,14 +66,37 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
           justifyContent: 'space-between',
           alignItems: 'center',
           fontSize: '14px',
-          height: '42px',
+          minHeight: '42px',
+          flexWrap: 'wrap',
+          gap: '4px',
           ...style
         }}
       >
-        <span style={{ color: selected ? '#0f172a' : '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-          {selected ? selected.label : placeholder}
-        </span>
-        <ChevronDown size={14} style={{ color: '#64748b', flexShrink: 0, marginLeft: 8 }} />
+        {isMulti ? (
+          value && value.length > 0 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxWidth: 'calc(100% - 24px)' }}>
+              {value.map(v => {
+                const opt = options.find(o => String(o.value) === String(v));
+                return (
+                  <div key={v} style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#e2e8f0', padding: '2px 8px', borderRadius: '12px' }}>
+                    <span style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{opt ? opt.label : v}</span>
+                    <X size={14} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={(e) => handleClear(e, v)} />
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <span style={{ color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{placeholder}</span>
+          )
+        ) : selected ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', backgroundColor: '#e2e8f0', padding: '2px 8px', borderRadius: '12px', maxWidth: 'calc(100% - 24px)' }}>
+            <span style={{ fontSize: '13px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>{selected.label}</span>
+            <X size={14} style={{ cursor: 'pointer', flexShrink: 0 }} onClick={(e) => handleClear(e)} />
+          </div>
+        ) : (
+          <span style={{ color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{placeholder}</span>
+        )}
+        <ChevronDown size={14} style={{ color: '#64748b', flexShrink: 0, marginLeft: 'auto' }} />
       </div>
       {isOpen && (
         <div style={{
@@ -75,13 +118,19 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
                 <div
                   key={opt.value}
                   onClick={() => {
-                    onChange({ target: { name, value: opt.value } });
-                    setIsOpen(false);
+                    if (isMulti) {
+                      const currentVals = value || [];
+                      onChange({ target: { name, value: [...currentVals, String(opt.value)] } });
+                      setIsOpen(false);
+                    } else {
+                      onChange({ target: { name, value: String(opt.value) } });
+                      setIsOpen(false);
+                    }
                     setSearch("");
                   }}
-                  style={{ padding: '10px 12px', cursor: 'pointer', backgroundColor: String(value) === String(opt.value) ? '#f1f5f9' : 'transparent', fontSize: '14px' }}
+                  style={{ padding: '10px 12px', cursor: 'pointer', backgroundColor: (isMulti ? (value || []).includes(String(opt.value)) : String(value) === String(opt.value)) ? '#f1f5f9' : 'transparent', fontSize: '14px' }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
-                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = String(value) === String(opt.value) ? '#f1f5f9' : 'transparent'}
+                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = (isMulti ? (value || []).includes(String(opt.value)) : String(value) === String(opt.value)) ? '#f1f5f9' : 'transparent'}
                 >
                   {opt.label}
                 </div>
@@ -96,6 +145,132 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
   );
 };
 
+const DateInputWithFormat = ({ value, onChange, min, error, placeholder }) => {
+  const [displayVal, setDisplayVal] = useState("");
+  const [localError, setLocalError] = useState("");
+  const dateRef = useRef(null);
+
+  useEffect(() => {
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [y, m, d] = value.split('-');
+      setDisplayVal(`${d}/${m}/${y}`);
+    } else if (!value) {
+      setDisplayVal("");
+    }
+  }, [value]);
+
+  const handleChange = (e) => {
+    let val = e.target.value;
+    
+    if (val.length - displayVal.length === 1) {
+      if (val.length === 2 && !val.includes('/')) val += '/';
+      else if (val.length === 5 && (val.match(/\//g) || []).length === 1) val += '/';
+    }
+    
+    setDisplayVal(val);
+
+    if (/[a-zA-Z]/.test(val)) {
+      setLocalError("Letters are not allowed.");
+      onChange({ target: { value: "" } });
+      return;
+    }
+    
+    setLocalError("");
+    
+    if (val === "") {
+      onChange({ target: { value: "" } });
+      return;
+    }
+
+    const match = val.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
+    if (match) {
+      const d = parseInt(match[1], 10);
+      const m = parseInt(match[2], 10);
+      const y = parseInt(match[3], 10);
+      
+      const date = new Date(y, m - 1, d);
+      if (date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d) {
+        onChange({ target: { value: `${match[3]}-${match[2]}-${match[1]}` } });
+      } else {
+        setLocalError("Invalid date.");
+        onChange({ target: { value: "" } });
+      }
+    } else {
+      onChange({ target: { value: "" } });
+    }
+  };
+
+  const finalError = localError || error;
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', border: '1px solid ' + (finalError ? '#ef4444' : '#cbd5e1'), borderRadius: '6px', backgroundColor: 'white' }}>
+      <input 
+        type="text" 
+        value={displayVal} 
+        onChange={handleChange} 
+        placeholder={placeholder || "DD/MM/YYYY"}
+        maxLength={10}
+        style={{ flex: 1, padding: '8px 12px', border: 'none', outline: 'none', borderRadius: '6px', fontSize: '14px', width: '100%', boxSizing: 'border-box' }}
+      />
+      <div 
+        style={{ padding: '0 8px', cursor: 'pointer', display: 'flex', alignItems: 'center' }}
+        onClick={() => {
+          if (dateRef.current && typeof dateRef.current.showPicker === 'function') {
+            dateRef.current.showPicker();
+          }
+        }}
+      >
+        <CalendarIcon size={16} color="#64748b" />
+      </div>
+      <input 
+        type="date"
+        ref={dateRef}
+        min={min}
+        value={(value && /^\d{4}-\d{2}-\d{2}$/.test(value)) ? value : ""}
+        onChange={(e) => {
+          if(e.target.value) {
+            onChange({ target: { value: e.target.value } });
+            setLocalError("");
+          }
+        }}
+        style={{ position: 'absolute', width: '1px', height: '1px', border: 0, padding: 0, overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', right: 0 }}
+      />
+      {finalError && <span style={{ color: '#ef4444', fontSize: '11px', position: 'absolute', bottom: '-16px', left: 0 }}>{finalError}</span>}
+    </div>
+  );
+};
+
+const parseLocal = (dateStr) => {
+  if (!dateStr) return null;
+  const parts = dateStr.split('T')[0].split('-');
+  if (parts.length !== 3) return new Date(dateStr);
+  return new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]));
+};
+
+const formatLocal = (d) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+};
+
+const calcEndDate = (startStr, workingDays, skipSat, skipSun, publicHolidayDates = []) => {
+  if (!startStr || !workingDays) return startStr;
+  const holidaySet = new Set(publicHolidayDates);
+  let count = 0;
+  let cur = parseLocal(startStr);
+  if (!cur) return startStr;
+  while (count < workingDays) {
+    const dow = cur.getDay();
+    const dateKey = formatLocal(cur);
+    if (!((skipSat && dow === 6) || (skipSun && dow === 0) || holidaySet.has(dateKey))) {
+      count++;
+    }
+    if (count < workingDays) cur.setDate(cur.getDate() + 1);
+  }
+  return formatLocal(cur);
+};
+
 const Assignment = ({ userRole, onLogout }) => {
   // --- STATE FOR FORM FIELDS ---
   const [taskCode, setTaskCode] = useState("");
@@ -106,26 +281,36 @@ const Assignment = ({ userRole, onLogout }) => {
   const [startDate, setStartDate] = useState("");
   const [dueDate, setDueDate] = useState("");
   const [dateError, setDateError] = useState("");
-  const [description, setDescription] = useState("Prepare and submit the monthly compliance report with all required documents and signatures before the due date.");
+  const [description, setDescription] = useState("");
 
   const [assignedEmployee, setAssignedEmployee] = useState("");
 
-  const [enableWorkflow, setEnableWorkflow] = useState(true);
-  const [reviewer, setReviewer] = useState("");
-  const [approver, setApprover] = useState("");
+  // Default workflow to disabled (false)
+  const [enableWorkflow, setEnableWorkflow] = useState(false);
+  const [reviewer, setReviewer] = useState([]);
+  const [approver, setApprover] = useState([]);
 
   const [employees, setEmployees] = useState([]);
   const [companies, setCompanies] = useState([]);
+  const [plants, setPlants] = useState([]);
   const [designations, setDesignations] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [view, setView] = useState("list");
   const [editId, setEditId] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [activeTab, setActiveTab] = useState("checklist");
+  const [goLiveTask, setGoLiveTask] = useState(null);
+  const [assignmentView, setAssignmentView] = useState("my");
 
-  const [alertConfig, setAlertConfig] = useState({ isOpen: false, type: 'info', title: '', message: '' });
-  const triggerAlert = (type, title, message) => {
-    setAlertConfig({ isOpen: true, type, title, message });
+  const [alertConfig, setAlertConfig] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null, confirmText: '', cancelText: '' });
+  const triggerAlert = (type, title, message, onConfirm = null, confirmText = '', cancelText = '') => {
+    setAlertConfig({ isOpen: true, type, title, message, onConfirm, confirmText, cancelText });
   };
+
+  // State to force open dropdowns from "+ Add" click
+  const [forceOpenReviewer, setForceOpenReviewer] = useState(false);
+  const [forceOpenApprover, setForceOpenApprover] = useState(false);
 
   const fetchAllData = async () => {
     try {
@@ -145,6 +330,7 @@ const Assignment = ({ userRole, onLogout }) => {
       const pltData = pltRes.ok ? await pltRes.json() : [];
 
       setCompanies(coyData);
+      setPlants(pltData);
       setDesignations(desigData);
 
       const mappedEmps = empData.map(emp => {
@@ -164,33 +350,62 @@ const Assignment = ({ userRole, onLogout }) => {
       });
       setEmployees(mappedEmps);
 
-      const tasksRes = await fetch(`${apiBaseUrl}/api/individual-tasks`, { headers: getAuthHeaders() });
+      const currentSessionEmpId = sessionStorage.getItem("empId");
+      const [tasksRes, assignedByRes] = await Promise.all([
+        fetch(`${apiBaseUrl}/api/assignments`, { headers: getAuthHeaders() }),
+        currentSessionEmpId ? fetch(`${apiBaseUrl}/api/assignments/assigned-by/${currentSessionEmpId}`, { headers: getAuthHeaders() }) : Promise.resolve(null)
+      ]);
+
       if (tasksRes.ok) {
-        const rawTasks = await tasksRes.json();
+        let rawTasks = await tasksRes.json();
+        
+        if (assignedByRes && assignedByRes.ok) {
+          const assignedByTasks = await assignedByRes.json();
+          const existingIds = new Set(rawTasks.map(t => t.empTaskId || t.id));
+          assignedByTasks.forEach(t => {
+            if (!existingIds.has(t.empTaskId || t.id)) {
+              rawTasks.push(t);
+            }
+          });
+        }
         const enrichedTasks = await Promise.all(rawTasks.map(async (task) => {
           let reviewerName = "N/A";
           let approverName = "N/A";
           if (task.prcsFlg) {
             try {
-              const pcRes = await fetch(`${apiBaseUrl}/api/process-config/draft-task/${task.empTaskId || task.id}`, { headers: getAuthHeaders() });
+              const pcRes = await fetch(`${apiBaseUrl}/api/process-config/assignment/${task.empTaskId || task.id}?t=${new Date().getTime()}`, { headers: getAuthHeaders() });
               if (pcRes.ok) {
                 const pcs = await pcRes.json();
-                const rev = pcs.find(p => p.stepType === 'REVIEWER');
-                if (rev && rev.empId) {
-                  const emp = mappedEmps.find(e => String(e.empId || e.id) === String(rev.empId));
-                  if (emp) reviewerName = `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}`;
+                const revs = pcs.filter(p => p.stepType === 'REVIEWER' || p.ordrId === 1);
+                if (revs.length > 0) {
+                  reviewerName = revs.map(r => {
+                    const emp = mappedEmps.find(e => String(e.empId || e.id) === String(r.empId));
+                    return emp ? `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` : "N/A";
+                  }).join(", ");
                 }
-                const app = pcs.find(p => p.stepType === 'APPROVER');
-                if (app && app.empId) {
-                  const emp = mappedEmps.find(e => String(e.empId || e.id) === String(app.empId));
-                  if (emp) approverName = `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}`;
+                const apps = pcs.filter(p => p.stepType === 'APPROVER' || p.ordrId === 2);
+                if (apps.length > 0) {
+                  approverName = apps.map(a => {
+                    const emp = mappedEmps.find(e => String(e.empId || e.id) === String(a.empId));
+                    return emp ? `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` : "N/A";
+                  }).join(", ");
                 }
               }
             } catch (err) {
               console.error("Failed to fetch process config for task", task.taskCd);
             }
           }
-          return { ...task, reviewerName, approverName };
+          
+          let checklistCount = 0;
+          try {
+             const chkRes = await fetch(`${apiBaseUrl}/api/checklists/assignment/${task.empTaskId || task.id}?t=${new Date().getTime()}`, { headers: getAuthHeaders() });
+             if (chkRes.ok) {
+                 const chks = await chkRes.json();
+                 checklistCount = chks.length;
+             }
+          } catch(err) {}
+
+          return { ...task, reviewerName, approverName, checklistCount };
         }));
         setTasks(enrichedTasks);
       }
@@ -307,9 +522,11 @@ const Assignment = ({ userRole, onLogout }) => {
     setDateError("");
     setAssignedEmployee("");
     setDescription("");
-    setReviewer("");
-    setApprover("");
-    setEnableWorkflow(true);
+    setReviewer([]);
+    setApprover([]);
+    setEnableWorkflow(false);
+    setChecklist([]);
+    setAttachments([]);
   };
 
   const handleEdit = (task) => {
@@ -325,7 +542,9 @@ const Assignment = ({ userRole, onLogout }) => {
     setStartDate(sd);
     setDueDate(dd);
 
-    if (sd && dd) {
+    if (task.plnDys || task.noOfDays || task.duration) {
+      setDuration(String(task.plnDys || task.noOfDays || task.duration));
+    } else if (sd && dd) {
       const start = new Date(sd);
       const end = new Date(dd);
       const diff = Math.ceil((end - start) / (1000 * 60 * 60 * 24));
@@ -338,24 +557,38 @@ const Assignment = ({ userRole, onLogout }) => {
     setDescription(task.taskDesc || "");
 
     // Fetch process configs for this task to prefill reviewer and approver dropdowns
-    setReviewer("");
-    setApprover("");
+    setReviewer([]);
+    setApprover([]);
     setEnableWorkflow(false);
 
     const taskId = task.empTaskId || task.id;
     if (taskId) {
-      fetch(`${apiBaseUrl}/api/process-config/draft-task/${taskId}`, { headers: getAuthHeaders() })
+      fetch(`${apiBaseUrl}/api/process-config/assignment/${taskId}?t=${new Date().getTime()}`, { headers: getAuthHeaders() })
         .then(res => res.ok ? res.json() : [])
         .then(pcs => {
           if (pcs && pcs.length > 0) {
             setEnableWorkflow(true);
-            const rev = pcs.find(p => p.stepType === 'REVIEWER');
-            if (rev && rev.empId) setReviewer(String(rev.empId));
-            const app = pcs.find(p => p.stepType === 'APPROVER');
-            if (app && app.empId) setApprover(String(app.empId));
+            const revs = pcs.filter(p => p.stepType === 'REVIEWER' || p.ordrId === 1);
+            if (revs.length > 0) setReviewer(revs.map(r => String(r.empId)));
+            const apps = pcs.filter(p => p.stepType === 'APPROVER' || p.ordrId === 2);
+            if (apps.length > 0) setApprover(apps.map(a => String(a.empId)));
           }
         })
         .catch(err => console.error("Error loading process config:", err));
+        
+      fetch(`${apiBaseUrl}/api/checklists/assignment/${taskId}?t=${new Date().getTime()}`, { headers: getAuthHeaders() })
+        .then(res => res.ok ? res.json() : [])
+        .then(chks => {
+            if (chks && chks.length > 0) {
+               setChecklist(chks.map(c => ({
+                   id: c.chkId,
+                   name: c.chkNm,
+                   code: c.chkCd
+               })));
+            } else {
+               setChecklist([]);
+            }
+        });
     }
 
     setView("form");
@@ -367,22 +600,61 @@ const Assignment = ({ userRole, onLogout }) => {
     setShowPreviewModal(true);
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this task?")) return;
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/individual-tasks/${id}`, {
-        method: "DELETE",
-        headers: getAuthHeaders()
-      });
-      if (response.ok) {
-        triggerAlert("success", "Success", "Task deleted successfully!");
-        fetchAllData();
-      } else {
-        triggerAlert("error", "Error", "Failed to delete task.");
+  const handleDelete = (id) => {
+    triggerAlert("warning", "Confirm Deletion", "Are you sure you want to delete this task?", async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/assignments/${id}`, {
+          method: "DELETE",
+          headers: getAuthHeaders()
+        });
+        if (response.ok) {
+          triggerAlert("success", "Success", "Task deleted successfully!");
+          fetchAllData();
+        } else {
+          triggerAlert("error", "Error", "Failed to delete task.");
+        }
+      } catch (err) {
+        triggerAlert("error", "Error", "Server error occurred.");
       }
-    } catch (err) {
-      triggerAlert("error", "Error", "Server error occurred.");
+    }, "Delete", "Cancel");
+  };
+
+  const recalculateDueDate = (start, dur, empId) => {
+    if (!start || !dur) return;
+    const emp = employees.find(e => String(e.empId || e.id) === String(empId));
+    if (!emp) {
+      const end = new Date(start);
+      end.setDate(end.getDate() + Math.max(0, parseInt(dur, 10) - 1));
+      setDueDate(end.toISOString().split('T')[0]);
+      return;
     }
+
+    const pltId = emp.pltId || emp.plantId;
+    const coyId = emp.coyId || emp.companyId;
+
+    let skipSat = false;
+    let skipSun = true;
+
+    if (pltId) {
+      const plantObj = plants.find(p => String(p.pltId || p.id) === String(pltId));
+      if (plantObj) {
+        const wrkDays = plantObj.wrkDaysPerWk;
+        if (wrkDays === 5) { skipSat = true; skipSun = true; }
+        else if (wrkDays === 6) { skipSat = false; skipSun = true; }
+        else if (wrkDays === 7) { skipSat = false; skipSun = false; }
+      }
+    } else if (coyId) {
+      const coyObj = companies.find(c => String(c.coyId || c.id) === String(coyId));
+      if (coyObj) {
+        const wrkDays = coyObj.wrkDaysPerWk || coyObj.workingDaysPerWeek;
+        if (wrkDays === 5) { skipSat = true; skipSun = true; }
+        else if (wrkDays === 6) { skipSat = false; skipSun = true; }
+        else if (wrkDays === 7) { skipSat = false; skipSun = false; }
+      }
+    }
+
+    const calculatedEnd = calcEndDate(start, parseInt(dur, 10), skipSat, skipSun, []);
+    setDueDate(calculatedEnd);
   };
 
   const handleStartDateChange = (e) => {
@@ -390,9 +662,7 @@ const Assignment = ({ userRole, onLogout }) => {
     setStartDate(newStart);
     setDateError("");
     if (newStart && duration) {
-      const end = new Date(newStart);
-      end.setDate(end.getDate() + Math.max(0, parseInt(duration, 10) - 1));
-      setDueDate(end.toISOString().split('T')[0]);
+      recalculateDueDate(newStart, duration, assignedEmployee);
     } else if (newStart && dueDate) {
       const start = new Date(newStart);
       const end = new Date(dueDate);
@@ -411,9 +681,7 @@ const Assignment = ({ userRole, onLogout }) => {
     const val = e.target.value.replace(/\D/g, "");
     setDuration(val);
     if (val && startDate) {
-      const end = new Date(startDate);
-      end.setDate(end.getDate() + Math.max(0, parseInt(val, 10) - 1));
-      setDueDate(end.toISOString().split('T')[0]);
+      recalculateDueDate(startDate, val, assignedEmployee);
     }
   };
 
@@ -470,7 +738,7 @@ const Assignment = ({ userRole, onLogout }) => {
 
   const saveNewChecklist = () => {
     if (!newChecklistName.trim()) {
-      alert("Please enter a valid checklist item name.");
+      triggerAlert("warning", "Validation Error", "Please enter a valid checklist item name.");
       return;
     }
     const newItemId = Date.now();
@@ -478,8 +746,8 @@ const Assignment = ({ userRole, onLogout }) => {
       ...checklist,
       { id: newItemId, name: newChecklistName, sequence: checklist.length + 1 }
     ]);
-    setIsAddingChecklist(false);
     setNewChecklistName("");
+    setIsAddingChecklist(false);
   };
 
   const deleteChecklistItem = (id) => {
@@ -502,20 +770,84 @@ const Assignment = ({ userRole, onLogout }) => {
   // --- PREVIEW MODAL STATE ---
   const [showPreviewModal, setShowPreviewModal] = useState(false);
 
-  const handleSaveTask = async () => {
+  const handleAssignClick = () => {
+    if (!taskCode.trim()) {
+      triggerAlert("warning", "Missing Fields", "Please enter Task Code.");
+      return;
+    }
     if (!taskTitle.trim() || !assignedEmployee) {
       triggerAlert("warning", "Missing Fields", "Please fill in task title and assigned employee.");
       return;
     }
-    const payload = {
+    if (!startDate || !duration || !dueDate) {
+      triggerAlert("warning", "Missing Fields", "Please specify Start Date and Duration to calculate the due date.");
+      return;
+    }
+    if (!description.trim()) {
+      triggerAlert("warning", "Missing Fields", "Please enter a task description.");
+      return;
+    }
+    const validReviewers = reviewer.filter(r => r.trim() !== '');
+    const validApprovers = approver.filter(a => a.trim() !== '');
+
+    if (enableWorkflow && (validReviewers.length === 0 || validApprovers.length === 0)) {
+      triggerAlert("warning", "Missing Fields", "Please select at least one Reviewer and one Approver when Workflow is enabled.");
+      return;
+    }
+
+    const emp = employees.find(e => String(e.empId || e.id) === String(assignedEmployee));
+    const coyId = emp ? (emp.coyId || emp.companyId) : null;
+    const pltId = emp ? (emp.pltId || emp.plantId) : null;
+    const isPlantEmployee = !!pltId;
+
+    setGoLiveTask({
+      projectName: taskTitle,
+      startDate: startDate,
+      endDate: dueDate,
+      totalProjectDays: duration,
+      id: editId,
+      isIndividualTask: true,
+      coyId: coyId,
+      pltId: pltId,
+      isPlantEmployee: isPlantEmployee
+    });
+  };
+
+  const executeTaskSave = async (settings) => {
+    setGoLiveTask(null);
+
+    let excludeSat = false;
+    let excludeSun = true;
+    let coyHolidays = false;
+    let pltHolidays = false;
+    let extHolidays = false;
+    let includeMandatory = true;
+
+    if (settings.mode === 'existing') {
+      const { company, plant, external } = settings.existingSelection || {};
+      coyHolidays = !!company;
+      pltHolidays = !!plant;
+      extHolidays = !!external;
+      if (settings.excludeSat !== undefined) excludeSat = settings.excludeSat;
+      if (settings.excludeSun !== undefined) excludeSun = settings.excludeSun;
+    } else if (settings.mode === 'custom') {
+      const { saturday, sunday, publicHolidays } = settings.customSettings || {};
+      excludeSat = !!saturday?.active;
+      excludeSun = !!sunday?.active;
+      coyHolidays = !!publicHolidays?.company;
+      pltHolidays = !!publicHolidays?.plant;
+      extHolidays = !!publicHolidays?.external;
+    }
+
+    const taskPayload = {
+      empTaskId: editId || null,
       taskCd: taskCode,
       taskNm: taskTitle,
       taskDesc: description,
       empId: parseInt(assignedEmployee),
-      assignedBy: currentUser?.empId || currentUser?.id || 1,
+      assignedBy: currentUser?.empId || currentUser?.id || parseInt(sessionStorage.getItem("empId")) || 1,
       taskAsgnTo: 'INTERNAL',
       stDt: startDate ? startDate : null,
-      endDt: dueDate ? dueDate : null,
       priority: priority.toUpperCase(),
       taskSts: 'ASSIGNED',
       prcsFlg: enableWorkflow,
@@ -523,71 +855,195 @@ const Assignment = ({ userRole, onLogout }) => {
       sts: true
     };
 
-    let url = `${apiBaseUrl}/api/individual-tasks`;
-    let method = "POST";
-    if (editId) {
-      url = `${url}/${editId}`;
-      method = "PUT";
-    }
+    const emp = employees.find(e => String(e.empId || e.id) === String(assignedEmployee));
+    const coyId = emp ? (emp.coyId || emp.companyId) : (currentUser?.coyId || currentUser?.companyId);
+    const pltId = emp ? (emp.pltId || emp.plantId) : (currentUser?.pltId || currentUser?.plantId);
+
+    const payload = {
+      task: taskPayload,
+      excludeSat,
+      excludeSun,
+      includeMandatory,
+      coyHolidays,
+      pltHolidays,
+      extHolidays,
+      noOfDays: parseInt(duration) || 0,
+      coyId,
+      pltId
+    };
 
     try {
+      const url = `${apiBaseUrl}/api/assignments/assign-with-calendar`;
+         
+      const payloadToSend = payload;
+      
       const response = await fetch(url, {
-        method,
+        method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payloadToSend)
       });
+      
       if (response.ok) {
         const savedTask = await response.json();
-        const taskId = savedTask.empTaskId || savedTask.id || editId;
-
-        if (enableWorkflow && taskId) {
-          if (reviewer) {
-            try {
-              await fetch(`${apiBaseUrl}/api/process-config/draft-task/${taskId}`, {
-                method: "POST", headers: getAuthHeaders(),
-                body: JSON.stringify({ ordrId: 1, stepType: "REVIEWER", empId: parseInt(reviewer), stepLabel: "Reviewer" })
-              });
-            } catch (e) { }
-          }
-          if (approver) {
-            try {
-              await fetch(`${apiBaseUrl}/api/process-config/draft-task/${taskId}`, {
-                method: "POST", headers: getAuthHeaders(),
-                body: JSON.stringify({ ordrId: 2, stepType: "APPROVER", empId: parseInt(approver), stepLabel: "Approver" })
-              });
-            } catch (e) { }
-          }
-        } else if (taskId) {
-          try {
-            const existingSteps = await fetch(`${apiBaseUrl}/api/process-config/draft-task/${taskId}`, { headers: getAuthHeaders() }).then(r => r.ok ? r.json() : []);
-            for (const step of existingSteps) {
-              const pcId = step.pcId || step.pc_id;
-              if (pcId) {
-                await fetch(`${apiBaseUrl}/api/process-config/${pcId}`, { method: "DELETE", headers: getAuthHeaders() });
-              }
-            }
-          } catch (e) { }
+        const taskId = savedTask.empTaskId || savedTask.id;
+        
+        if (!taskId) {
+            triggerAlert("error", "Task ID Missing", "The backend did not return a valid Task ID. Response: " + JSON.stringify(savedTask));
+            return;
         }
 
-        triggerAlert("success", "Success", `Task '${taskTitle}' has been successfully ${editId ? 'updated' : 'created'}!`);
+        // Save Checklists
+        if (checklist.length > 0) {
+          const checklistItems = checklist.map((c, i) => ({
+            chkCd: `CHK-${i + 1}`,
+            chkNm: c.name,
+            chkDesc: "",
+            seqNo: i + 1,
+            sts: true
+          }));
+          try {
+            const chkRes = await fetch(`${apiBaseUrl}/api/checklists/assignment/${taskId}/bulk`, {
+              method: "POST", headers: getAuthHeaders(),
+              body: JSON.stringify(checklistItems)
+            });
+            if (!chkRes.ok) {
+                const errTxt = await chkRes.text();
+                triggerAlert("error", "Checklist Error", errTxt);
+            }
+          } catch (e) { triggerAlert("error", "Checklist Exception", e.message); }
+        }
+
+        // Save Process Configs
+        if (enableWorkflow && taskId) {
+          const validReviewers = reviewer.filter(r => r.trim() !== '');
+          const validApprovers = approver.filter(a => a.trim() !== '');
+
+          if (validReviewers && validReviewers.length > 0) {
+            for (let i = 0; i < validReviewers.length; i++) {
+              try {
+                const revRes = await fetch(`${apiBaseUrl}/api/process-config/assignment/${taskId}`, {
+                  method: "POST", headers: getAuthHeaders(),
+                  body: JSON.stringify({ ordrId: i + 1, stepType: "REVIEWER", empId: parseInt(validReviewers[i]), stepLabel: `Reviewer ${i + 1}` })
+                });
+                if (!revRes.ok) {
+                    const errTxt = await revRes.text();
+                    triggerAlert("error", "Reviewer Error", errTxt);
+                }
+              } catch (e) { triggerAlert("error", "Reviewer Exception", e.message); }
+            }
+          }
+          if (validApprovers && validApprovers.length > 0) {
+            for (let i = 0; i < validApprovers.length; i++) {
+              try {
+                const appRes = await fetch(`${apiBaseUrl}/api/process-config/assignment/${taskId}`, {
+                  method: "POST", headers: getAuthHeaders(),
+                  body: JSON.stringify({ ordrId: validReviewers.length + i + 1, stepType: "APPROVER", empId: parseInt(validApprovers[i]), stepLabel: `Approver ${i + 1}` })
+                });
+                if (!appRes.ok) {
+                    const errTxt = await appRes.text();
+                    triggerAlert("error", "Approver Error", errTxt);
+                }
+              } catch (e) { triggerAlert("error", "Approver Exception", e.message); }
+            }
+          }
+        }
+
+        // --- Send Notifications ---
+        try {
+          const sendNotification = async (empId, roleMsg) => {
+             if(!empId) return;
+             await fetch(`${apiBaseUrl}/api/notifications`, {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                   empId: parseInt(empId),
+                   title: `Task Assigned: ${taskCode}`,
+                   message: `You have been assigned as the ${roleMsg} for task '${taskTitle}' (${taskCode}).`,
+                   entityTyp: "INDIVIDUAL_TASK",
+                   entityId: taskId
+                })
+             });
+          };
+
+          if (!editId) {
+             await sendNotification(assignedEmployee, "Assignee");
+             if (enableWorkflow) {
+                const validReviewers = reviewer.filter(r => r.trim() !== '');
+                const validApprovers = approver.filter(a => a.trim() !== '');
+                if (validReviewers && validReviewers.length > 0) {
+                  for (let r of validReviewers) await sendNotification(r, "Reviewer");
+                }
+                if (validApprovers && validApprovers.length > 0) {
+                  for (let a of validApprovers) await sendNotification(a, "Approver");
+                }
+             }
+          }
+        } catch (e) {
+          console.error("Failed to send some notifications:", e);
+        }
+
+        triggerAlert("success", "Success", `Task '${taskTitle}' has been successfully assigned! Notifications sent to Assignee, Reviewer, and Approver.`);
         setShowPreviewModal(false);
         handleResetForm();
         fetchAllData();
+        setView("list");
       } else {
         const errorText = await response.text();
-        triggerAlert("error", "Failed to save task", errorText || "An error occurred.");
+        triggerAlert("error", "Failed to assignment", errorText || "An error occurred.");
       }
     } catch (err) {
       triggerAlert("error", "Server error", err.message || "An error occurred.");
     }
   };
 
+  const getFilteredTasks = () => {
+    let baseTasks = tasks;
+    const currentEmpId = currentUser?.empId || currentUser?.id || sessionStorage.getItem("empId");
+
+
+    if (assignmentView === "my") {
+      baseTasks = baseTasks.filter(task => String(task.empId) === String(currentEmpId));
+    } else if (assignmentView === "assignedByMe") {
+      baseTasks = baseTasks.filter(task => 
+        String(task.assignedBy) === String(currentEmpId) && 
+        String(task.empId) !== String(currentEmpId)
+      );
+    }
+
+    const q = searchQuery.toLowerCase();
+    return baseTasks.filter(task => {
+      const emp = employees.find(e => String(e.empId || e.id) === String(task.empId));
+      const empName = emp ? `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` : "N/A";
+      
+      const assignedByEmp = employees.find(e => String(e.empId || e.id) === String(task.assignedBy));
+      const assignedByName = assignedByEmp ? `${assignedByEmp.fstNm || assignedByEmp.firstName} ${assignedByEmp.lstNm || assignedByEmp.lastName}` : "N/A";
+
+      const displayName = assignmentView === "my" ? assignedByName : empName;
+
+      return (
+        (task.taskCd || "").toLowerCase().includes(q) ||
+        (task.taskNm || "").toLowerCase().includes(q) ||
+        displayName.toLowerCase().includes(q) ||
+        (task.taskSts || "").toLowerCase().includes(q)
+      );
+    });
+  };
+
+  const filteredTasks = getFilteredTasks();
+
   return (
     <div className="cc-shell-container">
       <AlertModal {...alertConfig} onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })} />
+      {goLiveTask && (
+        <GoLiveCalendar
+          project={goLiveTask}
+          onCancel={() => setGoLiveTask(null)}
+          onPreview={(settings) => executeTaskSave(settings)}
+        />
+      )}
       <Sidebar onLogout={onLogout} />
       <div className="cc-shell">
-        <Header title=" Assign Task " onLogout={onLogout} userRole={userRole} />
+        <Header title=" Assignment " onLogout={onLogout} userRole={userRole} />
 
         <main className="cc-main">
           <div className="cit-container">
@@ -602,20 +1058,45 @@ const Assignment = ({ userRole, onLogout }) => {
               <div className="cit-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
                   <div>
-                    <h3 className="cit-card-title" style={{ margin: 0, marginBottom: '4px', fontSize: '18px', color: '#1e293b', fontWeight: 'bold' }}>Assign Task List</h3>
+                    <h3 className="cit-card-title" style={{ margin: 0, marginBottom: '4px', fontSize: '18px', color: '#1e293b', fontWeight: 'bold' }}>Assignment List</h3>
                     <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>View and manage all assigned task records</p>
                   </div>
-                  <button className="cit-btn-create" style={{ background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: '500' }} onClick={() => { handleResetForm(); setView("form"); }}>
-                    <Plus size={16} /> Assign New Task
-                  </button>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <input 
+                      type="text" 
+                      placeholder="Search tasks..." 
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', minWidth: '220px' }}
+                    />
+                    <button className="cit-btn-create" style={{ background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: '500' }} onClick={() => { handleResetForm(); setView("form"); }}>
+                      <Plus size={16} /> Assign New Task
+                    </button>
+                  </div>
                 </div>
+
+                <div style={{ margin: '8px 0 20px 0', padding: '4px', backgroundColor: '#f1f5f9', borderRadius: '10px', display: 'flex' }}>
+                  <div 
+                    onClick={() => setAssignmentView("my")}
+                    style={{ flex: 1, padding: '10px 0', cursor: 'pointer', backgroundColor: assignmentView === "my" ? '#2563eb' : 'transparent', borderRadius: '8px', textAlign: 'center' }}
+                  >
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: assignmentView === "my" ? 'white' : '#64748b' }}>My Assignments</span>
+                  </div>
+                  <div 
+                    onClick={() => setAssignmentView("assignedByMe")}
+                    style={{ flex: 1, padding: '10px 0', cursor: 'pointer', backgroundColor: assignmentView === "assignedByMe" ? '#2563eb' : 'transparent', borderRadius: '8px', textAlign: 'center' }}
+                  >
+                    <span style={{ fontSize: '13px', fontWeight: 'bold', color: assignmentView === "assignedByMe" ? 'white' : '#64748b' }}>Assigned by Me</span>
+                  </div>
+                </div>
+
                 <div className="cit-table-container">
                   <table className="cit-table">
                     <thead>
                       <tr>
                         <th>Task Code</th>
                         <th>Title</th>
-                        <th>Assigned To</th>
+                        <th>{assignmentView === "my" ? "Assigned By" : "Assigned To"}</th>
                         <th>Priority</th>
                         <th>Status</th>
                         <th>Start Date</th>
@@ -627,14 +1108,20 @@ const Assignment = ({ userRole, onLogout }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {tasks.length > 0 ? tasks.map(task => {
+                      {filteredTasks.length > 0 ? filteredTasks.map(task => {
                         const emp = employees.find(e => String(e.empId || e.id) === String(task.empId));
                         const empName = emp ? `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` : "N/A";
+                        
+                        const assignedByEmp = employees.find(e => String(e.empId || e.id) === String(task.assignedBy));
+                        const assignedByName = assignedByEmp ? `${assignedByEmp.fstNm || assignedByEmp.firstName} ${assignedByEmp.lstNm || assignedByEmp.lastName}` : "N/A";
+
+                        const displayName = assignmentView === "my" ? assignedByName : empName;
+
                         return (
                           <tr key={task.empTaskId || task.id}>
                             <td>{task.taskCd}</td>
                             <td>{task.taskNm}</td>
-                            <td>{empName}</td>
+                            <td>{displayName}</td>
                             <td>
                               <span className={`cit-badge priority-${(task.priority || task.Priority || '').toLowerCase()}`}>
                                 {task.priority || task.Priority || 'None'}
@@ -645,7 +1132,7 @@ const Assignment = ({ userRole, onLogout }) => {
                             <td>{task.endDt ? String(task.endDt).substring(0, 10) : ''}</td>
                             <td>{task.reviewerName || "N/A"}</td>
                             <td>{task.approverName || "N/A"}</td>
-                            <td>0 Items</td>
+                            <td>{task.checklistCount || 0} Items</td>
                             <td>
                               <button className="cit-action-btn view" title="View" style={{ color: '#64748b', marginRight: 8 }} onClick={() => handleView(task)}>
                                 <Eye size={16} />
@@ -724,20 +1211,39 @@ const Assignment = ({ userRole, onLogout }) => {
                             <SearchableSelect
                               name="assignedEmployee"
                               value={assignedEmployee}
-                              onChange={(e) => setAssignedEmployee(e.target.value)}
-                              options={employees.map(emp => ({ value: emp.empId || emp.id, label: emp.displayLabel || `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` }))}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setAssignedEmployee(val);
+                                if (reviewer.includes(val)) setReviewer(reviewer.filter(r => r !== val));
+                                if (approver.includes(val)) setApprover(approver.filter(a => a !== val));
+                                if (startDate && duration) {
+                                  recalculateDueDate(startDate, duration, val);
+                                }
+                              }}
+                              options={employees
+                                .map(emp => ({ value: emp.empId || emp.id, label: emp.displayLabel || `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` }))}
                               placeholder="Search Employee..."
+                            />
+                          </label>
+                          <label className="cc-field-item">
+                            <span>Assigned By</span>
+                            <input 
+                              type="text" 
+                              value={sessionStorage.getItem("userName") || "Admin"} 
+                              disabled 
+                              style={{ backgroundColor: '#f1f5f9', color: '#64748b', cursor: 'not-allowed' }}
                             />
                           </label>
                           <label className="cc-field-item">
                             <span>Priority <b style={{ color: '#ef4444' }}>*</b></span>
                             <div className="cit-input-wrapper" style={{ margin: 0 }}>
-                              <select value={priority} onChange={(e) => setPriority(e.target.value)} style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : '#22c55e', fontWeight: 600 }}>
+                              <select value={priority} onChange={(e) => setPriority(e.target.value)} style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e', fontWeight: 600 }}>
                                 <option value="High" style={{ color: '#ef4444' }}>High</option>
                                 <option value="Medium" style={{ color: '#eab308' }}>Medium</option>
+                                <option value="Normal" style={{ color: '#3b82f6' }}>Normal</option>
                                 <option value="Low" style={{ color: '#22c55e' }}>Low</option>
                               </select>
-                              <ChevronDown size={14} className="cit-input-icon-right" style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : '#22c55e' }} />
+                              <ChevronDown size={14} className="cit-input-icon-right" style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e' }} />
                             </div>
                           </label>
                         </div>
@@ -749,12 +1255,11 @@ const Assignment = ({ userRole, onLogout }) => {
                           </label>
                           <label className="cc-field-item">
                             <span>Start Date <b style={{ color: '#ef4444' }}>*</b></span>
-                            <input type="date" value={startDate} onChange={handleStartDateChange} style={{ borderColor: dateError ? 'red' : '' }} />
+                            <DateInputWithFormat value={startDate} onChange={handleStartDateChange} />
                           </label>
                           <label className="cc-field-item" style={{ position: 'relative' }}>
                             <span>Due Date <b style={{ color: '#ef4444' }}>*</b></span>
-                            <input type="date" value={dueDate} onChange={handleDueDateChange} min={startDate} style={{ borderColor: dateError ? 'red' : '' }} />
-                            {dateError && <span style={{ color: 'red', fontSize: '11px', position: 'absolute', bottom: '-16px', left: 0 }}>{dateError}</span>}
+                            <DateInputWithFormat value={dueDate} onChange={handleDueDateChange} min={startDate} error={dateError} />
                           </label>
                         </div>
 
@@ -805,51 +1310,115 @@ const Assignment = ({ userRole, onLogout }) => {
                         </div>
 
                         {enableWorkflow && (
-                          <div className="cc-form-layout-row columns-2">
-                            <label className="cc-field-item">
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                          <div className="cc-form-layout-row columns-2" style={{ marginTop: '16px' }}>
+                            <div className="cc-field-item">
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                 <span>Reviewer <b style={{ color: '#ef4444' }}>*</b></span>
-                                <span onClick={() => setShowQuickAddReviewer(!showQuickAddReviewer)} style={{ color: '#2563eb', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>+ Add New</span>
+                                <span 
+                                  onClick={() => setReviewer([...reviewer, ''])}
+                                  style={{ color: '#2563eb', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}
+                                >
+                                  + Add
+                                </span>
                               </div>
-                              <SearchableSelect
-                                name="reviewer"
-                                value={reviewer}
-                                onChange={(e) => setReviewer(e.target.value)}
-                                options={employees
-                                  .filter(emp => String(emp.empId || emp.id) !== String(assignedEmployee))
-                                  .map(emp => ({ value: emp.empId || emp.id, label: emp.displayLabel || `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` }))}
-                                placeholder="Search Reviewer..."
-                              />
-                              {showQuickAddReviewer && (
-                                <QuickAddBox
-                                  role="Reviewer"
-                                  onClose={() => setShowQuickAddReviewer(false)}
-                                  onSuccess={(id) => { setReviewer(id); setShowQuickAddReviewer(false); }}
-                                />
-                              )}
-                            </label>
-                            <label className="cc-field-item">
-                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                              {(reviewer.length > 0 ? reviewer : ['']).map((revId, index) => (
+                                <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', width: '100%' }}>
+                                  <div style={{ width: 'calc(100% - 36px)' }}>
+                                    <SearchableSelect
+                                      name={`reviewer_${index}`}
+                                      value={revId}
+                                      isMulti={false}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        const newRev = reviewer.length > 0 ? [...reviewer] : [''];
+                                        newRev[index] = val;
+                                        setReviewer(newRev);
+                                      }}
+                                      options={employees
+                                        .filter(emp => {
+                                          const id = String(emp.empId || emp.id);
+                                          const currentUserId = currentUser ? String(currentUser.empId || currentUser.id) : null;
+                                          if (currentUserId && id === currentUserId) return false;
+                                          return !approver.includes(id) && (!reviewer.includes(id) || reviewer[index] === id);
+                                        })
+                                        .map(emp => ({ value: emp.empId || emp.id, label: emp.displayLabel || `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` }))}
+                                      placeholder={`Search Reviewer ${index + 1}...`}
+                                    />
+                                  </div>
+                                  {(reviewer.length > 1 || (reviewer.length === 1 && reviewer[0] !== '')) && (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => {
+                                        const newRev = [...reviewer];
+                                        if (newRev.length > 1) {
+                                          newRev.splice(index, 1);
+                                          setReviewer(newRev);
+                                        } else {
+                                          setReviewer([]);
+                                        }
+                                      }}
+                                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: '28px', height: '28px' }}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                            <div className="cc-field-item">
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                                 <span>Approver <b style={{ color: '#ef4444' }}>*</b></span>
-                                <span onClick={() => setShowQuickAddApprover(!showQuickAddApprover)} style={{ color: '#2563eb', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}>+ Add New</span>
+                                <span 
+                                  onClick={() => setApprover([...approver, ''])}
+                                  style={{ color: '#2563eb', fontSize: '12px', cursor: 'pointer', fontWeight: '600' }}
+                                >
+                                  + Add
+                                </span>
                               </div>
-                              <SearchableSelect
-                                name="approver"
-                                value={approver}
-                                onChange={(e) => setApprover(e.target.value)}
-                                options={employees
-                                  .filter(emp => String(emp.empId || emp.id) !== String(assignedEmployee))
-                                  .map(emp => ({ value: emp.empId || emp.id, label: emp.displayLabel || `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` }))}
-                                placeholder="Search Approver..."
-                              />
-                              {showQuickAddApprover && (
-                                <QuickAddBox
-                                  role="Approver"
-                                  onClose={() => setShowQuickAddApprover(false)}
-                                  onSuccess={(id) => { setApprover(id); setShowQuickAddApprover(false); }}
-                                />
-                              )}
-                            </label>
+                              {(approver.length > 0 ? approver : ['']).map((appId, index) => (
+                                <div key={index} style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', width: '100%' }}>
+                                  <div style={{ width: 'calc(100% - 36px)' }}>
+                                    <SearchableSelect
+                                      name={`approver_${index}`}
+                                      value={appId}
+                                      isMulti={false}
+                                      onChange={(e) => {
+                                        const val = e.target.value;
+                                        const newApp = approver.length > 0 ? [...approver] : [''];
+                                        newApp[index] = val;
+                                        setApprover(newApp);
+                                      }}
+                                      options={employees
+                                        .filter(emp => {
+                                          const id = String(emp.empId || emp.id);
+                                          const currentUserId = currentUser ? String(currentUser.empId || currentUser.id) : null;
+                                          if (currentUserId && id === currentUserId) return false;
+                                          return !reviewer.includes(id) && (!approver.includes(id) || approver[index] === id);
+                                        })
+                                        .map(emp => ({ value: emp.empId || emp.id, label: emp.displayLabel || `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` }))}
+                                      placeholder={`Search Approver ${index + 1}...`}
+                                    />
+                                  </div>
+                                  {(approver.length > 1 || (approver.length === 1 && approver[0] !== '')) && (
+                                    <button 
+                                      type="button" 
+                                      onClick={() => {
+                                        const newApp = [...approver];
+                                        if (newApp.length > 1) {
+                                          newApp.splice(index, 1);
+                                          setApprover(newApp);
+                                        } else {
+                                          setApprover([]);
+                                        }
+                                      }}
+                                      style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: '#ef4444', padding: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, width: '28px', height: '28px' }}
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         )}
                         {!enableWorkflow && (
@@ -861,12 +1430,49 @@ const Assignment = ({ userRole, onLogout }) => {
                       </section>
 
                       {/* Section 3: Attachments & Checklist */}
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '24px' }}>
-                        {/* Attachments Column */}
+                      <div style={{ marginBottom: '24px' }}>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', marginBottom: '16px' }}>
+                          <button 
+                            type="button"
+                            onClick={() => setActiveTab('checklist')}
+                            style={{ 
+                              padding: '12px 24px', 
+                              borderBottom: activeTab === 'checklist' ? '2px solid #2563eb' : '2px solid transparent', 
+                              color: activeTab === 'checklist' ? '#2563eb' : '#64748b',
+                              fontWeight: activeTab === 'checklist' ? '600' : '400',
+                              backgroundColor: 'transparent',
+                              borderTop: 'none',
+                              borderLeft: 'none',
+                              borderRight: 'none',
+                              cursor: 'pointer',
+                              fontSize: '15px'
+                            }}
+                          >
+                            Checklist Items
+                          </button>
+                          <button 
+                            type="button"
+                            onClick={() => setActiveTab('attachment')}
+                            style={{ 
+                              padding: '12px 24px', 
+                              borderBottom: activeTab === 'attachment' ? '2px solid #2563eb' : '2px solid transparent', 
+                              color: activeTab === 'attachment' ? '#2563eb' : '#64748b',
+                              fontWeight: activeTab === 'attachment' ? '600' : '400',
+                              backgroundColor: 'transparent',
+                              borderTop: 'none',
+                              borderLeft: 'none',
+                              borderRight: 'none',
+                              cursor: 'pointer',
+                              fontSize: '15px'
+                            }}
+                          >
+                            Attachments
+                          </button>
+                        </div>
+
+                        {activeTab === 'attachment' && (
                         <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none' }}>
-                          <h3 className="cc-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '16px' }}>
-                            Attachments <Info size={14} color="#94a3b8" style={{ marginLeft: 6, cursor: 'pointer' }} />
-                          </h3>
+
                           <div
                             className="cit-upload-box"
                             onDragOver={(e) => e.preventDefault()}
@@ -895,13 +1501,12 @@ const Assignment = ({ userRole, onLogout }) => {
                             </div>
                           )}
                         </section>
+                        )}
 
-                        {/* Checklist Column */}
+                        {activeTab === 'checklist' && (
                         <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none' }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <h3 className="cc-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
-                              Checklist Items
-                            </h3>
+                            <div></div>
                             <button className="cit-add-btn" onClick={addChecklistItem} style={{ margin: 0 }}>
                               <Plus size={14} /> Add Checklist Item
                             </button>
@@ -912,8 +1517,8 @@ const Assignment = ({ userRole, onLogout }) => {
                                 <thead>
                                   <tr>
                                     <th width="10%">S.No</th>
-                                    <th width="50%">Checklist Item</th>
-                                    <th width="20%">Sequence</th>
+                                    <th width="15%">Code</th>
+                                    <th width="55%">Checklist Item</th>
                                     <th width="20%">Actions</th>
                                   </tr>
                                 </thead>
@@ -921,6 +1526,7 @@ const Assignment = ({ userRole, onLogout }) => {
                                   {checklist.map((item, index) => (
                                     <tr key={item.id}>
                                       <td>{index + 1}</td>
+                                      <td>CHK-{index + 1}</td>
                                       <td>
                                         {editingItemId === item.id ? (
                                           <input
@@ -935,7 +1541,6 @@ const Assignment = ({ userRole, onLogout }) => {
                                           item.name
                                         )}
                                       </td>
-                                      <td>{item.sequence}</td>
                                       <td>
                                         {editingItemId === item.id ? (
                                           <button className="cit-action-btn edit" onClick={() => saveChecklistEdit(item.id)}><Check size={14} /></button>
@@ -949,6 +1554,7 @@ const Assignment = ({ userRole, onLogout }) => {
                                   {isAddingChecklist && (
                                     <tr>
                                       <td>{checklist.length + 1}</td>
+                                      <td>CHK-{checklist.length + 1}</td>
                                       <td>
                                         <input
                                           type="text"
@@ -960,7 +1566,6 @@ const Assignment = ({ userRole, onLogout }) => {
                                           style={{ padding: '6px 10px', width: '100%', border: '1px solid #3b82f6', borderRadius: '4px', outline: 'none' }}
                                         />
                                       </td>
-                                      <td>{checklist.length + 1}</td>
                                       <td>
                                         <button className="cit-action-btn edit" onClick={saveNewChecklist}><Check size={14} /></button>
                                         <button className="cit-action-btn delete" onClick={() => { setIsAddingChecklist(false); setNewChecklistName(""); }}><Trash2 size={14} /></button>
@@ -972,6 +1577,7 @@ const Assignment = ({ userRole, onLogout }) => {
                             </div>
                           )}
                         </section>
+                        )}
                       </div>
 
                     </div>
@@ -985,17 +1591,17 @@ const Assignment = ({ userRole, onLogout }) => {
                       backgroundColor: '#fafbfc',
                       borderTop: '1px solid #e2e8f0'
                     }}>
+                      <button type="button" className="cc-btn primary" onClick={handleAssignClick} style={{ background: '#10b981', borderColor: '#10b981', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                        <Save size={14} /> Assignment
+                      </button>
                       <button type="button" className="cc-btn primary" onClick={() => setShowPreviewModal(true)} style={{ background: '#3b82f6', borderColor: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Eye size={14} /> Preview Task
-                      </button>
-                      <button type="button" className="cc-btn primary" onClick={handleSaveTask} style={{ background: '#10b981', borderColor: '#10b981', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Save size={14} /> Save
                       </button>
                       <button type="button" className="cc-btn secondary" onClick={() => {
                         setView("list");
                         handleResetForm();
                       }} style={{ background: 'white', border: '1px solid #cbd5e1', color: '#475569', padding: '8px 16px', borderRadius: '6px', fontWeight: 600 }}>
-                        Cancel
+                        Close
                       </button>
                     </div>
 
@@ -1031,7 +1637,7 @@ const Assignment = ({ userRole, onLogout }) => {
                 </tr>
                 <tr>
                   <th>Priority</th>
-                  <td><span style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : '#22c55e', fontWeight: 600 }}>{priority}</span></td>
+                  <td><span style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e', fontWeight: 600 }}>{priority}</span></td>
                 </tr>
                 <tr>
                   <th>Status</th>
@@ -1059,8 +1665,8 @@ const Assignment = ({ userRole, onLogout }) => {
                     {enableWorkflow ? (
                       <>
                         <span style={{ color: "#10b981", background: "#d1fae5", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Enabled</span>
-                        <span style={{ color: '#94a3b8', margin: '0 4px' }}>|</span> Reviewer: {reviewer}
-                        <span style={{ color: '#94a3b8', margin: '0 4px' }}>|</span> Approver: {approver}
+                        <span style={{ color: '#94a3b8', margin: '0 4px' }}>|</span> Reviewer: {reviewer.filter(r => r.trim() !== '').length > 0 ? reviewer.filter(r => r.trim() !== '').map(r => employees.find(e => String(e.empId || e.id) === String(r)) ? `${employees.find(e => String(e.empId || e.id) === String(r)).fstNm || employees.find(e => String(e.empId || e.id) === String(r)).firstName} ${employees.find(e => String(e.empId || e.id) === String(r)).lstNm || employees.find(e => String(e.empId || e.id) === String(r)).lastName}` : r).join(', ') : 'None'}
+                        <span style={{ color: '#94a3b8', margin: '0 4px' }}>|</span> Approver: {approver.filter(a => a.trim() !== '').length > 0 ? approver.filter(a => a.trim() !== '').map(a => employees.find(e => String(e.empId || e.id) === String(a)) ? `${employees.find(e => String(e.empId || e.id) === String(a)).fstNm || employees.find(e => String(e.empId || e.id) === String(a)).firstName} ${employees.find(e => String(e.empId || e.id) === String(a)).lstNm || employees.find(e => String(e.empId || e.id) === String(a)).lastName}` : a).join(', ') : 'None'}
                       </>
                     ) : (
                       <span style={{ color: "#64748b", background: "#f1f5f9", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Disabled</span>
@@ -1084,8 +1690,8 @@ const Assignment = ({ userRole, onLogout }) => {
 
             <div className="cit-modal-footer" style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
               <button className="cit-btn-cancel" onClick={() => setShowPreviewModal(false)}>Close Preview</button>
-              <button className="cit-btn-create" onClick={handleSaveTask}>
-                <Plus size={16} /> {editId ? 'Update Task' : 'Create & Assign Task'}
+              <button className="cit-btn-create" onClick={handleAssignClick}>
+                <Plus size={16} /> {editId ? 'Update Task' : 'Create & Assignment'}
               </button>
             </div>
           </div>

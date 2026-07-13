@@ -75,16 +75,18 @@ const ResetPassword = () => {
   return (
     <div className="login-container">
       <div className="login-fullscreen-split">
-        
+
         <div className="login-left">
           <img src="/icon3.png" alt="Login Background" className="left-side-image" />
         </div>
 
         <div className="login-right">
           <div className="login-body">
-            
+
             <div className="brand-header-large">
-              <img src="/login_logo.svg" alt="BIONOVA Logo" className="bionova-main-logo" style={{ width: '100%', maxWidth: '320px', height: 'auto' }} />
+              <div className="login-left">
+                <img src="/icon3.png" alt="Login Background" className="left-side-image" />
+              </div>
             </div>
 
             <div className="welcome-text" style={{ marginBottom: '20px', textAlign: 'center' }}>
@@ -97,7 +99,7 @@ const ResetPassword = () => {
                 <i className="fas fa-exclamation-circle"></i> <span>{error}</span>
               </div>
             )}
-            
+
             {successMsg && (
               <div className="success-message">
                 <i className="fas fa-check-circle"></i> <span>{successMsg}</span>
@@ -110,15 +112,15 @@ const ResetPassword = () => {
                 <div className="input-wrapper password-wrapper">
                   <i className="fas fa-lock input-icon"></i>
                   <input
-                    type={showPassword ? 'text' : 'password'} 
-                    value={password} 
-                    onChange={(e) => { setPassword(e.target.value); setError(''); }} 
+                    type={showPassword ? 'text' : 'password'}
+                    value={password}
+                    onChange={(e) => { setPassword(e.target.value); setError(''); }}
                     placeholder="Enter new password"
                     className="password-input"
                   />
-                  <button 
+                  <button
                     type="button"
-                    className="password-toggle-btn" 
+                    className="password-toggle-btn"
                     onClick={() => setShowPassword(!showPassword)}
                   >
                     <i className={showPassword ? 'far fa-eye-slash' : 'far fa-eye'}></i>
@@ -132,19 +134,19 @@ const ResetPassword = () => {
                   <i className="fas fa-lock input-icon"></i>
                   <input
                     type="password"
-                    value={confirmPassword} 
-                    onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }} 
+                    value={confirmPassword}
+                    onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
                     placeholder="Confirm new password"
                   />
                 </div>
               </div>
 
               <button type="submit" className="login-btn" disabled={loading}>
-                {loading ? <><i className="fas fa-spinner fa-spin" style={{marginRight: '8px'}}></i> Resetting...</> : "Update Password"}
+                {loading ? <><i className="fas fa-spinner fa-spin" style={{ marginRight: '8px' }}></i> Resetting...</> : "Update Password"}
               </button>
 
               <div className="back-link" onClick={() => navigate('/', { replace: true })}>
-                <i className="fas fa-arrow-left" style={{marginRight: '5px'}}></i> Back to Login
+                <i className="fas fa-arrow-left" style={{ marginRight: '5px' }}></i> Back to Login
               </div>
             </form>
 

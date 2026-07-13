@@ -1018,6 +1018,9 @@
   border-radius: 12px;
   width: 100%;
   max-width: 520px;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
   overflow: hidden;
   animation: modalEnter 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -1068,6 +1071,7 @@
 
 .dr-modal-body {
   padding: 20px;
+  overflow-y: auto;
 }
 
 .dr-form-group {

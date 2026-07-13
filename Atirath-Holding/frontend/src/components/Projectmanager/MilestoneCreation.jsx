@@ -179,7 +179,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   const [reviewersList, setReviewersList] = useState([]);
   const [approversList, setApproversList] = useState([]);
   const [milestoneList, setMilestoneList] = useState([]); // Combined (draft + live)
-
+  const [projectMilestones, setProjectMilestones] = useState([]);
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -373,6 +373,51 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     return updated;
   };
 
+  const calculateMilestoneStartDate = (milestoneData) => {
+
+    if (
+      !milestoneData.mlstm_dep_flg ||
+      milestoneData.mlstm_dep_typ === "INDEPENDENT" ||
+      !milestoneData.mlstm_dep_m_id
+    ) {
+      return milestoneData.tent_st_dt;
+    }
+
+    const depMilestone = projectMilestones.find(
+      m => String(m.drftMId) === String(milestoneData.mlstm_dep_m_id)
+    );
+
+    if (!depMilestone) {
+      return milestoneData.tent_st_dt;
+    }
+
+    if (milestoneData.mlstm_dep_typ === "PARALLEL") {
+      return depMilestone.tentStDt;
+    }
+
+    if (milestoneData.mlstm_dep_typ === "SEQUENTIAL") {
+      return addDays(depMilestone.tentEndDt, 1);
+    }
+
+    return milestoneData.tent_st_dt;
+  };
+
+  const autoCalculateMilestoneDates = (milestoneData) => {
+
+    const updated = { ...milestoneData };
+
+    updated.tent_st_dt = calculateMilestoneStartDate(updated);
+
+    if (updated.mlstm_days) {
+      updated.tent_end_dt = calculateEndDate(
+        updated.tent_st_dt,
+        updated.mlstm_days
+      );
+    }
+
+    return updated;
+  };
+
   // ── Effects ──────────────────────────────────────────────────
   useEffect(() => {
     loadAllData();
@@ -399,6 +444,28 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       setWorkingDaysPerWeek(6);
     }
   }, [milestone.drft_prj_id, projects]);
+  useEffect(() => {
+    if (!milestone.drft_prj_id) {
+      setProjectMilestones([]);
+      return;
+    }
+
+    fetch(`${API_BASE}/milestone-drafts/by-project/${milestone.drft_prj_id}`, {
+      headers: authHeaders(),
+    })
+      .then(res => {
+        if (!res.ok) throw new Error("Failed to fetch milestones");
+        return res.json();
+      })
+      .then(data => {
+        setProjectMilestones(data || []);
+      })
+      .catch(err => {
+        console.error(err);
+        setProjectMilestones([]);
+      });
+
+  }, [milestone.drft_prj_id]);
 
   useEffect(() => {
     if (milestone.tent_st_dt && milestone.mlstm_days) {
@@ -419,6 +486,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     }
 
   }, [milestone.tent_st_dt]);
+
+
 
   // ── Alert ────────────────────────────────────────────────────
   const triggerAlert = (type, title, message) => {
@@ -623,7 +692,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             !task.no_of_days || parseInt(task.no_of_days) <= 0;
         });
         if (incompleteTask) {
-          errors.tasks = "All tasks must be fully completed with a name, assignee, and valid duration.";
+          errors.tasks = "All tasks must be fully completed with a name, executor, and valid duration.";
           isValid = false;
         } else {
           const milestoneEnd = milestone.tent_end_dt ? new Date(milestone.tent_end_dt) : null;
@@ -654,7 +723,26 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   // ── Milestone CRUD ───────────────────────────────────────────
   const updateMilestone = (field, value) => {
     if (field === "mlstm_cd" && value.length > 10) value = value.slice(0, 10);
-    setMilestone(prev => ({ ...prev, [field]: value }));
+    setMilestone(prev => {
+
+      const updated = {
+        ...prev,
+        [field]: value
+      };
+
+      if (
+        [
+          "mlstm_dep_flg",
+          "mlstm_dep_typ",
+          "mlstm_dep_m_id",
+          "mlstm_days"
+        ].includes(field)
+      ) {
+        return autoCalculateMilestoneDates(updated);
+      }
+
+      return updated;
+    });
 
     setFormErrors(prev => ({ ...prev, [field]: "" }));
     setStepValidation(prev => {
@@ -756,8 +844,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   const validateTask = (task) => {
     const errors = {};
     if (!task.task_nm?.trim()) errors.task_nm = "Task name is required";
-    if (task.task_typ === "INTERNAL" && !task.emp_id) errors.assignee = "Assignee is required";
-    if (task.task_typ === "EXTERNAL" && !task.ext_emp_id) errors.ext_assignee = "External assignee is required";
+    if (task.task_typ === "INTERNAL" && !task.emp_id) errors.assignee = "Executor is required";
+    if (task.task_typ === "EXTERNAL" && !task.ext_emp_id) errors.ext_assignee = "External executor is required";
     if (!task.no_of_days || parseInt(task.no_of_days) <= 0) {
       errors.duration = "Valid duration is required";
     } else if (task.tent_end_dt && milestone.tent_end_dt) {
@@ -1802,7 +1890,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         <div className="mc-radio-row">
           <strong>Task Type <b>*</b></strong>
           {taskTypes.map(type => (
-            <label key={type.value}><input type="radio" name="taskType" checked={selectedTask.task_typ === type.value} onChange={() => { updateTask("task_typ", type.value); if (type.value === "INTERNAL") updateTask("ext_emp_id", ""); else updateTask("emp_id", ""); const updated = { ...selectedTask, task_typ: type.value }; const ut = [...tasks]; ut[editingTaskIndex] = updated; setTasks(ut); }} /> {type.label}</label>
+            <label key={type.value}><input type="radio" name={`taskType_${type.value}`} tabIndex={0} checked={selectedTask.task_typ === type.value} onChange={() => { updateTask("task_typ", type.value); if (type.value === "INTERNAL") updateTask("ext_emp_id", ""); else updateTask("emp_id", ""); const updated = { ...selectedTask, task_typ: type.value }; const ut = [...tasks]; ut[editingTaskIndex] = updated; setTasks(ut); }} /> {type.label}</label>
           ))}
         </div>
         <label className="mc-field">
@@ -1846,7 +1934,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             <input type="number" value={selectedTask.no_of_days || ""} onChange={(e) => { const v = e.target.value; updateTask("no_of_days", v); const updated = { ...selectedTask, no_of_days: v }; const calculated = autoCalculateTaskDates(updated); const ut = [...tasks]; ut[editingTaskIndex] = calculated; setTasks(ut); }} placeholder="Enter duration" min="1" className={getTaskError(editingTaskIndex, "duration") ? "mc-error" : ""} />
             {getTaskError(editingTaskIndex, "duration") && <small className="mc-error-text">{getTaskError(editingTaskIndex, "duration")}</small>}
           </label>
-          <label className="mc-field"><span>Start Date</span><input type="date" value={selectedTask.tent_st_dt || ""} readOnly className="mc-disabled" /><small className="mc-hint">Auto-calculated</small></label>
+          <label className="mc-field"><span>Start Date</span><input type="date" value={selectedTask.tent_st_dt || ""} onChange={(e) => { const v = e.target.value; updateTask("tent_st_dt", v); const updated = { ...selectedTask, tent_st_dt: v }; const ut = [...tasks]; ut[editingTaskIndex] = updated; setTasks(ut); }} /></label>
           <label className="mc-field"><span>End Date</span><input type="date" value={selectedTask.tent_end_dt || ""} readOnly className="mc-disabled" /><small className="mc-hint">Auto-calculated</small></label>
         </div>
         <div className="mc-auto-dates">
@@ -1857,7 +1945,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         <div className="mc-task-dependency-section">
           <div className="mc-dependency-toggle">
             <label className="mc-field toggle-line"><span>Task Dependency Available</span>
-              <span className="mc-switch"><input type="checkbox" checked={selectedTask.task_dep_flg} onChange={toggleTaskDependency} /><i /></span>
+              <span className="mc-switch"><input type="checkbox" tabIndex={0} checked={selectedTask.task_dep_flg} onChange={toggleTaskDependency} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleTaskDependency(); } }} /><i /></span>
             </label>
           </div>
           {selectedTask.task_dep_flg && (
@@ -1955,7 +2043,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
               <div className="mc-section-header"><h4>Process / Workflow</h4><label className="mc-switch"><input type="checkbox" checked={selectedTask.process?.enabled || false} onChange={toggleTaskProcess} /><i /></label></div>
               {selectedTask.process?.enabled && (
                 <>
-                  <div className="mc-process-info"><span className="mc-process-assignee"><strong>Task Assignee:</strong> {assigneeName || "Not assigned yet"}</span></div>
+                  <div className="mc-process-info"><span className="mc-process-assignee"><strong>Task Executor:</strong> {assigneeName || "Not assigned yet"}</span></div>
                   <div className="mc-process-review-approver">
                     <div className="mc-form-grid two">
                       <label className="mc-field"><span>Reviewer <b>*</b></span>
@@ -1998,6 +2086,14 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                     </div>
                   </div>
                   <div className="mc-process-status-display"><span className="mc-process-enabled-badge"><CheckCircle size={14} /> Process Enabled</span><span className="mc-process-note"><small>Reviewer and Approver will be assigned to this task</small></span></div>
+                  {/* ====== ADDED Rule====== */}
+                  <div style={{ marginTop: '12px', padding: '12px', background: '#f0f9ff', borderLeft: '4px solid #3b82f6', borderRadius: '4px', display: 'flex', gap: '8px', alignItems: 'flex-start' }}>
+                    <AlertCircle size={14} style={{ color: '#3b82f6', flexShrink: 0, marginTop: '2px' }} />
+                    <div style={{ fontSize: '0.875rem', color: '#1e293b', lineHeight: '1.5' }}>
+                      <strong>Note:</strong> Once the Executor completes the task, it is forwarded to the Reviewer. If no defects or errors are found, the task is forwarded to the Approver. If errors are found, it is reassigned back to the Executor. Similarly, if the Approver finds no defects, the task is marked as 'Completed'; otherwise, it is reassigned back to the Executor.
+                    </div>
+                  </div>
+                  {/* ====== END Rule ====== */}
                 </>
               )}
               {!selectedTask.process?.enabled && <div className="mc-process-disabled-msg"><span>Process workflow is disabled. Enable the toggle above to assign reviewer and approver.</span></div>}
@@ -2005,8 +2101,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           )}
         </div>
         <div className="mc-form-actions">
-          <button type="button" className="mc-btn secondary" onClick={cancelEdit}><X size={14} /> Cancel</button>
           <button type="button" className="mc-btn primary" onClick={saveTaskChanges}><Save size={14} /> Save Task</button>
+          <button type="button" className="mc-btn secondary" onClick={cancelEdit}><X size={14} /> Cancel</button>
         </div>
       </div>
     );
@@ -2018,14 +2114,14 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     return (
       <div className="mc-table-wrap">
         <table className="mc-task-table">
-          <thead><tr><th style={{ width: '40px' }}>S.No</th><th>Code</th><th>Task Name</th><th>Type</th><th>Assigned To</th><th>Duration</th><th>Start</th><th>End</th><th>Dependency</th><th>Checklist</th><th>Attachments</th><th>Process</th><th>Status</th><th style={{ width: '80px' }}>Actions</th></tr></thead>
+          <thead><tr><th style={{ width: '40px' }}>S.No</th><th>Code</th><th>Task Name</th><th>Type</th><th>Executor</th><th>Duration</th><th>Start</th><th>End</th><th>Dependency</th><th>Checklist</th><th>Attachments</th><th>Process</th><th>Status</th><th style={{ width: '80px' }}>Actions</th></tr></thead>
           <tbody>
             {tasks.map((task, index) => {
               const isIncomplete = !task.task_nm || (task.task_typ === "INTERNAL" && !task.emp_id) || (task.task_typ === "EXTERNAL" && !task.ext_emp_id) || !task.no_of_days;
               let assigneeName = "Not Assigned";
               if (task.task_typ === "INTERNAL") { const emp = employees.find(e => e.emp_id === parseInt(task.emp_id)); assigneeName = emp ? emp.emp_nm : "Not Assigned"; }
               else { const emp = externalEmployees.find(e => e.ext_emp_id === parseInt(task.ext_emp_id)); assigneeName = emp ? (emp.ext_emp_nm || emp.name) : "Not Assigned"; }
-              const assignedTo = [{ role: "Assignee", name: assigneeName }];
+              const assignedTo = [{ role: "Executor", name: assigneeName }];
               if (task.process?.enabled && task.process?.reviewer_id) {
                 const rev = employees.find(e => String(e.emp_id) === String(task.process.reviewer_id));
                 assignedTo.push({ role: "Reviewer", name: rev ? rev.emp_nm : "Not Selected" });
@@ -2089,11 +2185,11 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         <div className="mc-tasks-section">
           <div className="mc-section-header"><h3><Plus size={18} /> Task Creation</h3><button type="button" onClick={addTask} className="mc-add-btn"><Plus size={15} /> Add New Task</button></div>
           {errors.tasks && <div className="mc-error-banner"><AlertCircle size={16} /><span>{errors.tasks}</span></div>}
-          {!errors.tasks && hasExceedingTasks && <div className="mc-error-banner"><AlertCircle size={16} /><span>You are exceeding the milestone duration. You have to complete within {milestone.mlstm_days} days only. If not, update the days.</span></div>}
+          {!errors.tasks && hasExceedingTasks && <div className="mc-error-banner"><AlertCircle size={16} /><span>You are exceeding the milestone duration — you have to create the task within <strong>{milestone.mlstm_days} days</strong> only. Please update the task days or milestone duration.</span></div>}
           {!selectedTask ? <div className="mc-empty-state"><p>Click "Add New Task" to create a task or select an existing task from the table below to edit.</p></div> : renderTaskForm()}
         </div>
         <div className="mc-preview-table-section">
-          <div className="mc-section-header"><h3><ListChecks size={18} /> Tasks Preview Table</h3><div className="mc-search-box"><Search size={14} /><input type="text" placeholder="Search tasks..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div></div>
+          <div className="mc-section-header"><h3><ListChecks size={18} /> Tasks Preview Table</h3></div>
           {renderTasksTable()}
         </div>
         <div className="mc-gantt-section"><div className="mc-section-header"><h3><GanttChartSquare size={18} /> Gantt Chart View</h3></div>{renderGanttChart()}</div>
@@ -2129,7 +2225,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
               {errors.mlstm_days && <div className="mc-error-banner" style={{ marginTop: '8px', padding: '10px 12px' }}><AlertCircle size={16} /><span>{errors.mlstm_days}</span></div>}
             </label>
             <label className="mc-field"><span>Tentative Start Date <b>*</b></span>
-              <input type="date" value={milestone.tent_st_dt || ""} onChange={(e) => updateMilestone("tent_st_dt", e.target.value)} min={today} className={errors.tent_st_dt ? "mc-error" : ""} />
+              <input type="date" value={milestone.tent_st_dt || ""} onChange={(e) => updateMilestone("tent_st_dt", e.target.value)} className={errors.tent_st_dt ? "mc-error" : ""} />
               {errors.tent_st_dt && <small className="mc-error-text">{errors.tent_st_dt}</small>}
             </label>
             <label className="mc-field"><span>Tentative End Date <b>*</b></span>
@@ -2144,20 +2240,45 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           <div className="mc-dependency-section">
             <h4><Link size={16} /> Milestone Dependency</h4>
             <div className="mc-dependency-grid">
-              <div className="mc-dependency-row"><label className="mc-field toggle-field"><span>Dependency Available</span><span className="mc-switch"><input type="checkbox" checked={milestone.mlstm_dep_flg} onChange={() => updateMilestone("mlstm_dep_flg", !milestone.mlstm_dep_flg)} /><i /></span></label></div>
-              <div className="mc-dependency-row"><label className="mc-field"><span>Dependent Milestone <b>{milestone.mlstm_dep_flg ? '*' : ''}</b></span>
-                <select value={milestone.mlstm_dep_m_id || ""} onChange={(e) => updateMilestone("mlstm_dep_m_id", e.target.value)} disabled={!milestone.mlstm_dep_flg} className={errors.mlstm_dep_m_id ? "mc-error" : ""}>
-                  <option value="">Select Milestone</option>
-                  {milestoneList.filter(m => m.type === 'draft' && m.id !== milestone.drft_m_id).map(m => <option key={m.id} value={m.id}>{m.code} - {m.title}</option>)}
-                </select>
-                {errors.mlstm_dep_m_id && <small className="mc-error-text">{errors.mlstm_dep_m_id}</small>}
-              </label></div>
-              <div className="mc-dependency-row"><label className="mc-field"><span>Dependency Type <b>{milestone.mlstm_dep_flg ? '*' : ''}</b></span>
-                <select value={milestone.mlstm_dep_typ} onChange={(e) => updateMilestone("mlstm_dep_typ", e.target.value)} disabled={!milestone.mlstm_dep_flg}>
-                  {dependencyTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
-                </select>
-              </label></div>
+              <div className="mc-dependency-row"><label className="mc-field toggle-field"><span>Dependency Available</span><span className="mc-switch"><input type="checkbox" tabIndex={0} checked={milestone.mlstm_dep_flg} onChange={() => updateMilestone("mlstm_dep_flg", !milestone.mlstm_dep_flg)} onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); updateMilestone("mlstm_dep_flg", !milestone.mlstm_dep_flg); } }} /><i /></span></label></div>
+              {milestone.mlstm_dep_flg && (
+                <>
+                  <div className="mc-dependency-row"><label className="mc-field"><span>Dependent Milestone <b>*</b></span>
+                    <select
+                      value={milestone.mlstm_dep_m_id || ""}
+                      onChange={(e) => updateMilestone("mlstm_dep_m_id", e.target.value)}
+                      className={errors.mlstm_dep_m_id ? "mc-error" : ""}
+                    >
+                      <option value="">Select Milestone</option>
+
+                      {projectMilestones
+                        .filter(m => m.drftMId !== milestone.drft_m_id)
+                        .map(m => (
+                          <option key={m.drftMId} value={m.drftMId}>
+                            {m.mlstnCd} - {m.mlstnTtl}
+                          </option>
+                        ))}
+                    </select>
+                    {errors.mlstm_dep_m_id && <small className="mc-error-text">{errors.mlstm_dep_m_id}</small>}
+                  </label></div>
+                  <div className="mc-dependency-row"><label className="mc-field"><span>Dependency Type <b>*</b></span>
+                    <select value={milestone.mlstm_dep_typ} onChange={(e) => updateMilestone("mlstm_dep_typ", e.target.value)}>
+                      {dependencyTypes.map(type => <option key={type.value} value={type.value}>{type.label}</option>)}
+                    </select>
+                  </label></div>
+                </>
+              )}
             </div>
+            {milestone.mlstm_dep_flg && (
+              <div className="mc-dependency-scenario">
+                <strong>How dates will be calculated:</strong>
+                <ul>
+                  <li><span className="mc-dep-badge independent">Independent</span> Milestone starts independently on its own scheduled date</li>
+                  <li><span className="mc-dep-badge sequential">Sequential</span> Milestone starts after the dependent milestone completes</li>
+                  <li><span className="mc-dep-badge parallel">Parallel</span> Milestone starts on the same day as the dependent milestone</li>
+                </ul>
+              </div>
+            )}
             {milestone.mlstm_dep_flg && <p className="mc-dependency-note"><span className="mc-dot" /> This milestone will start after completion of <span className="mc-highlight">{milestone.mlstm_dep_m_id ? milestoneList.find(m => m.type === 'draft' && m.id === parseInt(milestone.mlstm_dep_m_id))?.code || "selected milestone" : "selected milestone"}</span></p>}
           </div>
         </div>
@@ -2218,8 +2339,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       <div className="mc-nav-right">
         {currentStep < STEPS.length ? <button type="button" className="mc-btn primary" onClick={goToNextStep}>Next Step <ArrowRight size={16} /></button> :
           <div className="mc-submit-group">
-            <button type="button" className="mc-btn tertiary" onClick={() => handleSubmit("DRAFT")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? "Saving..." : "Save Draft"}</button>
             <button type="button" className="mc-btn primary" onClick={() => handleSubmit("SUBMITTED")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? "Submitting..." : "Submit Milestone"}</button>
+            <button type="button" className="mc-btn tertiary" onClick={() => handleSubmit("DRAFT")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? "Saving..." : "Save Draft"}</button>
           </div>
         }
       </div>
@@ -2266,7 +2387,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                 const emp = externalEmployees.find(e => e.ext_emp_id === parseInt(task.ext_emp_id));
                 assigneeName = emp ? (emp.ext_emp_nm || emp.name) : "Not Assigned";
               }
-              const assignedTo = [{ role: "Assignee", name: assigneeName }];
+              const assignedTo = [{ role: "Executor", name: assigneeName }];
               if (task.process?.enabled && task.process?.reviewer_id) {
                 const rev = employees.find(e => String(e.emp_id) === String(task.process.reviewer_id));
                 assignedTo.push({ role: "Reviewer", name: rev ? rev.emp_nm : "Not Selected" });
@@ -2513,7 +2634,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             <div className="mc-content">
               <div className="mc-form-card">
                 <div className="mc-form-header">
-                  <div><h2>{isEditing ? "Edit Milestone" : "Create Milestone & Tasks"}</h2><p className="mc-subtitle">Fill in the details below to create a new milestone</p></div>
+                  <div><h2>{isEditing ? (currentStep === 2 ? "Edit Task" : "Edit Milestone") : "Create Milestone & Tasks"}</h2><p className="mc-subtitle">Fill in the details below to create a new milestone</p></div>
                   <button type="button" className="mc-back-btn" onClick={() => { setView("list"); resetMilestoneForm(); setIsEditing(false); }}><ArrowLeft size={15} /> Back to List</button>
                 </div>
                 <div className="mc-form-body">
@@ -2523,8 +2644,6 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                   {renderNavigationButtons()}
                 </div>
                 <div className="mc-form-footer">
-                  <button type="button" className="mc-btn secondary" onClick={() => { setView("list"); resetMilestoneForm(); setIsEditing(false); }}>Cancel</button>
-                  <button type="button" className="mc-btn tertiary" onClick={resetMilestoneForm}><RefreshCcw size={14} /> Reset All</button>
                   <span className="mc-step-indicator">Step {currentStep} of {STEPS.length}</span>
                 </div>
               </div>

@@ -20,27 +20,32 @@ const UserMyTask = ({ selectedProject, userTasks = [] }) => {
 
   const tasksPerPage = 5;
 
-  const projectMilestoneIds = (selectedProject?.milestones || []).map(m => m.mId);
-  const projectUserTasks = userTasks.filter(t => projectMilestoneIds.includes(t.mId));
+  const projectMilestoneIds = (selectedProject?.milestones || []).map(m => m.mId || m.mid || m.id);
+  const projectUserTasks = userTasks.filter(t => {
+    const tMId = t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id;
+    return projectMilestoneIds.includes(tMId);
+  });
 
   const mappedTasks = projectUserTasks.map(t => {
-    const milestoneObj = selectedProject?.milestones?.find(m => m.mId === t.mId);
+    const tMId = t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id;
+    const milestoneObj = selectedProject?.milestones?.find(m => (m.mId || m.mid || m.id) === tMId);
     const milestoneName = milestoneObj ? milestoneObj.name : "Unknown Milestone";
-    const progressVal = t.taskSts === 'COMPLETED' ? 100 : t.taskSts === 'WIP' ? 50 : (t.taskSts === 'SUBMIT_REVIEW' || t.taskSts === 'UNDER_REVIEW') ? 80 : 0;
+    const statusVal = (t.taskSts || t.tasksts || "").toUpperCase();
+    const progressVal = statusVal === 'COMPLETED' ? 100 : statusVal === 'WIP' ? 50 : (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') ? 80 : 0;
     
     let displayStatus = "Not Started";
-    if (t.taskSts === 'COMPLETED') displayStatus = "Completed";
-    else if (t.taskSts === 'WIP') displayStatus = "In Progress";
-    else if (t.taskSts === 'SUBMIT_REVIEW' || t.taskSts === 'UNDER_REVIEW') displayStatus = "In Progress";
-    else if (t.taskSts === 'OPEN' || t.taskSts === 'REWORK') displayStatus = "Pending";
+    if (statusVal === 'COMPLETED') displayStatus = "Completed";
+    else if (statusVal === 'WIP') displayStatus = "In Progress";
+    else if (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') displayStatus = "In Progress";
+    else if (statusVal === 'OPEN' || statusVal === 'REWORK') displayStatus = "Pending";
 
     return {
-      code: t.taskCd || `TSK-${t.taskId}`,
-      name: t.taskNm,
+      code: t.taskCd || t.taskcd || `TSK-${t.taskId}`,
+      name: t.taskNm || t.tasknm,
       milestone: milestoneName,
-      milestoneId: t.mId,
-      priority: "Medium",
-      due: t.endDt || "N/A",
+      milestoneId: tMId,
+      priority: t.priority || "Medium",
+      due: t.endDt || t.enddt || "N/A",
       status: displayStatus,
       progress: progressVal
     };

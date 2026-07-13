@@ -234,6 +234,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   // View toggle – default is "list"
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
+  const [isViewing, setIsViewing] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
   // Form state – all empty by default
@@ -283,18 +284,18 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       if (!value) {
         error = "Latitude is required.";
       } else {
-        const latRegex = /^\d{2}\.\d{6}\s[NEWS]$/;
+        const latRegex = /^\d{2}\.\d{6}\s[NS]$/;
         if (!latRegex.test(value.trim())) {
-          error = "Format must be e.g. 17.438574 N (2 digits, dot, 6 decimals, space, and N/E/W/S).";
+          error = "Format must be e.g. 17.438574 N (2 digits, dot, 6 decimals, space, and N/S).";
         }
       }
     } else if (name === "longitude") {
       if (!value) {
         error = "Longitude is required.";
       } else {
-        const lngRegex = /^\d{2}\.\d{6}\s[NEWS]$/;
+        const lngRegex = /^\d{2}\.\d{6}\s[EW]$/;
         if (!lngRegex.test(value.trim())) {
-          error = "Format must be e.g. 78.421012 E (2 digits, dot, 6 decimals, space, and N/E/W/S).";
+          error = "Format must be e.g. 78.421012 E (2 digits, dot, 6 decimals, space, and E/W).";
         }
       }
     } else if (name === "mobileNo") {
@@ -305,6 +306,41 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
         error = "Mobile Number must start with 6, 7, 8, or 9.";
       } else if (mobileVal.length > 0 && mobileVal.length < 10) {
         error = "Mobile Number must be exactly 10 digits.";
+      }
+    } else if (name === "landCode") {
+      if (!value.trim()) {
+        error = "Land Code is required.";
+      }
+    } else if (name === "landArea") {
+      if (!value.trim()) {
+        error = "Land Area is required.";
+      } else if (Number(value) <= 0) {
+        error = "Land Area must be greater than 0.";
+      }
+    } else if (name === "district") {
+      if (!value.trim()) {
+        error = "District is required.";
+      } else if (!/^[a-zA-Z\s]+$/.test(value.trim())) {
+        error = "District should contain only letters.";
+      }
+    } else if (name === "mandal") {
+      if (!value.trim()) {
+        error = "Mandal is required.";
+      } else if (!/^[a-zA-Z\s]+$/.test(value.trim())) {
+        error = "Mandal should contain only letters.";
+      }
+    } else if (name === "village") {
+      if (!value.trim()) {
+        error = "Village is required.";
+      } else if (!/^[a-zA-Z\s]+$/.test(value.trim())) {
+        error = "Village should contain only letters.";
+      }
+    } else if (name === "pincode") {
+      if (value && value.trim() !== "") {
+        const pincodeRegex = /^[1-9][0-9]{5}$/;
+        if (!pincodeRegex.test(value.trim())) {
+          error = "Pincode must be exactly 6 digits and cannot start with 0.";
+        }
       }
     }
     return error;
@@ -341,7 +377,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     } else if (name === 'surveyInput') {
       newValue = value.slice(0, 50);
     } else if (name === 'ownerInput') {
-      newValue = value.slice(0, 100);
+      newValue = value.replace(/[^a-zA-Z\s]/g, '').slice(0, 100);
     } else if (name === 'village') {
       newValue = value.slice(0, 50);
     } else if (name === 'mandal' || name === 'district') {
@@ -358,7 +394,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
     setForm(prev => {
       const updatedForm = { ...prev, [name]: newValue };
-      if (name === 'latitude' || name === 'longitude' || name === 'mobileNo') {
+      if (
+        ['latitude', 'longitude', 'mobileNo', 'landCode', 'landArea', 'district', 'mandal', 'village', 'pincode'].includes(name)
+      ) {
         const error = validateField(name, newValue);
         setFormErrors(prevErrors => ({ ...prevErrors, [name]: error }));
       }
@@ -369,13 +407,18 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   const handleSurveyKeyDown = (e) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
-      const val = form.surveyInput?.trim();
-      if (val && !form.surveyNo.includes(val)) {
-        setForm(prev => ({
-          ...prev,
-          surveyNo: [...(prev.surveyNo || []), val],
-          surveyInput: ''
-        }));
+      const val = form.surveyInput?.trim().toUpperCase();
+      if (val) {
+        if (!form.surveyNo.includes(val)) {
+          setForm(prev => ({
+            ...prev,
+            surveyNo: [...(prev.surveyNo || []), val],
+            surveyInput: ''
+          }));
+        } else {
+          triggerAlert("warning", "Duplicate Entry", "This Survey Number has already been added.");
+          setForm(prev => ({ ...prev, surveyInput: '' }));
+        }
       }
     }
   };
@@ -474,6 +517,10 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Land Area is required.");
       return;
     }
+    if (Number(form.landArea) <= 0) {
+      triggerAlert("error", "Validation Error", "Land Area must be greater than 0.");
+      return;
+    }
 
     // 4. Survey Number check
     if (!form.surveyNo || form.surveyNo.length === 0) {
@@ -504,6 +551,10 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     }
     if (!form.leaseEndDate) {
       triggerAlert("error", "Validation Error", "Lease End Date is required.");
+      return;
+    }
+    if (new Date(form.leaseEndDate) < new Date(form.leaseStartDate)) {
+      triggerAlert("error", "Validation Error", "Lease End Date cannot be earlier than Lease Start Date.");
       return;
     }
 
@@ -548,8 +599,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Pincode is required.");
       return;
     }
-    if (form.pincode.length !== 6) {
-      triggerAlert("error", "Validation Error", "Pincode must be exactly 6 digits.");
+    const pincodeRegex = /^[1-9][0-9]{5}$/;
+    if (!pincodeRegex.test(form.pincode.trim())) {
+      triggerAlert("error", "Validation Error", "Pincode must be exactly 6 digits and cannot start with 0.");
       return;
     }
 
@@ -558,9 +610,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Latitude is required.");
       return;
     }
-    const latRegex = /^\d{2}\.\d{6}\s[NEWS]$/;
+    const latRegex = /^\d{2}\.\d{6}\s[NS]$/;
     if (!latRegex.test(form.latitude.trim())) {
-      triggerAlert("error", "Validation Error", "Latitude format must be e.g. 17.438574 N (2 digits, dot, 6 decimals, space, and N/E/W/S).");
+      triggerAlert("error", "Validation Error", "Latitude format must be e.g. 17.438574 N (2 digits, dot, 6 decimals, space, and N/S).");
       return;
     }
 
@@ -569,9 +621,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Longitude is required.");
       return;
     }
-    const lngRegex = /^\d{2}\.\d{6}\s[NEWS]$/;
+    const lngRegex = /^\d{2}\.\d{6}\s[EW]$/;
     if (!lngRegex.test(form.longitude.trim())) {
-      triggerAlert("error", "Validation Error", "Longitude format must be e.g. 78.421012 E (2 digits, dot, 6 decimals, space, and N/E/W/S).");
+      triggerAlert("error", "Validation Error", "Longitude format must be e.g. 78.421012 E (2 digits, dot, 6 decimals, space, and E/W).");
       return;
     }
 
@@ -865,7 +917,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
         {/* ======================= DYNAMIC HEADER ======================= */}
         <Header
-          title="Land Master"
+          title="Land Creation"
           showSearch={false}
           userName="Syed Mohammad Johny Basha"
           userRole="Web Developer"
@@ -897,14 +949,19 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                     borderBottom: '1px solid #e2e8f0',
                     backgroundColor: '#fafbfc'
                   }}>
-                    <h2 style={{
-                      fontSize: '20px',
-                      fontWeight: '700',
-                      color: '#0f172a',
-                      margin: 0
-                    }}>
-                      {isEditing ? "Edit Land" : "Add New Land"}
-                    </h2>
+                    <div style={{ display: 'flex', flexDirection: 'column' }}>
+                      <h2 style={{
+                        fontSize: '20px',
+                        fontWeight: '700',
+                        color: '#0f172a',
+                        margin: 0
+                      }}>
+                        {isViewing ? "View Land Details" : isEditing ? "Edit Land" : "Add New Land Creation"}
+                      </h2>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#64748b' }}>
+                        {isViewing ? "View land details in the form below" : isEditing ? "Update land details in the form below" : "Enter land details in the form below"}
+                      </p>
+                    </div>
                     <button
                       type="button"
                       className="al-nav-view-btn"
@@ -912,6 +969,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         setView("list");
                         handleResetForm();
                         setIsEditing(false);
+                        setIsViewing(false);
                         setEditingId(null);
                       }}
                     >
@@ -921,238 +979,360 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
                   {/* Form Body */}
                   <div style={{ padding: '24px' }}>
-
-                    {/* 1. Basic Information */}
-                    <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
-
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                        <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
-                          Basic Information
-                        </h3>
-
-                        {/* Status Toggle Bar */}
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>Status:</span>
-
-                          <label style={{ position: "relative", display: "inline-block", width: "46px", height: "26px", margin: 0 }}>
-                            <input
-                              type="checkbox"
-                              checked={form.status === "Active"}
-                              onChange={handleToggleStatus}
-                              style={{ opacity: 0, width: 0, height: 0 }}
-                            />
-                            <span style={{
-                              position: "absolute", cursor: "pointer", top: 0, left: 0, right: 0, bottom: 0,
-                              backgroundColor: form.status === "Active" ? "#10b981" : "#cbd5e1",
-                              transition: ".4s", borderRadius: "34px"
-                            }}>
-                              <span style={{
-                                position: "absolute", height: "20px", width: "20px",
-                                left: form.status === "Active" ? "23px" : "3px", bottom: "3px",
-                                backgroundColor: "white", transition: ".4s", borderRadius: "50%",
-                                boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                              }}></span>
-                            </span>
-                          </label>
-
-                          <span style={{
-                            fontSize: "14px", fontWeight: "600", minWidth: "60px",
-                            color: form.status === "Active" ? "#16a34a" : "#dc2626"
-                          }}>
-                            {form.status}
-                          </span>
+                    {isViewing ? (
+                      <div className="al-view-unified" style={{ padding: '12px 0' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Land Code :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.landCode || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Plant :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{plants.find(p => String(p.pltId) === String(form.plant))?.pltNm || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Land Area :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.landArea ? `${form.landArea} Acres` : '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Survey Number :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{Array.isArray(form.surveyNo) ? form.surveyNo.join(', ') : (form.surveyNo || '-')}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Owner Name :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{Array.isArray(form.landOwnerName) ? form.landOwnerName.join(', ') : (form.landOwnerName || '-')}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Mobile No :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.mobileNo || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>State :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{states.find(s => String(s.stId) === String(form.state))?.stNm || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>District :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.district || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Mandal :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.mandal || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Village :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.village || '-'}</span>
+                            </div>
+                          </div>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0', alignItems: 'center' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Status :</span>
+                              <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', width: 'fit-content', backgroundColor: form.status === 'Active' ? '#dcfce7' : '#fee2e2', color: form.status === 'Active' ? '#166534' : '#991b1b' }}>{form.status}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Zone :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.zone || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Pincode :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.pincode || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease Start Date :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseStartDate || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease End Date :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseEndDate || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Duration :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseDuration || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Latitude :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.latitude || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Longitude :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.longitude || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Alloted For :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.allotedFor || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Land Image :</span>
+                              <div>
+                                 {form.logo ? (
+                                   <img src={form.logo} alt="Logo" style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
+                                 ) : (
+                                   <div style={{ width: '48px', height: '48px', borderRadius: '6px', background: '#f8fafc', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ImageIcon size={20} style={{ color: '#94a3b8' }} /></div>
+                                 )}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       </div>
+                    ) : (
+                      <>
+                        {/* 1. Basic Information */}
+                        <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
 
-                      <div className="al-form-layout-row columns-4">
-                        <label className="al-field-item">
-                          <span>Land Code <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="landCode" value={form.landCode} onChange={handleChange} placeholder="Enter land code" maxLength={10} />
-                          <small style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Must be unique.</small>
-                        </label>
-                        <label className="al-field-item">
-                          <span>Plant <b style={{ color: '#ef4444' }}>*</b></span>
-                          <SearchableSelect 
-                            name="plant" 
-                            value={form.plant} 
-                            onChange={handleChange} 
-                            placeholder="Select Plant"
-                            options={plants.map(p => ({ value: p.pltId, label: p.pltNm }))}
-                          />
-                        </label>
-                        <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
-                          <span>Land Image</span>
-                          <div className="al-logo-row">
-                            <div className="al-logo-box" style={{ width: '48px', height: '48px', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', overflow: 'hidden' }}>
-                              {form.logo ? <img src={form.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={22} style={{ color: '#94a3b8' }} />}
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                            <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                              Basic Information
+                            </h3>
+
+                            {/* Status Toggle Bar */}
+                            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                              <span style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>Status:</span>
+
+                              <label style={{ position: "relative", display: "inline-block", width: "46px", height: "26px", margin: 0 }}>
+                                <input
+                                  type="checkbox"
+                                  checked={form.status === "Active"}
+                                  onChange={handleToggleStatus}
+                                  style={{ opacity: 0, width: 0, height: 0 }}
+                                />
+                                <span style={{
+                                  position: "absolute", cursor: "pointer", top: 0, left: 0, right: 0, bottom: 0,
+                                  backgroundColor: form.status === "Active" ? "#10b981" : "#cbd5e1",
+                                  transition: ".4s", borderRadius: "34px"
+                                }}>
+                                  <span style={{
+                                    position: "absolute", height: "20px", width: "20px",
+                                    left: form.status === "Active" ? "23px" : "3px", bottom: "3px",
+                                    backgroundColor: "white", transition: ".4s", borderRadius: "50%",
+                                    boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+                                  }}></span>
+                                </span>
+                              </label>
+
+                              <span style={{
+                                fontSize: "14px", fontWeight: "600", minWidth: "60px",
+                                color: form.status === "Active" ? "#16a34a" : "#dc2626"
+                              }}>
+                                {form.status}
+                              </span>
                             </div>
-                            <input id="logoUploadHidden" type="file" accept="image/*" onChange={handleLogoChange} hidden />
-                            <button type="button" onClick={() => document.getElementById("logoUploadHidden").click()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', color: '#0f172a', cursor: 'pointer' }}>
-                              <Upload size={14} /> Upload Image
-                            </button>
                           </div>
-                        </label>
-                      </div>
-                    </section>
 
-                    {/* 3. Land Details */}
-                    <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
-                      <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Land Details</h3>
-                      <div className="al-form-layout-row columns-4">
-                        <label className="al-field-item">
-                          <span>Land Area (Acres) <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="landArea" value={form.landArea} onChange={handleChange} placeholder="Enter land area" />
-                        </label>
-                        <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
-                          <span>Survey Number <b style={{ color: '#ef4444' }}>*</b></span>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', minHeight: '40px', boxSizing: 'border-box', backgroundColor: 'white' }}>
-                            {Array.isArray(form.surveyNo) && form.surveyNo.map((tag, idx) => (
-                              <span key={idx} style={{ backgroundColor: '#f1f5f9', color: '#0f172a', padding: '4px 8px', borderRadius: '4px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #e2e8f0' }}>
-                                {tag}
-                                <X size={14} style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => removeSurveyTag(tag)} />
-                              </span>
-                            ))}
-                            <input
-                              type="text"
-                              name="surveyInput"
-                              value={form.surveyInput || ''}
-                              onChange={handleChange}
-                              onKeyDown={handleSurveyKeyDown}
-                              placeholder={(!form.surveyNo || form.surveyNo.length === 0) ? "Type and press Enter" : ""}
-                              style={{ border: 'none', outline: 'none', flex: 1, minWidth: '150px', fontSize: '14px', background: 'transparent' }}
-                            />
+                          <div className="al-form-layout-row columns-4">
+                            <label className="al-field-item">
+                              <span>Land Code <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="landCode" value={form.landCode} onChange={handleChange} placeholder="Enter land code" maxLength={10} />
+                              {formErrors.landCode && (
+                                <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.landCode}</span>
+                              )}
+                              <small style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Must be unique.</small>
+                            </label>
+                            <label className="al-field-item">
+                              <span>Plant <b style={{ color: '#ef4444' }}>*</b></span>
+                              <SearchableSelect 
+                                name="plant" 
+                                value={form.plant} 
+                                onChange={handleChange} 
+                                placeholder="Select Plant"
+                                options={plants.map(p => ({ value: p.pltId, label: p.pltNm }))}
+                              />
+                            </label>
+                            <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
+                              <span>Land Image</span>
+                              <div className="al-logo-row">
+                                <div className="al-logo-box" style={{ width: '48px', height: '48px', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', overflow: 'hidden' }}>
+                                  {form.logo ? <img src={form.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={22} style={{ color: '#94a3b8' }} />}
+                                </div>
+                                <input id="logoUploadHidden" type="file" accept="image/*" onChange={handleLogoChange} hidden />
+                                <button type="button" onClick={() => document.getElementById("logoUploadHidden").click()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', color: '#0f172a', cursor: 'pointer' }}>
+                                  <Upload size={14} /> Upload Image
+                                </button>
+                              </div>
+                            </label>
                           </div>
-                        </label>
-                      </div>
-                      <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
-                        <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
-                          <span>Land Owner Name <b style={{ color: '#ef4444' }}>*</b></span>
-                          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', minHeight: '40px', boxSizing: 'border-box', backgroundColor: 'white' }}>
-                            {Array.isArray(form.landOwnerName) && form.landOwnerName.map((tag, idx) => (
-                              <span key={idx} style={{ backgroundColor: '#f1f5f9', color: '#0f172a', padding: '4px 8px', borderRadius: '4px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #e2e8f0' }}>
-                                {tag}
-                                <X size={14} style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => removeOwnerTag(tag)} />
-                              </span>
-                            ))}
-                            <input
-                              type="text"
-                              name="ownerInput"
-                              value={form.ownerInput || ''}
-                              onChange={handleChange}
-                              onKeyDown={handleOwnerKeyDown}
-                              placeholder={(!form.landOwnerName || form.landOwnerName.length === 0) ? "Type and press Enter" : ""}
-                              style={{ border: 'none', outline: 'none', flex: 1, minWidth: '150px', fontSize: '14px', background: 'transparent' }}
-                            />
-                          </div>
-                        </label>
-                        <label className="al-field-item">
-                          <span>Mobile No <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="mobileNo" value={form.mobileNo} onChange={handleChange} placeholder="Enter mobile number" maxLength={10} />
-                          {formErrors.mobileNo && (
-                            <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.mobileNo}</span>
-                          )}
-                        </label>
-                      </div>
-                      <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
-                        <label className="al-field-item">
-                          <span>Lease Start Date <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="date" name="leaseStartDate" value={form.leaseStartDate || ""} onChange={handleChange} required />
-                        </label>
-                        <label className="al-field-item">
-                          <span>Lease End Date <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="date" name="leaseEndDate" value={form.leaseEndDate || ""} onChange={handleChange} required />
-                        </label>
-                        <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
-                          <span>Lease Duration</span>
-                          <input type="text" name="leaseDuration" value={form.leaseDuration || ""} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-calculated" />
-                        </label>
-                      </div>
-                    </section>
+                        </section>
 
-                    {/* 4. Location Information */}
-                    <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
-                      <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Location Information</h3>
-                      <div className="al-form-layout-row columns-4">
-                        <label className="al-field-item">
-                          <span>State <b style={{ color: '#ef4444' }}>*</b></span>
-                          <SearchableSelect 
-                            name="state" 
-                            value={form.state} 
-                            onChange={handleChange} 
-                            placeholder="Select State"
-                            options={states.map(s => ({ value: s.stId, label: s.stNm }))}
-                          />
-                        </label>
-                        <label className="al-field-item">
-                          <span>Zone</span>
-                          <input type="text" name="zone" value={form.zone || ''} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-filled Zone" />
-                        </label>
-                        <label className="al-field-item">
-                          <span>District <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="district" value={form.district} onChange={handleChange} placeholder="Enter district" maxLength={30} />
-                        </label>
-                        <label className="al-field-item">
-                          <span>Mandal <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="mandal" value={form.mandal} onChange={handleChange} placeholder="Enter mandal" maxLength={30} />
-                        </label>
-                      </div>
-                      <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
-                        <label className="al-field-item">
-                          <span>Village <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="village" value={form.village} onChange={handleChange} placeholder="Enter village" maxLength={50} />
-                        </label>
-                        <label className="al-field-item">
-                          <span>Pincode <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="pincode" value={form.pincode} onChange={handleChange} placeholder="Enter pincode" maxLength={6} />
-                        </label>
-                      </div>
-                    </section>
-
-                    {/* 5. Geo Location */}
-                    <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
-                      <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Geo Location</h3>
-                      <div className="al-form-layout-row columns-4">
-                        <label className="al-field-item">
-                          <span>Latitude <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="latitude" value={form.latitude} onChange={handleChange} placeholder="Enter latitude" />
-                          {formErrors.latitude && (
-                            <span className="error-text" style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.latitude}</span>
-                          )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', color: '#64748b', fontSize: '12px', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
-                            <Info size={14} style={{ color: '#3b82f6' }} />
-                            <span>17.438574 N</span>
+                        {/* 3. Land Details */}
+                        <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
+                          <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Land Details</h3>
+                          <div className="al-form-layout-row columns-4">
+                            <label className="al-field-item">
+                              <span>Land Area (Acres) <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="landArea" value={form.landArea} onChange={handleChange} placeholder="Enter land area" />
+                              {formErrors.landArea && (
+                                <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.landArea}</span>
+                              )}
+                            </label>
+                            <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
+                              <span>Survey Number <b style={{ color: '#ef4444' }}>*</b></span>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', minHeight: '40px', boxSizing: 'border-box', backgroundColor: 'white' }}>
+                                {Array.isArray(form.surveyNo) && form.surveyNo.map((tag, idx) => (
+                                  <span key={idx} style={{ backgroundColor: '#f1f5f9', color: '#0f172a', padding: '4px 8px', borderRadius: '4px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #e2e8f0' }}>
+                                    {tag}
+                                    <X size={14} style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => removeSurveyTag(tag)} />
+                                  </span>
+                                ))}
+                                <input
+                                  type="text"
+                                  name="surveyInput"
+                                  value={form.surveyInput || ''}
+                                  onChange={handleChange}
+                                  onKeyDown={handleSurveyKeyDown}
+                                  placeholder={(!form.surveyNo || form.surveyNo.length === 0) ? "Type and press Enter" : ""}
+                                  style={{ border: 'none', outline: 'none', flex: 1, minWidth: '150px', fontSize: '14px', background: 'transparent' }}
+                                />
+                              </div>
+                            </label>
                           </div>
-                        </label>
-                        <label className="al-field-item">
-                          <span>Longitude <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="longitude" value={form.longitude} onChange={handleChange} placeholder="Enter longitude" />
-                          {formErrors.longitude && (
-                            <span className="error-text" style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.longitude}</span>
-                          )}
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', color: '#64748b', fontSize: '12px', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
-                            <Info size={14} style={{ color: '#3b82f6' }} />
-                            <span>78.421012 E</span>
-                          </div>
-                        </label>
-                        <label className="al-field-item">
-                          <span>Alloted for <b style={{ color: '#ef4444' }}>*</b></span>
-                          <SearchableSelect 
-                            name="allotedFor" 
-                            value={form.allotedFor} 
-                            onChange={handleChange} 
-                            placeholder="Select Alloted for"
-                            options={[
-                              { value: "Agriculture Land", label: "Agriculture Land" },
-                              { value: "Plant", label: "Plant" }
-                            ]}
-                          />
-                        </label>
-                      </div>
-                    </section>
+                          <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
+                            <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
+                              <span>Land Owner Name <b style={{ color: '#ef4444' }}>*</b></span>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', padding: '6px', border: '1px solid #cbd5e1', borderRadius: '6px', minHeight: '40px', boxSizing: 'border-box', backgroundColor: 'white' }}>
+                                {Array.isArray(form.landOwnerName) && form.landOwnerName.map((tag, idx) => (
+                                  <span key={idx} style={{ backgroundColor: '#f1f5f9', color: '#0f172a', padding: '4px 8px', borderRadius: '4px', fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', border: '1px solid #e2e8f0' }}>
+                                    {tag}
+                                    <X size={14} style={{ cursor: 'pointer', color: '#64748b' }} onClick={() => removeOwnerTag(tag)} />
+                                  </span>
+                                ))}
+                                <input
+                                  type="text"
+                                  name="ownerInput"
+                                  value={form.ownerInput || ''}
+                                  onChange={handleChange}
+                                  onKeyDown={handleOwnerKeyDown}
+                                  placeholder={(!form.landOwnerName || form.landOwnerName.length === 0) ? "Type and press Enter" : ""}
+                                  style={{ border: 'none', outline: 'none', flex: 1, minWidth: '150px', fontSize: '14px', background: 'transparent' }}
+                                />
+                              </div>
+                              <div style={{ display: 'flex', gap: '4px', margin: '4px 0 0 0', fontSize: '12px', color: '#64748b' }}>
+                                <span style={{ color: '#f59e0b', fontWeight: '700', whiteSpace: 'nowrap' }}>📝 Note:</span>
+                                <span>If multiple owners share the same name, please include their initials to differentiate them <span style={{ fontStyle: 'italic' }}>(e.g., "A. Kumar", "B. Kumar")</span>.</span>
+                              </div>
+                            </label>
 
+                            <label className="al-field-item">
+                              <span>Mobile No <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="mobileNo" value={form.mobileNo} onChange={handleChange} placeholder="Enter mobile number" maxLength={10} />
+                              {formErrors.mobileNo && (
+                                <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.mobileNo}</span>
+                              )}
+                            </label>
+                          </div>
+                          <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
+                            <label className="al-field-item">
+                              <span>Lease Start Date <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="date" name="leaseStartDate" value={form.leaseStartDate || ""} onChange={handleChange} max={form.leaseEndDate || ""} required />
+                            </label>
+                            <label className="al-field-item">
+                              <span>Lease End Date <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="date" name="leaseEndDate" value={form.leaseEndDate || ""} onChange={handleChange} min={form.leaseStartDate || ""} required />
+                            </label>
+                            <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
+                              <span>Lease Duration</span>
+                              <input type="text" name="leaseDuration" value={form.leaseDuration || ""} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-calculated" />
+                            </label>
+                          </div>
+                        </section>
+
+                        {/* 4. Location Information */}
+                        <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
+                          <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Location Information</h3>
+                          <div className="al-form-layout-row columns-4">
+                            <label className="al-field-item">
+                              <span>State <b style={{ color: '#ef4444' }}>*</b></span>
+                              <SearchableSelect 
+                                name="state" 
+                                value={form.state} 
+                                onChange={handleChange} 
+                                placeholder="Select State"
+                                options={states.map(s => ({ value: s.stId, label: s.stNm }))}
+                              />
+                            </label>
+                            <label className="al-field-item">
+                              <span>Zone</span>
+                              <input type="text" name="zone" value={form.zone || ''} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-filled Zone" />
+                            </label>
+                            <label className="al-field-item">
+                              <span>District <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="district" value={form.district} onChange={handleChange} placeholder="Enter district" maxLength={30} />
+                              {formErrors.district && (
+                                <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.district}</span>
+                              )}
+                            </label>
+                            <label className="al-field-item">
+                              <span>Mandal <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="mandal" value={form.mandal} onChange={handleChange} placeholder="Enter mandal" maxLength={30} />
+                              {formErrors.mandal && (
+                                <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.mandal}</span>
+                              )}
+                            </label>
+                          </div>
+                          <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
+                            <label className="al-field-item">
+                              <span>Village <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="village" value={form.village} onChange={handleChange} placeholder="Enter village" maxLength={50} />
+                              {formErrors.village && (
+                                <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.village}</span>
+                              )}
+                            </label>
+                            <label className="al-field-item">
+                              <span>Pincode <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="pincode" value={form.pincode} onChange={handleChange} placeholder="Enter pincode" maxLength={6} />
+                              {formErrors.pincode && (
+                                <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.pincode}</span>
+                              )}
+                            </label>
+                          </div>
+                        </section>
+
+                        {/* 5. Geo Location */}
+                        <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
+                          <h3 className="al-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Geo Location</h3>
+                          <div className="al-form-layout-row columns-4">
+                            <label className="al-field-item">
+                              <span>Latitude <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="latitude" value={form.latitude} onChange={handleChange} placeholder="Enter latitude" />
+                              {formErrors.latitude && (
+                                <span className="error-text" style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.latitude}</span>
+                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', color: '#64748b', fontSize: '12px', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
+                                <Info size={14} style={{ color: '#3b82f6' }} />
+                                <span>17.438574 N / S</span>
+                              </div>
+                            </label>
+                            <label className="al-field-item">
+                              <span>Longitude <b style={{ color: '#ef4444' }}>*</b></span>
+                              <input type="text" name="longitude" value={form.longitude} onChange={handleChange} placeholder="Enter longitude" />
+                              {formErrors.longitude && (
+                                <span className="error-text" style={{ color: 'red', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.longitude}</span>
+                              )}
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px', color: '#64748b', fontSize: '12px', userSelect: 'none', WebkitUserSelect: 'none', MozUserSelect: 'none', msUserSelect: 'none' }}>
+                                <Info size={14} style={{ color: '#3b82f6' }} />
+                                <span>78.421012 E / W</span>
+                              </div>
+                            </label>
+                            <label className="al-field-item">
+                              <span>Alloted for <b style={{ color: '#ef4444' }}>*</b></span>
+                              <SearchableSelect 
+                                name="allotedFor" 
+                                value={form.allotedFor} 
+                                onChange={handleChange} 
+                                placeholder="Select Alloted for"
+                                options={[
+                                  { value: "Agriculture Land", label: "Agriculture Land" },
+                                  { value: "Plant", label: "Plant" }
+                                ]}
+                              />
+                            </label>
+                          </div>
+                        </section>
+                      </>
+                    )}
                   </div>
 
                   {/* Form Footer Buttons */}
+                  {!isViewing && (
                   <div className="al-form-footer" style={{
                     display: 'flex',
                     justifyContent: 'flex-end',
@@ -1168,11 +1348,13 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                       setView("list");
                       handleResetForm();
                       setIsEditing(false);
+                      setIsViewing(false);
                       setEditingId(null);
                     }}>
                       Cancel
                     </button>
                   </div>
+                  )}
                 </div>
               </div>
             </>
@@ -1358,11 +1540,11 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
                                       onClick={() => {
-                                        triggerAlert(
-                                          "info",
-                                          "Land Details",
-                                          `Land Details:\nCode: ${land.landCode}\nPlant: ${plants.find(p => Number(p.pltId) === Number(land.pltId))?.pltNm || 'N/A'}\nAlloted for: ${land.allotedFor || 'N/A'}\nOwner: ${Array.isArray(land.landOwnerName) ? land.landOwnerName.join(', ') : land.landOwnerName}\nArea: ${land.landArea} Acres\nLocation: ${land.village}, ${land.mandal}, ${states.find(s => Number(s.stId) === Number(land.stId))?.stNm || 'N/A'}\nSurvey No: ${Array.isArray(land.surveyNo) ? land.surveyNo.join(', ') : land.surveyNo}`
-                                        );
+                                        window.scrollTo({ top: 0, behavior: 'smooth' });
+                                        setForm(land);
+                                        setView("form");
+                                        setIsViewing(true);
+                                        setIsEditing(false);
                                         setActiveDropdown(null);
                                       }}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}

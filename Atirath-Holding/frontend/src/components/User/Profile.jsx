@@ -48,13 +48,40 @@ const Profile = ({ userRole, onLogout }) => {
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  // Login Activity Mock Data (will be replaced with real API data later)
-  const loginActivity = [
-    { id: 1, device: "Chrome - Windows", time: "29-May-2025 09:00 AM", location: "Kolkata, India", status: "Active", type: "desktop" },
-    { id: 2, device: "Android App", time: "28-May-2025 06:30 PM", location: "Kolkata, India", status: "Logged Out", type: "mobile" },
-    { id: 3, device: "Chrome - Windows", time: "27-May-2025 08:15 AM", location: "Kolkata, India", status: "Logged Out", type: "desktop" },
-    { id: 4, device: "Edge - Windows", time: "26-May-2025 07:45 PM", location: "Kolkata, India", status: "Logged Out", type: "desktop" }
-  ];
+  // Login Activity State (fetched from backend)
+  const [loginActivity, setLoginActivity] = useState([]);
+
+  const getDeviceType = (deviceInfo = "") => {
+    const info = deviceInfo.toLowerCase();
+    if (info.includes("android") || info.includes("ios") || info.includes("mobile") || info.includes("phone")) {
+      return "mobile";
+    }
+    if (info.includes("windows") || info.includes("mac") || info.includes("chrome") || info.includes("firefox") || info.includes("safari") || info.includes("edge")) {
+      return "desktop";
+    }
+    return "other";
+  };
+
+  const formatDateTime = (dateStr) => {
+    if (!dateStr) return "N/A";
+    try {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      const day = String(d.getDate()).padStart(2, '0');
+      const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const month = months[d.getMonth()];
+      const year = d.getFullYear();
+      let hours = d.getHours();
+      const minutes = String(d.getMinutes()).padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      const strTime = String(hours).padStart(2, '0') + ':' + minutes + ' ' + ampm;
+      return `${day}-${month}-${year} ${strTime}`;
+    } catch (e) {
+      return dateStr;
+    }
+  };
 
   const getDeviceIcon = (type) => {
     switch (type) {
@@ -253,6 +280,18 @@ const Profile = ({ userRole, onLogout }) => {
         }
       }
     } catch (err) { console.error("Error fetching employees:", err); }
+
+    try {
+      const res = await fetch(`${API_BASE}/settings`, { headers });
+      if (res.ok) {
+        const settingsData = await res.json();
+        if (settingsData && settingsData.loginActivity) {
+          setLoginActivity(settingsData.loginActivity);
+        }
+      }
+    } catch (err) {
+      console.error("Error fetching settings/login activity:", err);
+    }
   };
 
   useEffect(() => {
@@ -614,25 +653,28 @@ const Profile = ({ userRole, onLogout }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {loginActivity.map((log) => (
-                    <tr key={log.id}>
-                      <td>
-                        <div className="pf-device-cell">
-                          <span style={{ color: getDeviceColor(log.type) }}>
-                            {getDeviceIcon(log.type)}
-                          </span>
-                          {log.device}
-                        </div>
-                      </td>
-                      <td>{log.time}</td>
-                      <td>{log.location}</td>
-                      <td>
-                        <span className={`pf-status-badge-sm ${log.status === 'Active' ? 'active' : 'logged-out'}`}>
-                          {log.status}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
+                   {loginActivity.map((log, index) => {
+                     const devType = getDeviceType(log.deviceInfo);
+                     return (
+                       <tr key={log.activityId || index}>
+                         <td>
+                           <div className="pf-device-cell">
+                             <span style={{ color: getDeviceColor(devType) }}>
+                               {getDeviceIcon(devType)}
+                             </span>
+                             {log.deviceInfo || "Unknown Device"}
+                           </div>
+                         </td>
+                         <td>{formatDateTime(log.loginDt)}</td>
+                         <td>India</td>
+                         <td>
+                           <span className={`pf-status-badge-sm ${log.status === 'Active' ? 'active' : 'logged-out'}`}>
+                             {log.status || "Logged Out"}
+                           </span>
+                         </td>
+                       </tr>
+                     );
+                   })}
                 </tbody>
               </table>
               

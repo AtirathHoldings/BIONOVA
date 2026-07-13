@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Menu, Search, Bell, User, ExternalLink, X, FolderOpen, CheckSquare, Flag } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const STATUS_COLORS = {
   'Completed':   { bar: '#10b981', bg: '#d1fae5' },
@@ -11,6 +11,7 @@ const STATUS_COLORS = {
 
 const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPercent }) => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [userName, setUserName] = useState("User");
   const [userRole, setUserRole] = useState("Role");
   const [userEmail, setUserEmail] = useState("");
@@ -20,8 +21,8 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
   const [isProfileHovered, setIsProfileHovered] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [notifications, setNotifications] = useState([]);
-  const [companyLogo, setCompanyLogo] = useState(null);
-  const [toastNotif, setToastNotif] = useState(null);
+  const [companyLogo, setCompanyLogo] = useState(sessionStorage.getItem("companyLogo") || null);
+  const [toastNotif, setToastNotif] = useState(location.state?.showToastNotif || null);
   const [toastExiting, setToastExiting] = useState(false);
 
   useEffect(() => {
@@ -58,15 +59,14 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
     const fetchProfile = async () => {
       if (!email) return;
       try {
-        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/employees`, {
+        const res = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/profile`, {
           headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
           }
         });
         if (res.ok) {
-          const emps = await res.json();
-          const me = emps.find(e => e.email && e.email.toLowerCase() === email.toLowerCase());
+          const me = await res.json();
           if (me) {
             const fullName = `${me.fstNm || me.firstName || ""} ${me.lstNm || me.lastName || ""}`.trim();
             const designation = me.designation || me.role || "User";
@@ -82,23 +82,52 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
             sessionStorage.setItem("userDesignation", designation);
             if (photo) sessionStorage.setItem("userPhoto", photo);
 
-            // Fetch company logo using coyId
-            if (me.coyId) {
-              try {
-                const coyRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/companies/${me.coyId}`, {
-                  headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+            // Fetch logo using pltId or coyId
+            (async () => {
+              let logoUrl = null;
+              if (me.pltId) {
+                try {
+                  const pltRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/plants/${me.pltId}`, {
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+                    }
+                  });
+                  if (pltRes.ok) {
+                    const pltData = await pltRes.json();
+                    if (pltData.logo) {
+                      logoUrl = pltData.logo;
+                    }
                   }
-                });
-                if (coyRes.ok) {
-                  const coyData = await coyRes.json();
-                  if (coyData.logo) setCompanyLogo(coyData.logo);
+                } catch (err) {
+                  console.error("Failed to fetch plant logo", err);
                 }
-              } catch (err) {
-                console.error("Failed to fetch company logo", err);
               }
-            }
+
+              if (!logoUrl && me.coyId) {
+                try {
+                  const coyRes = await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/companies/${me.coyId}`, {
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+                    }
+                  });
+                  if (coyRes.ok) {
+                    const coyData = await coyRes.json();
+                    if (coyData.logo) {
+                      logoUrl = coyData.logo;
+                    }
+                  }
+                } catch (err) {
+                  console.error("Failed to fetch company logo", err);
+                }
+              }
+
+              if (logoUrl) {
+                setCompanyLogo(logoUrl);
+                sessionStorage.setItem("companyLogo", logoUrl);
+              }
+            })();
           }
         }
       } catch (err) {
@@ -121,6 +150,24 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
       }, 4500);
     }
   }, []);
+
+  useEffect(() => {
+    if (location.state?.showToastNotif) {
+      setToastNotif(location.state.showToastNotif);
+      setToastExiting(false);
+      // Clean up the state so refreshing the page doesn't show it again
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state]);
+
+  useEffect(() => {
+    if (toastNotif && !toastExiting) {
+      const timer = setTimeout(() => {
+        setToastExiting(true);
+      }, 6000);
+      return () => clearTimeout(timer);
+    }
+  }, [toastNotif, toastExiting]);
 
   const authHeaders = () => ({
     "Content-Type": "application/json",
@@ -465,6 +512,23 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
                           setShowNotifications(false);
                           // Mark as read
                           if (!notif.isRead) markOneAsRead(notif.id);
+
+                          // Immediately navigate based on entity type
+                          const typ = (notif.entityTyp || '').toUpperCase();
+                          const id = notif.entityId;
+                          
+                          // We pass the notification object in state so the next page's Header can show the toast
+                          const navState = { showToastNotif: notif };
+
+                          if (typ === 'PROJECT' && id) {
+                            navigate(`/project-details/${id}`, { state: { ...navState, viewMode: 'full', projectType: 'live' } });
+                          } else if (typ === 'TASK') {
+                            navigate('/my-tasks', { state: navState });
+                          } else if (typ === 'MILESTONE') {
+                            navigate('/milestone-creation', { state: navState });
+                          } else {
+                            navigate('/pm-dashboard', { state: navState });
+                          }
                         }}
                         style={{ transition: 'transform 0.15s ease, background 0.2s' }}
                       >
@@ -481,9 +545,7 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
                           {notif.message}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                          <span style={{ fontSize: '10px', color: '#3b82f6', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '3px' }}>
-                            <ExternalLink size={10} /> Click to view details
-                          </span>
+                          {/* Click to view details text removed per request */}
                           {!notif.isRead && (
                             <button
                               onClick={(e) => { e.stopPropagation(); markOneAsRead(notif.id); }}
@@ -685,10 +747,7 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
               {toastNotif.message}
             </div>
 
-            <div style={{ display: 'flex', alignItems: 'center', gap: '6px', color: '#3b82f6', fontSize: '12px', fontWeight: '600' }}>
-              <ExternalLink size={13} />
-              <span>Click to view details →</span>
-            </div>
+            {/* Click to view details text removed per request */}
           </div>
 
           {/* Auto-dismiss progress bar */}

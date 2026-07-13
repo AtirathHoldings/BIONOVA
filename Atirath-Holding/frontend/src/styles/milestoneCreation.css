@@ -1372,6 +1372,7 @@
   vertical-align: middle;
   color: #334155;
   font-size: 12px;
+  white-space: nowrap;
 }
 
 .mc-task-table tr:hover {
@@ -1841,6 +1842,7 @@
   letter-spacing: 0.5px;
   border-bottom: 2px solid #e2e8f0;
   background: #f8fafc;
+  white-space: nowrap;
 }
 
 .mc-list-table td {
@@ -1848,6 +1850,7 @@
   border-bottom: 1px solid #f1f5f9;
   font-size: 14px;
   color: #334155;
+  white-space: nowrap;
 }
 
 .mc-list-table tr:hover {

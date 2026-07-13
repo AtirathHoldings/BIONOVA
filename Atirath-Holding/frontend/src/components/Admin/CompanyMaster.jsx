@@ -72,7 +72,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
         }}
       >
         <span>{selected ? selected.label : placeholder || "Select..."}</span>
-        <span style={{ fontSize: '12px', color: '#64748b' }}>▼</span>
+        <span style={{ fontSize: '14px', color: '#475569', lineHeight: 1 }}>▼</span>
       </div>
       {isOpen && !disabled && (
         <div style={{
@@ -120,6 +120,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   const [companies, setCompanies] = useState([]);
   const [states, setStates] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [logoFile, setLogoFile] = useState(null);
 
   const fetchCompanies = async () => {
     // setLoading(true);
@@ -164,13 +165,14 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     fetchStates();
   }, []);
 
-  // View toggle – default is "list"
+  // View toggle â€“ default is "list"
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
+  const [isViewing, setIsViewing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formErrors, setFormErrors] = useState({});
 
-  // Form state – all empty by default
+  // Form state â€“ all empty by default
   const [formData, setFormData] = useState({
     companyName: "",
     companyCode: "",
@@ -269,17 +271,19 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     } else if (name === "city") {
       if (!value.trim()) error = "City/Village is required.";
       else if (value.length > 30) error = "Cannot exceed 30 characters.";
+      else if (!/^[A-Za-z\s]+$/.test(value)) error = "Only letters and spaces are allowed.";
     } else if (name === "district") {
       if (!value.trim()) error = "District Name is required.";
       else if (value.length > 30) error = "Cannot exceed 30 characters.";
+      else if (!/^[A-Za-z\s]+$/.test(value)) error = "Only letters and spaces are allowed.";
     } else if (name === "state") {
       if (!value) error = "State Reference selection is required.";
     } else if (name === "pincode") {
       if (!value.trim()) error = "Postal Code (Pincode) is required.";
       else {
-        const pincodeRegex = /^\d{6}$/;
+        const pincodeRegex = /^[1-9]\d{5}$/;
         if (!pincodeRegex.test(value.trim())) {
-          error = "Pincode must be exactly 6 numeric digits.";
+          error = "Pincode must be 6 digits and cannot start with 0.";
         }
       }
     } else if (name === "email") {
@@ -316,6 +320,9 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
     if (name === "pincode") {
       newValue = value.replace(/[^0-9]/g, '').slice(0, 6);
+      if (newValue.startsWith('0')) {
+        newValue = newValue.substring(1);
+      }
     } else if (name === "companyCode") {
       newValue = value.slice(0, 10);
     } else if (name === "companyName") {
@@ -370,6 +377,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   const handleLogoChange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    setLogoFile(file);
     const reader = new FileReader();
     reader.onloadend = () => setFormData((prev) => ({ ...prev, logo: reader.result }));
     reader.readAsDataURL(file);
@@ -398,14 +406,16 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       email: "",
       remarks: "",
       website: "",
-      logo: null,
+      logo: "",
       status: "Active",
       workingDaysPerWeek: ""
     });
+    setLogoFile(null);
+    setIsViewing(false);
     setFormErrors({});
   };
 
-  const handleSave = () => {
+  const handleSave = async () => {
     // Validate all fields
     const errors = {};
     Object.keys(formData).forEach(key => {
@@ -429,6 +439,28 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       return;
     }
 
+    let finalLogoUrl = formData.logo;
+    if (logoFile) {
+      try {
+        const formDataUpload = new FormData();
+        formDataUpload.append("file", logoFile);
+        const uploadResponse = await fetch(`${apiBaseUrl}/api/storage/upload/company-logo`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${sessionStorage.getItem("authToken") || ""}` },
+          body: formDataUpload
+        });
+        if (uploadResponse.ok) {
+          const uploadData = await uploadResponse.json();
+          finalLogoUrl = uploadData.url;
+        } else {
+          throw new Error("Logo upload failed");
+        }
+      } catch (uploadErr) {
+        triggerAlert("error", "Upload Error", "Failed to upload company logo.");
+        return;
+      }
+    }
+
 
 
     const companyPayload = {
@@ -442,7 +474,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       incDt: formData.incorporationDate,
       cin: formData.cinNumber.trim(),
       webUrl: formData.website ? formData.website.trim() : null,
-      logo: formData.logo ? formData.logo.slice(0, 255) : null,
+      logo: finalLogoUrl ? finalLogoUrl : null,
       str: formData.streetAddress.trim(),
       ctVlg: formData.city.trim(),
       dist: formData.district.trim(),
@@ -528,7 +560,43 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       workingDaysPerWeek: company.workingDaysPerWeek || ""
     });
     setFormErrors({});
+    setLogoFile(null);
     setIsEditing(true);
+    setIsViewing(false);
+    setEditingId(company.coyId);
+    setActiveDropdown(null);
+    setView("form");
+  };
+
+  const handleView = (company) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setFormData({
+      companyName: company.coyNm || "",
+      companyCode: company.coyCd || "",
+      under: company.prntCoyId ? company.prntCoyId.toString() : "Independent",
+      cinNumber: company.cin || "",
+      gstNumber: company.gstNum || "",
+      panNumber: company.panNum || "",
+      tanNumber: company.tanNum || "",
+      incorporationDate: company.incDt || "",
+      flatPlotDoor: company.flatPlotDoor || "",
+      streetAddress: company.str || "",
+      landMark: company.landMark || "",
+      city: company.ctVlg || "",
+      district: company.dist || "",
+      state: company.stId ? company.stId.toString() : "",
+      zone: company.znNm || "",
+      pincode: company.pin || "",
+      email: company.email || "",
+      remarks: company.addlRem || "",
+      website: company.webUrl || "",
+      logo: company.logo || null,
+      status: company.sts ? "Active" : "Inactive",
+      workingDaysPerWeek: company.workingDaysPerWeek || ""
+    });
+    setFormErrors({});
+    setIsEditing(false);
+    setIsViewing(true);
     setEditingId(company.coyId);
     setActiveDropdown(null);
     setView("form");
@@ -712,11 +780,11 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       <div className="cc-shell">
 
         <Header
-          title="Company Master"
+          title="Company Creation"
           showSearch={false}
-          userName="Syed Mohammad Johny Basha"
-          userRole="Web Developer"
-          initials="SB"
+          userName=""
+          userRole=""
+          initials=""
         />
 
         <main className="cc-main" style={{ padding: '24px' }}>
@@ -741,21 +809,28 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                     borderBottom: '1px solid #e2e8f0',
                     backgroundColor: '#fafbfc'
                   }}>
-                    <h2 style={{
-                      fontSize: '20px',
-                      fontWeight: '700',
-                      color: '#0f172a',
-                      margin: 0
-                    }}>
-                      {isEditing ? "Edit Company" : "Add New Company"}
-                    </h2>
+                    <div>
+                      <h2 style={{
+                        fontSize: '20px',
+                        fontWeight: '700',
+                        color: '#0f172a',
+                        margin: 0
+                      }}>
+                        {isViewing ? "View Company Details" : isEditing ? "Edit Company" : "Add New Company"}
+                      </h2>
+                      <p style={{ margin: '4px 0 0 0', fontSize: '14px', color: '#64748b' }}>
+                        {isViewing ? "View company details below" : isEditing ? "Update company details in the form below" : "Enter company details in the form below"}
+                      </p>
+                    </div>
                     <button
                       type="button"
                       className="cc-nav-view-btn"
                       onClick={() => {
+                        window.scrollTo(0, 0);
                         setView("list");
                         handleResetForm();
                         setIsEditing(false);
+                        setIsViewing(false);
                         setEditingId(null);
                       }}
                     >
@@ -764,8 +839,107 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                   </div>
 
                   <div style={{ padding: '24px' }}>
-
-                    <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
+                    {isViewing ? (
+                      <div className="cc-view-unified" style={{ padding: '12px 0' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Company Code :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.companyCode || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Parent Company :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{companies.find(c => String(c.coyId) === String(formData.under))?.coyNm || 'Independent'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>CIN Number :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.cinNumber || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>PAN Number :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.panNumber || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Incorporation Date :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.incorporationDate ? formData.incorporationDate.split('-').reverse().join('/') : '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Address :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.streetAddress || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>State :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{states.find(s => String(s.stId) === String(formData.state))?.stNm || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Company Logo :</span>
+                              <div>
+                                 {formData.logo ? (
+                                   <img src={formData.logo} alt="Logo" style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
+                                 ) : (
+                                   <div style={{ width: '48px', height: '48px', borderRadius: '6px', background: '#f8fafc', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><Building2 size={20} style={{ color: '#94a3b8' }} /></div>
+                                 )}
+                              </div>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Website :</span>
+                              <span style={{ fontSize: '14px', color: '#2563eb', fontWeight: '500' }}>
+                                {formData.website ? <a href={formData.website} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>{formData.website}</a> : '-'}
+                              </span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Remarks :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.remarks || '-'}</span>
+                            </div>
+                          </div>
+                          
+                          <div style={{ display: 'flex', flexDirection: 'column' }}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Company Name :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.companyName || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0', alignItems: 'center' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Status :</span>
+                              <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', width: 'fit-content', backgroundColor: formData.status === 'Active' ? '#dcfce7' : '#fee2e2', color: formData.status === 'Active' ? '#166534' : '#991b1b' }}>{formData.status}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>GST Number :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.gstNumber || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>TAN Number :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.tanNumber || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Email :</span>
+                              <span style={{ fontSize: '14px', color: '#2563eb', fontWeight: '500' }}>{formData.email || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>City/Village :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.city || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>District :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.district || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Pincode :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.pincode || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Zone :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.zone || '-'}</span>
+                            </div>
+                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Working Days :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.workingDaysPerWeek ? `${formData.workingDaysPerWeek} Days/Week` : '-'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
@@ -855,7 +1029,13 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         </label>
                         <label className="cc-field-item">
                           <span>Incorporation Date <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="date" name="incorporationDate" value={formData.incorporationDate} onChange={handleInputChange} />
+                          <input 
+                            type="date" 
+                            name="incorporationDate" 
+                            value={formData.incorporationDate} 
+                            onChange={handleInputChange} 
+                            max={new Date().toISOString().split("T")[0]}
+                          />
                           {formErrors.incorporationDate && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.incorporationDate}</span>}
                         </label>
                       </div>
@@ -910,6 +1090,11 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                           <input type="text" name="district" value={formData.district} onChange={handleInputChange} placeholder="Enter district" maxLength={30} />
                           {formErrors.district && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.district}</span>}
                         </label>
+                        <label className="cc-field-item">
+                          <span>Pincode <b style={{ color: '#ef4444' }}>*</b></span>
+                          <input type="text" name="pincode" value={formData.pincode} onChange={handleInputChange} placeholder="Enter 6-digit pincode" maxLength={6} />
+                          {formErrors.pincode && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.pincode}</span>}
+                        </label>
                       </div>
 
                       <div className="cc-form-layout-row columns-4" style={{ marginTop: '20px' }}>
@@ -935,11 +1120,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                             placeholder="Auto-fills from State"
                           />
                           {formErrors.zone && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.zone}</span>}
-                        </label>
-                        <label className="cc-field-item">
-                          <span>Pincode <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="pincode" value={formData.pincode} onChange={handleInputChange} placeholder="Enter 6-digit pincode" maxLength={6} />
-                          {formErrors.pincode && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.pincode}</span>}
                         </label>
                       </div>
                     </section>
@@ -967,8 +1147,11 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         </label>
                       </div>
                     </section>
+                      </>
+                    )}
                   </div>
 
+                  {!isViewing && (
                   <div className="cc-form-footer" style={{
                     display: 'flex',
                     justifyContent: 'flex-end',
@@ -984,11 +1167,13 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                       setView("list");
                       handleResetForm();
                       setIsEditing(false);
+                      setIsViewing(false);
                       setEditingId(null);
                     }}>
                       Cancel
                     </button>
                   </div>
+                  )}
                 </div>
               </div>
             </>
@@ -1053,7 +1238,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         >
                           COMPANY NAME{" "}
                           {sortConfig.key === "companyName" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                            (sortConfig.direction === "asc" ? "â–²" : "â–¼")}
                         </th>
                         <th
                           className="sortable"
@@ -1062,7 +1247,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         >
                           CODE{" "}
                           {sortConfig.key === "companyCode" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                            (sortConfig.direction === "asc" ? "â–²" : "â–¼")}
                         </th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>UNDER</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CIN NUMBER</th>
@@ -1112,7 +1297,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.gstNum || "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.panNum}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.tanNum || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.incDt || "N/A"}</td>
+                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.incDt ? company.incDt.split('-').reverse().join('/') : "N/A"}</td>
 
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.str || "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.ctVlg || "N/A"}</td>
@@ -1161,14 +1346,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                     <button
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => {
-                                        triggerAlert(
-                                          "info",
-                                          "Company Details",
-                                          `Company Details:\nName: ${company.coyNm}\nCode: ${company.coyCd}\nCIN: ${company.cin || 'N/A'}\nGST: ${company.gstNum || 'N/A'}\nPAN: ${company.panNum}\nState: ${states.find(s => Number(s.stId) === Number(company.stId))?.stNm || "N/A"}\nZone: ${company.znNm}\nEmail: ${company.email}\nStatus: ${company.sts ? "Active" : "Inactive"}`
-                                        );
-                                        setActiveDropdown(null);
-                                      }}
+                                      onClick={() => handleView(company)}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >
@@ -1215,6 +1393,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
           )}
         </main>
       </div>
+
 
       {showDeactivateModal && (
         <div className="cc-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -1271,3 +1450,4 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 };
 
 export default CompanyCreation;
+

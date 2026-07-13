@@ -3,14 +3,14 @@ import { BarChart2, Users, CheckCircle2, PlayCircle, Clock, Calendar } from 'luc
 import '../../styles/UserOverview.css';
 
 // Donut chart for project progress panel
-const DonutChart = ({ pct }) => {
+const DonutChart = ({ completedPct, inProgressPct, yetToStartPct, overallPct }) => {
   const size = 130, stroke = 18;
   const r = (size - stroke) / 2;
   const circ = 2 * Math.PI * r;
   const segments = [
-    { value: pct, color: "#10b981" },
-    { value: 20, color: "#3b82f6" },
-    { value: 100 - pct - 20, color: "#f59e0b" }
+    { value: completedPct, color: "#10b981" },
+    { value: inProgressPct, color: "#3b82f6" },
+    { value: yetToStartPct, color: "#f59e0b" }
   ];
   let offset = 0;
   return (
@@ -26,7 +26,7 @@ const DonutChart = ({ pct }) => {
       })}
       <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle"
         style={{ transform: "rotate(90deg)", transformOrigin: "center", fontSize: "22px", fontWeight: 800, fill: "#0d1126" }}>
-        {pct}%
+        {overallPct}%
       </text>
       <text x="50%" y="60%" textAnchor="middle" dominantBaseline="middle"
         style={{ transform: "rotate(90deg)", transformOrigin: "center", fontSize: "11px", fill: "#6b7280" }}>
@@ -37,6 +37,16 @@ const DonutChart = ({ pct }) => {
 };
 
 const UserOverview = ({ selectedProject }) => {
+  const total = selectedProject.taskSummary?.assigned || 0;
+  const completedCount = selectedProject.taskSummary?.completed || 0;
+  const wipCount = selectedProject.taskSummary?.inProgress || 0;
+  const openCount = selectedProject.taskSummary?.openTasks || 0;
+  const reviewCount = Math.max(0, total - completedCount - wipCount - openCount);
+
+  const completedPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
+  const inProgressPct = total > 0 ? Math.round(((wipCount + reviewCount) / total) * 100) : 0;
+  const yetToStartPct = total > 0 ? Math.max(0, 100 - completedPct - inProgressPct) : 100;
+
   return (
     <div className="mp-overview-grid">
       {/* Project Information */}
@@ -75,12 +85,12 @@ const UserOverview = ({ selectedProject }) => {
       <div className="mp-overview-card">
         <div className="mp-card-title"><BarChart2 size={15} /> PROJECT PROGRESS</div>
         <div className="mp-progress-chart-wrap">
-          <DonutChart pct={selectedProject.progress} />
+          <DonutChart completedPct={completedPct} inProgressPct={inProgressPct} yetToStartPct={yetToStartPct} overallPct={selectedProject.progress} />
         </div>
         <div className="mp-progress-legend">
-          <div className="mp-legend-item"><span style={{ background: "#10b981" }}></span> Completed <strong style={{ color: "#10b981" }}>{selectedProject.progress}%</strong></div>
-          <div className="mp-legend-item"><span style={{ background: "#3b82f6" }}></span> In Progress <strong style={{ color: "#3b82f6" }}>20%</strong></div>
-          <div className="mp-legend-item"><span style={{ background: "#f59e0b" }}></span> Yet to Start <strong style={{ color: "#f59e0b" }}>{100 - selectedProject.progress - 20}%</strong></div>
+          <div className="mp-legend-item"><span style={{ background: "#10b981" }}></span> Completed <strong style={{ color: "#10b981" }}>{completedPct}%</strong></div>
+          <div className="mp-legend-item"><span style={{ background: "#3b82f6" }}></span> In Progress <strong style={{ color: "#3b82f6" }}>{inProgressPct}%</strong></div>
+          <div className="mp-legend-item"><span style={{ background: "#f59e0b" }}></span> Yet to Start <strong style={{ color: "#f59e0b" }}>{yetToStartPct}%</strong></div>
         </div>
       </div>
 

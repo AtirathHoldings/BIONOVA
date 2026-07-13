@@ -59,9 +59,27 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
         ]);
 
         const mlData = mlRes.ok ? await mlRes.json() : [];
-        const taskData = taskRes.ok ? await taskRes.json() : [];
+        const taskDataRaw = taskRes.ok ? await taskRes.json() : [];
         const profile = profileRes.ok ? await profileRes.json() : null;
         const empData = empRes.ok ? await empRes.json() : [];
+
+        const taskData = await Promise.all((taskDataRaw || []).map(async task => {
+           try {
+               const taskId = isDraft ? (task.drftTaskId || task.drft_task_id) : (task.taskId || task.task_id || task.id);
+               if (!taskId) return task;
+               const path = isDraft ? `/process-config/draft-task/${taskId}` : `/process-config/live-task/${taskId}`;
+               const pcsRes = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
+               if (!pcsRes.ok) return task;
+               const configs = await pcsRes.json() || [];
+               const revCfg = configs.find(pc => pc.ordrId === 1 || pc.ordr_id === 1);
+               const appCfg = configs.find(pc => pc.ordrId === 2 || pc.ordr_id === 2);
+               return {
+                  ...task,
+                  reviewerId: revCfg ? (revCfg.empId || revCfg.emp_id) : (task.reviewerId || task.reviewer_id),
+                  approverId: appCfg ? (appCfg.empId || appCfg.emp_id) : (task.approverId || task.approver_id)
+               };
+           } catch(e) { return task; }
+        }));
 
         setEmployees(empData);
 
@@ -170,7 +188,7 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
 
   const getAssigneeInfo = (empId) => {
     if (!empId) return { name: 'Unassigned', role: '' };
-    const emp = employees.find(e => e.empId === empId);
+    const emp = employees.find(e => String(e.empId) === String(empId));
     if (emp) {
       return {
         name: `${emp.fstNm || ''} ${emp.lstNm || ''}`.trim(),
@@ -284,13 +302,13 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
           </div>
 
           <div className="mt-stat-card">
-            <div className="mt-stat-icon-wrap bg-green">
-              <CheckSquare size={20} color="#10b981" />
+            <div className="mt-stat-icon-wrap bg-yellow">
+              <HelpCircle size={20} color="#eab308" />
             </div>
             <div className="mt-stat-info">
-              <span className="mt-stat-value">{completedTasks}</span>
-              <span className="mt-stat-label">Completed Tasks</span>
-              <span className="mt-stat-percent">{getPercentage(completedTasks, totalTasks)}%</span>
+              <span className="mt-stat-value">{notStartedTasks}</span>
+              <span className="mt-stat-label">Not Started Tasks</span>
+              <span className="mt-stat-percent">{getPercentage(notStartedTasks, totalTasks)}%</span>
             </div>
           </div>
 
@@ -306,17 +324,6 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
           </div>
 
           <div className="mt-stat-card">
-            <div className="mt-stat-icon-wrap bg-yellow">
-              <HelpCircle size={20} color="#eab308" />
-            </div>
-            <div className="mt-stat-info">
-              <span className="mt-stat-value">{notStartedTasks}</span>
-              <span className="mt-stat-label">Not Started Tasks</span>
-              <span className="mt-stat-percent">{getPercentage(notStartedTasks, totalTasks)}%</span>
-            </div>
-          </div>
-
-          <div className="mt-stat-card">
             <div className="mt-stat-icon-wrap bg-red">
               <Clock size={20} color="#ef4444" />
             </div>
@@ -324,6 +331,17 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
               <span className="mt-stat-value">{overdueTasks}</span>
               <span className="mt-stat-label">Overdue Tasks</span>
               <span className="mt-stat-percent">{getPercentage(overdueTasks, totalTasks)}%</span>
+            </div>
+          </div>
+
+          <div className="mt-stat-card">
+            <div className="mt-stat-icon-wrap bg-green">
+              <CheckSquare size={20} color="#10b981" />
+            </div>
+            <div className="mt-stat-info">
+              <span className="mt-stat-value">{completedTasks}</span>
+              <span className="mt-stat-label">Completed Tasks</span>
+              <span className="mt-stat-percent">{getPercentage(completedTasks, totalTasks)}%</span>
             </div>
           </div>
         </div>
@@ -438,41 +456,29 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                 <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                   <h3 style={{ margin: 0 }}>Tasks for Milestone: <span className="highlight">{selectedMilestoneData?.mlstnTtl || selectedMilestoneData?.mlstn_ttl || selectedMilestoneData?.mlstmTtl || selectedMilestoneData?.mlstm_ttl || '...'}</span></h3>
                 </div>
-                <div className="mt-tasks-filters">
-                  <div className="mt-filter-btn">
-                    <Filter size={14} /> Filter
-                  </div>
-                  <select className="mt-filter-select">
-                    <option>All Tasks</option>
-                  </select>
-                  <div className="mt-search-box">
-                    <input
-                      type="text"
-                      placeholder="Search Task..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    <Search size={14} color="#94a3b8" />
-                  </div>
-                </div>
               </div>
 
               <div className="mt-table-container">
                 <table className="mt-table">
                   <thead>
                     <tr>
-                      <th>#</th>
-                      <th>Task Code</th>
-                      <th>Task Name</th>
-                      <th>Task Type</th>
-                      <th>Assigned To</th>
-                      <th>Start Date</th>
-                      <th>End Date</th>
-                      <th>Duration<br />(Days)</th>
-                      <th>Dependency</th>
-                      <th>Status</th>
-                      <th>Progress</th>
-                      <th>Actions</th>
+                      <th rowSpan="2">S.no</th>
+                      <th rowSpan="2">Task Code</th>
+                      <th rowSpan="2">Task Name</th>
+                      <th rowSpan="2">Task Type</th>
+                      <th colSpan="3" style={{ textAlign: 'center', borderBottom: '1px solid #e2e8f0' }}>Assigned To</th>
+                      <th rowSpan="2">Start Date</th>
+                      <th rowSpan="2">End Date</th>
+                      <th rowSpan="2">Duration<br />(Days)</th>
+                      <th rowSpan="2">Dependency</th>
+                      <th rowSpan="2">Status</th>
+                      <th rowSpan="2">Progress</th>
+                      <th rowSpan="2">Actions</th>
+                    </tr>
+                    <tr>
+                      <th style={{ fontSize: '11px', backgroundColor: '#f8fafc', fontWeight: '600' }}>Executor Name</th>
+                      <th style={{ fontSize: '11px', backgroundColor: '#f8fafc', fontWeight: '600' }}>Approver Name</th>
+                      <th style={{ fontSize: '11px', backgroundColor: '#f8fafc', fontWeight: '600' }}>Reviewer Name</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -481,7 +487,9 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                       const sDt = formatDate(t.tentStDt || t.tent_st_dt || t.stDt || t.st_dt);
                       const eDt = formatDate(t.tentEndDt || t.tent_end_dt || t.endDt || t.end_dt);
                       const st = t.taskSts || t.task_sts || 'DRAFT';
-                      const assignee = getAssigneeInfo(t.empId);
+                      const executor = getAssigneeInfo(t.empId);
+                      const approver = getAssigneeInfo(t.approverId || t.approver_id);
+                      const reviewer = getAssigneeInfo(t.reviewerId || t.reviewer_id);
                       const prog = calculateTaskProgress(st);
 
                       return (
@@ -497,11 +505,33 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                           <td>
                             <div className="mt-assignee">
                               <div className="mt-avatar">
-                                {assignee.name.charAt(0)}
+                                {executor.name.charAt(0)}
                               </div>
                               <div className="mt-assignee-info">
-                                <span className="mt-assignee-name">{assignee.name}</span>
-                                <span className="mt-assignee-role">{assignee.role}</span>
+                                <span className="mt-assignee-name">{executor.name}</span>
+                                <span className="mt-assignee-role">{executor.role}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="mt-assignee">
+                              <div className="mt-avatar" style={{ backgroundColor: '#f59e0b' }}>
+                                {approver.name.charAt(0)}
+                              </div>
+                              <div className="mt-assignee-info">
+                                <span className="mt-assignee-name">{approver.name}</span>
+                                <span className="mt-assignee-role">{approver.role}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="mt-assignee">
+                              <div className="mt-avatar" style={{ backgroundColor: '#8b5cf6' }}>
+                                {reviewer.name.charAt(0)}
+                              </div>
+                              <div className="mt-assignee-info">
+                                <span className="mt-assignee-name">{reviewer.name}</span>
+                                <span className="mt-assignee-role">{reviewer.role}</span>
                               </div>
                             </div>
                           </td>
@@ -524,14 +554,13 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                             <div className="mt-actions">
                               <button onClick={() => handleViewTask(t)} title="View Task"><Eye size={14} /></button>
                               <button onClick={() => handleEditTask(t)} title="Edit Task"><Edit2 size={14} /></button>
-                              <button onClick={() => handleDeleteTask(t)} className="text-red" title="Delete Task"><Trash2 size={14} /></button>
                             </div>
                           </td>
                         </tr>
                       );
                     }) : (
                       <tr>
-                        <td colSpan="12" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>No tasks available for this milestone.</td>
+                        <td colSpan="14" style={{ textAlign: 'center', padding: '24px', color: '#94a3b8' }}>No tasks available for this milestone.</td>
                       </tr>
                     )}
                   </tbody>

@@ -28,6 +28,19 @@ const getLoggedInUser = () => {
   return "Admin";
 };
 
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === "N/A") return "N/A";
+  const parts = dateStr.split('-');
+  if (parts.length >= 3 && parts[0].length === 4) {
+    return `${parts[2].substring(0, 2)}/${parts[1]}/${parts[0]}`;
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+  }
+  return dateStr;
+};
+
 const ProjectDetails = ({ userRole, onLogout }) => {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -163,6 +176,21 @@ const ProjectDetails = ({ userRole, onLogout }) => {
     #ef4444 ${ang3}deg 360deg
   )`;
 
+  const formatBulletedText = (text, fallback) => {
+    if (!text) return fallback;
+    if (text.includes('•')) {
+      const parts = text.split('•').map(p => p.replace(/[\n,]/g, '').trim()).filter(Boolean);
+      return (
+        <div style={{ marginTop: '4px', lineHeight: '1.5' }}>
+          {parts.map((p, i) => (
+            <span key={i} style={{ display: 'inline', marginRight: '8px' }}>• {p}</span>
+          ))}
+        </div>
+      );
+    }
+    return <span style={{ display: 'block', marginTop: '4px' }}>{text}</span>;
+  };
+
   return (
     <div className="proj-shell-container">
       <Sidebar userRole={userRole} onLogout={onLogout} />
@@ -199,19 +227,18 @@ const ProjectDetails = ({ userRole, onLogout }) => {
 
               <div className="pd-info-wrapper">
                 <div className="pd-title-row">
-                  <span className={`pd-badge ${project.status === 'LIVE' ? 'live' : project.status === 'DRAFT' ? 'draft' : ''}`}>{project.status}</span>
                   <h2>{project.projectName}</h2>
+                  <span className={`pd-badge ${project.status === 'LIVE' ? 'live' : project.status === 'DRAFT' ? 'draft' : ''}`}>{project.status}</span>
                 </div>
 
                 <div className="pd-meta-tags">
                   <span className="pd-tag blue">{project.projectCode}</span>
                   <span className="pd-tag red">{project.priority} PRIORITY</span>
-                  <span className="pd-tag gray">Created by {project.createdBy}</span>
                 </div>
 
                 <p className="pd-description">{project.projectDescription || "No description provided."}</p>
 
-                <div className="pd-details-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
+                <div className="pd-details-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
                   <div className="pd-detail-item">
                     <span className="pd-label">Company</span>
                     <span className="pd-value">{project.companyName || "N/A"}</span>
@@ -228,30 +255,35 @@ const ProjectDetails = ({ userRole, onLogout }) => {
                     <span className="pd-label">Project Manager</span>
                     <span className="pd-value">{project.createdBy}</span>
                   </div>
-                  <div className="pd-detail-item">
-                    <span className="pd-label">Tentative Start Date</span>
-                    <span className="pd-value">{project.startDate || "N/A"}</span>
-                  </div>
+                </div>
 
-                  <div className="pd-detail-item mt-2">
-                    <span className="pd-label">Tentative End Date</span>
-                    <span className="pd-value">{project.endDate || "N/A"}</span>
-                  </div>
-                  <div className="pd-detail-item mt-2">
+                <div className="pd-details-grid mt-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                  <div className="pd-detail-item">
                     <span className="pd-label">Total Project Days</span>
                     <span className="pd-value">{project.totalProjectDays ? `${project.totalProjectDays} Days` : "N/A"}</span>
                   </div>
-                  <div className="pd-detail-item mt-2">
-                    <span className="pd-label">Expected Deliverables</span>
-                    <span className="pd-value">{project.expectedDeliverables || "N/A"}</span>
+                  <div className="pd-detail-item">
+                    <span className="pd-label">Tentative Start Date</span>
+                    <span className="pd-value">{formatDateToDDMMYYYY(project.startDate)}</span>
                   </div>
-                  <div className="pd-detail-item mt-2">
+                  <div className="pd-detail-item">
+                    <span className="pd-label">Tentative End Date</span>
+                    <span className="pd-value">{formatDateToDDMMYYYY(project.endDate)}</span>
+                  </div>
+                  <div className="pd-detail-item">
                     <span className="pd-label">Remarks</span>
                     <span className="pd-value">{project.remarks || "N/A"}</span>
                   </div>
-                  <div className="pd-detail-item mt-2">
+                </div>
+
+                <div className="pd-details-grid mt-4" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
+                  <div className="pd-detail-item">
                     <span className="pd-label">Project Objective</span>
-                    <span className="pd-value">{project.projectObjective || "No objective defined."}</span>
+                    <span className="pd-value">{formatBulletedText(project.projectObjective, "No objective defined.")}</span>
+                  </div>
+                  <div className="pd-detail-item">
+                    <span className="pd-label">Expected Deliverables</span>
+                    <span className="pd-value">{formatBulletedText(project.expectedDeliverables, "N/A")}</span>
                   </div>
                 </div>
               </div>
@@ -319,7 +351,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
             {activeTab === 'Overview' && <ProjectOverview project={project} />}
             {activeTab === 'Milestones & Tasks' && <ProjectMilestonesTab project={project} userRole={userRole} />}
             {activeTab === 'Gantt Chart' && <ProjectGanttChart project={project} userRole={userRole} />}
-            {activeTab === 'Documents' && <DocsAndReports isTab={true} />}
+            {activeTab === 'Documents' && <DocsAndReports isTab={true} project={project} />}
             {activeTab === 'Forecasting' && <ProjectForecasting project={project} progressData={progressData} />}
             {activeTab === 'Change Logs' && <ProjectChangeLogs project={project} progressData={progressData} />}
           </div>

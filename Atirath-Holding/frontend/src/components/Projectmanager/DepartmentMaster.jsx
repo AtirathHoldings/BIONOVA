@@ -55,7 +55,6 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
       }
     } catch (err) {
       console.error("Error fetching departments:", err);
-      // We will rely on UI state for alerting later, as alertConfig isn't initialized yet here
     } finally {
       setLoading(false);
     }
@@ -68,6 +67,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
   // Screen View: "form" or "list"
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
+  const [isViewing, setIsViewing] = useState(false);
   const [editingId, setEditingId] = useState(null);
 
   // Form State
@@ -117,14 +117,61 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     setForm(prev => ({ ...prev, status: e.target.checked ? "Active" : "Inactive" }));
   };
 
-
-
   const handleReset = () => {
     setForm({ code: "", name: "", description: "", status: "Active" });
+    setIsViewing(false);
+  };
+
+  // Separate function to perform the actual save (API call)
+  const performSave = async (payload) => {
+    setLoading(true);
+    try {
+      let response;
+      if (isEditing) {
+        response = await fetch(`${apiBaseUrl}/api/departments/${editingId}`, {
+          method: "PUT",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+      } else {
+        response = await fetch(`${apiBaseUrl}/api/departments`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
+      }
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        let errorMsg = "Failed to save department";
+        try {
+          const parsed = JSON.parse(errorText);
+          if (parsed.message) errorMsg = parsed.message;
+          else if (parsed.error && parsed.status) {
+            errorMsg = `Server Error (${parsed.status}): ${parsed.error}.`;
+          }
+        } catch (e) {
+          errorMsg = errorText || errorMsg;
+        }
+        throw new Error(errorMsg);
+      }
+
+      triggerAlert("success", "Success", isEditing ? "Department updated successfully!" : "Department created successfully!");
+      fetchDepartments();
+      handleReset();
+      setIsEditing(false);
+      setEditingId(null);
+      setView("list");
+    } catch (err) {
+      console.error("Save department failed:", err);
+      triggerAlert("error", "Error", err.message || "Could not connect to server or save department.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleSave = async (e) => {
-    if (e) e.preventDefault();
+    if (e && typeof e.preventDefault === 'function') e.preventDefault();
 
     // 1. Department Code check
     if (!form.code.trim()) {
@@ -160,14 +207,65 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
 
     const codeToCheck = form.code.trim().toUpperCase();
 
-    const isDuplicate = departments.some(
+    // Check duplicate code (exact match, case-insensitive)
+    const isDuplicateCode = departments.some(
       (dept) => dept.code && dept.code.toUpperCase() === codeToCheck && (!isEditing || dept.id !== editingId)
     );
 
-    if (isDuplicate) {
-      triggerAlert("error", "Duplicate Error", "Department code already exists.");
+    if (isDuplicateCode) {
+      setAlertConfig({
+        isOpen: true,
+        type: "warning",
+        title: "Already Exists",
+        message: "Department code already exists.",
+        confirmText: "OK",
+        onConfirm: () => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
+          handleReset();
+        }
+      });
       return;
     }
+
+    const nameToCheck = form.name.trim().toLowerCase();
+    // Check for exact duplicate name (case-insensitive)
+    const isExactDuplicateName = departments.some(
+      (dept) => {
+        if (!dept.name) return false;
+        const existingName = dept.name.toLowerCase().trim();
+        if (isEditing && dept.id === editingId) return false;
+        return existingName === nameToCheck;
+      }
+    );
+
+    if (isExactDuplicateName) {
+      setAlertConfig({
+        isOpen: true,
+        type: "warning",
+        title: "Already Exists",
+        message: "Department name already exists.",
+        confirmText: "OK",
+        onConfirm: () => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
+          handleReset();
+        }
+      });
+      return;
+    }
+
+    // Check for partial match (one contains the other) – ask for confirmation
+    const isPartialMatch = departments.some(
+      (dept) => {
+        if (!dept.name) return false;
+        const existingName = dept.name.toLowerCase().trim();
+        if (isEditing && dept.id === editingId) return false;
+        // Exact match already handled, so only check containment
+        if (existingName.includes(nameToCheck) || nameToCheck.includes(existingName)) {
+          return true;
+        }
+        return false;
+      }
+    );
 
     const deptPayload = {
       deptCode: codeToCheck,
@@ -176,57 +274,44 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
       sts: form.status === "Active"
     };
 
-    setLoading(true);
-    try {
-      let response;
-      if (isEditing) {
-        response = await fetch(`${apiBaseUrl}/api/departments/${editingId}`, {
-          method: "PUT",
-          headers: getAuthHeaders(),
-          body: JSON.stringify(deptPayload)
-        });
-      } else {
-        response = await fetch(`${apiBaseUrl}/api/departments`, {
-          method: "POST",
-          headers: getAuthHeaders(),
-          body: JSON.stringify(deptPayload)
-        });
-      }
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        let errorMsg = "Failed to save department";
-        try {
-          const parsed = JSON.parse(errorText);
-          if (parsed.message) errorMsg = parsed.message;
-          else if (parsed.error && parsed.status) {
-            errorMsg = `Server Error (${parsed.status}): ${parsed.error}.`;
-          }
-        } catch (e) {
-          errorMsg = errorText || errorMsg;
+    if (isPartialMatch) {
+      // Show confirmation dialog
+      setAlertConfig({
+        isOpen: true,
+        type: "warning",
+        title: "Similar Name Found",
+        message: "A department with a similar name already exists. Do you want to continue?",
+        confirmText: "OK",
+        cancelText: "Cancel",
+        onConfirm: () => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
+          performSave(deptPayload);
+        },
+        onCancel: () => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
         }
-        throw new Error(errorMsg);
-      }
-
-      triggerAlert("success", "Success", isEditing ? "Department updated successfully!" : "Department created successfully!");
-      fetchDepartments();
-      handleReset();
-      setIsEditing(false);
-      setEditingId(null);
-      setView("list");
-    } catch (err) {
-      console.error("Save department failed:", err);
-      triggerAlert("error", "Error", err.message || "Could not connect to server or save department.");
-    } finally {
-      setLoading(false);
+      });
+      return;
     }
+
+    // No duplicate, proceed with save
+    performSave(deptPayload);
   };
-
-
 
   const handleEdit = (dept) => {
     setForm({ code: dept.code, name: dept.name, description: dept.description || "", status: dept.status });
     setIsEditing(true);
+    setIsViewing(false);
+    setEditingId(dept.id);
+    setActiveDropdown(null);
+    setView("form");
+  };
+
+  const handleView = (dept) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setForm({ code: dept.code, name: dept.name, description: dept.description || "", status: dept.status });
+    setIsEditing(false);
+    setIsViewing(true);
     setEditingId(dept.id);
     setActiveDropdown(null);
     setView("form");
@@ -261,7 +346,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
         }
         throw new Error(errorMsg);
       }
-      triggerAlert("success", "Success", "Department deactivated successfully!");
+      triggerAlert("success", "Success", "Department deleted successfully!");
       fetchDepartments();
     } catch (err) {
       console.error("Delete department failed:", err);
@@ -276,8 +361,19 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
   const toggleDropdown = (e, id) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
+    const dropdownHeight = 150; // approximate height of the dropdown
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+    let topPos;
+    if (spaceBelow < dropdownHeight && spaceAbove > dropdownHeight) {
+      // Show above the button
+      topPos = rect.top + window.scrollY - dropdownHeight;
+    } else {
+      // Show below
+      topPos = rect.bottom + window.scrollY;
+    }
     setDropdownPos({
-      top: rect.bottom + window.scrollY,
+      top: topPos,
       right: window.innerWidth - rect.right
     });
     setActiveDropdown((prev) => (prev === id ? null : id));
@@ -313,14 +409,12 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
 
       <div className="dept-shell">
         <Header
-          title="Department Master"
+          title="Department Creation"
           showSearch={false}
           userName="Syed Mohammad Johny Basha"
           userRole="Web Developer"
           initials="SB"
         />
-
-        {/* Breadcrumb Navigation */}
 
         <main className="dept-main" style={{ padding: '24px' }}>
           {view === "form" ? (
@@ -332,105 +426,131 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                     <div>
                       <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
-                        {isEditing ? "Edit Department" : "Add New Department"}
+                        {isViewing ? "View Department" : isEditing ? "Edit Department" : "Add New Department"}
                       </h2>
                       <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>
-                        Enter department details in the form below
+                        {isViewing ? "View department details below" : "Enter department details in the form below"}
                       </p>
                     </div>
 
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '12px' }}>
-                      <button type="button" className="dept-nav-view-btn" onClick={() => { handleReset(); setIsEditing(false); setView("list"); }}>
+                      <button type="button" className="dept-nav-view-btn" onClick={() => { handleReset(); setIsEditing(false); setIsViewing(false); setView("list"); }}>
                         <ArrowLeft size={15} /> Back to Department List
                       </button>
                     </div>
                   </div>
                 </div>
 
-                {/* Form Body - UPDATED DEPARTMENT NAME (REVERTED TO NORMAL) AND TOGGLE (SCREENSHOT MATCH) */}
-                <div style={{ padding: '24px', display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
-
-                  {/* Left Side: Inputs */}
-                  <div style={{ flex: '1 1 400px', maxWidth: '700px' }}>
-
-                    {/* --- Side by Side Wrapper --- */}
-                    <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-
-                      {/* Department Code Input */}
-                      <div className="dept-form-item" style={{ flex: '1 1 200px', marginBottom: 0 }}>
-                        <label>Department Code <span className="dept-req-star">*</span></label>
-                        <div className="dept-input-icon-wrap">
-                          <span className="dept-input-prefix-icon"><Calendar size={16} /></span>
-                          <input type="text" name="code" value={form.code} onChange={handleChange} placeholder="Enter department code" maxLength="10" required />
-                        </div>
-                        <div className="dept-input-helper-text" style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Department code must be unique.</div>
+                {isViewing ? (
+                  <div style={{ padding: '24px' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0' }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Department Code :</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.code || '-'}</span>
                       </div>
-
-                      {/* Department Name Input (Normal) */}
-                      <div className="dept-form-item" style={{ flex: '1 1 200px', marginBottom: 0 }}>
-                        <label>Department Name <span className="dept-req-star">*</span></label>
-                        <div className="dept-input-icon-wrap">
-                          <span className="dept-input-prefix-icon"><Building size={16} /></span>
-                          <input type="text" name="name" value={form.name} onChange={handleChange} placeholder="Enter department name" maxLength="100" required />
-                        </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Department Name :</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.name || '-'}</span>
                       </div>
-
-                    </div>
-                    {/* --- End Side by Side Wrapper --- */}
-
-                    {/* Description Input */}
-                    <div className="dept-form-item">
-                      <label>Description (Optional)</label>
-                      <div className="dept-input-icon-wrap">
-                        <textarea name="description" value={form.description} onChange={handleChange} placeholder="Enter description (optional)" maxLength="255" rows={4} style={{ paddingLeft: '14px' }} />
+                      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Description :</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.description || '-'}</span>
+                      </div>
+                      <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0', alignItems: 'center' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Status :</span>
+                        <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', width: 'fit-content', backgroundColor: form.status === 'Active' ? '#dcfce7' : '#fee2e2', color: form.status === 'Active' ? '#166534' : '#991b1b' }}>{form.status}</span>
                       </div>
                     </div>
                   </div>
+                ) : (
+                  <>
+                    {/* Form Body */}
+                    <div style={{ padding: '24px', display: 'flex', flexWrap: 'wrap', gap: '40px', alignItems: 'flex-start' }}>
 
-                  {/* Right Side: Status Toggle (SCREENSHOT STYLE) */}
-                  <div style={{ width: '280px', paddingTop: '8px' }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                      {/* Left Side: Inputs */}
+                      <div style={{ flex: '1 1 400px', maxWidth: '700px' }}>
 
-                      <span style={{ fontSize: "16px", fontWeight: "600", color: "#334155" }}>Status:</span>
+                        {/* --- Side by Side Wrapper --- */}
+                        <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
 
-                      <label style={{ position: "relative", display: "inline-block", width: "48px", height: "26px", margin: 0 }}>
-                        <input
-                          type="checkbox"
-                          checked={form.status === "Active"}
-                          onChange={handleToggleStatus}
-                          style={{ opacity: 0, width: 0, height: 0 }}
-                        />
-                        <span style={{
-                          position: "absolute", cursor: "pointer", top: 0, left: 0, right: 0, bottom: 0,
-                          backgroundColor: form.status === "Active" ? "#10b981" : "#cbd5e1",
-                          transition: ".3s", borderRadius: "34px"
-                        }}>
+                          {/* Department Code Input */}
+                          <div className="dept-form-item" style={{ flex: '1 1 200px', marginBottom: 0 }}>
+                            <label>Department Code <span className="dept-req-star">*</span></label>
+                            <div className="dept-input-icon-wrap">
+                              <span className="dept-input-prefix-icon"><Calendar size={16} /></span>
+                              <input type="text" name="code" value={form.code} onChange={handleChange} placeholder="Enter department code" maxLength="10" required />
+                            </div>
+                            <div className="dept-input-helper-text" style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Department code must be unique.</div>
+                          </div>
+
+                          {/* Department Name Input */}
+                          <div className="dept-form-item" style={{ flex: '1 1 200px', marginBottom: 0 }}>
+                            <label>Department Name <span className="dept-req-star">*</span></label>
+                            <div className="dept-input-icon-wrap">
+                              <span className="dept-input-prefix-icon"><Building size={16} /></span>
+                              <input type="text" name="name" value={form.name} onChange={handleChange} placeholder="Enter department name" maxLength="100" required />
+                            </div>
+                          </div>
+
+                        </div>
+
+                        {/* Description Input */}
+                        <div className="dept-form-item">
+                          <label>Description (Optional)</label>
+                          <div className="dept-input-icon-wrap">
+                            <textarea name="description" value={form.description} onChange={handleChange} placeholder="Enter description (optional)" maxLength="255" rows={4} style={{ paddingLeft: '14px' }} />
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Right Side: Status Toggle */}
+                      <div style={{ width: '280px', paddingTop: '8px' }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+
+                          <span style={{ fontSize: "16px", fontWeight: "600", color: "#334155" }}>Status:</span>
+
+                          <label style={{ position: "relative", display: "inline-block", width: "48px", height: "26px", margin: 0 }}>
+                            <input
+                              type="checkbox"
+                              checked={form.status === "Active"}
+                              onChange={handleToggleStatus}
+                              style={{ opacity: 0, width: 0, height: 0 }}
+                            />
+                            <span style={{
+                              position: "absolute", cursor: "pointer", top: 0, left: 0, right: 0, bottom: 0,
+                              backgroundColor: form.status === "Active" ? "#10b981" : "#cbd5e1",
+                              transition: ".3s", borderRadius: "34px"
+                            }}>
+                              <span style={{
+                                position: "absolute", height: "20px", width: "20px",
+                                left: form.status === "Active" ? "25px" : "3px", bottom: "3px",
+                                backgroundColor: "white", transition: ".3s", borderRadius: "50%",
+                                boxShadow: "0 1px 3px rgba(0,0,0,0.15)"
+                              }}></span>
+                            </span>
+                          </label>
+
                           <span style={{
-                            position: "absolute", height: "20px", width: "20px",
-                            left: form.status === "Active" ? "25px" : "3px", bottom: "3px",
-                            backgroundColor: "white", transition: ".3s", borderRadius: "50%",
-                            boxShadow: "0 1px 3px rgba(0,0,0,0.15)"
-                          }}></span>
-                        </span>
-                      </label>
+                            fontSize: "16px", fontWeight: "600", minWidth: "50px",
+                            color: form.status === "Active" ? "#10b981" : "#64748b"
+                          }}>
+                            {form.status}
+                          </span>
 
-                      <span style={{
-                        fontSize: "16px", fontWeight: "600", minWidth: "50px",
-                        color: form.status === "Active" ? "#10b981" : "#64748b"
-                      }}>
-                        {form.status}
-                      </span>
+                        </div>
+                      </div>
 
                     </div>
-                  </div>
-
-                </div>
+                  </>
+                )}
 
                 {/* Form Footer Buttons */}
-                <div className="dept-form-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#fafbfc', borderTop: '1px solid #e2e8f0' }}>
-                  <button type="button" className="dept-btn primary" onClick={handleSave}><Save size={14} /> {isEditing ? "Update Department" : "Save Department"}</button>
-                  <button type="button" className="dept-btn secondary" onClick={() => { handleReset(); setIsEditing(false); setView("list"); }}>Cancel</button>
-                </div>
+                {!isViewing && (
+                  <div className="dept-form-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#fafbfc', borderTop: '1px solid #e2e8f0' }}>
+                    <button type="button" className="dept-btn primary" onClick={handleSave}><Save size={14} /> {isEditing ? "Update Department" : "Save Department"}</button>
+                    <button type="button" className="dept-btn secondary" onClick={() => { handleReset(); setIsEditing(false); setIsViewing(false); setView("list"); }}>Cancel</button>
+                  </div>
+                )}
               </div>
             </div>
           ) : (
@@ -454,7 +574,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                         style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
                       />
                     </div>
-                    <button type="button" className="dept-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setView("form"); }}>
+                    <button type="button" className="dept-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setIsViewing(false); setView("form"); }}>
                       <Plus size={16} /> Add New Department
                     </button>
                   </div>
@@ -490,7 +610,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                                 <>
                                   <div className="dept-actions-dropdown-backdrop" onClick={() => setActiveDropdown(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 998 }} />
                                   <div className="dept-actions-dropdown-menu" style={{ position: 'fixed', right: `${dropdownPos.right}px`, top: `${dropdownPos.top}px`, backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 999, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
-                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("info", "Department Info", `Department Info:\nCode: ${dept.code}\nName: ${dept.name}\nDescription: ${dept.description}`); setActiveDropdown(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
+                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleView(dept)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleEdit(dept)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Edit size={15} /> Edit </button>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }} onClick={() => confirmDelete(dept.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Trash2 size={15} /> Delete </button>
                                   </div>
@@ -515,18 +635,18 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
           <div className="dept-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             <div className="dept-modal" style={{ backgroundColor: 'white', borderRadius: '8px', width: '400px', maxWidth: '90%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
               <div className="dept-modal-header" style={{ display: 'flex', justifyContent: 'space-between', padding: '16px 20px', borderBottom: '1px solid #e2e8f0' }}>
-                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1e293b' }}>Confirm Deactivation</h3>
+                <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#1e293b' }}>Confirm Delete</h3>
                 <button className="dept-modal-close" onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b' }}>
                   <X size={18} />
                 </button>
               </div>
               <div className="dept-modal-body" style={{ padding: '20px' }}>
-                <p style={{ margin: '0 0 8px 0', color: '#334155', fontSize: '14px' }}>Are you sure you want to deactivate this department?</p>
-                <p className="dept-modal-warning" style={{ margin: 0, color: '#ef4444', fontSize: '13px', fontWeight: '500' }}>This operation cannot be undone!</p>
+                <p style={{ margin: '0 0 8px 0', color: '#334155', fontSize: '14px' }}>Are you sure you want to delete this department?</p>
+                <p className="dept-modal-warning" style={{ margin: 0, color: '#ef4444', fontSize: '13px', fontWeight: '500' }}></p>
               </div>
               <div className="dept-modal-footer" style={{ padding: '16px 20px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '10px', backgroundColor: '#f8fafc' }}>
                 <button className="dept-btn-cancel-modal" onClick={() => setShowModal(false)} style={{ padding: '8px 16px', backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', color: '#475569' }}>Cancel</button>
-                <button className="dept-btn-delete-modal" onClick={handleDelete} style={{ padding: '8px 16px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}><Trash2 size={14} /> Deactivate</button>
+                <button className="dept-btn-delete-modal" onClick={handleDelete} style={{ padding: '8px 16px', backgroundColor: '#ef4444', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}><Trash2 size={14} /> Delete</button>
               </div>
             </div>
           </div>
@@ -537,7 +657,10 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
         type={alertConfig.type}
         title={alertConfig.title}
         message={alertConfig.message}
-        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={alertConfig.onConfirm}
+        confirmText={alertConfig.confirmText}
+        cancelText={alertConfig.cancelText}
+        onClose={() => setAlertConfig(prev => ({ ...prev, isOpen: false, onConfirm: null, confirmText: undefined, cancelText: undefined }))}
       />
     </div>
   );

@@ -5,8 +5,8 @@ import {
   FileText, Briefcase, Activity, TrendingUp, AlertCircle,
   ChevronRight, ChevronDown
 } from "lucide-react";
-import Sidebar from "../Sidebar.jsx"; 
-import Header from "../Header.jsx";
+import Sidebar from "../Sidebar"; 
+import Header from "../Header";
 import "../../styles/admin.css";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL) + "/api";
@@ -75,7 +75,7 @@ const AdminDashboard = ({ userRole, onLogout }) => {
 
   // ===== DYNAMIC DATA & STATES =====
   const [projFilter, setProjFilter] = useState("All Projects");
-  const [mileFilter, setMileFilter] = useState("This Month");
+  const [mileFilter, setMileFilter] = useState("All Time");
   const [taskFilter, setTaskFilter] = useState("All Tasks");
   
   // Real-time counts fetched from DB
@@ -108,6 +108,7 @@ const AdminDashboard = ({ userRole, onLogout }) => {
       if (resMetrics.ok) {
         const data = await resMetrics.json();
         setMetrics(data);
+        console.log("Admin Dashboard Metrics:", data);
       }
       if (resCompanies.ok) {
         const companies = await resCompanies.json();
@@ -202,19 +203,21 @@ const AdminDashboard = ({ userRole, onLogout }) => {
   const projectMatchesFilter = (prj, filter) => {
     if (filter === "All Projects") return true;
     const now = new Date();
-    const st = prj.stDt ? new Date(prj.stDt) : null;
-    const end = prj.endDt ? new Date(prj.endDt) : null;
-    if (!st) return false;
+    let st = prj.stDt ? new Date(prj.stDt) : null;
+    let end = prj.endDt ? new Date(prj.endDt) : null;
+    if (!st && !end) return false;
+    if (!st) st = end;
+    if (!end) end = st;
 
     if (filter === "This Month") {
       const startOfMonth = getStartOfMonth(now);
       const endOfMonth = getEndOfMonth(now);
-      return st <= endOfMonth && (!end || end >= startOfMonth);
+      return st <= endOfMonth && end >= startOfMonth;
     }
     if (filter === "This Year") {
       const startOfYear = getStartOfYear(now);
       const endOfYear = getEndOfYear(now);
-      return st <= endOfYear && (!end || end >= startOfYear);
+      return st <= endOfYear && end >= startOfYear;
     }
     return true;
   };
@@ -222,20 +225,22 @@ const AdminDashboard = ({ userRole, onLogout }) => {
   const milestoneMatchesFilter = (ms, filter) => {
     if (filter === "All Time") return true;
     const now = new Date();
-    const st = ms.stDt ? new Date(ms.stDt) : null;
-    const end = ms.endDt ? new Date(ms.endDt) : null;
-    if (!st) return false;
+    let st = ms.stDt ? new Date(ms.stDt) : null;
+    let end = ms.endDt ? new Date(ms.endDt) : null;
+    if (!st && !end) return false;
+    if (!st) st = end;
+    if (!end) end = st;
 
     if (filter === "This Month") {
       const startOfMonth = getStartOfMonth(now);
       const endOfMonth = getEndOfMonth(now);
-      return st <= endOfMonth && (!end || end >= startOfMonth);
+      return st <= endOfMonth && end >= startOfMonth;
     }
     if (filter === "Last Month") {
       const prevMonthDate = new Date(now.getFullYear(), now.getMonth() - 1, 1);
       const startOfPrevMonth = getStartOfMonth(prevMonthDate);
       const endOfPrevMonth = getEndOfMonth(prevMonthDate);
-      return st <= endOfPrevMonth && (!end || end >= startOfPrevMonth);
+      return st <= endOfPrevMonth && end >= startOfPrevMonth;
     }
     return true;
   };
@@ -243,19 +248,21 @@ const AdminDashboard = ({ userRole, onLogout }) => {
   const taskMatchesFilter = (t, filter) => {
     if (filter === "All Tasks") return true;
     const now = new Date();
-    const st = t.stDt ? new Date(t.stDt) : null;
-    const end = t.endDt ? new Date(t.endDt) : null;
-    if (!st) return false;
+    let st = t.stDt ? new Date(t.stDt) : null;
+    let end = t.endDt ? new Date(t.endDt) : null;
+    if (!st && !end) return false;
+    if (!st) st = end;
+    if (!end) end = st;
 
     if (filter === "This Week") {
       const startOfWeek = getStartOfWeek(now);
       const endOfWeek = getEndOfWeek(now);
-      return st <= endOfWeek && (!end || end >= startOfWeek);
+      return st <= endOfWeek && end >= startOfWeek;
     }
     if (filter === "This Month") {
       const startOfMonth = getStartOfMonth(now);
       const endOfMonth = getEndOfMonth(now);
-      return st <= endOfMonth && (!end || end >= startOfMonth);
+      return st <= endOfMonth && end >= startOfMonth;
     }
     return true;
   };
@@ -295,29 +302,25 @@ const AdminDashboard = ({ userRole, onLogout }) => {
     overdue: filteredMilestones.filter(m => m.mlstnSts !== "COMPLETED" && m.mlstnSts !== "CLOSED" && m.endDt && new Date(m.endDt) < now).length
   };
 
+  const wipStatuses = ["WIP", "IN_PROGRESS", "IN PROGRESS", "SUBMIT_REVIEW", "UNDER_REVIEW", "UNDER REVIEW"];
+  
   const td = {
     total: filteredTasks.length,
-    completed: filteredTasks.filter(t => t.taskSts === "COMPLETED").length,
-    progress: filteredTasks.filter(t => ["WIP", "SUBMIT_REVIEW", "UNDER_REVIEW"].includes(t.taskSts)).length,
-    todo: filteredTasks.filter(t => !["COMPLETED", "WIP", "SUBMIT_REVIEW", "UNDER_REVIEW"].includes(t.taskSts)).length,
-    overdue: filteredTasks.filter(t => t.taskSts !== "COMPLETED" && t.endDt && new Date(t.endDt) < now).length
+    completed: filteredTasks.filter(t => (t.taskSts || "").toUpperCase() === "COMPLETED").length,
+    progress: filteredTasks.filter(t => wipStatuses.includes((t.taskSts || "").toUpperCase())).length,
+    todo: filteredTasks.filter(t => !["COMPLETED", ...wipStatuses].includes((t.taskSts || "").toUpperCase())).length,
+    overdue: filteredTasks.filter(t => (t.taskSts || "").toUpperCase() !== "COMPLETED" && t.endDt && new Date(t.endDt) < now).length
   };
 
-  const overdueWip = filteredTasks.filter(t => ["WIP", "SUBMIT_REVIEW", "UNDER_REVIEW"].includes(t.taskSts) && t.endDt && new Date(t.endDt) < now).length;
-  const overdueTodo = filteredTasks.filter(t => !["COMPLETED", "WIP", "SUBMIT_REVIEW", "UNDER_REVIEW"].includes(t.taskSts) && t.endDt && new Date(t.endDt) < now).length;
+  const overdueWip = filteredTasks.filter(t => wipStatuses.includes((t.taskSts || "").toUpperCase()) && t.endDt && new Date(t.endDt) < now).length;
+  const overdueTodo = filteredTasks.filter(t => !["COMPLETED", ...wipStatuses].includes((t.taskSts || "").toUpperCase()) && t.endDt && new Date(t.endDt) < now).length;
   const progressOnTime = Math.max(0, td.progress - overdueWip);
   const todoOnTime = Math.max(0, td.todo - overdueTodo);
 
-  // Calculate milestone progress based on tasks
+  // Calculate milestone progress based on milestone status to remain consistent with backend and legend
   const getMilestoneProgressPercentage = () => {
     if (filteredMilestones.length === 0) return 0;
-    const milestoneIds = filteredMilestones.map(m => m.mId);
-    const relatedTasks = tasksList.filter(t => milestoneIds.includes(t.mId));
-    if (relatedTasks.length > 0) {
-      const completedTasks = relatedTasks.filter(t => t.taskSts === "COMPLETED").length;
-      return Math.round((completedTasks / relatedTasks.length) * 100);
-    }
-    const completedMilestones = filteredMilestones.filter(m => m.mlstnSts === "COMPLETED" || m.mlstnSts === "CLOSED").length;
+    const completedMilestones = filteredMilestones.filter(m => (m.mlstnSts || "").toUpperCase() === "COMPLETED" || (m.mlstnSts || "").toUpperCase() === "CLOSED").length;
     return Math.round((completedMilestones / filteredMilestones.length) * 100);
   };
 
@@ -433,9 +436,9 @@ const AdminDashboard = ({ userRole, onLogout }) => {
               </div>
               <div className="db-chart-content">
                 <div className="db-donut-chart" style={{ background: getProjGradient() }}>
-                  <div className="donut-inner">
-                    <h3>{pd.total}</h3>
-                    <p>Total</p>
+                  <div className="donut-inner" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                    <h3 className="mb-0 fw-bold" style={{ lineHeight: 1 }}>{pd.total}</h3>
+                    <p className="mb-0 mt-1" style={{ lineHeight: 1, fontSize: '14px' }}>Total</p>
                   </div>
                 </div>
                 <div className="db-chart-legend">
@@ -458,16 +461,16 @@ const AdminDashboard = ({ userRole, onLogout }) => {
               </div>
               <div className="db-chart-content">
                 <div className="db-donut-chart" style={{ background: getMileGradient() }}>
-                  <div className="donut-inner">
-                    <h3>{getMilestoneProgressPercentage()}%</h3>
-                    <p>Progress</p>
+                  <div className="donut-inner" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                    <h3 className="mb-0 fw-bold" style={{ lineHeight: 1 }}>{getMilestoneProgressPercentage()}%</h3>
+                    <p className="mb-0 mt-1" style={{ lineHeight: 1, fontSize: '14px' }}>Progress</p>
                   </div>
                 </div>
-                <div className="db-chart-legend milestone-legend">
-                  <div className="legend-row"><span>Total</span> <b>{md.total}</b></div>
-                  <div className="legend-row"><span>Completed</span> <b className="text-green">{md.completed}</b></div>
-                  <div className="legend-row"><span>In Progress</span> <b className="text-blue">{Math.max(0, md.progress - md.overdue)}</b></div>
-                  <div className="legend-row"><span>Overdue</span> <b className="text-red">{md.overdue}</b></div>
+                <div className="db-chart-legend">
+                  <div className="legend-item"><span className="dot" style={{backgroundColor: '#9ca3af'}}></span> Total <b>{md.total}</b></div>
+                  <div className="legend-item"><span className="dot dot-green"></span> Completed <b>{md.completed}</b></div>
+                  <div className="legend-item"><span className="dot dot-blue"></span> In Progress <b>{Math.max(0, md.progress - md.overdue)}</b></div>
+                  <div className="legend-item"><span className="dot dot-red"></span> Overdue <b>{md.overdue}</b></div>
                 </div>
               </div>
             </div>
@@ -483,9 +486,9 @@ const AdminDashboard = ({ userRole, onLogout }) => {
               </div>
               <div className="db-chart-content">
                 <div className="db-donut-chart" style={{ background: getTaskGradient() }}>
-                  <div className="donut-inner">
-                    <h3>{td.total}</h3>
-                    <p>Tasks</p>
+                  <div className="donut-inner" style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center' }}>
+                    <h3 className="mb-0 fw-bold" style={{ lineHeight: 1 }}>{td.total}</h3>
+                    <p className="mb-0 mt-1" style={{ lineHeight: 1, fontSize: '14px' }}>Tasks</p>
                   </div>
                 </div>
                 <div className="db-chart-legend">

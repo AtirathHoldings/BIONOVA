@@ -45,10 +45,11 @@ const Sidebar = ({ onLogout }) => {
         });
         if (permsRes.ok) {
           const permissions = await permsRes.json();
-          
+
           // Filter screens (if hasRbac is false, show all screens)
           const allowedScreens = permissions.filter(p => !hasRbac || p.viewFlg);
-          
+
+          // SCREEN_MAPPING with optional displayName override
           const SCREEN_MAPPING = {
             'ADMIN_DASHBOARD': { path: '/dashboard', icon: House },
             'COMPANY_CREATION': { path: '/company-creation', icon: Building },
@@ -57,24 +58,27 @@ const Sidebar = ({ onLogout }) => {
             'DEPARTMENT_CREATION': { path: '/department-creation', icon: Settings },
             'DEPARTMENT_MAPPING': { path: '/department-mapping', icon: Settings },
             'EMPLOYEE_CREATION': { path: '/employee-creation', icon: User },
-            
+
             'PROJECT_CREATION': { path: '/project-creation', icon: FolderPlus },
             'MILESTONE_CREATION': { path: '/milestone-creation', icon: FolderPlus },
             'PROJECT_DASHBOARD': { path: '/pm-dashboard', icon: FolderPlus },
             'LIVE_PROJECT_LIST': { path: '/project-list', icon: FolderPlus },
             'TASK_BOARD': { path: '/task-board', icon: FolderPlus },
-            'GANTT_CHART': { path: '/gantt-chart', icon: FolderPlus },
-            
+            'GANTT_CHART': { path: '/all-project-gantt-chart', icon: FolderPlus },
+            'ALL_PROJECT_GANTT_CHART': { path: '/all-project-gantt-chart', icon: FolderPlus },
+            'ALL_PROJECT_GANTT': { path: '/all-project-gantt-chart', icon: FolderPlus },
+
             'USER_DASHBOARD': { path: '/user-dashboard', icon: House },
             'MY_TASK': { path: '/my-tasks', icon: ClipboardCheck },
             'MY_PROJECTS': { path: '/projects', icon: FolderPlus },
             'CALENDAR': { path: '/calendar', icon: Calendar },
             'USER_TASK_BOARD': { path: '/user-task-board', icon: ClipboardCheck },
-            
+
             'PUBLIC_HOLIDAYS': { path: '/public-holidays', icon: Calendar },
             'PROFILE': { path: '/profile', icon: User },
-            'INDIVIDUAL_TASK': { path: '/assignment', icon: FileText },
-            
+            // 🔁 Override display name for INDIVIDUAL_TASK
+            'INDIVIDUAL_TASK': { path: '/assignment', icon: FileText, displayName: "Assignment" },
+
             'ASSIGN_ACCESS': { path: '/assign-access', icon: ClipboardCheck },
             'PROJECT_ACCESS': { path: '/project-access', icon: FolderPlus }
           };
@@ -87,8 +91,11 @@ const Sidebar = ({ onLogout }) => {
             const mapped = SCREEN_MAPPING[screen.screenCode];
             if (!mapped) return; // skip if screen code has no route mapping
 
+            // Use displayName if provided, otherwise fallback to backend screenNm
+            const displayName = mapped.displayName || screen.screenNm;
+
             const item = {
-              name: screen.screenNm,
+              name: displayName,
               path: mapped.path,
               icon: mapped.icon,
               code: screen.screenCode
@@ -117,6 +124,27 @@ const Sidebar = ({ onLogout }) => {
             'Project': 'project',
             'User': 'userMaster'
           };
+
+          const PROJECT_ORDER = [
+            'PROJECT_DASHBOARD',
+            'PROJECT_CREATION',
+            'MILESTONE_CREATION',
+            'LIVE_PROJECT_LIST',
+            'TASK_BOARD',
+            'GANTT_CHART',
+            'ALL_PROJECT_GANTT_CHART',
+            'ALL_PROJECT_GANTT'
+          ];
+          if (groups['Project']) {
+            groups['Project'].sort((a, b) => {
+              const indexA = PROJECT_ORDER.indexOf(a.code);
+              const indexB = PROJECT_ORDER.indexOf(b.code);
+              if (indexA === -1 && indexB === -1) return 0;
+              if (indexA === -1) return 1;
+              if (indexB === -1) return -1;
+              return indexA - indexB;
+            });
+          }
 
           Object.keys(groups).forEach(groupNm => {
             config.push({
@@ -203,17 +231,17 @@ const Sidebar = ({ onLogout }) => {
 
       <div className={`sidebar ${isMobileOpen ? 'mobile-open' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
         {/* Logo Section */}
-        <div className="logo-section" style={{ 
-          display: "flex", 
+        <div className="logo-section" style={{
+          display: "flex",
           flexDirection: isCollapsed ? "column" : "row",
-          alignItems: "center", 
-          justifyContent: isCollapsed ? "center" : "space-between", 
-          gap: isCollapsed ? "20px" : "10px", 
+          alignItems: "center",
+          justifyContent: isCollapsed ? "center" : "space-between",
+          gap: isCollapsed ? "20px" : "10px",
           width: "100%",
           padding: isCollapsed ? "8px 0" : "0 4px",
           marginBottom: isCollapsed ? "20px" : "35px"
         }}>
-          
+
           {isCollapsed ? (
             <button
               className="chatgpt-style-btn"
@@ -229,12 +257,12 @@ const Sidebar = ({ onLogout }) => {
             </button>
           ) : (
             <div style={{ display: 'flex', alignItems: 'center', width: '100%', gap: '10px', padding: '0 4px' }}>
-              <div className="logo-details" 
-                style={{ 
-                  display: "flex", 
-                  flex: 1, 
-                  minWidth: 0, 
-                  justifyContent: "center", 
+              <div className="logo-details"
+                style={{
+                  display: "flex",
+                  flex: 1,
+                  minWidth: 0,
+                  justifyContent: "center",
                   alignItems: "center",
                   background: "#ffffff",
                   borderRadius: "14px",
@@ -353,7 +381,7 @@ const Sidebar = ({ onLogout }) => {
                 letterSpacing: "0.5px",
                 lineHeight: "1.3"
               }}>
-                Athirath Holding
+                atirath Holding
               </span>
               <span style={{
                 fontSize: "11px",

@@ -20,7 +20,7 @@ const formatDateDisplay = (dateStr) => {
 
 const mapBackendHoliday = (h, employees = [], companies = [], plants = []) => {
   const addedByEmp = employees.find(e => String(e.empId) === String(h.addedBy));
-  const addedByName = addedByEmp ? `${addedByEmp.firstNm || ''} ${addedByEmp.lastNm || ''}`.trim() : "System Admin";
+  const addedByName = addedByEmp ? `${addedByEmp.fstNm || ''} ${addedByEmp.lstNm || ''}`.trim() : "System Admin";
   const coy = companies.find(c => String(c.coyId) === String(h.coyId));
   const plt = plants.find(p => String(p.pltId) === String(h.pltId));
 
@@ -69,7 +69,7 @@ const PublicHoliday = ({ userRole, onLogout }) => {
   
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [selectedYear, setSelectedYear] = useState("All Years");
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [editId, setEditId] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -97,7 +97,8 @@ const PublicHoliday = ({ userRole, onLogout }) => {
     calType: "", // "", "COMPANY", "PLANT", "EXTERNAL"
     coyId: "",
     pltId: "",
-    mandatory: true
+    mandatory: true,
+    isRegular: false
   });
 
   const navigate = useNavigate();
@@ -118,8 +119,13 @@ const PublicHoliday = ({ userRole, onLogout }) => {
       setPlants(plantsData || []);
       setProfile(profileRes);
 
+      const allEmps = employeesData || [];
+      if (profileRes && !allEmps.find(e => e.empId === profileRes.empId)) {
+        allEmps.push(profileRes);
+      }
+
       const mapped = (holidaysData || []).map(h => 
-        mapBackendHoliday(h, employeesData || [], companiesData || [], plantsData || [])
+        mapBackendHoliday(h, allEmps, companiesData || [], plantsData || [])
       );
       setHolidays(mapped);
     } catch (err) {
@@ -139,16 +145,24 @@ const PublicHoliday = ({ userRole, onLogout }) => {
     setCurrentPage(1);
   };
 
+  const currentYear = new Date().getFullYear();
+
   const filteredHolidays = holidays.filter(h => {
     const matchQuery = h.name.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                       h.desc.toLowerCase().includes(searchQuery.toLowerCase());
+                       (h.desc && h.desc.toLowerCase().includes(searchQuery.toLowerCase()));
     const year = h.date ? h.date.split('-')[0] : "";
+    
+    // Hide future years completely from the UI until the year changes
+    if (year && parseInt(year, 10) > currentYear) return false;
+
     const matchYear = selectedYear === "All Years" || year === selectedYear;
 
     return matchQuery && matchYear;
   });
 
-  const yearsList = ["All Years", ...new Set(holidays.map(h => h.date ? h.date.split('-')[0] : null).filter(Boolean))].sort((a, b) => b - a);
+  const allAvailableYears = [...new Set(holidays.map(h => h.date ? h.date.split('-')[0] : null).filter(Boolean))];
+  const validYears = allAvailableYears.filter(y => parseInt(y, 10) <= currentYear).sort((a, b) => b - a);
+  const yearsList = ["All Years", ...validYears];
 
   // Pagination calculations
   const totalPages = Math.ceil(filteredHolidays.length / rowsPerPage) || 1;
@@ -162,7 +176,8 @@ const PublicHoliday = ({ userRole, onLogout }) => {
       calType: "", 
       coyId: "", 
       pltId: "", 
-      mandatory: true 
+      mandatory: true,
+      isRegular: false
     });
     setDrawerOpen(true);
   };
@@ -175,7 +190,8 @@ const PublicHoliday = ({ userRole, onLogout }) => {
       calType: holiday.calType || "",
       coyId: holiday.coyId || "",
       pltId: holiday.pltId || "",
-      mandatory: holiday.mandatory
+      mandatory: holiday.mandatory,
+      isRegular: false
     });
     setDrawerOpen(true);
   };
@@ -242,7 +258,8 @@ const PublicHoliday = ({ userRole, onLogout }) => {
       calType: formData.mandatory ? null : (formData.calType || null),
       coyId: (!formData.mandatory && (formData.calType === "COMPANY" || formData.calType === "PLANT") && formData.coyId) ? parseInt(formData.coyId, 10) : null,
       pltId: (!formData.mandatory && formData.calType === "PLANT" && formData.pltId) ? parseInt(formData.pltId, 10) : null,
-      addedBy: profile?.empId || null
+      addedBy: profile?.empId || null,
+      isRegular: formData.isRegular
     };
 
     try {
@@ -421,6 +438,8 @@ const PublicHoliday = ({ userRole, onLogout }) => {
                       type="date" 
                       className="ph-input" 
                       value={formData.date}
+                      min={`${new Date().getFullYear()}-01-01`}
+                      max={`${new Date().getFullYear()}-12-31`}
                       onChange={(e) => setFormData({...formData, date: e.target.value})}
                     />
                   </div>
@@ -459,6 +478,28 @@ const PublicHoliday = ({ userRole, onLogout }) => {
                       <span className="ph-slider"></span>
                     </label>
                   </div>
+
+                  {!editId && (
+                    <div className="ph-toggle-row" style={{ marginTop: '12px' }}>
+                      <div className="ph-toggle-label">
+                        <strong>Regular Holiday <Info size={14} color="#64748b" /></strong>
+                        <span>If enabled, this holiday will automatically recur next year.</span>
+                      </div>
+                      <label className="ph-switch">
+                        <input 
+                          type="checkbox" 
+                          checked={formData.isRegular}
+                          onChange={(e) => {
+                            setFormData({
+                              ...formData,
+                              isRegular: e.target.checked
+                            });
+                          }}
+                        />
+                        <span className="ph-slider"></span>
+                      </label>
+                    </div>
+                  )}
                   
                   {!formData.mandatory && (
                     <>

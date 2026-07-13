@@ -1,7 +1,7 @@
 // src/components/User/Calendar.jsx
 import React, { useState, useRef, useEffect } from "react";
-import Sidebar from "../Sidebar.jsx";
-import Header from "../Header.jsx";
+import Sidebar from "../Sidebar";
+import Header from "../Header";
 import "../../styles/calendar.css";
 
 import {

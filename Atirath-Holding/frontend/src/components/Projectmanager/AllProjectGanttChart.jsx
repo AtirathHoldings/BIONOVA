@@ -56,11 +56,11 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
   const ROW_H = baseline ? ROW_H_BASELINE : ROW_H_NORMAL;
 
   // Resizable Table Setup
-  const [tableWidth, setTableWidth] = useState(380);
+  const [tableWidth, setTableWidth] = useState(300);
   const dragState = useRef({ isDragging: false, startX: 0, startW: 0 });
 
   useEffect(() => {
-    setTableWidth(baseline ? 440 : 380);
+    setTableWidth(baseline ? 360 : 300);
   }, [baseline]);
 
   const handleDragStart = (e) => {
@@ -75,7 +75,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
     if (!dragState.current.isDragging) return;
     const diff = e.clientX - dragState.current.startX;
     let newW = dragState.current.startW + diff;
-    if (newW < 450) newW = 450; 
+    if (newW < 250) newW = 250; 
     if (newW > 1200) newW = 1200; 
     setTableWidth(newW);
   };
@@ -146,32 +146,39 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
     const fetchData = async () => {
       setLoading(true);
       try {
-        const [prjRes, msRes, taskRes, empRes, deptRes] = await Promise.all([
-          fetch(`${API_BASE}/project-live`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/milestone-live`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/task-live`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/employees`, { headers: authHeaders() }),
-          fetch(`${API_BASE}/departments`, { headers: authHeaders() })
+        const [prjRes] = await Promise.all([
+          fetch(`${API_BASE}/project-live`, { headers: authHeaders() })
         ]);
 
         const projectsRaw = prjRes.ok ? await prjRes.json() : [];
-        const milestonesRaw = msRes.ok ? await msRes.json() : [];
-        const tasksRaw = taskRes.ok ? await taskRes.json() : [];
-        const employees = empRes.ok ? await empRes.json() : [];
-        const depts = deptRes.ok ? await deptRes.json() : [];
-        setDepartmentsList(depts);
-
-        // Deduplicate to avoid rendering conflicts
         const projects = Array.from(new Map(projectsRaw.map(p => [p.prjId, p])).values());
-        const milestones = Array.from(new Map(milestonesRaw.map(m => [m.mId, m])).values());
-        const tasks = Array.from(new Map(tasksRaw.map(t => [t.taskId, t])).values());
+
+        // Fetch Gantt data for each project using the unified Gantt endpoint
+        const ganttPromises = projects.map(p => 
+          fetch(`${API_BASE}/gantt/${p.prjId}`, { headers: authHeaders() })
+            .then(res => res.ok ? res.json() : [])
+            .catch(() => []) // Fallback in case a project endpoint fails
+        );
+        const ganttResults = await Promise.all(ganttPromises);
+
+        // Combine all items into one flat array
+        let rawItems = [];
+        ganttResults.forEach(arr => {
+          rawItems = rawItems.concat(arr);
+        });
+
+        if (rawItems.length === 0) {
+          setGanttRows([]);
+          setLoading(false);
+          return;
+        }
 
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
         let minDate = null;
         let maxDate = null;
-        
+
         const updateMinMax = (dateStr) => {
           if (!dateStr) return;
           const d = new Date(dateStr);
@@ -199,8 +206,6 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
         const kpi = { total: projects.length, completed: 0, inProgress: 0, notStarted: 0, overdue: 0 };
         
         projects.forEach(p => {
-          updateMinMax(p.stDt);
-          updateMinMax(p.endDt);
           const st = mapStatus(p.prjSts, p.endDt);
           if (st === 'Completed') kpi.completed++;
           else if (st === 'In Progress') kpi.inProgress++;
@@ -208,14 +213,9 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
           else kpi.notStarted++;
         });
 
-        milestones.forEach(m => {
-          updateMinMax(m.stDt);
-          updateMinMax(m.endDt);
-        });
-
-        tasks.forEach(t => {
-          updateMinMax(t.stDt);
-          updateMinMax(t.endDt);
+        rawItems.forEach(item => {
+          updateMinMax(item.startDate);
+          updateMinMax(item.endDate);
         });
 
         setStats(kpi);
@@ -242,112 +242,101 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
         setMonths(monthsList);
 
         const result = [];
+        
+        // Group items by project to maintain nesting hierarchy
         projects.sort((a,b) => new Date(a.stDt) - new Date(b.stDt)).forEach((p, pIdx) => {
-          const pOff = getDayOffset(p.stDt, tStart);
-          const pW = getDurationDays(p.stDt, p.endDt);
-          const pStatus = mapStatus(p.prjSts, p.endDt);
+          const prjItem = rawItems.find(i => i.type === 'project' && i.id === `PRJ-${p.prjId}`);
+          if (!prjItem) return;
 
-          const pMs = milestones.filter(m => m.prjId === p.prjId);
-          const pMsIds = pMs.map(m => m.mId);
-          const pTasks = tasks.filter(t => pMsIds.includes(t.milestoneId));
-          
-          let pProg = 0;
-          if (pTasks.length > 0) {
-            pProg = Math.round((pTasks.filter(t => t.taskSts === 'COMPLETED').length / pTasks.length) * 100);
-          } else if (pMs.length > 0) {
-            pProg = Math.round((pMs.filter(m => m.mlstnSts === 'COMPLETED' || m.mlstnSts === 'CLOSED').length / pMs.length) * 100);
-          } else {
-            pProg = pStatus === 'Completed' ? 100 : 0;
-          }
+          const pOff = getDayOffset(prjItem.startDate, tStart);
+          const pW = getDurationDays(prjItem.startDate, prjItem.endDate);
+          const paOff = getDayOffset(prjItem.plannedStartDate || prjItem.startDate, tStart);
+          const paW = getDurationDays(prjItem.plannedStartDate || prjItem.startDate, prjItem.plannedEndDate || prjItem.endDate);
 
           result.push({
-            id: `PRJ-${p.prjId}`,
+            id: prjItem.id,
             type: 'project',
-            name: p.prjNm,
+            name: prjItem.name,
             dur: pW,
-            start: formatDateString(p.stDt),
-            end: formatDateString(p.endDt),
-            rawStart: p.stDt,
-            rawEnd: p.endDt,
-            deptId: p.deptId,
-            prog: pProg,
-            status: pStatus,
+            start: formatDateString(prjItem.startDate),
+            end: formatDateString(prjItem.endDate),
+            rawStart: prjItem.startDate,
+            rawEnd: prjItem.endDate,
+            prog: Math.round((prjItem.progress || 0) * 100),
+            status: mapStatus(prjItem.status, prjItem.endDate),
             off: pOff,
             w: pW,
-            aOff: pOff,
-            aW: pW,
-            aProg: pProg,
-            manager: "Unassigned"
+            aOff: paOff,
+            aW: paW,
+            aProg: Math.round((prjItem.progress || 0) * 100)
           });
 
-          pMs.sort((a,b) => new Date(a.stDt) - new Date(b.stDt)).forEach((m, mIdx) => {
-            const mOff = getDayOffset(m.stDt, tStart);
-            const mW = getDurationDays(m.stDt, m.endDt);
-            const mStatus = mapStatus(m.mlstnSts, m.endDt);
-            
-            const mTasks = tasks.filter(t => t.milestoneId === m.mId);
-            let mProg = 0;
-            if (mTasks.length > 0) {
-              mProg = Math.round((mTasks.filter(t => t.taskSts === 'COMPLETED').length / mTasks.length) * 100);
-            } else {
-              mProg = mStatus === 'Completed' ? 100 : 0;
-            }
+          const pMilestones = rawItems.filter(i => i.type === 'milestone' && i.parent === prjItem.id).sort((a,b) => new Date(a.startDate) - new Date(b.startDate));
+          
+          pMilestones.forEach((ms, msIdx) => {
+            const msOff = getDayOffset(ms.startDate, tStart);
+            const msW = getDurationDays(ms.startDate, ms.endDate);
+            const msaOff = getDayOffset(ms.plannedStartDate || ms.startDate, tStart);
+            const msaW = getDurationDays(ms.plannedStartDate || ms.startDate, ms.plannedEndDate || ms.endDate);
 
             result.push({
-              id: `MS-${m.mId}`,
+              id: ms.id,
               type: 'milestone',
-              name: m.mlstnTtl || m.mlstm_ttl || "Unnamed Milestone",
-              dur: mW,
-              start: formatDateString(m.stDt),
-              end: formatDateString(m.endDt),
-              rawStart: m.stDt,
-              rawEnd: m.endDt,
-              prog: mProg,
-              status: mStatus,
-              off: mOff,
-              w: mW,
-              aOff: mOff,
-              aW: mW,
-              aProg: mProg,
-              displayId: `${pIdx + 1}.${mIdx + 1}`,
-              parentId: `PRJ-${p.prjId}`,
+              name: ms.name,
+              dur: msW,
+              start: formatDateString(ms.startDate),
+              end: formatDateString(ms.endDate),
+              rawStart: ms.startDate,
+              rawEnd: ms.endDate,
+              prog: Math.round((ms.progress || 0) * 100),
+              status: mapStatus(ms.status, ms.endDate),
+              off: msOff,
+              w: msW,
+              aOff: msaOff,
+              aW: msaW,
+              aProg: Math.round((ms.progress || 0) * 100),
+              displayId: `${pIdx + 1}.${msIdx + 1}`,
+              parentId: prjItem.id
             });
 
-            mTasks.sort((a,b) => new Date(a.stDt) - new Date(b.stDt)).forEach((t, tIdx) => {
-              const tOff = getDayOffset(t.stDt, tStart);
-              const tW = getDurationDays(t.stDt, t.endDt);
-              const tStatus = mapStatus(t.taskSts, t.endDt);
-              const tProg = tStatus === 'Completed' ? 100 : (tStatus === 'In Progress' ? 50 : 0);
-              
-              const emp = employees.find(e => e.empId === t.empId);
-              const assignee = emp ? `${emp.fstNm} ${emp.lstNm}` : "Unassigned";
+            const msTasks = rawItems.filter(i => i.type === 'task' && i.parent === ms.id).sort((a,b) => new Date(a.startDate) - new Date(b.startDate));
+
+            msTasks.forEach((tsk, tskIdx) => {
+              const tOff = getDayOffset(tsk.startDate, tStart);
+              const tW = getDurationDays(tsk.startDate, tsk.endDate);
+              const taOff = getDayOffset(tsk.plannedStartDate || tsk.startDate, tStart);
+              const taW = getDurationDays(tsk.plannedStartDate || tsk.startDate, tsk.plannedEndDate || tsk.endDate);
 
               result.push({
-                id: `TSK-${t.taskId}`,
+                id: tsk.id,
                 type: 'task',
-                name: t.taskNm,
+                name: tsk.name,
                 dur: tW,
-                start: formatDateString(t.stDt),
-                end: formatDateString(t.endDt),
-                rawStart: t.stDt,
-                rawEnd: t.endDt,
-                prog: tProg,
-                status: tStatus,
+                start: formatDateString(tsk.startDate),
+                end: formatDateString(tsk.endDate),
+                rawStart: tsk.startDate,
+                rawEnd: tsk.endDate,
+                prog: Math.round((tsk.progress || 0) * 100),
+                status: mapStatus(tsk.status, tsk.endDate),
                 off: tOff,
                 w: tW,
-                aOff: tOff,
-                aW: tW,
-                aProg: tProg,
-                displayId: `${pIdx + 1}.${mIdx + 1}.${tIdx + 1}`,
-                parentId: `MS-${m.mId}`,
-                grandParentId: `PRJ-${p.prjId}`,
-                manager: assignee,
+                aOff: taOff,
+                aW: taW,
+                aProg: Math.round((tsk.progress || 0) * 100),
+                displayId: `${pIdx + 1}.${msIdx + 1}.${tskIdx + 1}`,
+                parentId: ms.id,
+                grandParentId: prjItem.id,
+                manager: tsk.assignee || "Unassigned"
               });
             });
           });
         });
 
         setGanttRows(result);
+        const allProjIds = projects.map(p => `PRJ-${p.prjId}`);
+        const allMsIds = rawItems.filter(i => i.type === 'milestone').map(m => m.id);
+        setExpandedProjects(new Set(allProjIds));
+        setExpandedMilestones(new Set(allMsIds));
       } catch (err) {
         console.error("Failed to load global Gantt data", err);
       } finally {
@@ -561,9 +550,8 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
               {!tableCollapsed && (
                 <div className="gantt-table-section" style={{ width: tableWidth, flexShrink: 0, position: 'relative' }}>
                   <div className="gantt-thead">
-                    <div className="gantt-th" style={{ flex: 1, minWidth: '180px' }}>Project / Task</div>
-                    <div className="gantt-th" style={{ width: '95px' }}>Status</div>
-                    <div className="gantt-th" style={{ width: '60px' }}>Plan%</div>
+                    <div className="gantt-th" style={{ flex: 1, minWidth: '180px' }}>Project / Task / Status</div>
+
                     {baseline && <div className="gantt-th" style={{ width: '60px' }}>Act%</div>}
                   </div>
                   <div style={{ overflowY: 'hidden' }}>
@@ -597,13 +585,11 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                           >
                             {row.displayId ? `${row.displayId}. ` : ''}{row.name}
                           </span>
-                        </div>
-                        <div className="gantt-td" style={{ width: '95px', fontSize: '11px' }}>
-                          <span style={{ padding: '2px 7px', borderRadius: '10px', fontWeight: 600, fontSize: '10px', background: SC[row.status]?.bg || '#f1f5f9', color: SC[row.status]?.bar || '#64748b', whiteSpace: 'nowrap' }}>
+                          <span style={{ padding: '2px 7px', borderRadius: '10px', fontWeight: 600, fontSize: '10px', background: SC[row.status]?.bg || '#f1f5f9', color: SC[row.status]?.bar || '#64748b', whiteSpace: 'nowrap', marginLeft: '8px', flexShrink: 0 }}>
                             {row.status || '-'}
                           </span>
                         </div>
-                        <div className="gantt-td" style={{ width: '60px', fontWeight: 600, color: SC[row.status]?.bar }}>{row.prog}%</div>
+
                         {baseline && <div className="gantt-td" style={{ width: '60px', fontWeight: 600, color: '#64748b' }}>{row.aProg}%</div>}
                       </div>
                     ))}

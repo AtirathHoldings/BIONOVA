@@ -4,31 +4,32 @@ import "bootstrap/dist/css/bootstrap.min.css";
 import "./styles/colors.css";
 import "./styles/mobile-responsive.css"; // Added global mobile responsive styles
 
-import Login from "./components/Login.jsx";
-import AdminDashboard from "./components/Projectmanager/AdminDashboard.jsx";
-import UserDashboard from "./components/Projectmanager/UserDashboard.jsx"; // New User Dashboard
-import ProjectManagerDashboard from "./components/Projectmanager/ProjectManagerDashboard.jsx";
-import CompanyCreation from "./components/Admin/CompanyMaster.jsx";
-import PlantCreation from "./components/Admin/PlantMaster.jsx";
-import AgriLandAllocation from "./components/Admin/LandMaster.jsx";
-import DepartmentMapping from "./components/Admin/DepartmentMapping.jsx";
-import Projects from "./components/User/Projects.jsx";
-import Calendar from "./components/User/Calendar.jsx";
-import ProjectCreation from "./components/Projectmanager/ProjectCreation.jsx";
-import MilestoneCreation from "./components/Projectmanager/MilestoneCreation.jsx";
-import EmployeeCreation from "./components/Projectmanager/EmployeeMaster.jsx";
-import DepartmentCreation from "./components/Projectmanager/DepartmentMaster.jsx";
-import TaskBoard from "./components/Projectmanager/TaskBoard.jsx";
-import MyTasks from "./components/User/My Tasks.jsx";
-import Profile from "./components/User/Profile.jsx";
-import PublicHoliday from "./components/User/PublicHoliday.jsx";
-import ProjectDetails from "./components/User/ProjectDetails.jsx";
-import ProjectList from "./components/Projectmanager/ProjectList.jsx";
-import AssignAccess from "./components/Projectmanager/AssignAccess.jsx";
-import ProjectAccess from "./components/Projectmanager/ProjectAccess.jsx";
-import Assignment from "./components/Assignment.jsx";
-import ResetPassword from "./components/ResetPassword.jsx";
-import AllProjectGanttChart from "./components/Projectmanager/AllProjectGanttChart.jsx";
+import Login from "./components/Login";
+import AdminDashboard from "./components/Projectmanager/AdminDashboard";
+import UserDashboard from "./components/Projectmanager/UserDashboard"; // New User Dashboard
+import ProjectManagerDashboard from "./components/Projectmanager/ProjectManagerDashboard";
+import CompanyCreation from "./components/Admin/CompanyMaster";
+import PlantCreation from "./components/Admin/PlantMaster";
+import AgriLandAllocation from "./components/Admin/LandMaster";
+import DepartmentMapping from "./components/Admin/DepartmentMapping";
+import Projects from "./components/User/Projects";
+import Calendar from "./components/User/Calendar";
+import UserTaskBoard from "./components/User/UserTaskBoard";
+import ProjectCreation from "./components/Projectmanager/ProjectCreation";
+import MilestoneCreation from "./components/Projectmanager/MilestoneCreation";
+import EmployeeCreation from "./components/Projectmanager/EmployeeMaster";
+import DepartmentCreation from "./components/Projectmanager/DepartmentMaster";
+import TaskBoard from "./components/Projectmanager/TaskBoard";
+import MyTasks from "./components/User/My Tasks";
+import Profile from "./components/User/Profile";
+import PublicHoliday from "./components/User/PublicHoliday";
+import ProjectDetails from "./components/User/ProjectDetails";
+import ProjectList from "./components/Projectmanager/ProjectList";
+import AssignAccess from "./components/Projectmanager/AssignAccess";
+import ProjectAccess from "./components/Projectmanager/ProjectAccess";
+import Assignment from "./components/Assignment";
+import ResetPassword from "./components/ResetPassword";
+import AllProjectGanttChart from "./components/Projectmanager/AllProjectGanttChart";
 
 const AppContent = () => {
   const navigate = useNavigate();
@@ -44,16 +45,28 @@ const AppContent = () => {
     setLoading(false);
   }, []);
 
+  const getDashboardRoute = (role) => {
+    const lowerRole = role?.toLowerCase() || '';
+    if (lowerRole === 'admin' || lowerRole === 'full_access') {
+      return '/dashboard';
+    } else if (lowerRole === 'project_manager' || lowerRole === 'pm' || lowerRole === 'manager') {
+      return '/pm-dashboard';
+    } else {
+      return '/user-dashboard';
+    }
+  };
+
   const handleLogin = (status, role) => {
     setIsLoggedIn(status);
     setUserRole(role);
-    navigate("/dashboard", { replace: true });
+    navigate(getDashboardRoute(role), { replace: true });
   };
 
   const handleLogout = () => {
     localStorage.clear();
     sessionStorage.clear();
     setIsLoggedIn(false);
+    setUserRole("user");
     navigate("/", { replace: true });
   };
 
@@ -61,7 +74,7 @@ const AppContent = () => {
 
   return (
     <Routes>
-      <Route path="/" element={!isLoggedIn ? <Login onLogin={handleLogin} /> : <Navigate to="/dashboard" replace />} />
+      <Route path="/" element={!isLoggedIn ? <Login onLogin={handleLogin} /> : <Navigate to={getDashboardRoute(userRole)} replace />} />
 
       {/* Dashboards */}
       <Route path="/dashboard" element={isLoggedIn ? <AdminDashboard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
@@ -85,6 +98,7 @@ const AppContent = () => {
       <Route path="/milestone-creation" element={isLoggedIn ? <MilestoneCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/task-board" element={isLoggedIn ? <TaskBoard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/my-tasks" element={isLoggedIn ? <MyTasks userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/user-task-board" element={isLoggedIn ? <UserTaskBoard userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/all-project-gantt-chart" element={isLoggedIn ? <AllProjectGanttChart userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/employee-creation" element={isLoggedIn ? <EmployeeCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/department-creation" element={isLoggedIn ? <DepartmentCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />

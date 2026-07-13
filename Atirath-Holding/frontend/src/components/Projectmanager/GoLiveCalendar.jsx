@@ -89,10 +89,19 @@ const calcEndDate = (startStr, workingDays, skipSat, skipSun, publicHolidayDates
 const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
   const [step, setStep] = useState('config');
   const [calendarMode, setCalendarMode] = useState('existing');
-  const [existingSelection, setExistingSelection] = useState({
-    company: true,
-    plant: false,
-    external: false
+  const [existingSelection, setExistingSelection] = useState(() => {
+    if (project?.isIndividualTask) {
+      return {
+        company: !project.isPlantEmployee,
+        plant: !!project.isPlantEmployee,
+        external: false
+      };
+    }
+    return {
+      company: true,
+      plant: false,
+      external: false
+    };
   });
   const [considerOnly, setConsiderOnly] = useState({
     saturday:      { active: false, company: false, plant: false, external: false },
@@ -140,19 +149,31 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
       if (calendarMode === 'existing') {
         // wrkDaysPerWk = 5 → skip Sat AND Sun; 6 → skip Sun only; 7 → all working
         try {
-          const coyId = project.companyId || project.coyId;
-          if (coyId) {
-            const coyRes = await fetch(`${apiBaseUrl}/api/companies/${coyId}`, { headers: getAuthHeaders() });
-            if (coyRes.ok) {
-              const coyData = await coyRes.json();
-              const wrkDays = coyData.wrkDaysPerWk || coyData.workingDaysPerWeek;
+          if (existingSelection.plant && (project.pltId || project.plantId)) {
+            const pltId = project.pltId || project.plantId;
+            const pltRes = await fetch(`${apiBaseUrl}/api/plants/${pltId}`, { headers: getAuthHeaders() });
+            if (pltRes.ok) {
+              const pltData = await pltRes.json();
+              const wrkDays = pltData.wrkDaysPerWk;
               if (wrkDays === 5) { skipSat = true; skipSun = true; }
               else if (wrkDays === 6) { skipSat = false; skipSun = true; }
               else { skipSat = false; skipSun = false; }
             }
+          } else {
+            const coyId = project.companyId || project.coyId;
+            if (coyId) {
+              const coyRes = await fetch(`${apiBaseUrl}/api/companies/${coyId}`, { headers: getAuthHeaders() });
+              if (coyRes.ok) {
+                const coyData = await coyRes.json();
+                const wrkDays = coyData.wrkDaysPerWk || coyData.workingDaysPerWeek;
+                if (wrkDays === 5) { skipSat = true; skipSun = true; }
+                else if (wrkDays === 6) { skipSat = false; skipSun = true; }
+                else { skipSat = false; skipSun = false; }
+              }
+            }
           }
         } catch (e) {
-          console.warn('Could not fetch company working days, defaulting to skipSun only:', e);
+          console.warn('Could not fetch working days, defaulting to skipSun only:', e);
           skipSun = true;
         }
       } else {
@@ -211,7 +232,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
       let hierarchy = [];
       const drftPrjId = project.drftPrjId || project.projectId || project.id;
       
-      if (drftPrjId) {
+      if (drftPrjId && !project.isIndividualTask) {
         const milestonesRes = await fetch(`${apiBaseUrl}/api/milestone-drafts/by-project/${drftPrjId}`, { headers: getAuthHeaders() });
         if (milestonesRes.ok) {
           const milestonesData = await milestonesRes.json();
@@ -259,7 +280,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
       }
 
       // If no milestones found, inject a mock visual structure to demonstrate layout
-      if (hierarchy.length === 0) {
+      if (hierarchy.length === 0 && !project.isIndividualTask) {
         const mockMStart = projStart || new Date().toISOString().split('T')[0];
         const mockMEnd = calcEndDate(mockMStart, 30, skipSat, skipSun, publicHolidayDates);
         const mockTStart = mockMStart;
@@ -274,8 +295,11 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
         });
       }
 
+      const pType = project.isIndividualTask ? 'T' : 'P';
+      const pCode = project.isIndividualTask ? (project.taskCd || `TSK-${project.id || 'NEW'}`) : (project.prjCd || project.projectCode || '');
+      
       setPreview({
-        projectRow: { type: 'P', id: 'project', code: project.prjCd || project.projectCode || '', name: project.prjNm || project.projectName || '', start: projStart, end: projEnd, adjEnd: projAdjustedEnd, adjDays: totalDays },
+        projectRow: { type: pType, id: 'project', code: pCode, name: project.prjNm || project.projectName || '', start: projStart, end: projEnd, adjEnd: projAdjustedEnd, adjDays: totalDays },
         hierarchy, skipSat, skipSun, skipPub
       });
       setStep('preview');
@@ -292,6 +316,8 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
       mode: calendarMode,
       existingSelection: calendarMode === 'existing' ? existingSelection : null,
       customSettings: calendarMode === 'custom' ? considerOnly : null,
+      excludeSat: preview ? preview.skipSat : false,
+      excludeSun: preview ? preview.skipSun : true,
     });
   };
 
@@ -324,7 +350,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
         <div className="glm-header">
           <div>
             <h2 className="glm-title">Go Live – Calendar Configuration</h2>
-            <p className="glm-subtitle">{step === 'config' ? 'Configure project calendar, holidays and working days.' : `Preview of actual project dates for "${project?.prjNm || project?.projectName || 'Project'}".`}</p>
+            <p className="glm-subtitle">{step === 'config' ? 'Configure calendar, holidays and working days.' : `Preview of actual ${project?.isIndividualTask ? 'task' : 'project'} dates for "${project?.prjNm || project?.projectName || 'Item'}".`}</p>
           </div>
           <button className="glm-close-btn" onClick={onCancel}><X size={18} /></button>
         </div>
@@ -426,7 +452,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
 
             <div className="glm-confirm-note">
               <AlertTriangle size={15} />
-              Clicking <strong>"Confirm Go Live"</strong> will promote this project to LIVE status using the calendar configuration above.
+              Clicking <strong>"Confirm Go Live"</strong> will {project?.isIndividualTask ? 'assign this task' : 'promote this project to LIVE status'} using the calendar configuration above.
             </div>
           </div>
         )}
@@ -436,7 +462,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
             <><button className="glm-btn-secondary" onClick={onCancel}><X size={14}/> Cancel</button>
             <button className="glm-btn-primary" onClick={buildPreview} disabled={previewLoading || !isConfigValid()}>
               {previewLoading ? <Loader2 size={14} className="glm-spin"/> : <ArrowRight size={14}/>}
-              {previewLoading ? 'Calculating…' : 'Preview Project Dates'}
+              {previewLoading ? 'Calculating…' : `Preview ${project?.isIndividualTask ? 'Task' : 'Project'} Dates`}
             </button></>
           ) : (
             <><button className="glm-btn-secondary" onClick={() => setStep('config')}><ArrowLeft size={14}/> Back to Setup</button>

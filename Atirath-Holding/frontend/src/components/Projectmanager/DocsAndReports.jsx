@@ -36,182 +36,15 @@ import "../../styles/DocsAndReports.css";
 import plantImage from "../../assets/cbg_plant_construction.png";
 import Header from "../Header";
 import AlertModal from "../AlertModal";
+const API_BASE = (import.meta.env.VITE_API_BASE_URL) + "/api";
 
-// Default Initial Documents
-const initialDocuments = [
-  {
-    id: "DOC-001",
-    name: "Project Charter.pdf",
-    category: "Governance",
-    type: "pdf",
-    version: "V1.2",
-    uploadedBy: "Ravi Kumar",
-    uploadedOn: "2025-05-20T10:30:00",
-    status: "Approved",
-    size: "1.2 MB",
-    description: "Official project charter defining scope, milestones, and key stakeholders."
-  },
-  {
-    id: "DOC-002",
-    name: "Project Budget.xlsx",
-    category: "Finance",
-    type: "xlsx",
-    version: "V2.0",
-    uploadedBy: "Finance Team",
-    uploadedOn: "2025-05-18T16:15:00",
-    status: "Approved",
-    size: "2.6 MB",
-    description: "Detailed budget allocation, cashflows, and cost projections for all phases."
-  },
-  {
-    id: "DOC-003",
-    name: "Civil Layout Plan.dwg",
-    category: "Drawings",
-    type: "dwg",
-    version: "V3.1",
-    uploadedBy: "Design Team",
-    uploadedOn: "2025-05-17T11:20:00",
-    status: "Under Review",
-    size: "8.4 MB",
-    description: "Foundation layouts and concrete structures structural blueprints."
-  },
-  {
-    id: "DOC-004",
-    name: "Safety Manual.pdf",
-    category: "Safety",
-    type: "pdf",
-    version: "V1.0",
-    uploadedBy: "QA Team",
-    uploadedOn: "2025-05-15T09:45:00",
-    status: "Approved",
-    size: "3.1 MB",
-    description: "Onsite health and safety guidelines, protocol manuals, and PPE requirements."
-  },
-  {
-    id: "DOC-005",
-    name: "Quality Plan.docx",
-    category: "Quality",
-    type: "docx",
-    version: "V1.1",
-    uploadedBy: "Chandu",
-    uploadedOn: "2025-05-12T15:30:00",
-    status: "Approved",
-    size: "1.7 MB",
-    description: "Quality assurance parameters and material testing checklists."
-  },
-  {
-    id: "DOC-006",
-    name: "Contract Agreement.pdf",
-    category: "Contracts",
-    type: "pdf",
-    version: "V2.0",
-    uploadedBy: "Legal Team",
-    uploadedOn: "2025-05-10T14:10:00",
-    status: "Approved",
-    size: "4.8 MB",
-    description: "Signed contractual agreements with suppliers and sub-contractors."
-  },
-  {
-    id: "DOC-007",
-    name: "BOQ_50TPD.xlsx",
-    category: "BOQ & Estimates",
-    type: "xlsx",
-    version: "V3.0",
-    uploadedBy: "Estimation Team",
-    uploadedOn: "2025-05-08T11:05:00",
-    status: "Approved",
-    size: "5.6 MB",
-    description: "Bill of quantities list for mechanical, electrical, and civil works."
-  },
-  {
-    id: "DOC-008",
-    name: "Milestone-Progress-Report-May.pdf",
-    category: "Progress Reports",
-    type: "pdf",
-    version: "V1.0",
-    uploadedBy: "Ravi Kumar",
-    uploadedOn: "2025-05-24T09:00:00",
-    status: "Approved",
-    size: "2.1 MB",
-    description: "Monthly progress overview report detailing Milestone 1 completions."
-  },
-  {
-    id: "DOC-009",
-    name: "Risk_Mitigation_Plan.xlsx",
-    category: "Risk Reports",
-    type: "xlsx",
-    version: "V1.4",
-    uploadedBy: "QA Team",
-    uploadedOn: "2025-05-22T17:30:00",
-    status: "Approved",
-    size: "1.1 MB",
-    description: "Identified project risks, severity levels, and designated mitigation owners."
-  },
-  {
-    id: "DOC-010",
-    name: "Soil_Test_Report.pdf",
-    category: "Technical Specifications",
-    type: "pdf",
-    version: "V1.0",
-    uploadedBy: "Design Team",
-    uploadedOn: "2025-05-05T14:30:00",
-    status: "Approved",
-    size: "4.5 MB",
-    description: "Geotechnical soil investigation report from third-party surveyor."
-  },
-  {
-    id: "DOC-011",
-    name: "Hazop_Study_Report.pdf",
-    category: "Safety",
-    type: "pdf",
-    version: "V2.1",
-    uploadedBy: "QA Team",
-    uploadedOn: "2025-05-19T10:15:00",
-    status: "Under Review",
-    size: "3.8 MB",
-    description: "Hazard and Operability study report for gas handling unit."
-  },
-  {
-    id: "DOC-012",
-    name: "Electrical_Single_Line_Diagram.dwg",
-    category: "Drawings",
-    type: "dwg",
-    version: "V1.2",
-    uploadedBy: "Design Team",
-    uploadedOn: "2025-05-14T11:00:00",
-    status: "Approved",
-    size: "6.2 MB",
-    description: "Main power distribution schematic diagram."
-  }
-];
+const authHeaders = () => ({
+  Authorization: `Bearer ${sessionStorage.getItem("authToken") || ""}`,
+  "Content-Type": "application/json",
+});
 
-// Initial Activities
-const initialActivities = [
-  {
-    id: "ACT-001",
-    user: "Ravi Kumar",
-    action: "uploaded",
-    item: "BOQ_50TPD.xlsx",
-    timestamp: "2025-05-20T10:30:00",
-    type: "upload"
-  },
-  {
-    id: "ACT-002",
-    user: "Chandu",
-    action: "approved",
-    item: "Civil Layout Plan.dwg",
-    timestamp: "2025-05-17T11:20:00",
-    type: "approve"
-  },
-  {
-    id: "ACT-003",
-    user: "Mahesh",
-    action: "generated",
-    item: "Weekly Progress Report",
-    timestamp: "2025-05-16T17:45:00",
-    type: "generate"
-  }
-];
+const initialDocuments = [];
+const initialActivities = [];
 
 // Document Categories Mapping
 const CATEGORIES = [
@@ -239,27 +72,47 @@ const REPORTS = [
   "Forecast vs Actual Report"
 ];
 
-const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
+const DocsAndReports = ({ userRole, onLogout, isTab = false, project }) => {
   const navigate = useNavigate();
 
-  // Documents and Activities persistent state
-  const [documents, setDocuments] = useState(() => {
-    const saved = localStorage.getItem("bionova_docs_v1");
-    return saved ? JSON.parse(saved) : initialDocuments;
-  });
+  const [documents, setDocuments] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [selectedFile, setSelectedFile] = useState(null);
 
-  const [activities, setActivities] = useState(() => {
-    const saved = localStorage.getItem("bionova_activities_v1");
-    return saved ? JSON.parse(saved) : initialActivities;
-  });
+  const refreshDocuments = () => {
+    if (isTab && project) {
+      const prjId = project.prjId || project.id;
+      if (prjId) {
+        fetch(`${API_BASE}/attachments/project/${prjId}`, { headers: authHeaders() })
+          .then(res => res.ok ? res.json() : [])
+          .then(data => {
+            if (Array.isArray(data)) {
+              const mapped = data.map(att => ({
+                id: `DOC-${att.fileId}`,
+                name: att.fileNm,
+                category: "Project Document", 
+                type: (att.fileNm.split('.').pop() || "unknown").toLowerCase(),
+                version: "V1.0",
+                uploadedBy: "System",
+                uploadedOn: att.dateTimestamp,
+                status: "Approved",
+                size: "Unknown",
+                description: "Uploaded document",
+                url: att.atPath
+              }));
+              setDocuments(mapped);
+            }
+          })
+          .catch(err => console.error("Error fetching docs", err));
+      }
+    } else {
+      setDocuments([]);
+    }
+  };
 
   useEffect(() => {
-    localStorage.setItem("bionova_docs_v1", JSON.stringify(documents));
-  }, [documents]);
-
-  useEffect(() => {
-    localStorage.setItem("bionova_activities_v1", JSON.stringify(activities));
-  }, [activities]);
+    refreshDocuments();
+  }, [isTab, project]);
 
   // Filters & State
   const [selectedCategoryTab, setSelectedCategoryTab] = useState("All Documents");
@@ -415,71 +268,96 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
   };
 
   // Upload a document handler
-  const handleUploadSubmit = (e) => {
+  const handleUploadSubmit = async (e) => {
     e.preventDefault();
     if (!uploadName.trim()) return;
+    if (!selectedFile) {
+      triggerAlert("warning", "File Required", "Please select a file to upload.");
+      return;
+    }
 
-    // Generate custom ID
-    const nextNum = Math.max(...documents.map(d => parseInt(d.id.replace("DOC-", ""), 10))) + 1;
-    const formattedId = `DOC-${String(nextNum).padStart(3, "0")}`;
+    const prjId = project?.prjId || project?.id;
+    if (!prjId) {
+      triggerAlert("error", "Error", "Project ID not found.");
+      return;
+    }
 
-    const newDoc = {
-      id: formattedId,
-      name: uploadName.endsWith(".pdf") || uploadName.endsWith(".xlsx") || uploadName.endsWith(".docx") || uploadName.endsWith(".dwg") 
-        ? uploadName 
-        : `${uploadName}.pdf`,
-      category: uploadCategory,
-      type: uploadName.split(".").pop() || "pdf",
-      version: uploadVersion || "V1.0",
-      uploadedBy: uploadUploadedBy || "Ravi Kumar",
-      uploadedOn: new Date().toISOString(),
-      status: uploadStatus || "Approved",
-      size: uploadSize || "1.2 MB",
-      description: uploadDescription || ""
-    };
+    try {
+      // 1. Upload to storage
+      const formData = new FormData();
+      formData.append("file", selectedFile);
 
-    setDocuments(prev => [newDoc, ...prev]);
+      const uploadRes = await fetch(`${API_BASE}/storage/upload/attachment/project`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+        },
+        body: formData
+      });
 
-    // Add activity log
-    const newAct = {
-      id: `ACT-${Date.now()}`,
-      user: newDoc.uploadedBy,
-      action: "uploaded",
-      item: newDoc.name,
-      timestamp: newDoc.uploadedOn,
-      type: "upload"
-    };
-    setActivities(prev => [newAct, ...prev]);
+      if (!uploadRes.ok) {
+        const errMsg = await uploadRes.text();
+        throw new Error(errMsg || "Failed to upload file to storage.");
+      }
 
-    setShowUploadModal(false);
-    // Reset inputs
-    setUploadName("");
-    setUploadCategory("Governance");
-    setUploadVersion("V1.0");
-    setUploadSize("1.5 MB");
-    setUploadUploadedBy("Ravi Kumar");
-    setUploadDescription("");
-    setUploadStatus("Approved");
+      const uploadData = await uploadRes.json();
+      const finalPath = uploadData.url;
+
+      // 2. Save attachment metadata
+      const attRes = await fetch(`${API_BASE}/attachments/project/${prjId}`, {
+        method: "POST",
+        headers: authHeaders(),
+        body: JSON.stringify({
+          fileNm: uploadName,
+          atPath: finalPath,
+          atType: "UPLOAD"
+        })
+      });
+
+      if (!attRes.ok) {
+        const errMsg = await attRes.text();
+        throw new Error(errMsg || "Failed to save attachment metadata.");
+      }
+
+      triggerAlert("success", "Success", "Document uploaded successfully.");
+
+      // Refresh documents
+      refreshDocuments();
+
+      setShowUploadModal(false);
+      setSelectedFile(null);
+      setUploadName("");
+      setUploadCategory("Governance");
+      setUploadDescription("");
+    } catch (err) {
+      console.error(err);
+      triggerAlert("error", "Upload Failed", err.message || "An error occurred during file upload.");
+    }
   };
 
   // Delete document handler
   const handleDeleteDoc = (id, name) => {
+    const fileId = parseInt(id.replace("DOC-", ""), 10);
     triggerAlert(
       "warning",
       "Confirm Delete",
       `Are you sure you want to delete ${name}? This action cannot be undone.`,
-      () => {
-        setDocuments(prev => prev.filter(d => d.id !== id));
-        // Add activity log
-        const newAct = {
-          id: `ACT-${Date.now()}`,
-          user: "Ravi Kumar",
-          action: "deleted",
-          item: name,
-          timestamp: new Date().toISOString(),
-          type: "delete"
-        };
-        setActivities(prev => [newAct, ...prev]);
+      async () => {
+        try {
+          const res = await fetch(`${API_BASE}/attachments/${fileId}`, {
+            method: "DELETE",
+            headers: authHeaders()
+          });
+          if (res.ok) {
+            triggerAlert("success", "Deleted", "Document deleted successfully.");
+            refreshDocuments();
+          } else {
+            throw new Error("Failed to delete document from backend.");
+          }
+        } catch (err) {
+          console.error(err);
+          triggerAlert("error", "Delete Failed", err.message || "Failed to delete document.");
+        }
       },
       "Delete",
       "Cancel"
@@ -606,9 +484,6 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
                   <button className="dr-btn-white-header" onClick={() => navigate("/project-creation")}>
                     Edit Project
                   </button>
-                  <button className="dr-btn-primary-header" onClick={() => handleGenerateReport("Overall Project Performance Report")}>
-                    <TrendingUp size={16} /> Generate Report
-                  </button>
                   <button className="dr-btn-white-header">
                     More
                   </button>
@@ -669,34 +544,8 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
             </>
           )}
 
-        {/* Sub-toolbar upload export buttons */}
-        <div className="dr-toolbar-actions">
-          <div className="dr-toolbar-left">
-            <button className="dr-btn-blue" onClick={() => setShowUploadModal(true)}>
-              <UploadCloud size={16} /> Upload Document
-            </button>
-            <button className="dr-btn-white-tool" onClick={() => handleGenerateReport("Executive Summary Report")}>
-              <TrendingUp size={15} /> Generate Report
-            </button>
-            <button className="dr-btn-white-tool">
-              Export
-            </button>
-            <button className="dr-btn-white-tool">
-              Share
-            </button>
-          </div>
-          <div className="dr-toolbar-right">
-            <button className="dr-btn-icon-only" title="Refresh Dashboard" onClick={() => {
-              setDocuments(initialDocuments);
-              setActivities(initialActivities);
-            }}>
-              <RefreshCw size={15} />
-            </button>
-          </div>
-        </div>
-
-        {/* Stats Summary Grid Cards */}
-        <div className="dr-stats-row">
+        {/* Stats Summary Grid Cards with Actions */}
+        <div className="dr-stats-row" style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'nowrap', overflowX: 'auto' }}>
           <div 
             className="dr-stat-card" 
             style={{ cursor: "pointer" }} 
@@ -741,7 +590,7 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
 
           <div 
             className="dr-stat-card" 
-            style={{ cursor: "pointer" }} 
+            style={{ cursor: "pointer", minWidth: "180px" }} 
             onClick={() => {
               setSelectedCategoryTab("All Documents");
               setFilterCategory("All Categories");
@@ -760,86 +609,20 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
             </div>
           </div>
 
-          <div 
-            className="dr-stat-card" 
-            style={{ cursor: "pointer" }} 
-            onClick={() => {
-              setSelectedCategoryTab("All Documents");
-              setFilterCategory("All Categories");
-              setFilterType("All Types");
-              setFilterUser("All Users");
-              setSearchQuery("Under Review");
-            }}
-          >
-            <div className="dr-stat-icon-wrap orange">
-              <Clock />
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+            <div className="dr-search-box" style={{ width: '250px', margin: 0 }}>
+              <Search size={14} />
+              <input
+                type="text"
+                placeholder="Search documents..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+              />
             </div>
-            <div className="dr-stat-info">
-              <span className="dr-stat-label">Pending Approvals</span>
-              <span className="dr-stat-value">{pendingApprovalsCount}</span>
-              <span className="dr-stat-link">View all</span>
-            </div>
+            <button className="dr-btn-blue" onClick={() => setShowUploadModal(true)} style={{ whiteSpace: 'nowrap' }}>
+              Upload Document
+            </button>
           </div>
-
-          <div className="dr-stat-card dr-stat-card-storage" style={{ minWidth: "170px" }}>
-            <div className="dr-stat-icon-wrap yellow">
-              <Database />
-            </div>
-            <div className="dr-stat-info">
-              <span className="dr-stat-label">Storage Used</span>
-              <span className="dr-stat-value" style={{ fontSize: '18px' }}>1.8 GB</span>
-              <span style={{ fontSize: '10px', color: '#94a3b8', fontWeight: '500' }}>of 10 GB</span>
-              <div className="dr-storage-bar-bg">
-                <div className="dr-storage-bar-fill" style={{ width: "18%" }}></div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Filters Row */}
-        <div className="dr-filters-row">
-          <select className="dr-filter-select" value={filterCategory} onChange={e => {
-            setFilterCategory(e.target.value);
-            setSelectedCategoryTab(e.target.value === "All Categories" ? "All Documents" : e.target.value);
-          }}>
-            <option value="All Categories">All Categories</option>
-            {presentCategories.map(cat => (
-              <option key={cat} value={cat}>{cat}</option>
-            ))}
-          </select>
-
-          <select className="dr-filter-select" value={filterType} onChange={e => setFilterType(e.target.value)}>
-            <option value="All Types">All Types</option>
-            {presentTypes.map(t => (
-              <option key={t} value={t}>{getFileTypeDisplayName(t)}</option>
-            ))}
-          </select>
-
-          <select className="dr-filter-select" value={filterUser} onChange={e => setFilterUser(e.target.value)}>
-            <option value="All Users">All Users</option>
-            {presentUsers.map(usr => (
-              <option key={usr} value={usr}>{usr}</option>
-            ))}
-          </select>
-
-          <div className="dr-date-range-box">
-            <CalendarIcon size={14} />
-            <input type="text" value={dateRange} onChange={e => setDateRange(e.target.value)} />
-          </div>
-
-          <div className="dr-search-box">
-            <Search size={14} />
-            <input
-              type="text"
-              placeholder="Search documents..."
-              value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
-            />
-          </div>
-
-          <button className="dr-btn-white-tool" style={{ height: "38px" }}>
-            <SlidersHorizontal size={14} /> Filters
-          </button>
         </div>
 
         {/* Main Two Column Repository Grid */}
@@ -896,13 +679,13 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
                             </button>
                             <button
                               className="dr-action-btn"
-                              title="Simulate Download"
+                              title="Download"
                               onClick={() => {
-                                triggerAlert(
-                                  "success",
-                                  "Download Started",
-                                  `Simulating file download of: ${doc.name}`
-                                );
+                                if (doc.url) {
+                                  window.open(doc.url, "_blank");
+                                } else {
+                                  triggerAlert("error", "Error", "Download URL is not available.");
+                                }
                               }}
                             >
                               <Download size={13} />
@@ -1066,6 +849,7 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
                   e.currentTarget.style.backgroundColor = "transparent";
                   const file = e.dataTransfer.files[0];
                   if (file) {
+                    setSelectedFile(file);
                     setUploadName(file.name);
                     const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
                     setUploadSize(`${sizeInMb} MB`);
@@ -1080,6 +864,7 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
                   onChange={(e) => {
                     const file = e.target.files[0];
                     if (file) {
+                      setSelectedFile(file);
                       setUploadName(file.name);
                       const sizeInMb = (file.size / (1024 * 1024)).toFixed(1);
                       setUploadSize(`${sizeInMb} MB`);
@@ -1102,55 +887,7 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
                 />
               </div>
 
-              <div className="dr-form-row">
-                <div className="dr-form-group">
-                  <label>Category</label>
-                  <select value={uploadCategory} onChange={e => setUploadCategory(e.target.value)}>
-                    {CATEGORIES.filter(c => c.key !== "All Documents").map(c => (
-                      <option key={c.key} value={c.key}>{c.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div className="dr-form-group">
-                  <label>Version</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="V1.0"
-                    value={uploadVersion}
-                    onChange={e => setUploadVersion(e.target.value)}
-                  />
-                </div>
-              </div>
 
-              <div className="dr-form-row">
-                <div className="dr-form-group">
-                  <label>Uploaded By</label>
-                  <input
-                    type="text"
-                    required
-                    value={uploadUploadedBy}
-                    onChange={e => setUploadUploadedBy(e.target.value)}
-                  />
-                </div>
-                <div className="dr-form-group">
-                  <label>Initial Status</label>
-                  <select value={uploadStatus} onChange={e => setUploadStatus(e.target.value)}>
-                    <option value="Approved">Approved</option>
-                    <option value="Under Review">Under Review</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="dr-form-group">
-                <label>Description</label>
-                <input
-                  type="text"
-                  placeholder="Brief description of the document contents..."
-                  value={uploadDescription}
-                  onChange={e => setUploadDescription(e.target.value)}
-                />
-              </div>
             </div>
             <div className="dr-modal-footer">
               <button type="button" className="dr-btn-secondary" onClick={() => setShowUploadModal(false)}>Cancel</button>
@@ -1218,7 +955,11 @@ const DocsAndReports = ({ userRole, onLogout, isTab = false }) => {
             </div>
             <div className="dr-modal-footer">
               <button className="dr-btn-secondary" onClick={() => {
-                alert(`Simulating download of: ${selectedDoc.name}`);
+                if (selectedDoc.url) {
+                  window.open(selectedDoc.url, "_blank");
+                } else {
+                  alert("Download URL is not available.");
+                }
                 setShowDetailModal(false);
               }}>
                 <Download size={14} /> Download File

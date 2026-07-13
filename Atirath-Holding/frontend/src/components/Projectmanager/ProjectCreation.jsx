@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Menu,
   ChevronRight,
@@ -15,7 +15,8 @@ import {
   MoreVertical,
   ChevronLeft,
   Search,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Calendar
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../Sidebar.jsx";
@@ -48,6 +49,7 @@ const getLoggedInUser = () => {
   return "Admin";
 };
 
+// ========== Searchable Select (unchanged) ==========
 const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -127,6 +129,192 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
   );
 };
 
+// ========== Custom DatePicker (with calendar icon) ==========
+const DatePicker = ({ value, onChange, placeholder, name }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [displayValue, setDisplayValue] = useState('');
+  const [viewDate, setViewDate] = useState(new Date());
+  const wrapperRef = useRef(null);
+
+  useEffect(() => {
+    if (value) {
+      const parts = value.split('-');
+      if (parts.length === 3) {
+        setDisplayValue(`${parts[2]}/${parts[1]}/${parts[0]}`);
+        setViewDate(new Date(value));
+      }
+    } else {
+      setDisplayValue('');
+      setViewDate(new Date());
+    }
+  }, [value]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const handleDateSelect = (date) => {
+    const formatted = date.toISOString().split('T')[0];
+    onChange({ target: { name, value: formatted } });
+    setIsOpen(false);
+  };
+
+  const handleClear = () => {
+    onChange({ target: { name, value: '' } });
+    setDisplayValue('');
+  };
+
+  const daysInMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    return new Date(year, month + 1, 0).getDate();
+  };
+
+  const firstDayOfMonth = (date) => {
+    const year = date.getFullYear();
+    const month = date.getMonth();
+    return new Date(year, month, 1).getDay();
+  };
+
+  const generateCalendar = () => {
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    const totalDays = daysInMonth(viewDate);
+    const firstDay = firstDayOfMonth(viewDate);
+    const days = [];
+    for (let i = 0; i < firstDay; i++) {
+      days.push(null);
+    }
+    for (let i = 1; i <= totalDays; i++) {
+      days.push(new Date(year, month, i));
+    }
+    return days;
+  };
+
+  const isSelected = (date) => {
+    if (!value) return false;
+    const d = new Date(value);
+    return d.getFullYear() === date.getFullYear() &&
+           d.getMonth() === date.getMonth() &&
+           d.getDate() === date.getDate();
+  };
+
+  const changeMonth = (delta) => {
+    const newDate = new Date(viewDate);
+    newDate.setMonth(newDate.getMonth() + delta);
+    setViewDate(newDate);
+  };
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%' }}>
+      <div style={{ position: 'relative', width: '100%' }}>
+        <Calendar
+          size={18}
+          style={{
+            position: 'absolute',
+            left: '10px',
+            top: '50%',
+            transform: 'translateY(-50%)',
+            color: '#94a3b8',
+            pointerEvents: 'none'
+          }}
+        />
+        <input
+          type="text"
+          readOnly
+          value={displayValue}
+          placeholder={placeholder || "dd/mm/yyyy"}
+          onFocus={() => setIsOpen(true)}
+          style={{
+            width: '100%',
+            padding: '10px 34px 10px 36px',
+            border: '1px solid #cbd5e1',
+            borderRadius: '6px',
+            fontSize: '14px',
+            outline: 'none',
+            boxSizing: 'border-box',
+            backgroundColor: '#f9fafb',
+            cursor: 'pointer'
+          }}
+        />
+        {value && (
+          <button
+            type="button"
+            onClick={handleClear}
+            style={{
+              position: 'absolute',
+              right: '8px',
+              top: '50%',
+              transform: 'translateY(-50%)',
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              color: '#94a3b8',
+              padding: '4px'
+            }}
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+      {isOpen && (
+        <div style={{
+          position: 'absolute',
+          top: 'calc(100% + 4px)',
+          left: 0,
+          right: 0,
+          backgroundColor: 'white',
+          border: '1px solid #cbd5e1',
+          borderRadius: '6px',
+          boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+          zIndex: 1000,
+          padding: '12px',
+          width: '280px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
+            <button type="button" onClick={() => changeMonth(-1)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>&lt;</button>
+            <span style={{ fontWeight: '600' }}>{viewDate.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
+            <button type="button" onClick={() => changeMonth(1)} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px' }}>&gt;</button>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: '4px', textAlign: 'center' }}>
+            {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => <div key={d} style={{ fontSize: '12px', fontWeight: '600', color: '#64748b' }}>{d}</div>)}
+            {generateCalendar().map((date, idx) => (
+              <div key={idx} style={{ padding: '4px', fontSize: '14px' }}>
+                {date ? (
+                  <button
+                    type="button"
+                    onClick={() => handleDateSelect(date)}
+                    style={{
+                      background: isSelected(date) ? '#2563eb' : 'transparent',
+                      color: isSelected(date) ? 'white' : '#0f172a',
+                      border: 'none',
+                      borderRadius: '4px',
+                      cursor: 'pointer',
+                      width: '100%',
+                      padding: '4px 0'
+                    }}
+                    onMouseEnter={(e) => { if (!isSelected(date)) e.currentTarget.style.backgroundColor = '#f1f5f9'; }}
+                    onMouseLeave={(e) => { if (!isSelected(date)) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                  >
+                    {date.getDate()}
+                  </button>
+                ) : <span></span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ========== Main Component ==========
 const ProjectCreation = ({ userRole, onLogout }) => {
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
@@ -210,7 +398,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
           createdBy: getLoggedInUser()
         };
       });
-      // ✅ FIX: Merge both drafts and live projects
       setProjects([...mappedDrafts, ...mappedLive]);
     } catch (err) {
       console.error("Error fetching projects:", err);
@@ -221,7 +408,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
 
   useEffect(() => { fetchAllData(); }, []);
 
-  // View toggle – default is "list", also handles "form", "golive"
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
@@ -238,7 +424,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     setAlertConfig({ isOpen: true, type, title, message });
   };
 
-  // Form state
   const [form, setForm] = useState({
     projectCode: "",
     projectName: "",
@@ -264,35 +449,26 @@ const ProjectCreation = ({ userRole, onLogout }) => {
   const [isDragging, setIsDragging] = useState(false);
   const [success, setSuccess] = useState(false);
 
-  // Search Filter state
-  const [searchInputs, setSearchInputs] = useState({
-    projectName: '',
-    projectCode: '',
-    status: ''
-  });
-
+  // ─── Search state ──────────────────────────────────────────────
+  const [searchQuery, setSearchQuery] = useState('');
   const [activeFilters, setActiveFilters] = useState({
     projectName: '',
     projectCode: '',
     status: ''
   });
 
-  // Table action dropdown trigger state
   const [activeDropdown, setActiveDropdown] = useState(null);
 
-  // Deactivation confirmation modal state
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [deactivateTargetId, setDeactivateTargetId] = useState(null);
 
-  // Sorting state
   const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
 
-  // Pagination state
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
 
-  // ─── NEW: Status tab filter state ──────────────────────────────────────
-  const [statusTab, setStatusTab] = useState('All'); // 'All', 'Draft', 'Live'
+  // ─── Status tab filter state ──────────────────────────────────────
+  const [statusTab, setStatusTab] = useState('All'); // 'All', 'Draft', 'Live', 'Hold', 'Closed'
 
   // ─── Input Change Handler ──────────────────────────────────────────────────
   const handleChange = (e) => {
@@ -311,20 +487,23 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     setForm((prev) => {
       const nextForm = { ...prev, [name]: newValue };
 
-      // Auto-calculate end date if start date and total days are present
       if ((name === 'startDate' || name === 'totalProjectDays') && nextForm.startDate && nextForm.totalProjectDays) {
         const start = new Date(nextForm.startDate);
-        start.setDate(start.getDate() + parseInt(nextForm.totalProjectDays, 10));
+        const days = parseInt(nextForm.totalProjectDays, 10);
+        start.setDate(start.getDate() + days - 1);
         nextForm.endDate = start.toISOString().split('T')[0];
       }
 
-      // Auto-calculate total days if both start and end dates are present (and totalProjectDays is not currently being edited)
       if ((name === 'startDate' || name === 'endDate') && nextForm.startDate && nextForm.endDate && name !== 'totalProjectDays') {
         const start = new Date(nextForm.startDate);
         const end = new Date(nextForm.endDate);
         const diffTime = end - start;
-        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-        nextForm.totalProjectDays = diffDays >= 0 ? String(diffDays) : "0";
+        if (diffTime >= 0) {
+          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
+          nextForm.totalProjectDays = diffDays >= 0 ? String(diffDays) : "0";
+        } else {
+          nextForm.totalProjectDays = "0";
+        }
       }
 
       return nextForm;
@@ -395,10 +574,10 @@ const ProjectCreation = ({ userRole, onLogout }) => {
 
       const before = value.substring(0, selectionStart);
       const after = value.substring(selectionEnd);
-      
+
       let insertion = "";
       let offset = 0;
-      
+
       if (e.key === "Enter") {
         insertion = "\n• ";
         offset = 3;
@@ -421,26 +600,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     if (!value.trim()) {
       setForm((prev) => ({ ...prev, [name]: "• " }));
     }
-  };
-
-  // Date calculations are now handled in handleChange
-
-  // Filter input change handler
-  const handleFilterChange = (e) => {
-    const { name, value } = e.target;
-    setSearchInputs(prev => ({ ...prev, [name]: value }));
-  };
-
-  const applySearch = () => {
-    setActiveFilters({ ...searchInputs });
-    setCurrentPage(1);
-  };
-
-  const resetFilters = () => {
-    const cleared = { projectName: '', projectCode: '', status: '' };
-    setSearchInputs(cleared);
-    setActiveFilters(cleared);
-    setCurrentPage(1);
   };
 
   const handleResetForm = () => {
@@ -533,12 +692,12 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         fetchAllData();
       } else {
         let msg = `Failed to save project. (Status: ${response.status})`;
-        try { 
-          const text = await response.text(); 
+        try {
+          const text = await response.text();
           if (text) {
             try {
-              const j = JSON.parse(text); 
-              if (j.message) msg = j.message; 
+              const j = JSON.parse(text);
+              if (j.message) msg = j.message;
             } catch (e) {
               msg = text;
             }
@@ -663,9 +822,9 @@ const ProjectCreation = ({ userRole, onLogout }) => {
           if (res.ok) {
             const text = await res.text();
             let result = {};
-            try { if(text) result = JSON.parse(text); } catch(e) {}
-            
-            const newLiveId = result?.prjId || result?.id || project.id; // fallback to project.id if not returned
+            try { if (text) result = JSON.parse(text); } catch (e) { }
+
+            const newLiveId = result?.prjId || result?.id || project.id;
             if (newLiveId) {
               if (newStatus === "HOLD" || newStatus === "CLOSED") {
                 try {
@@ -687,7 +846,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
             fetchAllData();
           } else {
             let errText = "Failed to promote project.";
-            try { errText = await res.text() || errText; } catch(e) {}
+            try { errText = await res.text() || errText; } catch (e) { }
             triggerAlert("error", "Error", errText);
           }
         }
@@ -735,6 +894,8 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         promoteBody.coyHolidays = !!company;
         promoteBody.pltHolidays = !!plant;
         promoteBody.extHolidays = !!external;
+        if (settings.excludeSat !== undefined) promoteBody.excludeSat = settings.excludeSat;
+        if (settings.excludeSun !== undefined) promoteBody.excludeSun = settings.excludeSun;
       } else if (settings.mode === 'custom') {
         const { saturday, sunday, publicHolidays } = settings.customSettings || {};
         promoteBody.excludeSat = !!saturday?.active;
@@ -752,15 +913,15 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       if (res.ok) {
         const text = await res.text();
         let result = {};
-        try { if(text) result = JSON.parse(text); } catch(e) {}
-        
+        try { if (text) result = JSON.parse(text); } catch (e) { }
+
         triggerAlert("success", "Success", "Project promoted to Live successfully!");
         setView("list");
         setGoLiveProject(null);
         fetchAllData();
       } else {
         let errText = "Failed to promote project.";
-        try { errText = await res.text() || errText; } catch(e) {}
+        try { errText = await res.text() || errText; } catch (e) { }
         triggerAlert("error", "Error", errText);
       }
     } catch (err) {
@@ -771,7 +932,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     }
   };
 
-  // Sorting calculation
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -794,55 +954,86 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     return sortable;
   }, [projects, sortConfig]);
 
-  // ─── Filter calculations with statusTab ──────────────────────────────────
+  // ─── Filtering logic (including search) ─────────────────────────
   const filteredProjects = sortedProjects.filter(p => {
-    const matchName = !activeFilters.projectName ||
-      p.projectName?.toLowerCase().includes(activeFilters.projectName.toLowerCase());
-    const matchCode = !activeFilters.projectCode ||
-      p.projectCode?.toLowerCase().includes(activeFilters.projectCode.toLowerCase());
-    const matchStatus = !activeFilters.status || p.status === activeFilters.status;
+    // Search filter (project name or code)
+    const searchLower = searchQuery.toLowerCase().trim();
+    const matchSearch = !searchLower ||
+      p.projectName?.toLowerCase().includes(searchLower) ||
+      p.projectCode?.toLowerCase().includes(searchLower);
 
-    // Tab filter
+    // Status tab filter
     let tabMatch = true;
     if (statusTab === 'Draft') {
       tabMatch = p.status.toUpperCase() === 'DRAFT';
     } else if (statusTab === 'Live') {
       tabMatch = p.status.toUpperCase() === 'LIVE';
+    } else if (statusTab === 'Hold') {
+      tabMatch = p.status.toUpperCase() === 'HOLD';
+    } else if (statusTab === 'Closed') {
+      tabMatch = p.status.toUpperCase() === 'CLOSED';
     }
     // 'All' – no filter
 
-    return matchName && matchCode && matchStatus && tabMatch;
+    return matchSearch && tabMatch;
   });
 
-  // Pagination removed
   const currentItems = filteredProjects;
-  const indexOfFirstItem = 0; // Preserved for S.NO index rendering
+  const indexOfFirstItem = 0;
 
-  const formatListText = (text) => {
-    if (!text) return "N/A";
-    let result = text;
-    // Force bullets onto new lines
-    if (result.includes("•")) {
-      result = result.split("•").filter(Boolean).map(s => "• " + s.trim()).join("\n");
-    }
-    // Dots mean new sentence
-    result = result.replace(/\.\s+/g, '.\n');
-    // Commas mean separation
-    result = result.replace(/,\s+/g, ',\n');
-    return result;
+  // ─── Search handler ──────────────────────────────────────────────
+  const handleSearchChange = (e) => {
+    setSearchQuery(e.target.value);
+    setCurrentPage(1);
+  };
+
+  const handleTabChange = (status) => {
+    // 1. Scroll to top/left BEFORE the state update so the browser doesn't try to clamp the scroll position
+    window.scrollTo(0, 0);
+    document.documentElement.scrollTop = 0;
+    document.documentElement.scrollLeft = 0;
+    document.body.scrollTop = 0;
+    document.body.scrollLeft = 0;
+    const elementsToScroll = document.querySelectorAll('.proj-shell, .proj-shell-container, .proj-main, .proj-table-container, #root');
+    elementsToScroll.forEach(el => { 
+      el.scrollTop = 0; 
+      el.scrollLeft = 0; 
+    });
+
+    // 2. Trigger the state updates
+    setStatusTab(status);
+    setCurrentPage(1);
+
+    // 3. Scroll to top/left AFTER the state update in the next animation frame and a short timeout
+    requestAnimationFrame(() => {
+      window.scrollTo(0, 0);
+      elementsToScroll.forEach(el => { 
+        el.scrollTop = 0; 
+        el.scrollLeft = 0; 
+      });
+      
+      setTimeout(() => {
+        window.scrollTo(0, 0);
+        document.documentElement.scrollTop = 0;
+        document.documentElement.scrollLeft = 0;
+        document.body.scrollTop = 0;
+        document.body.scrollLeft = 0;
+        elementsToScroll.forEach(el => { 
+          el.scrollTop = 0; 
+          el.scrollLeft = 0; 
+        });
+      }, 50);
+    });
   };
 
   const vibrantBlue = "#2563eb";
 
   return (
     <div className="proj-shell-container">
-      {/* Sidebar Navigation */}
       <Sidebar userRole={userRole} onLogout={onLogout} />
 
-      {/* Main Container Viewport */}
       <div className="proj-shell">
 
-        {/* ======================= DYNAMIC HEADER ======================= */}
         <Header
           title="Project Creation"
           showSearch={false}
@@ -853,14 +1044,10 @@ const ProjectCreation = ({ userRole, onLogout }) => {
 
         <main className="proj-main" style={{ padding: '24px' }}>
 
-
-
           {view === "form" ? (
-            /* ================= VIEW: ADD NEW PROJECT FORM ================= */
             <>
               <div className="proj-content" style={{ paddingBottom: '80px', maxWidth: '1280px', margin: '0 auto' }}>
 
-                {/* Form Card */}
                 <div className="proj-form-card" style={{
                   backgroundColor: 'white',
                   borderRadius: '8px',
@@ -869,7 +1056,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                   boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                 }}>
 
-                  {/* Form Header with Title and Back Button */}
                   <div style={{
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -900,7 +1086,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                     </button>
                   </div>
 
-                  {/* Form Body */}
                   <div style={{ padding: '24px' }}>
                     {success && (
                       <div className="proj-success-alert" style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '12px 16px', backgroundColor: '#dcfce7', borderRadius: '6px', color: '#166534', marginBottom: '20px', border: '1px solid #86efac' }}>
@@ -909,46 +1094,25 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       </div>
                     )}
 
-                    {/* 1. Project Information */}
                     <section className="proj-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                         <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
                           Project Information
                         </h3>
-
-                        {/* Status Toggle Bar */}
-                        <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                          <span style={{ fontSize: "14px", fontWeight: "600", color: "#475569" }}>Status:</span>
-
-                          <label style={{ position: "relative", display: "inline-block", width: "46px", height: "26px", margin: 0 }}>
-                            <input
-                              type="checkbox"
-                              checked={form.status === "Live"}
-                              onChange={handleToggleStatus}
-                              style={{ opacity: 0, width: 0, height: 0 }}
-                            />
-                            <span style={{
-                              position: "absolute", cursor: "pointer", top: 0, left: 0, right: 0, bottom: 0,
-                              backgroundColor: form.status === "Live" ? "#10b981" : "#cbd5e1",
-                              transition: ".4s", borderRadius: "34px"
-                            }}>
-                              <span style={{
-                                position: "absolute", height: "20px", width: "20px",
-                                left: form.status === "Live" ? "23px" : "3px", bottom: "3px",
-                                backgroundColor: "white", transition: ".4s", borderRadius: "50%",
-                                boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
-                              }}></span>
-                            </span>
-                          </label>
-
-                          <span style={{
-                            fontSize: "14px", fontWeight: "600", minWidth: "60px",
-                            color: form.status === "Live" ? "#16a34a" : "#dc2626"
-                          }}>
-                            {form.status}
-                          </span>
-                        </div>
+                        
+                        <span style={{
+                          backgroundColor: '#f1f5f9',
+                          padding: '6px 18px',           
+                          borderRadius: '24px',
+                          fontSize: '14px',              
+                          fontWeight: '700',
+                          color: '#475569',
+                          border: '1px solid #e2e8f0',
+                          letterSpacing: '0.3px'
+                        }}>
+                          Draft
+                        </span>
                       </div>
 
                       <div className="proj-form-layout-row columns-4">
@@ -1000,37 +1164,36 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       </div>
                     </section>
 
-                    {/* 2. Organization Details */}
                     <section className="proj-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
                       <h3 className="proj-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Organization Details</h3>
 
                       <div className="proj-form-layout-row columns-4">
                         <label className="proj-field-item">
                           <span>Company <b style={{ color: '#ef4444' }}>*</b></span>
-                          <SearchableSelect 
-                            name="companyName" 
-                            value={form.companyName} 
-                            onChange={handleChange} 
+                          <SearchableSelect
+                            name="companyName"
+                            value={form.companyName}
+                            onChange={handleChange}
                             placeholder="Select Company"
                             options={companies.map(c => ({ value: c.coyId, label: c.coyNm }))}
                           />
                         </label>
                         <label className="proj-field-item">
                           <span>Plant <b style={{ color: '#ef4444' }}>*</b></span>
-                          <SearchableSelect 
-                            name="plantName" 
-                            value={form.plantName} 
-                            onChange={handleChange} 
+                          <SearchableSelect
+                            name="plantName"
+                            value={form.plantName}
+                            onChange={handleChange}
                             placeholder="Select Plant"
                             options={plants.filter(p => !form.companyName || String(p.coyId) === String(form.companyName)).map(p => ({ value: p.pltId, label: p.pltNm }))}
                           />
                         </label>
                         <label className="proj-field-item">
                           <span>Department <b style={{ color: '#ef4444' }}>*</b></span>
-                          <SearchableSelect 
-                            name="department" 
-                            value={form.department} 
-                            onChange={handleChange} 
+                          <SearchableSelect
+                            name="department"
+                            value={form.department}
+                            onChange={handleChange}
                             placeholder="Select Department"
                             options={departments.map(d => ({ value: d.deptId, label: d.deptNm }))}
                           />
@@ -1045,20 +1208,29 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                         <label className="proj-field-item">
                           <span>Total Project Days <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="totalProjectDays" value={form.totalProjectDays} onChange={handleChange} placeholder="Enter total days" />
-                          <small style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Auto calculates end date</small>
+                          <small style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Auto calculates end date (inclusive)</small>
                         </label>
                         <label className="proj-field-item">
                           <span>Tentative Start Date <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="date" name="startDate" value={form.startDate} onChange={handleChange} />
+                          <DatePicker
+                            name="startDate"
+                            value={form.startDate}
+                            onChange={handleChange}
+                            placeholder="dd/mm/yyyy"
+                          />
                         </label>
                         <label className="proj-field-item">
                           <span>Tentative End Date <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="date" name="endDate" value={form.endDate} onChange={handleChange} />
+                          <DatePicker
+                            name="endDate"
+                            value={form.endDate}
+                            onChange={handleChange}
+                            placeholder="dd/mm/yyyy"
+                          />
                         </label>
                       </div>
                     </section>
 
-                    {/* 3. Information */}
                     <section className="proj-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
                       <h3 className="proj-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}> Information</h3>
 
@@ -1071,7 +1243,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                     </section>
                   </div>
 
-                  {/* Form Footer Buttons */}
                   <div className="proj-form-footer" style={{
                     display: 'flex',
                     justifyContent: 'flex-end',
@@ -1083,9 +1254,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                     <button type="button" className="proj-btn primary" onClick={handleSave}>
                       <Save size={14} /> {isEditing ? "Update Project" : "Save Project"}
                     </button>
-                    <button type="button" className="proj-btn tertiary" onClick={handleResetForm}>
-                      <RefreshCcw size={14} /> Reset
-                    </button>
+
                     <button type="button" className="proj-btn secondary" onClick={() => {
                       setView("list");
                       handleResetForm();
@@ -1099,19 +1268,19 @@ const ProjectCreation = ({ userRole, onLogout }) => {
               </div>
             </>
           ) : (
-            /* ================= VIEW: PROJECT LIST ================= */
             <div className="proj-content" style={{ maxWidth: '1280px', margin: '0 auto' }}>
 
-              {/* INTEGRATED CARD FOR FILTERS AND TABLE */}
               <div className="proj-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
 
-                {/* Header with Title and Add New Button - Inside Card */}
+                {/* ─── Header with Title, Search, and Add Button ─── */}
                 <div style={{
                   display: 'flex',
                   justifyContent: 'space-between',
                   alignItems: 'center',
                   padding: '20px 24px',
-                  borderBottom: '1px solid #e2e8f0'
+                  borderBottom: '1px solid #e2e8f0',
+                  flexWrap: 'wrap',
+                  gap: '12px'
                 }}>
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
@@ -1121,20 +1290,69 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       View and manage all project records
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    className="proj-btn-add-new"
-                    onClick={() => {
-                      handleResetForm();
-                      setIsEditing(false);
-                      setView("form");
-                    }}
-                  >
-                    <Plus size={16} /> Add New Project
-                  </button>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center', flexWrap: 'wrap' }}>
+                    {/* Search Bar */}
+                    <div style={{ position: 'relative', width: '240px' }}>
+                      <input
+                        type="text"
+                        placeholder="Search projects..."
+                        value={searchQuery}
+                        onChange={handleSearchChange}
+                        style={{
+                          width: '100%',
+                          padding: '8px 12px 8px 36px',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: '6px',
+                          fontSize: '14px',
+                          outline: 'none',
+                          boxSizing: 'border-box'
+                        }}
+                      />
+                      <Search
+                        size={18}
+                        style={{
+                          position: 'absolute',
+                          left: '10px',
+                          top: '50%',
+                          transform: 'translateY(-50%)',
+                          color: '#94a3b8'
+                        }}
+                      />
+                      {searchQuery && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          style={{
+                            position: 'absolute',
+                            right: '8px',
+                            top: '50%',
+                            transform: 'translateY(-50%)',
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#94a3b8',
+                            padding: '2px'
+                          }}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      className="proj-btn-add-new"
+                      onClick={() => {
+                        handleResetForm();
+                        setIsEditing(false);
+                        setView("form");
+                      }}
+                    >
+                      <Plus size={16} /> Add New Project
+                    </button>
+                  </div>
                 </div>
 
-                {/* ─── NEW: Status filter tabs ────────────────────────── */}
+                {/* ─── Status filter tabs ────────────────────────── */}
                 <div style={{
                   padding: '8px 24px',
                   borderBottom: '1px solid #e2e8f0',
@@ -1143,7 +1361,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                   backgroundColor: '#fafbfc'
                 }}>
                   <button
-                    onClick={() => setStatusTab('All')}
+                    onClick={() => handleTabChange('All')}
                     style={{
                       padding: '6px 16px',
                       borderRadius: '20px',
@@ -1159,7 +1377,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                     All
                   </button>
                   <button
-                    onClick={() => setStatusTab('Draft')}
+                    onClick={() => handleTabChange('Draft')}
                     style={{
                       padding: '6px 16px',
                       borderRadius: '20px',
@@ -1175,7 +1393,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                     Draft
                   </button>
                   <button
-                    onClick={() => setStatusTab('Live')}
+                    onClick={() => handleTabChange('Live')}
                     style={{
                       padding: '6px 16px',
                       borderRadius: '20px',
@@ -1190,9 +1408,40 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                   >
                     Live
                   </button>
+                  <button
+                    onClick={() => handleTabChange('Hold')}
+                    style={{
+                      padding: '6px 16px',
+                      borderRadius: '20px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: statusTab === 'Hold' ? '#2563eb' : 'white',
+                      color: statusTab === 'Hold' ? 'white' : '#334155',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Hold
+                  </button>
+                  <button
+                    onClick={() => handleTabChange('Closed')}
+                    style={{
+                      padding: '6px 16px',
+                      borderRadius: '20px',
+                      border: '1px solid #cbd5e1',
+                      backgroundColor: statusTab === 'Closed' ? '#2563eb' : 'white',
+                      color: statusTab === 'Closed' ? 'white' : '#334155',
+                      cursor: 'pointer',
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      transition: 'all 0.2s'
+                    }}
+                  >
+                    Closed
+                  </button>
                 </div>
 
-                {/* Data Table Section Inside the Card */}
                 <div className="proj-table-container" style={{ overflowX: 'auto', paddingBottom: '140px' }}>
                   <table className="proj-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2800px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
@@ -1257,9 +1506,39 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                             <td data-label="COMPANY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.companyName || "N/A"}</td>
                             <td data-label="PLANT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.plantName || "N/A"}</td>
                             <td data-label="DEPARTMENT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.department || "N/A"}</td>
-                            <td data-label="DESCRIPTION" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.projectDescription || "N/A"}</td>
-                            <td data-label="OBJECTIVE" style={{ padding: '14px 20px', fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{formatListText(project.projectObjective)}</td>
-                            <td data-label="DELIVERABLES" style={{ padding: '14px 20px', fontSize: '13px', color: '#334155', whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>{formatListText(project.expectedDeliverables)}</td>
+                            <td data-label="DESCRIPTION" style={{ 
+                              padding: '14px 20px', 
+                              fontSize: '14px', 
+                              color: '#334155',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '150px'
+                            }}>
+                              {project.projectDescription || "N/A"}
+                            </td>
+                            <td data-label="OBJECTIVE" style={{ 
+                              padding: '14px 20px', 
+                              fontSize: '13px', 
+                              color: '#334155',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '150px'
+                            }}>
+                              {project.projectObjective || "N/A"}
+                            </td>
+                            <td data-label="DELIVERABLES" style={{ 
+                              padding: '14px 20px', 
+                              fontSize: '13px', 
+                              color: '#334155',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '150px'
+                            }}>
+                              {project.expectedDeliverables || "N/A"}
+                            </td>
                             <td data-label="PRIORITY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{
                                 padding: '4px 10px',
@@ -1280,53 +1559,77 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                             <td data-label="START DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.startDate || "N/A"}</td>
                             <td data-label="END DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.endDate || "N/A"}</td>
                             <td data-label="TOTAL DAYS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.totalProjectDays || "N/A"}</td>
-                            <td data-label="REMARKS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.remarks || "N/A"}</td>
-                             <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
-                              <select
-                                value={project.status}
-                                onChange={(e) => handleStatusChange(project, e.target.value)}
-                                style={{
+                            <td data-label="REMARKS" style={{ 
+                              padding: '14px 20px', 
+                              fontSize: '14px', 
+                              color: '#334155',
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              maxWidth: '150px'
+                            }}>
+                              {project.remarks || "N/A"}
+                            </td>
+                            <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                              {project.status.toUpperCase() === 'CLOSED' ? (
+                                <span style={{
                                   padding: '6px 12px',
                                   borderRadius: '8px',
                                   fontSize: '13px',
                                   fontWeight: '600',
-                                  border: '1px solid #cbd5e1',
-                                  outline: 'none',
-                                  cursor: 'pointer',
-                                  backgroundColor: project.status === 'LIVE' || project.status === 'Live' ? '#dcfce7' :
-                                                   project.status === 'DRAFT' || project.status === 'Draft' ? '#fefce8' :
-                                                   project.status === 'IN_PROGRESS' || project.status === 'In Progress' ? '#eff6ff' :
-                                                   project.status === 'HOLD' || project.status === 'Hold' ? '#fef3c7' : '#fee2e2',
-                                  color: project.status === 'LIVE' || project.status === 'Live' ? '#166534' :
-                                         project.status === 'DRAFT' || project.status === 'Draft' ? '#854d0e' :
-                                         project.status === 'IN_PROGRESS' || project.status === 'In Progress' ? '#1e40af' :
-                                         project.status === 'HOLD' || project.status === 'Hold' ? '#92400e' : '#991b1b'
-                                }}
-                              >
-                                {project.status === "DRAFT" || project.status === "Draft" ? (
-                                  <>
-                                    <option value="DRAFT" disabled style={{ display: 'none' }}>Draft</option>
-                                    <option value="LIVE">Live</option>
-                                    <option value="HOLD">Hold</option>
-                                    <option value="CLOSED">Closed</option>
-                                  </>
-                                ) : (
-                                  <>
-                                    {project.status !== "LIVE" && project.status !== "Live" && (
-                                      <option value="LIVE">Live</option>
-                                    )}
-                                    {project.status !== "HOLD" && project.status !== "Hold" && (
-                                      <option value="HOLD">Hold</option>
-                                    )}
-                                    {project.status !== "CLOSED" && project.status !== "Closed" && (
-                                      <option value="CLOSED">Closed</option>
-                                    )}
-                                    <option value={project.status} disabled style={{ display: 'none' }}>
-                                      {project.status === "LIVE" ? "Live" : project.status === "HOLD" ? "Hold" : "Closed"}
-                                    </option>
-                                  </>
-                                )}
-                              </select>
+                                  backgroundColor: '#fee2e2',
+                                  color: '#991b1b',
+                                  display: 'inline-block',
+                                  border: '1px solid #fecaca'
+                                }}>
+                                  Closed
+                                </span>
+                              ) : (
+                                <select
+                                  value={project.status}
+                                  onChange={(e) => handleStatusChange(project, e.target.value)}
+                                  style={{
+                                    padding: '6px 12px',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    fontWeight: '600',
+                                    border: '1px solid #cbd5e1',
+                                    outline: 'none',
+                                    cursor: 'pointer',
+                                    backgroundColor: project.status === 'LIVE' || project.status === 'Live' ? '#dcfce7' :
+                                      project.status === 'DRAFT' || project.status === 'Draft' ? '#fefce8' :
+                                        project.status === 'IN_PROGRESS' || project.status === 'In Progress' ? '#eff6ff' :
+                                          project.status === 'HOLD' || project.status === 'Hold' ? '#fef3c7' : '#fee2e2',
+                                    color: project.status === 'LIVE' || project.status === 'Live' ? '#166534' :
+                                      project.status === 'DRAFT' || project.status === 'Draft' ? '#854d0e' :
+                                        project.status === 'IN_PROGRESS' || project.status === 'In Progress' ? '#1e40af' :
+                                          project.status === 'HOLD' || project.status === 'Hold' ? '#92400e' : '#991b1b'
+                                  }}
+                                >
+                                  {(() => {
+                                    const upper = project.status.toUpperCase();
+                                    if (upper === "DRAFT") {
+                                      return (
+                                        <>
+                                          <option value={project.status} disabled style={{ display: 'none' }}>Draft</option>
+                                          <option value="LIVE">Live</option>
+                                        </>
+                                      );
+                                    } else {
+                                      return (
+                                        <>
+                                          {upper !== "LIVE" && <option value="LIVE">Live</option>}
+                                          {upper !== "HOLD" && <option value="HOLD">Hold</option>}
+                                          {upper !== "CLOSED" && <option value="CLOSED">Closed</option>}
+                                          <option value={project.status} disabled style={{ display: 'none' }}>
+                                            {project.status === "LIVE" ? "Live" : project.status === "HOLD" ? "Hold" : "Closed"}
+                                          </option>
+                                        </>
+                                      );
+                                    }
+                                  })()}
+                                </select>
+                              )}
                             </td>
                             <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
                               <button
@@ -1339,7 +1642,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                 <MoreVertical size={18} />
                               </button>
 
-                              {/* Actions Dropdown menu */}
                               {activeDropdown === project.id && (
                                 <>
                                   <div
@@ -1395,14 +1697,12 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                   </table>
                 </div>
 
-
               </div>
             </div>
           )}
         </main>
       </div>
 
-      {/* Deactivation Confirmation Modal */}
       {showDeactivateModal && (
         <div className="proj-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div className="proj-modal" style={{ backgroundColor: 'white', borderRadius: '8px', width: '400px', maxWidth: '90%', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }}>
@@ -1453,7 +1753,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         confirmText={alertConfig.confirmText}
         cancelText={alertConfig.cancelText}
       />
-      {/* ── Go Live Calendar Modal (overlay) ── */}
       {goLiveProject && (
         <GoLiveCalendar
           project={goLiveProject}

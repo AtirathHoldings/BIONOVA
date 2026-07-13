@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
-import AlertModal from "../AlertModal";
+import AlertModal from "../AlertModal.jsx";
 import "../../styles/EmployeeMaster.css";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -42,7 +42,7 @@ const getAuthHeaders = () => ({
   "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
 });
 
-const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled, allowCustom }) => {
+const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled, allowCustom, hideSearch, bottomFixedOption }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const wrapperRef = React.useRef(null);
@@ -77,15 +77,17 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
           marginTop: '4px', zIndex: 999, maxHeight: '250px', overflowY: 'auto',
           boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
         }} onClick={e => e.stopPropagation()}>
-          <div style={{ padding: '8px', position: 'sticky', top: 0, background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 2 }}>
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search..."
-              style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
-            />
-          </div>
+          {!hideSearch && (
+            <div style={{ padding: '8px', position: 'sticky', top: 0, background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 2 }}>
+              <input
+                type="text"
+                value={search}
+                onChange={e => setSearch(e.target.value)}
+                placeholder="Search..."
+                style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+              />
+            </div>
+          )}
           <div style={{ padding: '4px 0' }}>
             {allowCustom && search.trim() && !options.some(o => o.label.toLowerCase() === search.toLowerCase()) && (
               <div 
@@ -118,6 +120,20 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
             ))}
             {filtered.length === 0 && <div style={{ padding: '8px 16px', color: '#64748b', fontSize: '13px', textAlign: 'center' }}>No results found</div>}
           </div>
+          {bottomFixedOption && (
+            <div
+              onClick={() => {
+                onChange({ target: { name, value: bottomFixedOption.value } });
+                setIsOpen(false);
+                setSearch("");
+              }}
+              style={{ padding: '10px 16px', cursor: 'pointer', background: 'white', borderTop: '1px solid #e2e8f0', fontSize: '14px', color: '#2563eb', fontWeight: '600', position: 'sticky', bottom: 0, zIndex: 3 }}
+              onMouseOver={e => e.target.style.background = '#f8fafc'}
+              onMouseOut={e => e.target.style.background = 'white'}
+            >
+              {bottomFixedOption.label}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -135,6 +151,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   // Views & UI States
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
+  const [isViewing, setIsViewing] = useState(false);
   const [editId, setEditId] = useState(null);
   const [photo, setPhoto] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -339,6 +356,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
         error = "Mobile Number must start with 6, 7, 8, or 9.";
       } else if (mobileVal.length > 0 && mobileVal.length < 10) {
         error = "Mobile Number must be exactly 10 digits.";
+      }
+    } else if (name === "firstName" || name === "lastName") {
+      if (/[^a-zA-Z\s]/.test(value)) {
+        error = "Only letters and spaces are allowed.";
       }
     }
     return error;
@@ -602,6 +623,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     setPhoto(null);
     setShowPassword(false);
     setShowConfirmPassword(false);
+    setIsViewing(false);
   };
 
   // Save / Submit Employee
@@ -627,6 +649,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "First Name cannot exceed 50 characters.");
       return;
     }
+    if (/[^a-zA-Z\s]/.test(form.firstName)) {
+      triggerAlert("error", "Validation Error", "First Name can only contain letters and spaces.");
+      return;
+    }
 
     // 3. Last Name check
     if (!form.lastName.trim()) {
@@ -635,6 +661,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
     if (form.lastName.length > 50) {
       triggerAlert("error", "Validation Error", "Last Name cannot exceed 50 characters.");
+      return;
+    }
+    if (/[^a-zA-Z\s]/.test(form.lastName)) {
+      triggerAlert("error", "Validation Error", "Last Name can only contain letters and spaces.");
       return;
     }
 
@@ -915,9 +945,48 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       role: emp.role || "user"
     });
 
-    setPhoto(emp.photoUrl && emp.photoUrl.startsWith("data:") ? emp.photoUrl : (emp.photoPath && emp.photoPath.startsWith("data:") ? emp.photoPath : null));
+    setPhoto(emp.photoPath || emp.photoUrl || null);
     setFormErrors({});
     setIsEditing(true);
+    setIsViewing(false);
+    setEditId(emp.empId || emp.id);
+    setView("form");
+    setActiveActionsMenu(null);
+  };
+
+  const handleView = (emp) => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    setForm({
+      employeeCode: emp.empCode || emp.employeeCode || "",
+      firstName: emp.firstName || "",
+      lastName: emp.lastName || "",
+      gender: emp.gender ? (emp.gender.charAt(0) + emp.gender.slice(1).toLowerCase()) : "",
+      dateOfBirth: emp.dob || emp.dateOfBirth || "",
+      email: emp.email || "",
+      mobile: emp.mobNum || emp.mobile || "",
+      bloodGroup: emp.bldGrp || emp.bloodGroup || "",
+      address: emp.address || "",
+      photoPath: emp.photoUrl || emp.photoPath || "",
+      joiningDate: emp.doj || emp.joiningDate || "",
+      designation: emp.designation || "",
+      workingFor: emp.pltId ? "plant" : "company",
+      company: emp.coyId ? String(emp.coyId) : "",
+      plant: emp.pltId ? String(emp.pltId) : "",
+      department: emp.deptId ? String(emp.deptId) : "",
+      workLocation: emp.wloc || emp.wLoc || emp.workLocation || "",
+      reportingManager: emp.repManId ? String(emp.repManId) : "",
+      username: emp.email || emp.username || "",
+      password: "********",
+      confirmPassword: "********",
+      status: emp.status === true || emp.status === "Active" ? "Active" : "Inactive",
+      employmentType: emp.employmentType || "",
+      role: emp.role || "user"
+    });
+
+    setPhoto(emp.photoPath || emp.photoUrl || null);
+    setFormErrors({});
+    setIsEditing(false);
+    setIsViewing(true);
     setEditId(emp.empId || emp.id);
     setView("form");
     setActiveActionsMenu(null);
@@ -1033,14 +1102,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
     setActiveActionsMenu(null);
   };
-  const filteredEmployees = tableSearchQuery
+  const filteredEmployees = (tableSearchQuery
     ? employees.filter(emp =>
       (emp.employeeCode && emp.employeeCode.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
       (emp.employeeName && emp.employeeName.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
       (emp.email && emp.email.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
       (emp.designation && emp.designation.toLowerCase().includes(tableSearchQuery.toLowerCase()))
     )
-    : employees;
+    : employees).slice().sort((a, b) => (a.employeeCode || '').localeCompare(b.employeeCode || '', undefined, {numeric: true, sensitivity: 'base'}));
 
   return (
     <div className="emp-shell-container">
@@ -1048,11 +1117,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
       <div className="emp-shell">
         <Header
-          title="Employee Master"
-          showSearch={false}
-          userName="Syed Mohammad Johny Basha"
-          userRole="Web Developer"
-          initials="SB"
+          title="Employee Creation"
         />
 
         <main className="emp-main" style={{ padding: '24px', position: 'relative' }}>
@@ -1063,9 +1128,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
               <div className="emp-form-card" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
-                  <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
-                    {isEditing ? "Edit Employee" : "Add New Employee"}
-                  </h2>
+                  <div>
+                    <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
+                      {isViewing ? "View Employee" : isEditing ? "Edit Employee" : "Add New Employee"}
+                    </h2>
+                    {!isViewing && !isEditing && (
+                      <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>Enter employee details in the form below</p>
+                    )}
+                  </div>
                   <button type="button" className="emp-nav-view-btn" onClick={() => {
                     setView("list"); handleReset(); setIsEditing(false); setEditId(null);
                   }}>
@@ -1074,6 +1144,99 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 </div>
 
                 <div style={{ padding: '24px' }}>
+                {isViewing ? (
+                  <div style={{ display: 'flex', flexDirection: 'column' }}>
+                    {/* Photo Row (Optional: Only if photo exists) */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
+                      <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f1f5f9', overflow: 'hidden', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        {form.photoPath || photo ? (
+                          <img src={form.photoPath || photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <User size={32} style={{ color: '#94a3b8' }} />
+                        )}
+                      </div>
+                      <div>
+                        <h2 style={{ margin: '0 0 4px 0', fontSize: '24px', color: '#0f172a', fontWeight: '700' }}>{form.firstName} {form.lastName}</h2>
+                        <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', backgroundColor: form.status === 'Active' ? '#dcfce7' : '#fee2e2', color: form.status === 'Active' ? '#166534' : '#991b1b' }}>{form.status}</span>
+                      </div>
+                    </div>
+
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0' }}>Personal Information</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', columnGap: '40px', rowGap: '16px', marginBottom: '32px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Employee Code</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.employeeCode || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Gender</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.gender || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Date of Birth</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.dateOfBirth || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Email</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.email || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Mobile Number</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.mobile || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Blood Group</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.bloodGroup || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gridColumn: 'span 2' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Address</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.address || '-'}</span>
+                      </div>
+                    </div>
+
+                    <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '16px', paddingBottom: '8px', borderBottom: '1px solid #e2e8f0' }}>Employment Information</h3>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', columnGap: '40px', rowGap: '16px', marginBottom: '32px' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Joining Date</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.joiningDate || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Designation</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.designation || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Employment Type</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.employmentType || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Working For</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500', textTransform: 'capitalize' }}>{form.workingFor || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Company</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{companies.find(c => String(c.coyId || c.id) === String(form.company))?.coyNm || companies.find(c => String(c.coyId || c.id) === String(form.company))?.name || '-'}</span>
+                      </div>
+                      {form.workingFor === "plant" && (
+                        <div style={{ display: 'flex', flexDirection: 'column' }}>
+                          <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Plant</span>
+                          <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{plants.find(p => String(p.pltId || p.id) === String(form.plant))?.pltNm || plants.find(p => String(p.pltId || p.id) === String(form.plant))?.name || '-'}</span>
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Department</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{departments.find(d => String(d.deptId || d.id) === String(form.department))?.deptNm || departments.find(d => String(d.deptId || d.id) === String(form.department))?.name || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Work Location</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.workLocation || '-'}</span>
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column' }}>
+                        <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Reporting Manager</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{employees.find(emp => String(emp.empId || emp.id) === String(form.reportingManager))?.employeeName || employees.find(emp => String(emp.empId || emp.id) === String(form.reportingManager))?.firstName || '-'}</span>
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <>
                   {/* 1. PERSONAL INFORMATION */}
                   <div className="emp-form-section">
                     <h3 className="emp-form-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
@@ -1093,6 +1256,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
                           <input type="text" name="firstName" value={form.firstName} onChange={handleChange} placeholder="Enter first name" maxLength="50" required />
                         </div>
+                        {formErrors.firstName && (
+                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                            {formErrors.firstName}
+                          </div>
+                        )}
                       </div>
                       <div className="emp-form-item">
                         <label>Last Name <span className="emp-req-star">*</span></label>
@@ -1100,6 +1268,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
                           <input type="text" name="lastName" value={form.lastName} onChange={handleChange} placeholder="Enter last name" maxLength="50" required />
                         </div>
+                        {formErrors.lastName && (
+                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                            {formErrors.lastName}
+                          </div>
+                        )}
                       </div>
                       <div className="emp-form-item">
                         <label>Gender <span className="emp-req-star">*</span></label>
@@ -1109,6 +1282,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             value={form.gender}
                             onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
                             placeholder="Select gender"
+                            hideSearch={true}
                             options={[
                               { value: "Male", label: "Male" },
                               { value: "Female", label: "Female" },
@@ -1124,7 +1298,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Date of Birth <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Calendar size={16} /></span>
-                          <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleChange} required />
+                          <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleChange} max={new Date().toISOString().split('T')[0]} required />
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -1214,7 +1388,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Joining Date <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Calendar size={16} /></span>
-                          <input type="date" name="joiningDate" value={form.joiningDate} onChange={handleChange} required />
+                          <input type="date" name="joiningDate" value={form.joiningDate} onChange={handleChange} max={new Date().toISOString().split('T')[0]} required />
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -1226,11 +1400,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             value={form.designation} 
                             onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })} 
                             placeholder="Select designation"
+                            bottomFixedOption={{ value: "CREATE_NEW", label: "+ Create Designation" }}
                             options={[
                               ...[...new Set([...designations.map(d => d.desigNm).filter(Boolean), ...employees.map(emp => emp.designation).filter(Boolean)])]
                                 .map(d => ({ value: d, label: d }))
-                                .sort((a, b) => a.label.localeCompare(b.label)),
-                              { value: "CREATE_NEW", label: "+ Create Designation" }
+                                .sort((a, b) => a.label.localeCompare(b.label))
                             ]}
                           />
                         </div>
@@ -1323,6 +1497,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             value={form.department}
                             onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
                             placeholder="Select department"
+                            bottomFixedOption={{ value: "CREATE_NEW", label: "+ Create Department" }}
                             options={[
                               ...departments
                                 .filter(dept => {
@@ -1335,8 +1510,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                                     return mappings.some(m => m.pltId === parseInt(form.plant) && m.deptId === deptId && m.sts !== false);
                                   }
                                 })
-                                .map(dept => ({ value: dept.deptId || dept.id, label: dept.deptNm || dept.name })),
-                              { value: "CREATE_NEW", label: "+ Create Department" }
+                                .map(dept => ({ value: dept.deptId || dept.id, label: dept.deptNm || dept.name }))
                             ]}
                           />
                         </div>
@@ -1360,7 +1534,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             value={form.reportingManager}
                             onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
                             placeholder="Select reporting manager"
-                            options={employees.map(emp => ({ value: emp.empId || emp.id, label: emp.employeeName || `${emp.firstName} ${emp.lastName}` }))}
+                            options={employees.filter(emp => String(emp.empId || emp.id) !== String(editId)).map(emp => ({ value: emp.empId || emp.id, label: emp.employeeName || `${emp.firstName} ${emp.lastName}` }))}
                           />
                         </div>
                       </div>
@@ -1453,19 +1627,21 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                       </div>
                     </div>
                   </div>
+                  </>
+                )}
                 </div>
 
+                {/* Form Footer Buttons */}
+                {!isViewing && (
                 <div className="emp-form-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#fafbfc', borderTop: '1px solid #e2e8f0' }}>
                   <button type="button" className="emp-btn primary" onClick={handleSave}>
                     <Save size={14} /> {isEditing ? "Update Employee" : "Save Employee"}
                   </button>
-                  <button type="button" className="emp-btn tertiary" onClick={handleReset}>
-                    <RefreshCcw size={14} /> Reset
-                  </button>
-                  <button type="button" className="emp-btn secondary" onClick={() => { setView("list"); handleReset(); setIsEditing(false); setEditId(null); }}>
+                  <button type="button" className="emp-btn secondary" onClick={() => { setView("list"); handleReset(); setIsEditing(false); setIsViewing(false); setEditId(null); }}>
                     Cancel
                   </button>
                 </div>
+                )}
               </div>
             </div>
           ) : (
@@ -1563,7 +1739,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                                 <>
                                   <div className="emp-actions-dropdown-backdrop" onClick={() => setActiveActionsMenu(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }} />
                                   <div className="emp-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
-                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => { triggerAlert("info", "Employee Details", `Employee Details:\nName: ${emp.employeeName}\nCode: ${emp.employeeCode}\nDepartment: ${emp.department}\nEmployment Type: ${emp.employmentType || "N/A"}\nLocation: ${emp.workLocation || "N/A"}`); setActiveActionsMenu(null); }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
+                                    <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleView(emp)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleEdit(emp)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Edit size={15} /> Edit </button>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleDelete(emp.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Trash2 size={15} /> Delete </button>
                                   </div>

@@ -31,9 +31,13 @@ const HorizontalProgress = ({ pct, color }) => (
 
 const UserMilestone = ({ selectedProject, userTasks = [] }) => {
   const milestones = (selectedProject?.milestones || []).map((m, i) => {
-    const milestoneTasks = userTasks.filter(t => t.mId === m.mId);
+    const mId = m.mId || m.mid || m.id;
+    const milestoneTasks = userTasks.filter(t => {
+      const tMId = t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id;
+      return String(tMId) === String(mId);
+    });
     const assignedCount = milestoneTasks.length;
-    const completedCount = milestoneTasks.filter(t => t.taskSts === 'COMPLETED').length;
+    const completedCount = milestoneTasks.filter(t => (t.taskSts || t.tasksts || "").toUpperCase() === 'COMPLETED').length;
     const progressVal = assignedCount > 0 ? Math.round((completedCount / assignedCount) * 100) : 0;
     
     let statusVal = "Not Started";
@@ -41,7 +45,7 @@ const UserMilestone = ({ selectedProject, userTasks = [] }) => {
     else if (progressVal > 0) statusVal = "In Progress";
 
     return {
-      id: m.mId,
+      id: mId,
       idx: i + 1,
       name: m.name,
       desc: m.desc || `Details for ${m.name}`,
@@ -65,16 +69,20 @@ const UserMilestone = ({ selectedProject, userTasks = [] }) => {
     }
   }, [selectedProject?.id]);
 
-  const selectedMilestoneTasks = userTasks.filter(t => t.mId === selectedMilestone);
+  const selectedMilestoneTasks = userTasks.filter(t => {
+    const tMId = t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id;
+    return String(tMId) === String(selectedMilestone);
+  });
   const tasks = selectedMilestoneTasks.map(t => {
-    const progressVal = t.taskSts === 'COMPLETED' ? 100 : t.taskSts === 'WIP' ? 50 : (t.taskSts === 'SUBMIT_REVIEW' || t.taskSts === 'UNDER_REVIEW') ? 80 : 0;
+    const statusVal = (t.taskSts || t.tasksts || "").toUpperCase();
+    const progressVal = statusVal === 'COMPLETED' ? 100 : statusVal === 'WIP' ? 50 : (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') ? 80 : 0;
     return {
-      code: t.taskCd || `TSK-${t.taskId}`,
-      name: t.taskNm,
+      code: t.taskCd || t.taskcd || `TSK-${t.taskId}`,
+      name: t.taskNm || t.tasknm,
       assigned: "You",
-      priority: "Medium",
-      due: t.endDt || "N/A",
-      status: t.taskSts || "OPEN",
+      priority: t.priority || "Medium",
+      due: t.endDt || t.enddt || "N/A",
+      status: t.taskSts || t.tasksts || "OPEN",
       progress: progressVal
     };
   });
