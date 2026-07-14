@@ -51,6 +51,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\controller\UserDashboardCont
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\AdminDashboardResponse.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\AssignmentRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\CalendarEventDto.java
+D:\sample\bionova-backend\src\main\java\com\bionova\dto\EmployeePermissionsDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\EmployeeSettingsResponseDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\ForgotPasswordRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\GanttTaskDto.java
@@ -67,6 +68,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\dto\SaveAccessRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\SaveRoleRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\ScreenPermissionDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\TeamMemberDto.java
+D:\sample\bionova-backend\src\main\java\com\bionova\dto\UpdateEmployeePermissionsRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\UserDashboardResponseDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\ActivityLog.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\AppNotification.java

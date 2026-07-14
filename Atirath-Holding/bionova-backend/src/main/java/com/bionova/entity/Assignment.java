@@ -82,6 +82,12 @@ public class Assignment {
     @Transient
     private String approverNm;
 
+    @Transient
+    private String empNm;
+
+    @Transient
+    private String assignedByNm;
+
     public TaskPriorityMaster getPriority() {
         if (taskSts != null && "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm())) {
             return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(stDt, endDt, null, taskSts, null);

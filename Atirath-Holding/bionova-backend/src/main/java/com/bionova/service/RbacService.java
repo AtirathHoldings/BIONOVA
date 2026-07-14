@@ -3,6 +3,8 @@ package com.bionova.service;
 import com.bionova.dto.ScreenPermissionDto;
 import com.bionova.dto.SaveAccessRequest;
 import com.bionova.dto.RoleDto;
+import com.bionova.dto.EmployeePermissionsDto;
+import com.bionova.dto.UpdateEmployeePermissionsRequest;
 import com.bionova.entity.*;
 import com.bionova.repository.*;
 
@@ -24,6 +26,12 @@ public class RbacService {
 
     @Autowired
     private RoleBasedEmployeeMappingRepository employeeMappingRepository;
+
+    @Autowired
+    private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private DesignationRepository designationRepository;
 
 
     public List<ScreenMaster> getAllScreens() {
@@ -216,5 +224,100 @@ public class RbacService {
             }
         }
         return false;
+    }
+    public List<EmployeePermissionsDto> getAllEmployeePermissions() {
+        List<RoleBasedEmployeeMapping> allMappings = employeeMappingRepository.findAll();
+        Set<Long> empIds = allMappings.stream()
+                .map(RoleBasedEmployeeMapping::getEmpId)
+                .filter(Objects::nonNull)
+                .collect(Collectors.toSet());
+
+        Map<Integer, String> designationMap = designationRepository.findAll().stream()
+                .collect(Collectors.toMap(
+                        DesignationMaster::getDesigId,
+                        DesignationMaster::getDesigNm,
+                        (a, b) -> a
+                ));
+
+        List<EmployeePermissionsDto> result = new ArrayList<>();
+        for (Long empId : empIds) {
+            Optional<Employee> empOpt = employeeRepository.findById(empId);
+            if (empOpt.isPresent()) {
+                Employee employee = empOpt.get();
+                String name = (employee.getFirstName() + " " + (employee.getLastName() == null ? "" : employee.getLastName())).trim();
+                String desigName = employee.getDesigId() != null ? designationMap.get(employee.getDesigId()) : null;
+                if (desigName == null) {
+                    desigName = employee.getRole() != null ? employee.getRole() : "Employee";
+                }
+
+                List<ScreenPermissionDto> permissions = getEmployeePermissions(empId);
+
+                EmployeePermissionsDto dto = new EmployeePermissionsDto(
+                        empId,
+                        name,
+                        employee.getEmail(),
+                        employee.getEmpCode(),
+                        desigName,
+                        permissions
+                );
+                result.add(dto);
+            }
+        }
+        return result;
+    }
+
+    @Transactional
+    public void updateEmployeePermissions(Long empId, UpdateEmployeePermissionsRequest request) {
+        List<RoleBasedEmployeeMapping> oldMappings = employeeMappingRepository.findByEmpId(empId);
+
+        String finalRoleNm = "Custom_Access_" + System.currentTimeMillis();
+        Integer finalRoleId = rbacRepository.findMaxRoleId();
+        finalRoleId = (finalRoleId == null ? 0 : finalRoleId) + 1;
+
+        savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions(), request.getCreatedBy());
+
+        employeeMappingRepository.deleteByEmpId(empId);
+
+        RoleBasedEmployeeMapping newMapping = new RoleBasedEmployeeMapping();
+        newMapping.setEmpId(empId);
+        newMapping.setRoleId(finalRoleId);
+        employeeMappingRepository.save(newMapping);
+
+        // Clean up old custom roles
+        for (RoleBasedEmployeeMapping oldMapping : oldMappings) {
+            Integer oldRoleId = oldMapping.getRoleId();
+            List<RoleBasedAccessControl> rbacList = rbacRepository.findByRoleId(oldRoleId);
+            if (!rbacList.isEmpty()) {
+                String oldRoleNm = rbacList.get(0).getRoleNm();
+                if (oldRoleNm != null && oldRoleNm.startsWith("Custom_")) {
+                    List<RoleBasedEmployeeMapping> remaining = employeeMappingRepository.findByRoleId(oldRoleId);
+                    if (remaining.isEmpty()) {
+                        rbacRepository.deleteByRoleId(oldRoleId);
+                    }
+                }
+            }
+        }
+    }
+
+    @Transactional
+    public void deleteEmployeeAccess(Long empId) {
+        List<RoleBasedEmployeeMapping> oldMappings = employeeMappingRepository.findByEmpId(empId);
+
+        employeeMappingRepository.deleteByEmpId(empId);
+
+        // Clean up old custom roles
+        for (RoleBasedEmployeeMapping oldMapping : oldMappings) {
+            Integer oldRoleId = oldMapping.getRoleId();
+            List<RoleBasedAccessControl> rbacList = rbacRepository.findByRoleId(oldRoleId);
+            if (!rbacList.isEmpty()) {
+                String oldRoleNm = rbacList.get(0).getRoleNm();
+                if (oldRoleNm != null && oldRoleNm.startsWith("Custom_")) {
+                    List<RoleBasedEmployeeMapping> remaining = employeeMappingRepository.findByRoleId(oldRoleId);
+                    if (remaining.isEmpty()) {
+                        rbacRepository.deleteByRoleId(oldRoleId);
+                    }
+                }
+            }
+        }
     }
 }

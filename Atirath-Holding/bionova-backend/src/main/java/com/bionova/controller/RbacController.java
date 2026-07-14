@@ -3,6 +3,8 @@ package com.bionova.controller;
 import com.bionova.dto.ScreenPermissionDto;
 import com.bionova.dto.SaveAccessRequest;
 import com.bionova.dto.RoleDto;
+import com.bionova.dto.EmployeePermissionsDto;
+import com.bionova.dto.UpdateEmployeePermissionsRequest;
 import com.bionova.entity.ScreenMaster;
 import com.bionova.service.RbacService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -88,6 +90,31 @@ public class RbacController {
             return ResponseEntity.ok(Map.of("message", "Role template deleted successfully."));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("message", "Failed to delete role: " + e.getMessage()));
+        }
+    }
+
+    @GetMapping("/employees/permissions")
+    public List<EmployeePermissionsDto> getAllEmployeePermissions() {
+        return rbacService.getAllEmployeePermissions();
+    }
+
+    @PutMapping("/employees/{empId}/permissions")
+    public ResponseEntity<?> updateEmployeePermissions(@PathVariable Long empId, @RequestBody UpdateEmployeePermissionsRequest request) {
+        try {
+            rbacService.updateEmployeePermissions(empId, request);
+            return ResponseEntity.ok(Map.of("message", "Employee permissions updated successfully."));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("message", "Failed to update employee permissions: " + e.getMessage()));
+        }
+    }
+
+    @DeleteMapping("/employees/{empId}/access")
+    public ResponseEntity<?> deleteEmployeeAccess(@PathVariable Long empId) {
+        try {
+            rbacService.deleteEmployeeAccess(empId);
+            return ResponseEntity.ok(Map.of("message", "Employee access deleted successfully."));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("message", "Failed to delete employee access: " + e.getMessage()));
         }
     }
 }

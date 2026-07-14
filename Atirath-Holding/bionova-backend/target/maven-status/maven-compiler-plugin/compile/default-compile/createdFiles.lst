@@ -16,6 +16,7 @@ com\bionova\controller\ProcessConfigController.class
 com\bionova\service\ProjectDashboardService.class
 com\bionova\entity\TaskDraft.class
 com\bionova\controller\MilestoneDraftController.class
+com\bionova\dto\EmployeePermissionsDto.class
 com\bionova\entity\ProjectAccess.class
 com\bionova\repository\DepartmentRepository.class
 com\bionova\entity\MilestoneDraft.class
@@ -98,6 +99,7 @@ com\bionova\controller\TaskDraftController.class
 com\bionova\repository\ProcessConfigRepository.class
 com\bionova\entity\ProcessConfig.class
 com\bionova\config\DatabaseMigrator$JpaDependencySetup.class
+com\bionova\dto\UpdateEmployeePermissionsRequest.class
 com\bionova\config\DatabaseMigrator.class
 com\bionova\controller\ProjectAccessController.class
 com\bionova\service\EmployeeSettingsService.class

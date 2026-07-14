@@ -56,6 +56,20 @@ public class AssignmentController {
 
     private void populateReviewerAndApprover(Assignment task) {
         if (task == null) return;
+        
+        if (task.getEmpId() != null) {
+            employeeRepository.findById(task.getEmpId()).ifPresent(emp -> {
+                String lastName = emp.getLastName() != null ? emp.getLastName() : "";
+                task.setEmpNm((emp.getFirstName() + " " + lastName).trim());
+            });
+        }
+        if (task.getAssignedBy() != null) {
+            employeeRepository.findById(task.getAssignedBy()).ifPresent(emp -> {
+                String lastName = emp.getLastName() != null ? emp.getLastName() : "";
+                task.setAssignedByNm((emp.getFirstName() + " " + lastName).trim());
+            });
+        }
+
         List<com.bionova.entity.ProcessConfig> configs = processConfigRepo.findByEmpTaskIdOrderByOrdrIdAsc(task.getEmpTaskId());
         for (com.bionova.entity.ProcessConfig pc : configs) {
             if (pc.getOrdrId() == 1) {
