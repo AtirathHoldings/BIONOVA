@@ -9,6 +9,7 @@ import com.bionova.repository.ProjectLiveRepository;
 import com.bionova.repository.TaskLiveRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -28,17 +29,17 @@ public class ProjectStatusCascadeService {
     @Autowired
     private ProjectLeadLagService projectLeadLagService;
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     public void cascadeStatusFromTask(Long taskId) {
         TaskLive task = taskLiveRepository.findById(taskId).orElse(null);
         if (task == null) return;
 
         // Release downstream sequential tasks if this task is completed
-        if (task.getTaskSts() != null && "COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+        if (task.getTaskSts() != null && "Completed".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
             List<TaskLive> downstreamTasks = taskLiveRepository.findByDepTaskId(taskId);
             for (TaskLive dt : downstreamTasks) {
                 String dtSts = dt.getTaskSts() != null ? dt.getTaskSts().getStatusNm() : "";
-                if ("DRAFT".equalsIgnoreCase(dtSts) || "".equalsIgnoreCase(dtSts)) {
+                if ("Draft".equalsIgnoreCase(dtSts) || "".equalsIgnoreCase(dtSts)) {
                     dt.setTaskSts(TaskStatusMaster.OPEN);
                     taskLiveRepository.save(dt);
                 }
@@ -57,11 +58,11 @@ public class ProjectStatusCascadeService {
         boolean anyStarted = false;
 
         for (TaskLive t : milestoneTasks) {
-            String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "OPEN";
-            if (!"COMPLETED".equals(sts)) {
+            String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "Open";
+            if (!"Completed".equalsIgnoreCase(sts)) {
                 allCompleted = false;
             }
-            if ("WIP".equals(sts) || "UNDER_REVIEW".equals(sts) || "COMPLETED".equals(sts)) {
+            if ("WIP".equalsIgnoreCase(sts) || "Completed".equalsIgnoreCase(sts)) {
                 anyStarted = true;
             }
         }
@@ -124,12 +125,12 @@ public class ProjectStatusCascadeService {
      * Recursively cascades the REWORK status to all downstream tasks that depend on the given task.
      * This ensures that if a task is rejected, any tasks relying on its completion are also reset.
      */
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     public void cascadeReworkDownstream(Long taskId) {
         List<TaskLive> downstreamTasks = taskLiveRepository.findByDepTaskId(taskId);
         for (TaskLive dt : downstreamTasks) {
-            String sts = dt.getTaskSts() != null ? dt.getTaskSts().getStatusNm() : "OPEN";
-            if (!"OPEN".equals(sts)) {
+            String sts = dt.getTaskSts() != null ? dt.getTaskSts().getStatusNm() : "Open";
+            if (!"Open".equalsIgnoreCase(sts)) {
                 dt.setTaskSts(TaskStatusMaster.OPEN);
                 taskLiveRepository.save(dt);
                 

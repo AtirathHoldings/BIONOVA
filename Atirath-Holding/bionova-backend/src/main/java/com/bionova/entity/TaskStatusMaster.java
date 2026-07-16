@@ -16,8 +16,11 @@ public class TaskStatusMaster {
     @Column(name = "status_id")
     private Integer statusId;
 
-    @Column(name = "status_nm", unique = true, nullable = false, length = 20)
+    @Column(name = "status_nm", nullable = false, length = 20)
     private String statusNm;
+
+    @Column(name = "sub_status_nm", length = 255)
+    private String subStatusNm;
 
     public TaskStatusMaster() {}
 
@@ -26,26 +29,37 @@ public class TaskStatusMaster {
         this.statusNm = statusNm;
     }
 
-    public static final TaskStatusMaster DRAFT = new TaskStatusMaster(1, "DRAFT");
-    public static final TaskStatusMaster OPEN = new TaskStatusMaster(2, "OPEN");
-    public static final TaskStatusMaster WIP = new TaskStatusMaster(3, "WIP");
-    public static final TaskStatusMaster UNDER_REVIEW = new TaskStatusMaster(4, "UNDER_REVIEW");
-    public static final TaskStatusMaster COMPLETED = new TaskStatusMaster(5, "COMPLETED");
-    public static final TaskStatusMaster REASSIGN = new TaskStatusMaster(6, "REASSIGN");
-    public static final TaskStatusMaster REWORK = new TaskStatusMaster(7, "REWORK");
-    public static final TaskStatusMaster OVER_DUE = new TaskStatusMaster(8, "OVER_DUE");
+    public TaskStatusMaster(Integer statusId, String statusNm, String subStatusNm) {
+        this.statusId = statusId;
+        this.statusNm = statusNm;
+        this.subStatusNm = subStatusNm;
+    }
+
+    public static final TaskStatusMaster DRAFT = new TaskStatusMaster(1, "Draft", null);
+    public static final TaskStatusMaster OPEN = new TaskStatusMaster(2, "Open", "Overdue");
+    public static final TaskStatusMaster WIP = new TaskStatusMaster(3, "WIP", "Under Review, Reassign, Rework, Overdue");
+    public static final TaskStatusMaster COMPLETED = new TaskStatusMaster(4, "Completed", "Lead, On Time, Lag");
+    public static final TaskStatusMaster HOLD = new TaskStatusMaster(5, "Hold", null);
 
     public static Integer getStatusIdByName(String name) {
         if (name == null) return null;
-        switch (name.toUpperCase().replace(" ", "_")) {
+        switch (name.toUpperCase().trim().replace(" ", "_")) {
             case "DRAFT": return 1;
             case "OPEN": return 2;
-            case "WIP": return 3;
-            case "UNDER_REVIEW": return 4;
-            case "COMPLETED": return 5;
-            case "REASSIGN": return 6;
-            case "REWORK": return 7;
-            case "OVER_DUE": case "OVERDUE": return 8;
+            case "WIP": case "IN_PROGRESS": return 3;
+            case "COMPLETED": return 4;
+            case "HOLD": return 5;
+            // Map sub-status names to parent status IDs to support legacy frontend/controllers status updates
+            case "UNDER_REVIEW":
+            case "REASSIGN":
+            case "REWORK":
+            case "OVER_DUE":
+            case "OVERDUE":
+                return 3; // WIP parent status
+            case "LEAD":
+            case "ON_TIME":
+            case "LAG":
+                return 4; // COMPLETED parent status
             default: return null;
         }
     }
@@ -61,18 +75,42 @@ public class TaskStatusMaster {
             case 1: return DRAFT;
             case 2: return OPEN;
             case 3: return WIP;
-            case 4: return UNDER_REVIEW;
-            case 5: return COMPLETED;
-            case 6: return REASSIGN;
-            case 7: return REWORK;
-            case 8: return OVER_DUE;
+            case 4: return COMPLETED;
+            case 5: return HOLD;
             default: return null;
         }
+    }
+
+    public static TaskStatusMaster getByStatusAndSubStatus(String status, String subStatus) {
+        if (status == null) return null;
+        String normalizedStatus = status.trim();
+        if ("IN_PROGRESS".equalsIgnoreCase(normalizedStatus)) {
+            normalizedStatus = "WIP";
+        }
+        return getByName(normalizedStatus);
     }
 
     @JsonValue
     public String getStatusNm() {
         return statusNm;
+    }
+
+    @Override
+    public String toString() {
+        return statusNm;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof TaskStatusMaster)) return false;
+        TaskStatusMaster that = (TaskStatusMaster) o;
+        return statusId != null && statusId.equals(that.getStatusId());
+    }
+
+    @Override
+    public int hashCode() {
+        return statusId != null ? statusId.hashCode() : 0;
     }
 
     @JsonCreator

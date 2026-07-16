@@ -34,6 +34,7 @@ com\bionova\repository\CalendarMasterRepository.class
 com\bionova\repository\EmployeeRepository.class
 com\bionova\config\SQLParenCheck.class
 com\bionova\BionovaBackendApplication.class
+com\bionova\enums\TimeStatus.class
 com\bionova\entity\PlantMaster.class
 com\bionova\entity\DesignationMaster.class
 com\bionova\config\AuditListener.class
@@ -134,6 +135,7 @@ com\bionova\config\DataInitializer.class
 com\bionova\controller\ActivityLogController.class
 com\bionova\dto\ProjectDashboardResponse$SummaryMetrics.class
 com\bionova\dto\ResetPasswordRequest.class
+com\bionova\enums\ProcessStatus.class
 com\bionova\entity\ChecklistMaster.class
 com\bionova\controller\LandmasterController.class
 com\bionova\entity\ScreenMaster.class

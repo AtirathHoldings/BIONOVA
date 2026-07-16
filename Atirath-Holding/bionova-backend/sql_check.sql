@@ -50,6 +50,7 @@ BEGIN
       t.no_of_days, 
       t.task_sts, 
       tsm.status_nm, 
+      t.sub_status,
       COALESCE(p.prj_cd || ' - ' || m.mlstn_ttl, '') AS project_info, 
       COALESCE(p.prj_cd, '') AS prj_cd, 
       CASE 
@@ -68,18 +69,19 @@ BEGIN
     WHERE (t.emp_id = p_emp_id OR t.task_id IN ( 
       SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true 
     )) 
-
+ 
     UNION ALL 
-
+ 
     SELECT 
       t.emp_task_id AS task_id, 
       t.task_nm, 
       t.st_dt, 
       t.end_dt, 
-      CASE WHEN tsm.status_nm = 'COMPLETED' THEN t.end_dt ELSE NULL END AS act_cmp_dt, 
+      CASE WHEN UPPER(tsm.status_nm) = 'COMPLETED' THEN t.end_dt ELSE NULL END AS act_cmp_dt, 
       (t.end_dt - t.st_dt) AS no_of_days, 
       t.task_sts, 
       tsm.status_nm, 
+      t.sub_status,
       COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS project_info, 
       COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, 
       CASE 
@@ -97,18 +99,18 @@ BEGIN
       SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL 
     )) AND COALESCE(t.sts, true) = true 
   ; 
-
+ 
   SELECT 
     COUNT(*), 
-    COUNT(*) FILTER (WHERE status_nm = 'COMPLETED'), 
-    COUNT(*) FILTER (WHERE status_nm = 'OVER_DUE' OR (status_nm <> 'COMPLETED' AND end_dt IS NOT NULL AND end_dt < v_today)), 
-    COUNT(*) FILTER (WHERE status_nm <> 'COMPLETED' AND end_dt = v_today), 
-    COUNT(*) FILTER (WHERE status_nm = 'WIP'), 
-    COUNT(*) FILTER (WHERE status_nm = 'UNDER_REVIEW'), 
-    COUNT(*) FILTER (WHERE status_nm = 'OPEN'), 
-    COUNT(*) FILTER (WHERE status_nm = 'REASSIGN'), 
-    COUNT(*) FILTER (WHERE status_nm = 'REWORK'), 
-    COUNT(*) FILTER (WHERE status_nm = 'DRAFT') 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'COMPLETED'), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'OVER_DUE' OR (UPPER(status_nm) <> 'COMPLETED' AND end_dt IS NOT NULL AND end_dt < v_today)), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) <> 'COMPLETED' AND end_dt = v_today), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'WIP' AND NOT (end_dt IS NOT NULL AND end_dt < v_today) AND (sub_status IS NULL OR UPPER(sub_status) NOT IN ('UNDER REVIEW', 'REASSIGN', 'REWORK'))), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'WIP' AND UPPER(sub_status) = 'UNDER REVIEW' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'OPEN' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'WIP' AND UPPER(sub_status) = 'REASSIGN' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'WIP' AND UPPER(sub_status) = 'REWORK' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'DRAFT' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)) 
   INTO v_total_tasks, v_completed, v_overdue, v_due_today, 
        v_wip, v_under_review, v_open, v_reassigned, v_rework, v_draft 
   FROM temp_all_tasks; 
@@ -202,8 +204,8 @@ BEGIN
       'project', t.project_info, 
       'endDt', t.end_dt, 
       'status', t.status_nm, 
-      'isOverdue', (t.status_nm = 'OVER_DUE' OR (t.status_nm <> 'COMPLETED' AND t.end_dt < v_today)), 
-      'isDueToday', (t.status_nm <> 'COMPLETED' AND t.end_dt = v_today), 
+      'isOverdue', (UPPER(t.status_nm) = 'OVER_DUE' OR (UPPER(t.status_nm) <> 'COMPLETED' AND t.end_dt < v_today)), 
+      'isDueToday', (UPPER(t.status_nm) <> 'COMPLETED' AND t.end_dt = v_today), 
       'priority', CASE COALESCE(t.priority_nm, 'MEDIUM') 
                     WHEN 'LOW' THEN 'Low' 
                     WHEN 'NORMAL' THEN 'Medium' 
@@ -216,7 +218,7 @@ BEGIN
       'employees', COALESCE(t.employees, '[]'::jsonb) 
     ) AS sub 
     FROM all_todo t 
-    WHERE t.status_nm <> 'COMPLETED' AND t.st_dt <= v_today 
+    WHERE UPPER(t.status_nm) <> 'COMPLETED' AND t.st_dt <= v_today 
     ORDER BY t.end_dt ASC NULLS LAST 
     LIMIT 5 
   ) x; 
@@ -303,7 +305,7 @@ BEGIN
       'employees', COALESCE(t.employees, '[]'::jsonb) 
     ) AS sub 
     FROM all_upcoming t 
-    WHERE t.status_nm <> 'COMPLETED' AND t.st_dt > v_today 
+    WHERE UPPER(t.status_nm) <> 'COMPLETED' AND t.st_dt > v_today 
     ORDER BY t.end_dt ASC NULLS LAST 
     LIMIT 5 
   ) x; 
@@ -327,11 +329,26 @@ BEGIN
                        END, 
       'dueDate',       p.end_dt, 
       'tasksAssigned', COUNT(t.task_id), 
-      'openTasks',     COUNT(t.task_id) FILTER (WHERE tsm.status_nm <> 'COMPLETED'), 
-      'progress',      ROUND( 
-        CASE WHEN COUNT(t.task_id) > 0 
-          THEN (COUNT(t.task_id) FILTER (WHERE tsm.status_nm = 'COMPLETED')::NUMERIC / COUNT(t.task_id)) * 100 
-          ELSE 0 END, 0) 
+      'openTasks',     COUNT(t.task_id) FILTER (WHERE UPPER(tsm.status_nm) <> 'COMPLETED'), 
+      'progress',      COALESCE((
+        SELECT ROUND(
+          (SUM(
+            CASE 
+              WHEN UPPER(tsm_all.status_nm) = 'COMPLETED' THEN 1.0
+              WHEN UPPER(tsm_all.status_nm) = 'WIP' THEN 
+                CASE 
+                  WHEN UPPER(t_all.sub_status) = 'UNDER REVIEW' THEN 0.8
+                  WHEN UPPER(t_all.sub_status) = 'REWORK' THEN 0.2
+                  ELSE 0.5
+                END
+              ELSE 0.0
+            END * COALESCE(t_all.wrk_days, t_all.no_of_days, 1.0)
+          ) / NULLIF(SUM(COALESCE(t_all.wrk_days, t_all.no_of_days, 1.0)), 0)) * 100, 0)
+        FROM task_live_master t_all
+        JOIN milestone_live_master ml_all ON ml_all.m_id = t_all.m_id
+        LEFT JOIN task_status_master tsm_all ON tsm_all.status_id = t_all.task_sts
+        WHERE ml_all.prj_id = p.prj_id
+      ), 0)
     ) AS sub 
     FROM task_live_master t 
     JOIN milestone_live_master  ml ON ml.m_id   = t.m_id 
@@ -467,11 +484,10 @@ BEGIN
     LIMIT 5 
   ) x; 
 
-  /* 10. Performance Calculations */ 
   SELECT COALESCE( 
     ROUND( 
-      (COUNT(*) FILTER (WHERE status_nm = 'COMPLETED' AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / 
-       NULLIF(COUNT(*) FILTER (WHERE status_nm = 'COMPLETED'), 0)) * 100, 
+      (COUNT(*) FILTER (WHERE UPPER(status_nm) = 'COMPLETED' AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / 
+       NULLIF(COUNT(*) FILTER (WHERE UPPER(status_nm) = 'COMPLETED'), 0)) * 100, 
       0 
     )::INT, 
     100 

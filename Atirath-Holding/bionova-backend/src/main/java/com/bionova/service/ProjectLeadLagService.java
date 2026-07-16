@@ -232,31 +232,18 @@ public class ProjectLeadLagService {
             else                status = "LAG";
         } else {
             // Still in progress
-            if (today.isAfter(endDate) && actualProgress < 100.0) {
-                // Past end date and not done → LAG
-                daysVariance = -(int) (today.toEpochDay() - endDate.toEpochDay());
-                status = "LAG";
-            } else if (variance > TOLERANCE_PERCENT) {
-                // Ahead of schedule
-                long estimatedDaysAhead = Math.round((variance / 100.0) * totalDays);
-                daysVariance = (int) estimatedDaysAhead;
-                status = "LEAD";
-            } else if (variance < -TOLERANCE_PERCENT) {
-                // Behind schedule
-                long estimatedDaysBehind = Math.round((Math.abs(variance) / 100.0) * totalDays);
-                daysVariance = -(int) estimatedDaysBehind;
-                status = "LAG";
-            } else {
-                status = "ON_TIME";
-            }
+            status = null;
+            daysVariance = 0;
         }
 
         // ── Label + color ─────────────────────────────────────────────────
-        String label, color;
-        switch (status) {
-            case "LEAD"    -> { label = "Lead";    color = "#10b981"; } // green
-            case "LAG"     -> { label = "Lag";     color = "#ef4444"; } // red
-            default        -> { label = "On Time"; color = "#f59e0b"; } // amber
+        String label = null, color = null;
+        if (status != null) {
+            switch (status) {
+                case "LEAD"    -> { label = "Lead";    color = "#10b981"; } // green
+                case "LAG"     -> { label = "Lag";     color = "#ef4444"; } // red
+                default        -> { label = "On Time"; color = "#f59e0b"; } // amber
+            }
         }
 
         // ── Build response ─────────────────────────────────────────────────
@@ -291,12 +278,10 @@ public class ProjectLeadLagService {
      * Lightweight status computation (no map building) — used by persist path.
      */
     private String computeStatus(ProjectLive project, List<TaskLive> allTasks, LocalDate today) {
-        LocalDate startDate = project.getStDt();
         LocalDate endDate   = project.getEndDt();
         LocalDate actCmpDt  = project.getActCmpDt();
 
-        if (startDate == null) startDate = today;
-        if (endDate == null)   endDate   = today.plusDays(1);
+        if (endDate == null) endDate   = today.plusDays(1);
 
         if (actCmpDt != null) {
             long diff = actCmpDt.toEpochDay() - endDate.toEpochDay();
@@ -305,16 +290,7 @@ public class ProjectLeadLagService {
             else                return "LAG";
         }
 
-        long totalDays   = Math.max(endDate.toEpochDay() - startDate.toEpochDay(), 1);
-        long elapsedDays = Math.min(Math.max(today.toEpochDay() - startDate.toEpochDay(), 0), totalDays);
-        double expectedProgress = (elapsedDays * 100.0) / totalDays;
-        double actualProgress   = computeActualProgress(allTasks);
-        double variance         = actualProgress - expectedProgress;
-
-        if (today.isAfter(endDate) && actualProgress < 100.0) return "LAG";
-        if (variance > TOLERANCE_PERCENT)   return "LEAD";
-        if (variance < -TOLERANCE_PERCENT)  return "LAG";
-        return "ON_TIME";
+        return null;
     }
 
     /**
@@ -334,14 +310,20 @@ public class ProjectLeadLagService {
                     ? t.getWrkDays()
                     : (t.getNoOfDays() != null && t.getNoOfDays() > 0 ? t.getNoOfDays() : 1.0);
 
-            String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "OPEN";
-            double taskPct = switch (sts.toUpperCase()) {
-                case "COMPLETED"     -> 100.0;
-                case "UNDER_REVIEW"  -> 80.0;
-                case "WIP"           -> 50.0;
-                case "REWORK"        -> 20.0;
-                default              -> 0.0;
-            };
+            String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "Open";
+            String subSts = t.getSubStatus() != null ? t.getSubStatus() : "";
+            double taskPct = 0.0;
+            if ("Completed".equalsIgnoreCase(sts)) {
+                taskPct = 100.0;
+            } else if ("WIP".equalsIgnoreCase(sts)) {
+                if ("Under Review".equalsIgnoreCase(subSts)) {
+                    taskPct = 80.0;
+                } else if ("Rework".equalsIgnoreCase(subSts)) {
+                    taskPct = 20.0;
+                } else {
+                    taskPct = 50.0;
+                }
+            }
 
             totalWeight     += weight;
             completedWeight += (taskPct / 100.0) * weight;

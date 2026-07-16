@@ -282,6 +282,31 @@ public class AssignmentController {
         return ResponseEntity.ok(updated);
     }
 
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<?> updateStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        Assignment task = repository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Task not found: " + id));
+
+        String newStatus = body.get("taskSts");
+        if (newStatus == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "taskSts is required"));
+        }
+        String upperStatus = newStatus.toUpperCase().replace(" ", "_");
+        if (!List.of("DRAFT", "OPEN", "WIP", "UNDER_REVIEW", "SUBMIT_REVIEW", "COMPLETED", "REASSIGN", "REWORK", "OVER_DUE", "HOLD").contains(upperStatus)) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, SUBMIT_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE, HOLD"));
+        }
+        // SUBMIT_REVIEW is a frontend-only state → maps to WIP
+        if ("SUBMIT_REVIEW".equals(upperStatus)) {
+            task.setTaskSts(TaskStatusMaster.WIP);
+        } else {
+            task.setTaskSts(TaskStatusMaster.getByName(newStatus));
+        }
+        Assignment saved = repository.save(task);
+        populateReviewerAndApprover(saved);
+        return ResponseEntity.ok(saved);
+    }
+
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
         processConfigRepo.deleteByEmpTaskId(id);

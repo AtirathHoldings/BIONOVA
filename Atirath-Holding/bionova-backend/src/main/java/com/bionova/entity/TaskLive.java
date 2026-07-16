@@ -5,6 +5,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.time.LocalDate;
+import com.bionova.enums.ProcessStatus;
+import com.bionova.enums.TimeStatus;
+import com.bionova.entity.ProjectLive;
 
 @Entity
 @Table(name = "task_live_master")
@@ -91,6 +94,15 @@ public class TaskLive {
     @JoinColumn(name = "task_sts", referencedColumnName = "status_id")
     private TaskStatusMaster taskSts = TaskStatusMaster.OPEN;
 
+    @Column(name = "sub_status", length = 50)
+    private String subStatus;
+
+    @Transient
+    private ProcessStatus processStatus; // NONE, UNDER_REVIEW, REWORK, REASSIGN
+
+    @Transient
+    private TimeStatus timeStatus; // LEAD, ON_TIME, DUE_TODAY, OVERDUE, LAG
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "priority", referencedColumnName = "priority_id")
     private TaskPriorityMaster priority;
@@ -109,6 +121,66 @@ public class TaskLive {
 
     @Transient
     private String approverNm;
+
+    public ProcessStatus getProcessStatus() {
+        if (subStatus == null || subStatus.isEmpty()) {
+            return ProcessStatus.NONE;
+        }
+        try {
+            String normalized = subStatus.toUpperCase().replace(" ", "_");
+            return ProcessStatus.valueOf(normalized);
+        } catch (IllegalArgumentException e) {
+            return ProcessStatus.NONE;
+        }
+    }
+
+    public void setProcessStatus(ProcessStatus processStatus) {
+        this.processStatus = processStatus;
+        if (processStatus == null || processStatus == ProcessStatus.NONE) {
+            this.subStatus = null;
+        } else {
+            String nm = processStatus.name().replace("_", " ");
+            this.subStatus = capitalizeWords(nm);
+        }
+    }
+
+    public TimeStatus getTimeStatus() {
+        if (taskSts != null && "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm())) {
+            if (actCmpDt != null && endDt != null) {
+                if (actCmpDt.isBefore(endDt)) {
+                    return TimeStatus.LEAD;
+                } else if (actCmpDt.isEqual(endDt)) {
+                    return TimeStatus.ON_TIME;
+                } else {
+                    return TimeStatus.LAG;
+                }
+            }
+        } else {
+            if (endDt != null) {
+                java.time.LocalDate today = java.time.LocalDate.now();
+                if (today.isBefore(endDt)) {
+                    return TimeStatus.ON_TIME;
+                } else if (today.isEqual(endDt)) {
+                    return TimeStatus.DUE_TODAY;
+                } else {
+                    return TimeStatus.OVERDUE;
+                }
+            }
+        }
+        return null;
+    }
+
+    private String capitalizeWords(String str) {
+        if (str == null || str.isEmpty()) return str;
+        String[] words = str.toLowerCase().split(" ");
+        StringBuilder sb = new StringBuilder();
+        for (String w : words) {
+            if (!w.isEmpty()) {
+                sb.append(Character.toUpperCase(w.charAt(0))).append(w.substring(1)).append(" ");
+            }
+        }
+        return sb.toString().trim();
+    }
 
     public TaskPriorityMaster getPriority() {
         if (taskSts != null && "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm())) {

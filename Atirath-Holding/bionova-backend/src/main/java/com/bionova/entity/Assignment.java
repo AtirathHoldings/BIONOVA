@@ -64,6 +64,9 @@ public class Assignment {
     @JoinColumn(name = "task_sts", referencedColumnName = "status_id")
     private TaskStatusMaster taskSts = TaskStatusMaster.DRAFT;
 
+    @Column(name = "sub_status", length = 50)
+    private String subStatus;
+
     @Column(name = "remarks", length = 255)
     private String remarks;
 

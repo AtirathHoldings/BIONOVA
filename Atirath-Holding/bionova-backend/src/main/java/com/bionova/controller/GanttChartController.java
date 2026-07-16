@@ -112,7 +112,7 @@ public class GanttChartController {
             } else if (!msTasks.isEmpty()) {
                 double taskProgressSum = 0.0;
                 for (TaskLive task : msTasks) {
-                    taskProgressSum += getTaskProgressValue(task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN");
+                    taskProgressSum += getTaskProgressValue(task);
                 }
                 milestoneProgress = taskProgressSum / msTasks.size();
             }
@@ -149,7 +149,7 @@ public class GanttChartController {
 
             // Create Task Gantt Items
             for (TaskLive task : msTasks) {
-                double taskProgress = getTaskProgressValue(task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN");
+                double taskProgress = getTaskProgressValue(task);
                 String assigneeName = task.getEmpId() != null ? employeeNameMap.get(task.getEmpId()) : null;
 
                 // Fetch Task Baseline Dates (from draft task if available)
@@ -171,7 +171,7 @@ public class GanttChartController {
                         task.getEndDt(),
                         taskProgress,
                         "MS-" + ms.getMId(),
-                        task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN",
+                        task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "Open",
                         task.getTaskCd(),
                         assigneeName,
                         task.getDepTaskId() != null ? "TSK-" + task.getDepTaskId() : null,
@@ -226,19 +226,21 @@ public class GanttChartController {
         return ResponseEntity.ok(finalData);
     }
 
-    private double getTaskProgressValue(String status) {
-        if (status == null) return 0.0;
-        switch (status.toUpperCase()) {
-            case "COMPLETED":
-                return 1.0;
-            case "UNDER_REVIEW":
+    private double getTaskProgressValue(TaskLive task) {
+        if (task == null || task.getTaskSts() == null) return 0.0;
+        String status = task.getTaskSts().getStatusNm();
+        String subStatus = task.getSubStatus() != null ? task.getSubStatus() : "";
+        if ("Completed".equalsIgnoreCase(status)) {
+            return 1.0;
+        } else if ("WIP".equalsIgnoreCase(status)) {
+            if ("Under Review".equalsIgnoreCase(subStatus)) {
                 return 0.8;
-            case "WIP":
+            } else if ("Rework".equalsIgnoreCase(subStatus)) {
+                return 0.2;
+            } else {
                 return 0.5;
-            case "OPEN":
-            case "REWORK":
-            default:
-                return 0.0;
+            }
         }
+        return 0.0;
     }
 }

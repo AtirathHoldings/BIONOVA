@@ -27,70 +27,152 @@ public class DatabaseMigrator implements InitializingBean {
         System.out.println("--- Running DatabaseMigrator BEFORE Hibernate starts ---");
         try (Connection conn = dataSource.getConnection();
              Statement stmt = conn.createStatement()) {
+            try {
+                stmt.execute("SET lock_timeout = 10000");
+            } catch (Exception e) {}
+
 
             // 1. Create and populate task_status_master
             stmt.execute(
                 "CREATE TABLE IF NOT EXISTS task_status_master (" +
                 "    status_id INTEGER PRIMARY KEY," +
-                "    status_nm VARCHAR(20) NOT NULL UNIQUE" +
+                "    status_nm VARCHAR(20) NOT NULL" +
                 ")"
             );
 
-            // Check if we need to migrate old status values
-            boolean needsMigration = false;
-            try (ResultSet rs = stmt.executeQuery("SELECT COUNT(*) FROM task_status_master WHERE status_nm IN ('ASSIGNED', 'SUBMIT_REVIEW')")) {
-                if (rs.next() && rs.getInt(1) > 0) {
-                    needsMigration = true;
-                }
-            } catch (Exception e) {
-                // Table might not exist or be empty yet
+            // Drop unique constraint on status_nm if it exists
+            try {
+                stmt.execute("ALTER TABLE task_status_master DROP CONSTRAINT IF EXISTS task_status_master_status_nm_key");
+                stmt.execute("ALTER TABLE task_status_master DROP CONSTRAINT IF EXISTS uklxpnguw8spv01m95oi9clwtja");
+                stmt.execute("DROP INDEX IF EXISTS task_status_master_status_nm_key");
+                stmt.execute("DROP INDEX IF EXISTS uklxpnguw8spv01m95oi9clwtja");
+            } catch (Exception ex) {
+                System.err.println("Could not drop unique constraint on status_nm: " + ex.getMessage());
             }
 
-            if (needsMigration) {
-                System.out.println("Migrating old task status values to new order (lock-free)...");
-                // 1. Update task_sts column in referencing tables (using existing valid IDs 1-7)
-                String[] statusReferencingTables = {"task_live_master", "task_draft_master", "employee_individual_task_master"};
-                for (String tbl : statusReferencingTables) {
-                    try {
-                        stmt.execute(
-                            "UPDATE " + tbl + " SET task_sts = CASE " +
-                            "  WHEN task_sts = 1 THEN 1 " + // DRAFT -> DRAFT
-                            "  WHEN task_sts = 2 THEN 2 " + // ASSIGNED -> OPEN
-                            "  WHEN task_sts = 3 THEN 2 " + // OPEN -> OPEN
-                            "  WHEN task_sts = 4 THEN 3 " + // WIP -> WIP
-                            "  WHEN task_sts = 5 THEN 4 " + // SUBMIT_REVIEW -> UNDER_REVIEW
-                            "  WHEN task_sts = 6 THEN 4 " + // UNDER_REVIEW -> UNDER_REVIEW
-                            "  WHEN task_sts = 7 THEN 5 " + // COMPLETED -> COMPLETED
-                            "  WHEN task_sts = 8 THEN 6 " + // REASSIGN -> REASSIGN
-                            "  WHEN task_sts = 9 THEN 7 " + // REWORK -> REWORK
-                            "  ELSE 2 " +
-                            "END"
-                        );
-                    } catch (Exception ex) {
-                        System.err.println("Failed to update status in " + tbl + ": " + ex.getMessage());
+            // Add sub_status_nm column to task_status_master if not exists
+            try {
+                stmt.execute("ALTER TABLE task_status_master ADD COLUMN IF NOT EXISTS sub_status_nm VARCHAR(255)");
+            } catch (Exception ex) {
+                System.err.println("Could not add sub_status_nm column to task_status_master: " + ex.getMessage());
+            }
+
+            // Ensure sub_status column exists in task tables
+            String[] targetTables = {"task_live_master", "task_draft_master", "employee_individual_task_master"};
+            for (String tbl : targetTables) {
+                try {
+                    stmt.execute("ALTER TABLE " + tbl + " ADD COLUMN IF NOT EXISTS sub_status VARCHAR(50)");
+                } catch (Exception ex) {
+                    System.err.println("Could not add sub_status column to " + tbl + ": " + ex.getMessage());
+                }
+            }
+
+            // Migrate task_sts and sub_status to the 5-status schema
+            for (String tbl : targetTables) {
+                try {
+                    stmt.execute("UPDATE " + tbl + " SET sub_status = 'Under Review', task_sts = 3 WHERE task_sts = 4");
+                    stmt.execute("UPDATE " + tbl + " SET sub_status = 'Reassign', task_sts = 3 WHERE task_sts = 6");
+                    stmt.execute("UPDATE " + tbl + " SET sub_status = 'Rework', task_sts = 3 WHERE task_sts = 7");
+                    stmt.execute("UPDATE " + tbl + " SET sub_status = 'Overdue', task_sts = 2 WHERE task_sts = 8");
+                    stmt.execute("UPDATE " + tbl + " SET sub_status = 'Overdue', task_sts = 3 WHERE task_sts = 13");
+                    stmt.execute("UPDATE " + tbl + " SET sub_status = 'Lead', task_sts = 4 WHERE task_sts = 10");
+                    stmt.execute("UPDATE " + tbl + " SET sub_status = 'On Time', task_sts = 4 WHERE task_sts = 11");
+                    stmt.execute("UPDATE " + tbl + " SET sub_status = 'Lag', task_sts = 4 WHERE task_sts = 12");
+                    
+                    // After the above mappings, we map completed (5) to status 4:
+                    stmt.execute("UPDATE " + tbl + " SET task_sts = 4 WHERE task_sts = 5");
+                    // And hold (9) to status 5:
+                    stmt.execute("UPDATE " + tbl + " SET task_sts = 5 WHERE task_sts = 9");
+                } catch (Exception ex) {
+                    System.err.println("Failed to migrate status in table " + tbl + ": " + ex.getMessage());
+                }
+            }
+
+            // Populate the new status master rows (exactly 5 statuses)
+            stmt.execute("INSERT INTO task_status_master (status_id, status_nm, sub_status_nm) VALUES " +
+                "(1, 'Draft', NULL), " +
+                "(2, 'Open', 'Overdue'), " +
+                "(3, 'WIP', 'Under Review, Reassign, Rework, Overdue'), " +
+                "(4, 'Completed', 'Lead, On Time, Lag'), " +
+                "(5, 'Hold', NULL) " +
+                "ON CONFLICT (status_id) DO UPDATE SET status_nm = EXCLUDED.status_nm, sub_status_nm = EXCLUDED.sub_status_nm");
+
+            try {
+                stmt.execute("DELETE FROM task_status_master WHERE status_id > 5");
+            } catch (Exception ex) {}
+
+            System.out.println("task_status_master initialized with 5 statuses.");
+
+            // Update some tasks for emp_id = 5 to cover various scenarios
+            try {
+                System.out.println("Updating select tasks of emp_id = 5 for scenario demonstration...");
+                
+                // Get task_ids for emp_id = 5
+                List<Long> taskIds = new ArrayList<>();
+                try (ResultSet rs = stmt.executeQuery("SELECT task_id FROM task_live_master WHERE emp_id = 5 ORDER BY task_id")) {
+                    while (rs.next()) {
+                        taskIds.add(rs.getLong("task_id"));
                     }
                 }
-
-                // 1.5. Append _TEMP to existing status names to avoid unique constraint violations during rename
-                try {
-                    stmt.execute("UPDATE task_status_master SET status_nm = status_nm || '_TEMP'");
-                } catch (Exception ex) {
-                    System.err.println("Failed to rename status names temporarily: " + ex.getMessage());
+                
+                // Set various scenarios on task_live_master
+                if (taskIds.size() > 0) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 1, sub_status = NULL WHERE task_id = " + taskIds.get(0)); // Draft
                 }
-
-                // 2. Delete old status IDs >= 8 since they are no longer referenced
-                try {
-                    stmt.execute("DELETE FROM task_status_master WHERE status_id >= 8");
-                } catch (Exception ex) {
-                    System.err.println("Failed to delete old status IDs: " + ex.getMessage());
+                if (taskIds.size() > 1) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 2, sub_status = NULL WHERE task_id = " + taskIds.get(1)); // Open
                 }
+                if (taskIds.size() > 2) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 2, sub_status = 'Overdue' WHERE task_id = " + taskIds.get(2)); // Open (Overdue)
+                }
+                if (taskIds.size() > 3) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = 'Under Review' WHERE task_id = " + taskIds.get(3)); // WIP (Under Review)
+                }
+                if (taskIds.size() > 4) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = 'Reassign' WHERE task_id = " + taskIds.get(4)); // WIP (Reassign)
+                }
+                if (taskIds.size() > 5) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = 'Rework' WHERE task_id = " + taskIds.get(5)); // WIP (Rework)
+                }
+                if (taskIds.size() > 6) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = 'Overdue' WHERE task_id = " + taskIds.get(6)); // WIP (Overdue)
+                }
+                if (taskIds.size() > 7) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = NULL WHERE task_id = " + taskIds.get(7)); // WIP
+                }
+                if (taskIds.size() > 8) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 4, sub_status = 'Lead' WHERE task_id = " + taskIds.get(8)); // Completed (Lead)
+                }
+                if (taskIds.size() > 9) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 4, sub_status = 'On Time' WHERE task_id = " + taskIds.get(9)); // Completed (On Time)
+                }
+                if (taskIds.size() > 10) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 4, sub_status = 'Lag' WHERE task_id = " + taskIds.get(10)); // Completed (Lag)
+                }
+                if (taskIds.size() > 11) {
+                    stmt.execute("UPDATE task_live_master SET task_sts = 5, sub_status = NULL WHERE task_id = " + taskIds.get(11)); // Hold
+                }
+                
+                // Get individual task_ids for emp_id = 5
+                List<Long> individualTaskIds = new ArrayList<>();
+                try (ResultSet rs = stmt.executeQuery("SELECT emp_task_id FROM employee_individual_task_master WHERE emp_id = 5 ORDER BY emp_task_id")) {
+                    while (rs.next()) {
+                        individualTaskIds.add(rs.getLong("emp_task_id"));
+                    }
+                }
+                
+                // Set some scenarios on employee_individual_task_master
+                if (individualTaskIds.size() > 0) {
+                    stmt.execute("UPDATE employee_individual_task_master SET task_sts = 3, sub_status = 'Rework' WHERE emp_task_id = " + individualTaskIds.get(0));
+                }
+                if (individualTaskIds.size() > 1) {
+                    stmt.execute("UPDATE employee_individual_task_master SET task_sts = 4, sub_status = 'On Time' WHERE emp_task_id = " + individualTaskIds.get(1));
+                }
+                
+                System.out.println("Demo tasks updated successfully for emp_id = 5.");
+            } catch (Exception ex) {
+                System.err.println("Could not update demo tasks for emp_id = 5: " + ex.getMessage());
             }
-
-            stmt.execute("INSERT INTO task_status_master (status_id, status_nm) VALUES " +
-                "(1, 'DRAFT'), (2, 'OPEN'), (3, 'WIP'), (4, 'UNDER_REVIEW'), " +
-                "(5, 'COMPLETED'), (6, 'REASSIGN'), (7, 'REWORK'), (8, 'OVER_DUE') " +
-                "ON CONFLICT (status_id) DO UPDATE SET status_nm = EXCLUDED.status_nm");
-            System.out.println("task_status_master initialized.");
 
             // 1c. Ensure screen_master has screen_code column and populate it
             // This is critical for RBAC enforcement — RbacGuardFilter maps
@@ -423,6 +505,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "  v_reassigned     INT := 0; " +
                     "  v_rework         INT := 0; " +
                     "  v_draft          INT := 0; " +
+                    "  v_reassigned_raw INT := 0; " +
+                    "  v_rework_raw     INT := 0; " +
                     "  v_my_prj_count   BIGINT := 0; " +
                     "  v_todo_list      jsonb; " +
                     "  v_upcoming       jsonb; " +
@@ -456,6 +540,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      t.no_of_days, " +
                     "      t.task_sts, " +
                     "      tsm.status_nm, " +
+                    "      t.sub_status, " +
                     "      COALESCE(p.prj_cd || ' - ' || m.mlstn_ttl, '') AS project_info, " +
                     "      COALESCE(p.prj_cd, '') AS prj_cd, " +
                     "      CASE " +
@@ -464,8 +549,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 2) THEN 'Approver' " +
                     "        ELSE 'Executor' " +
                     "      END AS user_badge, " +
-                    "      pm.priority_nm, " +
-                    "      'PROJECT' AS task_source " +
+                    "      'PROJECT' AS task_source, " +
+                    "      pm.priority_nm " +
                     "    FROM task_live_master t " +
                     "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id " +
                     "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id " +
@@ -482,10 +567,11 @@ public class DatabaseMigrator implements InitializingBean {
                     "      t.task_nm, " +
                     "      t.st_dt, " +
                     "      t.end_dt, " +
-                    "      CASE WHEN tsm.status_nm = 'COMPLETED' THEN t.end_dt ELSE NULL END AS act_cmp_dt, " +
+                    "      CASE WHEN tsm.status_nm = 'Completed' THEN t.end_dt ELSE NULL END AS act_cmp_dt, " +
                     "      (t.end_dt - t.st_dt) AS no_of_days, " +
                     "      t.task_sts, " +
                     "      tsm.status_nm, " +
+                    "      t.sub_status, " +
                     "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS project_info, " +
                     "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, " +
                     "      CASE " +
@@ -494,8 +580,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 2) THEN 'Approver' " +
                     "        ELSE 'Executor' " +
                     "      END AS user_badge, " +
-                    "      pm.priority_nm, " +
-                    "      'INDIVIDUAL' AS task_source " +
+                    "      'INDIVIDUAL' AS task_source, " +
+                    "      pm.priority_nm " +
                     "    FROM employee_individual_task_master t " +
                     "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
                     "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
@@ -505,17 +591,20 @@ public class DatabaseMigrator implements InitializingBean {
                     "  ; " +
                     "  SELECT " +
                     "    COUNT(*), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'COMPLETED'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'OVER_DUE' OR (status_nm <> 'COMPLETED' AND end_dt IS NOT NULL AND end_dt < v_today)), " +
-                    "    COUNT(*) FILTER (WHERE status_nm <> 'COMPLETED' AND end_dt = v_today), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'WIP'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'UNDER_REVIEW'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'OPEN'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'REASSIGN'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'REWORK'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'DRAFT') " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed'), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today)), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt = v_today), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'under review' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') IN ('open', 'hold') AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'reassign' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'draft' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'reassign'), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework') " +
                     "  INTO v_total_tasks, v_completed, v_overdue, v_due_today, " +
-                    "       v_wip, v_under_review, v_open, v_reassigned, v_rework, v_draft " +
+                    "       v_wip, v_under_review, v_open, v_reassigned, v_rework, v_draft, " +
+                    "       v_reassigned_raw, v_rework_raw " +
                     "  FROM temp_all_tasks; " +
                     " " +
                     "  /* 3. Projects Count (Only active projects) */ " +
@@ -536,6 +625,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      t.end_dt, " +
                     "      t.task_sts, " +
                     "      tsm.status_nm, " +
+                    "      t.sub_status, " +
                     "      COALESCE(p.prj_cd || ' - ' || m.mlstn_ttl, '') AS project_info, " +
                     "      CASE " +
                     "        WHEN t.emp_id = p_emp_id THEN 'Executor' " +
@@ -543,6 +633,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 2) THEN 'Approver' " +
                     "        ELSE 'Executor' " +
                     "      END AS user_badge, " +
+                    "      'PROJECT' AS task_source, " +
                     "      pm.priority_nm, " +
                     "      ( " +
                     "        SELECT jsonb_agg(jsonb_build_object( " +
@@ -573,6 +664,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      t.end_dt, " +
                     "      t.task_sts, " +
                     "      tsm.status_nm, " +
+                    "      t.sub_status, " +
                     "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS project_info, " +
                     "      CASE " +
                     "        WHEN t.emp_id = p_emp_id THEN 'Executor' " +
@@ -580,6 +672,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 2) THEN 'Approver' " +
                     "        ELSE 'Executor' " +
                     "      END AS user_badge, " +
+                    "      'INDIVIDUAL' AS task_source, " +
                     "      pm.priority_nm, " +
                     "      ( " +
                     "        SELECT jsonb_agg(jsonb_build_object( " +
@@ -607,8 +700,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'project', t.project_info, " +
                     "      'endDt', t.end_dt, " +
                     "      'status', t.status_nm, " +
-                    "      'isOverdue', (t.status_nm = 'OVER_DUE' OR (t.status_nm <> 'COMPLETED' AND t.end_dt < v_today)), " +
-                    "      'isDueToday', (t.status_nm <> 'COMPLETED' AND t.end_dt = v_today), " +
+                    "      'isOverdue', (COALESCE(LOWER(t.sub_status), '') = 'overdue' OR (COALESCE(LOWER(t.status_nm), '') <> 'completed' AND t.end_dt < v_today)), " +
+                    "      'isDueToday', (COALESCE(LOWER(t.status_nm), '') <> 'completed' AND t.end_dt = v_today), " +
                     "      'priority', CASE COALESCE(t.priority_nm, 'MEDIUM') " +
                     "                    WHEN 'LOW' THEN 'Low' " +
                     "                    WHEN 'NORMAL' THEN 'Medium' " +
@@ -618,10 +711,11 @@ public class DatabaseMigrator implements InitializingBean {
                     "                    ELSE 'Medium' " +
                     "                  END, " +
                     "      'badge', t.user_badge, " +
+                    "      'taskSource', t.task_source, " +
                     "      'employees', COALESCE(t.employees, '[]'::jsonb) " +
                     "    ) AS sub " +
                     "    FROM all_todo t " +
-                    "    WHERE t.status_nm <> 'COMPLETED' AND t.st_dt <= v_today " +
+                    "    WHERE COALESCE(LOWER(t.status_nm), '') <> 'completed' AND t.st_dt <= v_today " +
                     "    ORDER BY t.end_dt ASC NULLS LAST " +
                     "    LIMIT 5 " +
                     "  ) x; " +
@@ -708,7 +802,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'employees', COALESCE(t.employees, '[]'::jsonb) " +
                     "    ) AS sub " +
                     "    FROM all_upcoming t " +
-                    "    WHERE t.status_nm <> 'COMPLETED' AND t.st_dt > v_today " +
+                    "    WHERE COALESCE(LOWER(t.status_nm), '') <> 'completed' AND t.st_dt > v_today " +
                     "    ORDER BY t.end_dt ASC NULLS LAST " +
                     "    LIMIT 5 " +
                     "  ) x; " +
@@ -732,11 +826,24 @@ public class DatabaseMigrator implements InitializingBean {
                     "                       END, " +
                     "      'dueDate',       p.end_dt, " +
                     "      'tasksAssigned', COUNT(t.task_id), " +
-                    "      'openTasks',     COUNT(t.task_id) FILTER (WHERE tsm.status_nm <> 'COMPLETED'), " +
-                    "      'progress',      ROUND( " +
-                    "        CASE WHEN COUNT(t.task_id) > 0 " +
-                    "          THEN (COUNT(t.task_id) FILTER (WHERE tsm.status_nm = 'COMPLETED')::NUMERIC / COUNT(t.task_id)) * 100 " +
-                    "          ELSE 0 END, 0) " +
+                    "      'openTasks',     COUNT(t.task_id) FILTER (WHERE COALESCE(LOWER(tsm.status_nm), '') <> 'completed'), " +
+                    "      'closedTasks',   COUNT(t.task_id) FILTER (WHERE COALESCE(LOWER(tsm.status_nm), '') = 'completed'), " +
+                    "      'progress',      ( " +
+                    "        SELECT ROUND( " +
+                    "          CASE WHEN COUNT(t_all.task_id) > 0 " +
+                    "            THEN ( " +
+                    "              ( " +
+                    "                COUNT(t_all.task_id) FILTER (WHERE COALESCE(LOWER(tsm_all.status_nm), '') = 'completed')::NUMERIC + " +
+                    "                COUNT(t_all.task_id) FILTER (WHERE COALESCE(LOWER(tsm_all.status_nm), '') IN ('under review', 'under_review', 'submit review', 'submit_review')) * 0.8 + " +
+                    "                COUNT(t_all.task_id) FILTER (WHERE COALESCE(LOWER(tsm_all.status_nm), '') IN ('wip', 'in progress', 'in_progress')) * 0.5 " +
+                    "              ) / COUNT(t_all.task_id) " +
+                    "            ) * 100 " +
+                    "            ELSE 0 END, 0) " +
+                    "        FROM task_live_master t_all " +
+                    "        JOIN milestone_live_master ml_all ON ml_all.m_id = t_all.m_id " +
+                    "        LEFT JOIN task_status_master tsm_all ON tsm_all.status_id = t_all.task_sts " +
+                    "        WHERE ml_all.prj_id = p.prj_id " +
+                    "      ) " +
                     "    ) AS sub " +
                     "    FROM task_live_master t " +
                     "    JOIN milestone_live_master  ml ON ml.m_id   = t.m_id " +
@@ -744,7 +851,11 @@ public class DatabaseMigrator implements InitializingBean {
                     "    LEFT JOIN company_master    cm ON cm.coy_id = p.coy_id " +
                     "    LEFT JOIN plant_master      pm ON pm.plt_id = p.plt_id " +
                     "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
-                    "    LEFT JOIN project_access pa ON pa.prj_id = p.prj_id AND pa.emp_id = p_emp_id AND pa.sts = true " +
+                    "    LEFT JOIN ( " +
+                    "      SELECT DISTINCT ON (prj_id, emp_id) prj_id, emp_id, access_type " +
+                    "      FROM project_access " +
+                    "      WHERE sts = true " +
+                    "    ) pa ON pa.prj_id = p.prj_id AND pa.emp_id = p_emp_id " +
                     "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
                     "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
                     "    )) AND p.prj_sts IN ('LIVE', 'CLOSED', 'HOLD') " +
@@ -764,9 +875,9 @@ public class DatabaseMigrator implements InitializingBean {
                     "      SELECT " +
                     "        d, " +
                     "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d) AS assigned_count, " +
-                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d AND status_nm = 'OPEN' AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS open_count, " +
-                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d AND status_nm = 'WIP' AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS wip_count, " +
-                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE end_dt < d AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS overdue_count, " +
+                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d AND COALESCE(LOWER(status_nm), '') IN ('open', 'draft', 'hold') AND NOT (end_dt < d OR COALESCE(LOWER(sub_status), '') = 'overdue') AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS open_count, " +
+                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d AND COALESCE(LOWER(status_nm), '') = 'wip' AND NOT (end_dt < d OR COALESCE(LOWER(sub_status), '') = 'overdue') AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS wip_count, " +
+                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE (end_dt < d OR sub_status = 'Overdue') AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS overdue_count, " +
                     "        (SELECT COUNT(*) FROM temp_all_tasks WHERE act_cmp_dt <= d) AS completed_count, " +
                     "        (SELECT COUNT(DISTINCT m.prj_id) " +
                     "         FROM task_live_master t_tr " +
@@ -787,39 +898,45 @@ public class DatabaseMigrator implements InitializingBean {
                     "    FROM ( " +
                     "      SELECT " +
                     "        'assignedTasks' AS metric, " +
-                    "        (SELECT jsonb_agg(assigned_count) FROM trend_data) AS trend_array, " +
+                    "        jsonb_agg(assigned_count) AS trend_array, " +
                     "        (SELECT assigned_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT assigned_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
-                    "      UNION ALL " +
-                    "      SELECT " +
-                    "        'openTasks' AS metric, " +
-                    "        (SELECT jsonb_agg(open_count) FROM trend_data) AS trend_array, " +
-                    "        (SELECT open_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT open_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
+                    "        (SELECT assigned_count FROM trend_data ORDER BY d ASC LIMIT 1) AS seven_days_ago_val " +
+                    "      FROM trend_data " +
                     "      UNION ALL " +
                     "      SELECT " +
                     "        'inProgress' AS metric, " +
-                    "        (SELECT jsonb_agg(wip_count) FROM trend_data) AS trend_array, " +
+                    "        jsonb_agg(wip_count) AS trend_array, " +
                     "        (SELECT wip_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT wip_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
+                    "        (SELECT wip_count FROM trend_data ORDER BY d ASC LIMIT 1) AS seven_days_ago_val " +
+                    "      FROM trend_data " +
+                    "      UNION ALL " +
+                    "      SELECT " +
+                    "        'openTasks' AS metric, " +
+                    "        jsonb_agg(open_count) AS trend_array, " +
+                    "        (SELECT open_count FROM trend_data WHERE d = v_today) AS current_val, " +
+                    "        (SELECT open_count FROM trend_data ORDER BY d ASC LIMIT 1) AS seven_days_ago_val " +
+                    "      FROM trend_data " +
                     "      UNION ALL " +
                     "      SELECT " +
                     "        'overdueTasks' AS metric, " +
-                    "        (SELECT jsonb_agg(overdue_count) FROM trend_data) AS trend_array, " +
+                    "        jsonb_agg(overdue_count) AS trend_array, " +
                     "        (SELECT overdue_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT overdue_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
+                    "        (SELECT overdue_count FROM trend_data ORDER BY d ASC LIMIT 1) AS seven_days_ago_val " +
+                    "      FROM trend_data " +
                     "      UNION ALL " +
                     "      SELECT " +
                     "        'completedTasks' AS metric, " +
-                    "        (SELECT jsonb_agg(completed_count) FROM trend_data) AS trend_array, " +
+                    "        jsonb_agg(completed_count) AS trend_array, " +
                     "        (SELECT completed_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT completed_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
+                    "        (SELECT completed_count FROM trend_data ORDER BY d ASC LIMIT 1) AS seven_days_ago_val " +
+                    "      FROM trend_data " +
                     "      UNION ALL " +
                     "      SELECT " +
                     "        'myProjects' AS metric, " +
-                    "        (SELECT jsonb_agg(projects_count) FROM trend_data) AS trend_array, " +
+                    "        jsonb_agg(projects_count) AS trend_array, " +
                     "        (SELECT projects_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT projects_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
+                    "        (SELECT projects_count FROM trend_data ORDER BY d ASC LIMIT 1) AS seven_days_ago_val " +
+                    "      FROM trend_data " +
                     "    ) x; " +
                     "  END; " +
                     " " +
@@ -875,15 +992,15 @@ public class DatabaseMigrator implements InitializingBean {
                     "  /* 10. Performance Calculations */ " +
                     "  SELECT COALESCE( " +
                     "    ROUND( " +
-                    "      (COUNT(*) FILTER (WHERE status_nm = 'COMPLETED' AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / " +
-                    "       NULLIF(COUNT(*) FILTER (WHERE status_nm = 'COMPLETED'), 0)) * 100, " +
+                    "      (COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed' AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / " +
+                    "       NULLIF(COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed'), 0)) * 100, " +
                     "      0 " +
                     "    )::INT, " +
                     "    100 " +
                     "  ) INTO v_productivity " +
                     "  FROM temp_all_tasks; " +
                     " " +
-                    "  v_quality := GREATEST(50, 100 - ((v_reassigned + v_rework) * 5)); " +
+                    "  v_quality := GREATEST(50, 100 - ((v_reassigned_raw + v_rework_raw) * 5)); " +
                     " " +
                     "  v_performance := jsonb_build_object( " +
                     "    'productivity', jsonb_build_object( " +
@@ -956,6 +1073,287 @@ public class DatabaseMigrator implements InitializingBean {
                 e.printStackTrace();
             }
 
+            // 2d_new. Create/Update get_my_tasks_data SQL function
+            try {
+                System.out.println("Creating/Updating get_my_tasks_data stored procedure...");
+                stmt.execute(
+                    "CREATE OR REPLACE FUNCTION get_my_tasks_data(p_emp_id BIGINT) " +
+                    "RETURNS jsonb " +
+                    "LANGUAGE plpgsql " +
+                    "SECURITY DEFINER " +
+                    "AS $$ " +
+                    "DECLARE " +
+                    "  v_today          DATE := CURRENT_DATE; " +
+                    "  v_tasks          jsonb; " +
+                    "BEGIN " +
+                    "  WITH combined_tasks AS ( " +
+                    "    SELECT " +
+                    "      t.task_id AS task_id, " +
+                    "      t.task_cd AS task_cd, " +
+                    "      t.task_nm AS task_nm, " +
+                    "      t.task_desc AS task_desc, " +
+                    "      t.task_asgn_to AS task_asgn_to, " +
+                    "      t.emp_id AS emp_id, " +
+                    "      t.ext_emp_id AS ext_emp_id, " +
+                    "      t.task_dep_flg AS task_dep_flg, " +
+                    "      t.task_dep_typ AS task_dep_typ, " +
+                    "      t.dep_task_id AS dep_task_id, " +
+                    "      t.no_of_days AS no_of_days, " +
+                    "      t.wrk_days AS wrk_days, " +
+                    "      t.chk_flg AS chk_flg, " +
+                    "      t.atta_flg AS atta_flg, " +
+                    "      t.atta_file_id AS atta_file_id, " +
+                    "      t.note_txt AS note_txt, " +
+                    "      t.st_dt AS st_dt, " +
+                    "      t.end_dt AS end_dt, " +
+                    "      t.act_cmp_dt AS act_cmp_dt, " +
+                    "      t.prcs_flg AS prcs_flg, " +
+                    "      t.prcs_yes_actn AS prcs_yes_actn, " +
+                    "      tsm.status_nm AS status_nm, " +
+                    "      t.sub_status AS sub_status, " +
+                    "      pm.priority_nm AS priority_nm, " +
+                    "      t.addl_rem AS addl_rem, " +
+                    "      false AS is_individual, " +
+                    "      p.prj_nm AS project_name, " +
+                    "      m.mlstn_ttl AS milestone_title, " +
+                    "      pc_rev.emp_id AS reviewer_id, " +
+                    "      TRIM(COALESCE(e_rev.fst_nm,'')||' '||COALESCE(e_rev.lst_nm,'')) AS reviewer_name, " +
+                    "      pc_app.emp_id AS approver_id, " +
+                    "      TRIM(COALESCE(e_app.fst_nm,'')||' '||COALESCE(e_app.lst_nm,'')) AS approver_name, " +
+                    "      chk.total AS chk_total, " +
+                    "      chk.completed AS chk_completed " +
+                    "    FROM task_live_master t " +
+                    "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id " +
+                    "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id " +
+                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
+                    "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
+                    "    LEFT JOIN process_config pc_rev ON pc_rev.task_id = t.task_id AND pc_rev.is_live = true AND pc_rev.ordr_id = 1 " +
+                    "    LEFT JOIN employee_master e_rev ON e_rev.emp_id = pc_rev.emp_id " +
+                    "    LEFT JOIN process_config pc_app ON pc_app.task_id = t.task_id AND pc_app.is_live = true AND pc_app.ordr_id = 2 " +
+                    "    LEFT JOIN employee_master e_app ON e_app.emp_id = pc_app.emp_id " +
+                    "    LEFT JOIN LATERAL ( " +
+                    "      SELECT " +
+                    "        COALESCE(SUM(1 + LENGTH(chk_nm) - LENGTH(REPLACE(chk_nm, ',', ''))), 0) AS total, " +
+                    "        COALESCE(SUM(CASE WHEN chk_sts = true THEN 1 + LENGTH(chk_nm) - LENGTH(REPLACE(chk_nm, ',', '')) ELSE 0 END), 0) AS completed " +
+                    "      FROM checklist_master " +
+                    "      WHERE task_id = t.task_id AND sts = true " +
+                    "    ) chk ON true " +
+                    "    WHERE (t.emp_id = p_emp_id OR pc_rev.emp_id = p_emp_id OR pc_app.emp_id = p_emp_id) " +
+                    " " +
+                    "    UNION ALL " +
+                    " " +
+                    "    SELECT " +
+                    "      t.emp_task_id AS task_id, " +
+                    "      t.task_cd AS task_cd, " +
+                    "      t.task_nm AS task_nm, " +
+                    "      t.task_desc AS task_desc, " +
+                    "      t.task_asgn_to AS task_asgn_to, " +
+                    "      t.emp_id AS emp_id, " +
+                    "      NULL::bigint AS ext_emp_id, " +
+                    "      false AS task_dep_flg, " +
+                    "      NULL::varchar AS task_dep_typ, " +
+                    "      NULL::bigint AS dep_task_id, " +
+                    "      (t.end_dt - t.st_dt) AS no_of_days, " +
+                    "      NULL::integer AS wrk_days, " +
+                    "      t.chk_flg AS chk_flg, " +
+                    "      t.atta_flg AS atta_flg, " +
+                    "      NULL::integer AS atta_file_id, " +
+                    "      NULL::varchar AS note_txt, " +
+                    "      t.st_dt AS st_dt, " +
+                    "      t.end_dt AS end_dt, " +
+                    "      CASE WHEN tsm.status_nm = 'Completed' THEN t.end_dt ELSE NULL END AS act_cmp_dt, " +
+                    "      t.prcs_flg AS prcs_flg, " +
+                    "      t.prcs_yes_actn AS prcs_yes_actn, " +
+                    "      tsm.status_nm AS status_nm, " +
+                    "      t.sub_status AS sub_status, " +
+                    "      pm.priority_nm AS priority_nm, " +
+                    "      t.remarks AS addl_rem, " +
+                    "      true AS is_individual, " +
+                    "      'Individual Task' AS project_name, " +
+                    "      '-' AS milestone_title, " +
+                    "      pc_rev.emp_id AS reviewer_id, " +
+                    "      TRIM(COALESCE(e_rev.fst_nm,'')||' '||COALESCE(e_rev.lst_nm,'')) AS reviewer_name, " +
+                    "      pc_app.emp_id AS approver_id, " +
+                    "      TRIM(COALESCE(e_app.fst_nm,'')||' '||COALESCE(e_app.lst_nm,'')) AS approver_name, " +
+                    "      chk.total AS chk_total, " +
+                    "      chk.completed AS chk_completed " +
+                    "    FROM employee_individual_task_master t " +
+                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
+                    "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
+                    "    LEFT JOIN process_config pc_rev ON pc_rev.emp_task_id = t.emp_task_id AND pc_rev.ordr_id = 1 " +
+                    "    LEFT JOIN employee_master e_rev ON e_rev.emp_id = pc_rev.emp_id " +
+                    "    LEFT JOIN process_config pc_app ON pc_app.emp_task_id = t.emp_task_id AND pc_app.ordr_id = 2 " +
+                    "    LEFT JOIN employee_master e_app ON e_app.emp_id = pc_app.emp_id " +
+                    "    LEFT JOIN LATERAL ( " +
+                    "      SELECT " +
+                    "        COALESCE(SUM(1 + LENGTH(chk_nm) - LENGTH(REPLACE(chk_nm, ',', ''))), 0) AS total, " +
+                    "        COALESCE(SUM(CASE WHEN chk_sts = true THEN 1 + LENGTH(chk_nm) - LENGTH(REPLACE(chk_nm, ',', '')) ELSE 0 END), 0) AS completed " +
+                    "      FROM checklist_master " +
+                    "      WHERE emp_task_id = t.emp_task_id AND sts = true " +
+                    "    ) chk ON true " +
+                    "    WHERE COALESCE(t.sts, true) = true AND (t.emp_id = p_emp_id OR pc_rev.emp_id = p_emp_id OR pc_app.emp_id = p_emp_id) " +
+                    "  ), " +
+                    "  calculated_tasks AS ( " +
+                    "    SELECT " +
+                    "      t.*, " +
+                    "      CASE " +
+                    "        WHEN t.priority_nm IS NOT NULL THEN " +
+                    "          CASE " +
+                    "            WHEN UPPER(t.priority_nm) = 'LOW' THEN 'Low' " +
+                    "            WHEN UPPER(t.priority_nm) = 'NORMAL' THEN 'Normal' " +
+                    "            WHEN UPPER(t.priority_nm) = 'MEDIUM' THEN 'Medium' " +
+                    "            WHEN UPPER(t.priority_nm) = 'HIGH' THEN 'High' " +
+                    "            WHEN UPPER(t.priority_nm) IN ('CRITICAL', 'ATMOST CRITICAL') THEN 'Critical' " +
+                    "            ELSE t.priority_nm " +
+                    "          END " +
+                    "        WHEN t.end_dt IS NOT NULL THEN " +
+                    "          CASE " +
+                    "            WHEN ( " +
+                    "              COALESCE( " +
+                    "                CASE WHEN t.status_nm IN ('COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
+                    "                     THEN COALESCE(t.act_cmp_dt, v_today) " +
+                    "                     ELSE v_today " +
+                    "                END, v_today) - t.end_dt " +
+                    "            ) = 0 THEN 'High' " +
+                    "            WHEN ( " +
+                    "              COALESCE( " +
+                    "                CASE WHEN t.status_nm IN ('COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
+                    "                     THEN COALESCE(t.act_cmp_dt, v_today) " +
+                    "                     ELSE v_today " +
+                    "                END, v_today) - t.end_dt " +
+                    "            ) = 1 THEN 'Critical' " +
+                    "            WHEN ( " +
+                    "              COALESCE( " +
+                    "                CASE WHEN t.status_nm IN ('COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
+                    "                     THEN COALESCE(t.act_cmp_dt, v_today) " +
+                    "                     ELSE v_today " +
+                    "                END, v_today) - t.end_dt " +
+                    "            ) >= 2 THEN 'Critical' " +
+                    "            ELSE 'Low' " +
+                    "          END " +
+                    "        ELSE 'Medium' " +
+                    "      END AS final_priority, " +
+                    "      CASE " +
+                    "        WHEN UPPER(t.status_nm) = 'COMPLETED' THEN 'Completed' " +
+                    "        WHEN UPPER(t.status_nm) = 'HOLD' THEN 'Hold' " +
+                    "        WHEN UPPER(t.status_nm) = 'DRAFT' THEN 'Draft' " +
+                    "        WHEN UPPER(t.status_nm) IN ('WIP', 'IN_PROGRESS', 'UNDER_REVIEW', 'SUBMIT_REVIEW') THEN 'In Progress' " +
+                    "        ELSE 'Open' " +
+                    "      END AS progress_sts, " +
+                    "      CASE " +
+                    "        WHEN t.sub_status = 'Under Review' OR UPPER(t.status_nm) IN ('UNDER_REVIEW', 'SUBMIT_REVIEW') THEN 'Under Review' " +
+                    "        WHEN t.sub_status = 'Rework' OR UPPER(t.status_nm) = 'REWORK' THEN 'Rework' " +
+                    "        WHEN t.sub_status = 'Reassign' OR UPPER(t.status_nm) = 'REASSIGN' THEN 'Reassign' " +
+                    "        ELSE 'None' " +
+                    "      END AS process_sts, " +
+                    "      CASE " +
+                    "        WHEN UPPER(t.status_nm) = 'COMPLETED' THEN " +
+                    "          CASE " +
+                    "            WHEN t.end_dt IS NOT NULL THEN " +
+                    "              CASE " +
+                    "                WHEN COALESCE(t.act_cmp_dt, v_today) < t.end_dt THEN 'Lead' " +
+                    "                WHEN COALESCE(t.act_cmp_dt, v_today) = t.end_dt THEN 'On Time' " +
+                    "                ELSE 'Lag' " +
+                    "              END " +
+                    "            ELSE 'On Time' " +
+                    "          END " +
+                    "        ELSE " +
+                    "          CASE " +
+                    "            WHEN t.end_dt IS NOT NULL THEN " +
+                    "              CASE " +
+                    "                WHEN v_today < t.end_dt THEN 'On Time' " +
+                    "                WHEN v_today = t.end_dt THEN 'Due Today' " +
+                    "                ELSE 'Overdue' " +
+                    "              END " +
+                    "            ELSE 'On Time' " +
+                    "          END " +
+                    "      END AS time_sts " +
+                    "    FROM combined_tasks t " +
+                    "  ), " +
+                    "  final_tasks AS ( " +
+                    "    SELECT " +
+                    "      t.*, " +
+                    "      CASE " +
+                    "        WHEN NOT COALESCE(t.prcs_flg, false) THEN " +
+                    "          CASE " +
+                    "            WHEN UPPER(t.status_nm) = 'COMPLETED' THEN 100 " +
+                    "            WHEN t.chk_total > 0 THEN ROUND((t.chk_completed::numeric / t.chk_total) * 100)::integer " +
+                    "            ELSE 0 " +
+                    "          END " +
+                    "        ELSE " +
+                    "          CASE " +
+                    "            WHEN UPPER(t.status_nm) = 'COMPLETED' THEN 100 " +
+                    "            WHEN UPPER(t.status_nm) = 'UNDER_REVIEW' THEN 95 " +
+                    "            WHEN UPPER(t.status_nm) = 'SUBMIT_REVIEW' THEN 90 " +
+                    "            WHEN t.chk_total > 0 THEN ROUND((t.chk_completed::numeric / t.chk_total) * 100)::integer " +
+                    "            ELSE 0 " +
+                    "          END " +
+                    "      END AS progress_pct " +
+                    "    FROM calculated_tasks t " +
+                    "  ) " +
+                    "  SELECT COALESCE(jsonb_agg( " +
+                    "    jsonb_build_object( " +
+                    "      'id', COALESCE(t.task_cd, CASE WHEN t.is_individual THEN 'IND-' || t.task_id ELSE 'TSK-' || t.task_id END), " +
+                    "      'taskId', t.task_id, " +
+                    "      'isIndividual', t.is_individual, " +
+                    "      'title', t.task_nm, " +
+                    "      'project', COALESCE(t.project_name, 'Unknown Project'), " +
+                    "      'milestone', COALESCE(t.milestone_title, 'Unknown Milestone'), " +
+                    "      'priority', t.final_priority, " +
+                    "      'dueDate', COALESCE(t.end_dt::text, ''), " +
+                    "      'status', t.progress_sts, " +
+                    "      'progressSts', t.progress_sts, " +
+                    "      'processSts', t.process_sts, " +
+                    "      'timeSts', t.time_sts, " +
+                    "      'progress', t.progress_pct, " +
+                    "      'rawStatus', t.status_nm, " +
+                    "      'description', COALESCE(t.task_desc, ''), " +
+                    "      'assignedBy', CASE WHEN t.is_individual THEN 'Task Manager' ELSE 'Project Manager' END, " +
+                    "      'rawTask', jsonb_build_object( " +
+                    "        'taskId', t.task_id, " +
+                    "        'mId', CASE WHEN t.is_individual THEN NULL ELSE t.task_id END, " +
+                    "        'taskCd', t.task_cd, " +
+                    "        'taskNm', t.task_nm, " +
+                    "        'taskDesc', t.task_desc, " +
+                    "        'empId', t.emp_id, " +
+                    "        'extEmpId', t.ext_emp_id, " +
+                    "        'taskDepFlg', t.task_dep_flg, " +
+                    "        'taskDepTyp', t.task_dep_typ, " +
+                    "        'depTaskId', t.dep_task_id, " +
+                    "        'noOfDays', t.no_of_days, " +
+                    "        'wrkDays', t.wrk_days, " +
+                    "        'chkFlg', t.chk_flg, " +
+                    "        'attaFlg', t.atta_flg, " +
+                    "        'attaFileId', t.atta_file_id, " +
+                    "        'noteTxt', t.note_txt, " +
+                    "        'stDt', COALESCE(t.st_dt::text, ''), " +
+                    "        'endDt', COALESCE(t.end_dt::text, ''), " +
+                    "        'actCmpDt', COALESCE(t.act_cmp_dt::text, ''), " +
+                    "        'prcsFlg', t.prcs_flg, " +
+                    "        'prcsYesActn', t.prcs_yes_actn, " +
+                    "        'taskSts', t.status_nm, " +
+                    "        'subStatus', t.sub_status, " +
+                    "        'priority', t.priority_nm, " +
+                    "        'addlRem', t.addl_rem, " +
+                    "        'reviewerId', t.reviewer_id, " +
+                    "        'approverId', t.approver_id, " +
+                    "        'reviewerNm', t.reviewer_name, " +
+                    "        'approverNm', t.approver_name " +
+                    "      ) " +
+                    "    ) " +
+                    "  ), '[]'::jsonb) INTO v_tasks " +
+                    "  FROM final_tasks t; " +
+                    " " +
+                    "  RETURN v_tasks; " +
+                    "END; " +
+                    "$$;"
+                );
+                System.out.println("get_my_tasks_data stored procedure created/updated successfully.");
+            } catch (Exception e) {
+                System.err.println("Failed to create/update get_my_tasks_data stored procedure: " + e.getMessage());
+                e.printStackTrace();
+            }
+
             // 2e. Create/Update get_admin_dashboard SQL function
             try {
                 System.out.println("Creating/Updating get_admin_dashboard stored procedure...");
@@ -1024,17 +1422,21 @@ public class DatabaseMigrator implements InitializingBean {
                     "  END LOOP; " +
                     " " +
                     "  /* 4. Task Overview Metrics */ " +
-                    "  FOR rec IN SELECT task_sts, end_dt FROM task_live_master LOOP " +
+                    "  FOR rec IN " +
+                    "    SELECT t.task_sts, t.end_dt, tsm.status_nm, t.sub_status " +
+                    "    FROM task_live_master t " +
+                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
+                    "  LOOP " +
                     "    v_t_total := v_t_total + 1; " +
-                    "    IF rec.task_sts = 5 THEN " +
+                    "    IF rec.status_nm = 'Completed' THEN " +
                     "      v_t_completed := v_t_completed + 1; " +
-                    "    ELSIF rec.task_sts IN (3, 4, 6, 7) THEN " +
+                    "    ELSIF rec.status_nm = 'WIP' THEN " +
                     "      v_t_in_prog := v_t_in_prog + 1; " +
                     "    ELSE " +
                     "      v_t_todo := v_t_todo + 1; " +
                     "    END IF; " +
                     " " +
-                    "    IF rec.task_sts <> 5 AND (rec.task_sts = 8 OR (rec.end_dt IS NOT NULL AND rec.end_dt < v_today)) THEN " +
+                    "    IF rec.status_nm <> 'Completed' AND (rec.sub_status = 'Overdue' OR (rec.end_dt IS NOT NULL AND rec.end_dt < v_today)) THEN " +
                     "      v_t_overdue := v_t_overdue + 1; " +
                     "    END IF; " +
                     "  END LOOP; " +
@@ -1048,12 +1450,13 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'projectName',    p.prj_nm, " +
                     "      'projectCode',    p.prj_cd, " +
                     "      'progressPercent', ROUND(CASE WHEN COUNT(t.task_id)>0 " +
-                    "        THEN (COUNT(t.task_id) FILTER (WHERE t.task_sts=5)::NUMERIC/COUNT(t.task_id))*100 " +
+                    "        THEN (COUNT(t.task_id) FILTER (WHERE tsm.status_nm='Completed')::NUMERIC/COUNT(t.task_id))*100 " +
                     "        ELSE 0 END, 2) " +
                     "    ) AS sub " +
                     "    FROM project_live_master p " +
                     "    LEFT JOIN milestone_live_master m ON m.prj_id = p.prj_id " +
                     "    LEFT JOIN task_live_master t ON t.m_id = m.m_id " +
+                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
                     "    GROUP BY p.prj_id, p.prj_nm, p.prj_cd " +
                     "    LIMIT 5 " +
                     "  ) x; " +
@@ -1072,7 +1475,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "    FROM task_live_master t " +
                     "    LEFT JOIN milestone_live_master m ON m.m_id  = t.m_id " +
                     "    LEFT JOIN project_live_master   p ON p.prj_id = m.prj_id " +
-                    "    WHERE t.task_sts <> 5 AND t.end_dt IS NOT NULL " +
+                    "    WHERE t.task_sts <> 4 AND t.end_dt IS NOT NULL " +
                     "    ORDER BY t.end_dt LIMIT 5 " +
                     "  ) x; " +
                     " " +
@@ -1215,10 +1618,10 @@ public class DatabaseMigrator implements InitializingBean {
                     "          ), 0), " +
                     "          COALESCE(SUM( " +
                     "            CASE " +
-                    "              WHEN tsm.status_nm = 'COMPLETED' THEN 100.0 " +
-                    "              WHEN tsm.status_nm = 'UNDER_REVIEW' THEN 80.0 " +
+                    "              WHEN tsm.status_nm = 'Completed' THEN 100.0 " +
+                    "              WHEN tsm.status_nm = 'WIP' AND t.sub_status = 'Under Review' THEN 80.0 " +
+                    "              WHEN tsm.status_nm = 'WIP' AND t.sub_status = 'Rework' THEN 20.0 " +
                     "              WHEN tsm.status_nm = 'WIP' THEN 50.0 " +
-                    "              WHEN tsm.status_nm = 'REWORK' THEN 20.0 " +
                     "              ELSE 0.0 " +
                     "            END / 100.0 * " +
                     "            CASE " +
@@ -1279,15 +1682,19 @@ public class DatabaseMigrator implements InitializingBean {
                     "    END IF; " +
                     "  END LOOP; " +
                     " " +
-                    "  FOR rec IN SELECT task_sts, end_dt FROM task_live_master LOOP " +
+                    "  FOR rec IN " +
+                    "    SELECT t.task_sts, t.end_dt, tsm.status_nm, t.sub_status " +
+                    "    FROM task_live_master t " +
+                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
+                    "  LOOP " +
                     "    v_t_total := v_t_total + 1; " +
-                    "    IF rec.task_sts = 5 THEN " +
+                    "    IF rec.status_nm = 'Completed' THEN " +
                     "      v_t_completed := v_t_completed + 1; " +
-                    "    ELSIF rec.task_sts = 8 OR (rec.end_dt IS NOT NULL AND rec.end_dt < v_today) THEN " +
+                    "    ELSIF rec.sub_status = 'Overdue' OR (rec.status_nm <> 'Completed' AND rec.end_dt IS NOT NULL AND rec.end_dt < v_today) THEN " +
                     "      v_t_overdue := v_t_overdue + 1; " +
-                    "    ELSIF rec.task_sts = 4 THEN " +
+                    "    ELSIF rec.status_nm = 'WIP' AND rec.sub_status = 'Under Review' THEN " +
                     "      v_t_under_review := v_t_under_review + 1; " +
-                    "    ELSIF rec.task_sts IN (3, 6, 7) THEN " +
+                    "    ELSIF rec.status_nm = 'WIP' THEN " +
                     "      v_t_in_progress := v_t_in_progress + 1; " +
                     "    ELSE " +
                     "      v_t_not_started := v_t_not_started + 1; " +
@@ -1331,7 +1738,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id " +
                     "    LEFT JOIN employee_master e ON e.emp_id = t.emp_id " +
                     "    LEFT JOIN external_employee_master ext ON ext.ext_emp_id = t.ext_emp_id " +
-                    "    WHERE t.task_sts <> 5 AND t.end_dt >= v_today " +
+                    "    WHERE t.task_sts <> 4 AND t.end_dt >= v_today " +
                     "    ORDER BY t.priority DESC, t.end_dt ASC LIMIT 5 " +
                     "  ) x; " +
                     " " +
@@ -1399,6 +1806,10 @@ public class DatabaseMigrator implements InitializingBean {
             } catch (Exception e) {
                 System.err.println("Could not drop check constraints on activity_log_transaction: " + e.getMessage());
             }
+
+            try {
+                stmt.execute("RESET lock_timeout");
+            } catch (Exception e) {}
         } catch (Exception e) {
             System.err.println("DatabaseMigrator migration failed: " + e.getMessage());
             e.printStackTrace();

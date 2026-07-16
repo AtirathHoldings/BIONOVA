@@ -20,6 +20,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.HashMap;
@@ -273,6 +274,7 @@ public class TaskLiveController {
         return ResponseEntity.ok(response);
     }
 
+    @Transactional
     @PutMapping("/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody TaskLive details) {
         TaskLive task = taskLiveRepository.findById(id)
@@ -359,17 +361,27 @@ public class TaskLiveController {
         return ResponseEntity.ok(response);
     }
 
+    @Transactional
     @PatchMapping("/{id}/status")
     public ResponseEntity<?> updateStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
         TaskLive task = taskLiveRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Task not found: " + id));
 
         String newStatus = body.get("taskSts");
-        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","COMPLETED","REASSIGN","REWORK","OVER_DUE").contains(newStatus)) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE"));
+        if (newStatus == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "taskSts is required"));
         }
-        task.setTaskSts(TaskStatusMaster.getByName(newStatus));
+        String upperStatus = newStatus.toUpperCase().replace(" ", "_");
+        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","SUBMIT_REVIEW","COMPLETED","REASSIGN","REWORK","OVER_DUE","HOLD").contains(upperStatus)) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, SUBMIT_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE, HOLD"));
+        }
+        // SUBMIT_REVIEW is a frontend-only state → maps to WIP
+        if ("SUBMIT_REVIEW".equals(upperStatus)) {
+            task.setTaskSts(TaskStatusMaster.WIP);
+        } else {
+            task.setTaskSts(TaskStatusMaster.getByName(newStatus));
+        }
         TaskLive saved = taskLiveRepository.save(task);
         projectStatusCascadeService.cascadeStatusFromTask(id);
         return ResponseEntity.ok(saved);

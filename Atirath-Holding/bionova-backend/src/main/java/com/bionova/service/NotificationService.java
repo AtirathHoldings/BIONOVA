@@ -274,7 +274,7 @@ public class NotificationService {
         List<TaskLive> activeTasks = taskLiveRepository.findAll().stream()
                 .filter(t -> {
                     String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "";
-                    return !"COMPLETED".equalsIgnoreCase(sts) && !"CLOSED".equalsIgnoreCase(sts);
+                    return !"Completed".equalsIgnoreCase(sts);
                 })
                 .collect(Collectors.toList());
 
@@ -283,10 +283,12 @@ public class NotificationService {
             try {
                 if (task.getEndDt() != null && today.isAfter(task.getEndDt())) {
                     String sts = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
-                    if (!"OVER_DUE".equals(sts)) {
-                        task.setTaskSts(com.bionova.entity.TaskStatusMaster.OVER_DUE);
-                        taskLiveRepository.save(task);
-                        projectStatusCascadeService.cascadeStatusFromTask(task.getTaskId());
+                    if (!"Completed".equalsIgnoreCase(sts)) {
+                        if (!"Overdue".equals(task.getSubStatus())) {
+                            task.setSubStatus("Overdue");
+                            taskLiveRepository.save(task);
+                            projectStatusCascadeService.cascadeStatusFromTask(task.getTaskId());
+                        }
                     }
                 }
                 if (shouldSendReminder("TASK", task.getTaskId(), task.getStDt(), task.getEndDt())) {
@@ -301,7 +303,7 @@ public class NotificationService {
         List<com.bionova.entity.Assignment> activeAssignments = assignmentRepository.findAll().stream()
                 .filter(a -> {
                     String sts = a.getTaskSts() != null ? a.getTaskSts().getStatusNm() : "";
-                    return !"COMPLETED".equalsIgnoreCase(sts);
+                    return !"Completed".equalsIgnoreCase(sts);
                 })
                 .collect(Collectors.toList());
 
@@ -309,9 +311,11 @@ public class NotificationService {
             try {
                 if (assignment.getEndDt() != null && today.isAfter(assignment.getEndDt())) {
                     String sts = assignment.getTaskSts() != null ? assignment.getTaskSts().getStatusNm() : "";
-                    if (!"OVER_DUE".equals(sts)) {
-                        assignment.setTaskSts(com.bionova.entity.TaskStatusMaster.OVER_DUE);
-                        assignmentRepository.save(assignment);
+                    if (!"Completed".equalsIgnoreCase(sts)) {
+                        if (!"Overdue".equals(assignment.getSubStatus())) {
+                            assignment.setSubStatus("Overdue");
+                            assignmentRepository.save(assignment);
+                        }
                     }
                 }
             } catch (Exception e) {

@@ -60,6 +60,28 @@ public class UserDashboardController {
         }
     }
 
+    @GetMapping("/my-tasks")
+    public ResponseEntity<?> getMyTasksData() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Employee employee = employeeRepository.findByEmail(email).orElse(null);
+
+        if (employee == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        Object result = entityManager
+                .createNativeQuery("SELECT get_my_tasks_data(:empId)")
+                .setParameter("empId", employee.getEmpId())
+                .getSingleResult();
+
+        try {
+            JsonNode root = objectMapper.readTree(result.toString());
+            return ResponseEntity.ok(root);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to parse get_my_tasks_data() response", e);
+        }
+    }
+
     private UserDashboardResponseDto mapToResponse(JsonNode root) {
         JsonNode profile = root.path("profile");
         JsonNode summary = root.path("summary");
@@ -78,6 +100,7 @@ public class UserDashboardController {
                     t.path("isOverdue").asBoolean(),
                     t.path("isDueToday").asBoolean(),
                     t.path("badge").asText("Executor"),
+                    t.path("taskSource").asText("PROJECT"),
                     mapEmployees(t.path("employees"))
             ));
         }
@@ -103,16 +126,16 @@ public class UserDashboardController {
             Long projectId = p.path("projectId").asLong(0);
 
             // Fetch Lead/Lag status for this project
-            String leadLagStatus = "ON_TIME";
-            String leadLagLabel  = "On Time";
-            String leadLagColor  = "#f59e0b";
+            String leadLagStatus = null;
+            String leadLagLabel  = null;
+            String leadLagColor  = null;
             int    daysVariance  = 0;
             if (projectId > 0) {
                 try {
                     java.util.Map<String, Object> ll = leadLagService.getLeadLagDetail(projectId);
-                    leadLagStatus = (String) ll.getOrDefault("leadLagStatus", "ON_TIME");
-                    leadLagLabel  = (String) ll.getOrDefault("leadLagLabel",  "On Time");
-                    leadLagColor  = (String) ll.getOrDefault("leadLagColor",  "#f59e0b");
+                    leadLagStatus = (String) ll.get("leadLagStatus");
+                    leadLagLabel  = (String) ll.get("leadLagLabel");
+                    leadLagColor  = (String) ll.get("leadLagColor");
                     Object dv = ll.get("daysVariance");
                     if (dv instanceof Number n) daysVariance = n.intValue();
                 } catch (Exception ignored) { /* project not live yet */ }
@@ -129,6 +152,7 @@ public class UserDashboardController {
                     p.path("progress").asDouble(),
                     p.path("tasksAssigned").asInt(),
                     p.path("openTasks").asInt(),
+                    p.path("closedTasks").asInt(),
                     p.path("status").asText("In Progress"),
                     p.path("logo").asText(null),
                     parseDate(p.path("dueDate").asText(null)),
@@ -186,7 +210,7 @@ public class UserDashboardController {
 
         JsonNode trendsNode = root.path("metricsTrends");
         dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), myTasksCount + completedTasksCount + overdueTasksCount));
-        dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), counts.path("Open").asInt()));
+        dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), counts.path("Open").asInt() + counts.path("Draft").asInt()));
         dto.setInProgressCard(mapMetricCard(trendsNode.path("inProgress"), counts.path("In Progress").asInt()));
         dto.setOverdueTasksCard(mapMetricCard(trendsNode.path("overdueTasks"), overdueTasksCount));
         dto.setCompletedTasksCard(mapMetricCard(trendsNode.path("completedTasks"), completedTasksCount));

@@ -105,6 +105,8 @@ D:\sample\bionova-backend\src\main\java\com\bionova\entity\TaskLive.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\TaskPriorityMaster.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\TaskStatusMaster.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\TeamMember.java
+D:\sample\bionova-backend\src\main\java\com\bionova\enums\ProcessStatus.java
+D:\sample\bionova-backend\src\main\java\com\bionova\enums\TimeStatus.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\ActivityLogRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\AppNotificationRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\AssignmentRepository.java

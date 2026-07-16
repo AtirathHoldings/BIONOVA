@@ -77,6 +77,9 @@ public class TaskDraft {
     @JoinColumn(name = "task_sts", referencedColumnName = "status_id")
     private TaskStatusMaster taskSts = TaskStatusMaster.DRAFT;
 
+    @Column(name = "sub_status", length = 50)
+    private String subStatus;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "priority", referencedColumnName = "priority_id")
     private TaskPriorityMaster priority;

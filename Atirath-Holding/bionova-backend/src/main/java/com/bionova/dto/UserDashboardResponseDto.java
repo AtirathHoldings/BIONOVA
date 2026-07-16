@@ -107,6 +107,7 @@ public class UserDashboardResponseDto {
         private boolean isOverdue;
         private boolean isDueToday;
         private String badge;
+        private String taskSource;      // "PROJECT" or "INDIVIDUAL"
         private List<EmployeeAvatarDto> employees;
     }
 
@@ -138,6 +139,7 @@ public class UserDashboardResponseDto {
         private double progress;       // Percentage, e.g. 65.0
         private int tasksAssigned;
         private int openTasks;
+        private int closedTasks;
         private String status;         // E.g., "In Progress"
         private String logo;           // Logo URL / base64 or path
         private LocalDate dueDate;     // Project End Date

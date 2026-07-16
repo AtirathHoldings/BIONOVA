@@ -95,4 +95,7 @@ public class ProjectLive {
 
     @Transient
     private String plantName;
+
+    @Transient
+    private Integer progress;
 }

@@ -96,6 +96,41 @@ public class ProjectLiveController {
         }
         prj.setPlantName(plantName);
         prj.setLocation(location);
+
+        // Compute overall progress using all tasks across all milestones of the project
+        List<MilestoneLive> milestones = milestoneLiveRepository.findByPrjId(prj.getPrjId());
+        double totalWeight = 0.0;
+        double completedWeight = 0.0;
+        for (MilestoneLive ms : milestones) {
+            List<TaskLive> tasks = taskLiveRepository.findByMilestoneId(ms.getMId());
+            for (TaskLive t : tasks) {
+                double weight = t.getWrkDays() != null && t.getWrkDays() > 0
+                        ? t.getWrkDays()
+                        : (t.getNoOfDays() != null && t.getNoOfDays() > 0 ? t.getNoOfDays() : 1.0);
+
+                String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "Open";
+                String subSts = t.getSubStatus() != null ? t.getSubStatus() : "";
+                double taskPct = 0.0;
+                if ("Completed".equalsIgnoreCase(sts)) {
+                    taskPct = 100.0;
+                } else if ("WIP".equalsIgnoreCase(sts)) {
+                    if ("Under Review".equalsIgnoreCase(subSts)) {
+                        taskPct = 80.0;
+                    } else if ("Rework".equalsIgnoreCase(subSts)) {
+                        taskPct = 20.0;
+                    } else {
+                        taskPct = 50.0;
+                    }
+                }
+                totalWeight += weight;
+                completedWeight += (taskPct / 100.0) * weight;
+            }
+        }
+        int progressPct = 0;
+        if (totalWeight > 0) {
+            progressPct = (int) Math.round((completedWeight / totalWeight) * 100.0);
+        }
+        prj.setProgress(progressPct);
     }
 
     private void enrichProjects(List<ProjectLive> projects) {
@@ -382,11 +417,26 @@ public class ProjectLiveController {
                 .orElseThrow(() -> new RuntimeException("Task not found: " + taskId));
 
         String newStatus = body.get("taskSts");
-        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","COMPLETED","REASSIGN","REWORK","OVER_DUE").contains(newStatus)) {
+        if (newStatus == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "taskSts is required"));
+        }
+        String upperStatus = newStatus.toUpperCase().replace(" ", "_");
+        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","COMPLETED","REASSIGN","REWORK","OVER_DUE","HOLD").contains(upperStatus)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE"));
+                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE, HOLD"));
         }
         task.setTaskSts(TaskStatusMaster.getByName(newStatus));
+        if ("UNDER_REVIEW".equals(upperStatus)) {
+            task.setSubStatus("Under Review");
+        } else if ("REWORK".equals(upperStatus)) {
+            task.setSubStatus("Rework");
+        } else if ("REASSIGN".equals(upperStatus)) {
+            task.setSubStatus("Reassign");
+        } else if ("OVER_DUE".equals(upperStatus) || "OVERDUE".equals(upperStatus)) {
+            task.setSubStatus("Overdue");
+        } else {
+            task.setSubStatus(null);
+        }
         TaskLive saved = taskLiveRepository.save(task);
         projectStatusCascadeService.cascadeStatusFromTask(taskId);
         return ResponseEntity.ok(saved);
