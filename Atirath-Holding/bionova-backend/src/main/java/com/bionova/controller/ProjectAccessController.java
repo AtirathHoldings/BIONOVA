@@ -150,6 +150,7 @@ public class ProjectAccessController {
             List<Map<String, Object>> response = new ArrayList<>();
 
             for (ProjectLive project : projects) {
+                try {
                 Optional<ProjectAccess> accessOpt = projectAccessRepository.findByPrjIdAndEmpIdAndSts(
                         project.getPrjId(), currentEmp.getEmpId(), true);
 
@@ -199,13 +200,34 @@ public class ProjectAccessController {
                     }
                 }
 
-                // Fetch tasks stats and progress using LeadLagService
+                // Fetch milestones and tasks stats
                 int totalTasks = 0;
                 int completedTasks = 0;
+                int totalMilestones = 0;
+                int completedMilestones = 0;
                 List<MilestoneLive> milestones = milestoneLiveRepository.findByPrjId(project.getPrjId());
+                totalMilestones = milestones.size();
                 for (MilestoneLive ms : milestones) {
                     List<TaskLive> tasks = taskLiveRepository.findByMilestoneId(ms.getMId());
                     totalTasks += tasks.size();
+                    boolean msCompleted = false;
+                    if (ms.getMlstnSts() != null && ("COMPLETED".equalsIgnoreCase(ms.getMlstnSts()) || "CLOSED".equalsIgnoreCase(ms.getMlstnSts()))) {
+                        msCompleted = true;
+                    } else if (!tasks.isEmpty()) {
+                        boolean allCompleted = true;
+                        for (TaskLive task : tasks) {
+                            if (task.getTaskSts() == null || !"COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+                                allCompleted = false;
+                                break;
+                            }
+                        }
+                        if (allCompleted) {
+                            msCompleted = true;
+                        }
+                    }
+                    if (msCompleted) {
+                        completedMilestones++;
+                    }
                     for (TaskLive task : tasks) {
                         if (task.getTaskSts() != null && "COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
                             completedTasks++;
@@ -277,10 +299,19 @@ public class ProjectAccessController {
                 tasksMap.put("completed", completedTasks);
                 prjMap.put("tasks", tasksMap);
 
+                Map<String, Object> milestonesMap = new HashMap<>();
+                milestonesMap.put("total", totalMilestones);
+                milestonesMap.put("completed", completedMilestones);
+                prjMap.put("milestonesCount", milestonesMap);
+
                 prjMap.put("has_access", hasAccess);
                 prjMap.put("access_type", hasAccess ? accessType : "");
 
                 response.add(prjMap);
+                } catch (Exception projEx) {
+                    // Skip this project if it causes a DB lock or other error
+                    System.err.println("Skipping project " + project.getPrjId() + " due to error: " + projEx.getMessage());
+                }
             }
 
             return ResponseEntity.ok(response);
@@ -344,13 +375,34 @@ public class ProjectAccessController {
                 }
             }
 
-            // Fetch tasks stats and progress using LeadLagService
+            // Fetch milestones and tasks stats
             int totalTasks = 0;
             int completedTasks = 0;
+            int totalMilestones = 0;
+            int completedMilestones = 0;
             List<MilestoneLive> milestones = milestoneLiveRepository.findByPrjId(prjId);
+            totalMilestones = milestones.size();
             for (MilestoneLive ms : milestones) {
                 List<TaskLive> tasks = taskLiveRepository.findByMilestoneId(ms.getMId());
                 totalTasks += tasks.size();
+                boolean msCompleted = false;
+                if (ms.getMlstnSts() != null && ("COMPLETED".equalsIgnoreCase(ms.getMlstnSts()) || "CLOSED".equalsIgnoreCase(ms.getMlstnSts()))) {
+                    msCompleted = true;
+                } else if (!tasks.isEmpty()) {
+                    boolean allCompleted = true;
+                    for (TaskLive task : tasks) {
+                        if (task.getTaskSts() == null || !"COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+                            allCompleted = false;
+                            break;
+                        }
+                    }
+                    if (allCompleted) {
+                        msCompleted = true;
+                    }
+                }
+                if (msCompleted) {
+                    completedMilestones++;
+                }
                 for (TaskLive task : tasks) {
                     if (task.getTaskSts() != null && "COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
                         completedTasks++;
@@ -395,6 +447,16 @@ public class ProjectAccessController {
             prjMap.put("projectType", "Construction");
             prjMap.put("type", "Construction");
             prjMap.put("priority", project.getPrjPrty() != null ? project.getPrjPrty().getPriorityNm().toLowerCase() : "medium");
+
+            Map<String, Object> milestonesMap = new HashMap<>();
+            milestonesMap.put("total", totalMilestones);
+            milestonesMap.put("completed", completedMilestones);
+            prjMap.put("milestonesCount", milestonesMap);
+
+            Map<String, Object> tasksMap = new HashMap<>();
+            tasksMap.put("total", totalTasks);
+            tasksMap.put("completed", completedTasks);
+            prjMap.put("tasks", tasksMap);
 
             List<ProjectAccess> accesses = projectAccessRepository.findByPrjIdAndSts(prjId, true);
             List<Map<String, Object>> accessDetails = new ArrayList<>();
@@ -464,7 +526,41 @@ public class ProjectAccessController {
                     Map<String, Object> tMap = new HashMap<>();
                     tMap.put("id", task.getTaskId().toString());
                     tMap.put("name", task.getTaskNm());
-                    tMap.put("status", formatTaskStatus(task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : null));
+                    tMap.put("taskCode", task.getTaskCd());
+                    String resolvedStatus = "Pending";
+                    if (task.getTaskSts() != null) {
+                        String baseStatus = task.getTaskSts().getStatusNm();
+                        if ("COMPLETED".equalsIgnoreCase(baseStatus)) {
+                            resolvedStatus = "Completed";
+                        } else if ("IN_PROGRESS".equalsIgnoreCase(baseStatus)) {
+                            resolvedStatus = "In Progress";
+                        } else if ("OPEN".equalsIgnoreCase(baseStatus)) {
+                            resolvedStatus = "Pending";
+                        } else {
+                            resolvedStatus = baseStatus;
+                        }
+                    }
+
+                    // Check process status overrides
+                    com.bionova.enums.ProcessStatus processSts = task.getProcessStatus();
+                    if (processSts == com.bionova.enums.ProcessStatus.UNDER_REVIEW) {
+                        resolvedStatus = "Under Review";
+                    } else if (processSts == com.bionova.enums.ProcessStatus.REWORK) {
+                        resolvedStatus = "Rework";
+                    } else if (processSts == com.bionova.enums.ProcessStatus.REASSIGN) {
+                        resolvedStatus = "Reassign";
+                    }
+
+                    // Check time status overrides (if not completed)
+                    if (!"Completed".equalsIgnoreCase(resolvedStatus)) {
+                        com.bionova.enums.TimeStatus timeSts = task.getTimeStatus();
+                        if (timeSts == com.bionova.enums.TimeStatus.OVERDUE) {
+                            resolvedStatus = "Overdue";
+                        } else if (timeSts == com.bionova.enums.TimeStatus.DUE_TODAY) {
+                            resolvedStatus = "Due Today";
+                        }
+                    }
+                    tMap.put("status", resolvedStatus);
                     
                     // Resolve names
                     tMap.put("assignee", resolveAssigneeNameAndCode(task));
@@ -596,5 +692,74 @@ public class ProjectAccessController {
     @GetMapping("/api/access-templates/project")
     public ResponseEntity<?> getAccessTemplates() {
         return ResponseEntity.ok(List.of());
+    }
+
+    // 8. POST /api/projects/tasks/{taskId}/assign-role -> Assign or remove task assignee, reviewer, or approver
+    @PostMapping("/api/projects/tasks/{taskId}/assign-role")
+    @org.springframework.transaction.annotation.Transactional
+    public ResponseEntity<?> assignTaskRole(
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body) {
+        try {
+            String roleType = (String) body.get("roleType");
+            Object empIdObj = body.get("empId");
+            Long empId = null;
+            if (empIdObj != null && !empIdObj.toString().isEmpty()) {
+                empId = Long.valueOf(empIdObj.toString());
+                if (empId == 0) {
+                    empId = null;
+                }
+            }
+
+            TaskLive task = taskLiveRepository.findById(taskId)
+                    .orElseThrow(() -> new RuntimeException("Task not found: " + taskId));
+
+            if ("assignee".equalsIgnoreCase(roleType)) {
+                task.setEmpId(empId);
+                taskLiveRepository.save(task);
+            } else if ("reviewer".equalsIgnoreCase(roleType) || "approver".equalsIgnoreCase(roleType)) {
+                int ordrId = "reviewer".equalsIgnoreCase(roleType) ? 1 : 2;
+                List<ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(taskId, true);
+                ProcessConfig targetConfig = null;
+                for (ProcessConfig pc : configs) {
+                    if (pc.getOrdrId() != null && pc.getOrdrId() == ordrId) {
+                        targetConfig = pc;
+                        break;
+                    }
+                }
+
+                if (empId == null) {
+                    if (targetConfig != null) {
+                        processConfigRepository.delete(targetConfig);
+                    }
+                } else {
+                    if (targetConfig == null) {
+                        targetConfig = new ProcessConfig();
+                        targetConfig.setTaskId(taskId);
+                        targetConfig.setIsLive(true);
+                        targetConfig.setOrdrId(ordrId);
+                        String roleName = (ordrId == 1) ? "Reviewer" : "Approver";
+                        Integer rId = reviewerMasterRepository.findAll().stream()
+                                .filter(r -> roleName.equalsIgnoreCase(r.getRNm()))
+                                .findFirst()
+                                .map(ReviewerMaster::getRId)
+                                .orElseGet(() -> {
+                                    ReviewerMaster rm = new ReviewerMaster();
+                                    rm.setRNm(roleName);
+                                    return reviewerMasterRepository.save(rm).getRId();
+                                });
+                        targetConfig.setRId(rId);
+                    }
+                    targetConfig.setEmpId(empId);
+                    processConfigRepository.save(targetConfig);
+                }
+            } else {
+                return ResponseEntity.badRequest().body(Map.of("error", "Invalid roleType. Must be assignee, reviewer, or approver"));
+            }
+
+            return ResponseEntity.ok(Map.of("message", "Task role assigned successfully"));
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
+        }
     }
 }

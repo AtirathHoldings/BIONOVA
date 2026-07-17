@@ -25,6 +25,9 @@ public class EmployeeController {
     @Autowired
     private com.bionova.repository.PlantRepository plantRepository;
 
+    @Autowired
+    private com.bionova.repository.DepartmentRepository departmentRepository;
+
     private void populateDesignation(Employee employee) {
         if (employee.getDesigId() != null) {
             designationRepository.findById(employee.getDesigId())
@@ -64,6 +67,10 @@ public class EmployeeController {
             plantRepository.findById(employee.getPltId().longValue())
                 .ifPresent(p -> employee.setPltNm(p.getPltNm()));
         }
+        if (employee.getDeptId() != null) {
+            departmentRepository.findById(employee.getDeptId().longValue())
+                .ifPresent(d -> employee.setDeptNm(d.getDeptNm()));
+        }
     }
 
     private void populateCompanyAndPlantNames(List<Employee> employees) {
@@ -85,12 +92,23 @@ public class EmployeeController {
                 (v1, v2) -> v1
             ));
 
+        List<com.bionova.entity.DepartmentMaster> departments = departmentRepository.findAll();
+        Map<Long, String> deptMap = departments.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                com.bionova.entity.DepartmentMaster::getDeptId,
+                com.bionova.entity.DepartmentMaster::getDeptNm,
+                (v1, v2) -> v1
+            ));
+
         for (Employee emp : employees) {
             if (emp.getCoyId() != null) {
                 emp.setCoyNm(coyMap.get(emp.getCoyId().longValue()));
             }
             if (emp.getPltId() != null) {
                 emp.setPltNm(pltMap.get(emp.getPltId().longValue()));
+            }
+            if (emp.getDeptId() != null) {
+                emp.setDeptNm(deptMap.get(emp.getDeptId().longValue()));
             }
         }
     }

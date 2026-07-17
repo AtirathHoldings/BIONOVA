@@ -101,4 +101,7 @@ public class Employee {
 
     @Transient
     private String pltNm;
+
+    @Transient
+    private String deptNm;
 }
