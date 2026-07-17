@@ -80,19 +80,25 @@ public class GanttChartController {
         // 1. Fetch Milestones
         List<MilestoneLive> milestones = milestoneLiveRepository.findByPrjId(projectId);
 
-        // Fetch all employees in a map for quick lookup
-        Map<Long, String> employeeNameMap = employeeRepository.findAll().stream()
-                .collect(Collectors.toMap(
-                        Employee::getEmpId,
-                        e -> e.getFirstName() + " " + (e.getLastName() != null ? e.getLastName() : ""),
-                        (v1, v2) -> v1 // In case of duplicate keys
-                ));
-
-        // 2. Fetch Tasks for all these milestones and group them by milestone ID
+        // Fetch Tasks for all these milestones and group them by milestone ID (first pass to get emp IDs)
         Map<Long, List<TaskLive>> tasksByMilestone = new HashMap<>();
+        java.util.Set<Long> empIds = new java.util.HashSet<>();
         for (MilestoneLive ms : milestones) {
             List<TaskLive> msTasks = taskLiveRepository.findByMilestoneId(ms.getMId());
             tasksByMilestone.put(ms.getMId(), msTasks);
+            for (TaskLive t : msTasks) {
+                if (t.getEmpId() != null) empIds.add(t.getEmpId());
+                if (t.getExtEmpId() != null) empIds.add(t.getExtEmpId());
+            }
+        }
+
+        // Fetch only the employees actually assigned to tasks in this project
+        Map<Long, String> employeeNameMap = new HashMap<>();
+        if (!empIds.isEmpty()) {
+            employeeRepository.findAllById(empIds).forEach(e ->
+                employeeNameMap.put(e.getEmpId(),
+                    e.getFirstName() + " " + (e.getLastName() != null ? e.getLastName() : ""))
+            );
         }
 
         // 3. Compute progress for Project
