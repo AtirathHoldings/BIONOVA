@@ -507,6 +507,9 @@ public class DatabaseMigrator implements InitializingBean {
                     "  v_draft          INT := 0; " +
                     "  v_reassigned_raw INT := 0; " +
                     "  v_rework_raw     INT := 0; " +
+                    "  v_main_completed INT := 0; " +
+                    "  v_main_wip       INT := 0; " +
+                    "  v_main_open      INT := 0; " +
                     "  v_my_prj_count   BIGINT := 0; " +
                     "  v_todo_list      jsonb; " +
                     "  v_upcoming       jsonb; " +
@@ -545,6 +548,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      COALESCE(p.prj_cd, '') AS prj_cd, " +
                     "      CASE " +
                     "        WHEN t.emp_id = p_emp_id THEN 'Executor' " +
+                    "        WHEN t.task_id IN (SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL) THEN 'Contributor' " +
                     "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 1) THEN 'Reviewer' " +
                     "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 2) THEN 'Approver' " +
                     "        ELSE 'Executor' " +
@@ -558,6 +562,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
                     "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
                     "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
+                    "    ) OR t.task_id IN ( " +
+                    "      SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
                     "    )) " +
                     " " +
                     "    UNION ALL " +
@@ -576,6 +582,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, " +
                     "      CASE " +
                     "        WHEN t.emp_id = p_emp_id THEN 'Executor' " +
+                    "        WHEN t.emp_task_id IN (SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL) THEN 'Contributor' " +
                     "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 1) THEN 'Reviewer' " +
                     "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 2) THEN 'Approver' " +
                     "        ELSE 'Executor' " +
@@ -587,6 +594,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
                     "    WHERE (t.emp_id = p_emp_id OR t.emp_task_id IN ( " +
                     "      SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL " +
+                    "    ) OR t.emp_task_id IN ( " +
+                    "      SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL " +
                     "    )) AND COALESCE(t.sts, true) = true " +
                     "  ; " +
                     "  SELECT " +
@@ -601,19 +610,24 @@ public class DatabaseMigrator implements InitializingBean {
                     "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
                     "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'draft' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
                     "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'reassign'), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework') " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework'), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed'), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip'), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') IN ('open', 'hold')) " +
                     "  INTO v_total_tasks, v_completed, v_overdue, v_due_today, " +
                     "       v_wip, v_under_review, v_open, v_reassigned, v_rework, v_draft, " +
-                    "       v_reassigned_raw, v_rework_raw " +
+                    "       v_reassigned_raw, v_rework_raw, " +
+                    "       v_main_completed, v_main_wip, v_main_open " +
                     "  FROM temp_all_tasks; " +
                     " " +
-                    "  /* 3. Projects Count (Only active projects) */ " +
                     "  SELECT COUNT(DISTINCT m.prj_id) INTO v_my_prj_count " +
                     "  FROM task_live_master t " +
                     "  JOIN milestone_live_master m ON m.m_id = t.m_id " +
                     "  JOIN project_live_master p ON p.prj_id = m.prj_id " +
                     "  WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
                     "    SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
+                    "  ) OR t.task_id IN ( " +
+                    "    SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
                     "  )) AND p.prj_sts = 'LIVE'; " +
                     " " +
                     "  /* 4. To-Do List (Limit 5, ordered by end_dt) */ " +
@@ -629,6 +643,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      COALESCE(p.prj_cd || ' - ' || m.mlstn_ttl, '') AS project_info, " +
                     "      CASE " +
                     "        WHEN t.emp_id = p_emp_id THEN 'Executor' " +
+                    "        WHEN t.task_id IN (SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL) THEN 'Contributor' " +
                     "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 1) THEN 'Reviewer' " +
                     "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 2) THEN 'Approver' " +
                     "        ELSE 'Executor' " +
@@ -640,11 +655,16 @@ public class DatabaseMigrator implements InitializingBean {
                     "          'empId', em.emp_id, " +
                     "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), " +
                     "          'photoUrl', em.photo_url, " +
-                    "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END " +
+                    "          'role', CASE " +
+                    "                    WHEN t.emp_id = em.emp_id THEN 'Executor' " +
+                    "                    WHEN em.emp_id IN (SELECT tm.emp_id FROM team_members tm WHERE tm.task_id = t.task_id) THEN 'Contributor' " +
+                    "                    ELSE 'Reviewer/Approver' " +
+                    "                  END " +
                     "        )) " +
                     "        FROM employee_master em " +
                     "        WHERE em.emp_id = t.emp_id " +
                     "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.task_id = t.task_id AND pc.is_live = true) " +
+                    "           OR em.emp_id IN (SELECT tm.emp_id FROM team_members tm WHERE tm.task_id = t.task_id) " +
                     "      ) AS employees " +
                     "    FROM task_live_master t " +
                     "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id " +
@@ -653,6 +673,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
                     "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
                     "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
+                    "    ) OR t.task_id IN ( " +
+                    "      SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
                     "    )) " +
                     " " +
                     "    UNION ALL " +
@@ -668,6 +690,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS project_info, " +
                     "      CASE " +
                     "        WHEN t.emp_id = p_emp_id THEN 'Executor' " +
+                    "        WHEN t.emp_task_id IN (SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL) THEN 'Contributor' " +
                     "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 1) THEN 'Reviewer' " +
                     "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 2) THEN 'Approver' " +
                     "        ELSE 'Executor' " +
@@ -679,17 +702,24 @@ public class DatabaseMigrator implements InitializingBean {
                     "          'empId', em.emp_id, " +
                     "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), " +
                     "          'photoUrl', em.photo_url, " +
-                    "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END " +
+                    "          'role', CASE " +
+                    "                    WHEN t.emp_id = em.emp_id THEN 'Executor' " +
+                    "                    WHEN em.emp_id IN (SELECT tm.emp_id FROM team_members tm WHERE tm.emp_task_id = t.emp_task_id) THEN 'Contributor' " +
+                    "                    ELSE 'Reviewer/Approver' " +
+                    "                  END " +
                     "        )) " +
                     "        FROM employee_master em " +
                     "        WHERE em.emp_id = t.emp_id " +
                     "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.emp_task_id = t.emp_task_id AND pc.emp_task_id IS NOT NULL) " +
+                    "           OR em.emp_id IN (SELECT tm.emp_id FROM team_members tm WHERE tm.emp_task_id = t.emp_task_id) " +
                     "      ) AS employees " +
                     "    FROM employee_individual_task_master t " +
                     "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
                     "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
                     "    WHERE (t.emp_id = p_emp_id OR t.emp_task_id IN ( " +
                     "      SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL " +
+                    "    ) OR t.emp_task_id IN ( " +
+                    "      SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL " +
                     "    )) AND COALESCE(t.sts, true) = true " +
                     "  ) " +
                     "  SELECT jsonb_agg(sub) INTO v_todo_list " +
@@ -737,11 +767,16 @@ public class DatabaseMigrator implements InitializingBean {
                     "          'empId', em.emp_id, " +
                     "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), " +
                     "          'photoUrl', em.photo_url, " +
-                    "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END " +
+                    "          'role', CASE " +
+                    "                    WHEN t.emp_id = em.emp_id THEN 'Executor' " +
+                    "                    WHEN em.emp_id IN (SELECT tm.emp_id FROM team_members tm WHERE tm.task_id = t.task_id) THEN 'Contributor' " +
+                    "                    ELSE 'Reviewer/Approver' " +
+                    "                  END " +
                     "        )) " +
                     "        FROM employee_master em " +
                     "        WHERE em.emp_id = t.emp_id " +
                     "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.task_id = t.task_id AND pc.is_live = true) " +
+                    "           OR em.emp_id IN (SELECT tm.emp_id FROM team_members tm WHERE tm.task_id = t.task_id) " +
                     "      ) AS employees " +
                     "    FROM task_live_master t " +
                     "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id " +
@@ -750,6 +785,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
                     "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
                     "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
+                    "    ) OR t.task_id IN ( " +
+                    "      SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
                     "    )) " +
                     " " +
                     "    UNION ALL " +
@@ -769,17 +806,24 @@ public class DatabaseMigrator implements InitializingBean {
                     "          'empId', em.emp_id, " +
                     "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), " +
                     "          'photoUrl', em.photo_url, " +
-                    "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END " +
+                    "          'role', CASE " +
+                    "                    WHEN t.emp_id = em.emp_id THEN 'Executor' " +
+                    "                    WHEN em.emp_id IN (SELECT tm.emp_id FROM team_members tm WHERE tm.emp_task_id = t.emp_task_id) THEN 'Contributor' " +
+                    "                    ELSE 'Reviewer/Approver' " +
+                    "                  END " +
                     "        )) " +
                     "        FROM employee_master em " +
                     "        WHERE em.emp_id = t.emp_id " +
                     "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.emp_task_id = t.emp_task_id AND pc.emp_task_id IS NOT NULL) " +
+                    "           OR em.emp_id IN (SELECT tm.emp_id FROM team_members tm WHERE tm.emp_task_id = t.emp_task_id) " +
                     "      ) AS employees " +
                     "    FROM employee_individual_task_master t " +
                     "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
                     "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
                     "    WHERE (t.emp_id = p_emp_id OR t.emp_task_id IN ( " +
                     "      SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL " +
+                    "    ) OR t.emp_task_id IN ( " +
+                    "      SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL " +
                     "    )) AND COALESCE(t.sts, true) = true " +
                     "  ) " +
                     "  SELECT jsonb_agg(sub) INTO v_upcoming " +
@@ -858,6 +902,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "    ) pa ON pa.prj_id = p.prj_id AND pa.emp_id = p_emp_id " +
                     "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
                     "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
+                    "    ) OR t.task_id IN ( " +
+                    "      SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
                     "    )) AND p.prj_sts IN ('LIVE', 'CLOSED', 'HOLD') " +
                     "    GROUP BY p.prj_id, p.prj_nm, p.prj_cd, p.logo, cm.coy_nm, pm.plt_nm, cm.ct_vlg, p.prj_sts, pa.access_type, p.end_dt " +
                     "    ORDER BY p.prj_nm " +
@@ -884,8 +930,11 @@ public class DatabaseMigrator implements InitializingBean {
                     "         JOIN milestone_live_master m ON m.m_id = t_tr.m_id " +
                     "         JOIN project_live_master p_tr ON p_tr.prj_id = m.prj_id " +
                     "         WHERE (t_tr.emp_id = p_emp_id OR t_tr.task_id IN ( " +
-                    "           SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "         )) AND p_tr.prj_sts = 'LIVE' AND p_tr.st_dt <= d) AS projects_count " +
+                    "            SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
+                    "          ) OR t_tr.task_id IN ( " +
+                    "            SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
+                    "          )) AND p_tr.prj_sts = 'LIVE' AND p_tr.st_dt <= d) AS projects_count " +
+
                     "      FROM days " +
                     "      ORDER BY d " +
                     "    ) " +
@@ -976,6 +1025,10 @@ public class DatabaseMigrator implements InitializingBean {
                     "         SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
                     "      ) OR ind.emp_task_id IN ( " +
                     "         SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL " +
+                    "      ) OR t.task_id IN ( " +
+                    "         SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
+                    "      ) OR ind.emp_task_id IN ( " +
+                    "         SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL " +
                     "      ))) " +
                     "      OR (p.prj_id IN ( " +
                     "         SELECT DISTINCT ml_sub.prj_id " +
@@ -983,6 +1036,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "         JOIN milestone_live_master ml_sub ON ml_sub.m_id = t_sub.m_id " +
                     "         WHERE t_sub.emp_id = p_emp_id OR t_sub.task_id IN ( " +
                     "           SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
+                    "         ) OR t_sub.task_id IN ( " +
+                    "           SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
                     "         ) " +
                     "      )) " +
                     "    ORDER BY al.log_dt DESC " +
@@ -1051,7 +1106,9 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'Completed', v_completed, 'In Progress', v_wip, " +
                     "      'Under Review', v_under_review, 'Overdue', v_overdue, " +
                     "      'Open', v_open, 'Reassigned', v_reassigned, " +
-                    "      'Rework', v_rework, 'Draft', v_draft), " +
+                    "      'Rework', v_rework, 'Draft', v_draft, " +
+                    "      'MainCompleted', v_main_completed, 'MainWIP', v_main_wip, " +
+                    "      'MainOpen', v_main_open), " +
                     "    'todoList',      COALESCE(v_todo_list, '[]'::jsonb), " +
                     "    'upcomingTasks', COALESCE(v_upcoming, '[]'::jsonb), " +
                     "    'myProjects',    COALESCE(v_my_projects, '[]'::jsonb), " +
@@ -1138,7 +1195,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      FROM checklist_master " +
                     "      WHERE task_id = t.task_id AND sts = true " +
                     "    ) chk ON true " +
-                    "    WHERE (t.emp_id = p_emp_id OR pc_rev.emp_id = p_emp_id OR pc_app.emp_id = p_emp_id) " +
+                    "    WHERE (t.emp_id = p_emp_id OR pc_rev.emp_id = p_emp_id OR pc_app.emp_id = p_emp_id OR t.task_id IN (SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL)) " +
                     " " +
                     "    UNION ALL " +
                     " " +
@@ -1191,7 +1248,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      FROM checklist_master " +
                     "      WHERE emp_task_id = t.emp_task_id AND sts = true " +
                     "    ) chk ON true " +
-                    "    WHERE COALESCE(t.sts, true) = true AND (t.emp_id = p_emp_id OR pc_rev.emp_id = p_emp_id OR pc_app.emp_id = p_emp_id) " +
+                    "    WHERE COALESCE(t.sts, true) = true AND (t.emp_id = p_emp_id OR pc_rev.emp_id = p_emp_id OR pc_app.emp_id = p_emp_id OR t.emp_task_id IN (SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL)) " +
                     "  ), " +
                     "  calculated_tasks AS ( " +
                     "    SELECT " +

@@ -11,6 +11,7 @@ import lombok.Setter;
 @Setter
 public class TeamMemberDto {
     private Long taskId;
+    private Long empTaskId;
     private Long empId;
     private String asgnRmk;
 }

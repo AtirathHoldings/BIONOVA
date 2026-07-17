@@ -1,12 +1,15 @@
 package com.bionova.controller;
 
 import com.bionova.dto.AssignmentRequest;
+import com.bionova.dto.TeamMemberDto;
 import com.bionova.entity.Employee;
 import com.bionova.entity.Assignment;
+import com.bionova.entity.TeamMember;
 import com.bionova.entity.TaskStatusMaster;
 import com.bionova.entity.TaskPriorityMaster;
 import com.bionova.repository.AssignmentRepository;
 import com.bionova.repository.EmployeeRepository;
+import com.bionova.repository.TeamMemberRepository;
 import com.bionova.service.CalendarService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -36,6 +39,9 @@ public class AssignmentController {
 
     @Autowired
     private CalendarService calendarService;
+
+    @Autowired
+    private TeamMemberRepository teamMemberRepository;
 
     private boolean isAdminOrManager(Employee employee) {
         if (employee == null) {
@@ -313,5 +319,54 @@ public class AssignmentController {
         checklistRepo.deleteByEmpTaskId(id);
         repository.deleteById(id);
         return ResponseEntity.ok().build();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Contributor Endpoints
+    // ─────────────────────────────────────────────────────────────────────────
+
+    @GetMapping("/{id}/contributors")
+    public ResponseEntity<?> getContributors(@PathVariable Long id) {
+        if (!repository.existsById(id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Assignment not found: " + id));
+        }
+        return ResponseEntity.ok(teamMemberRepository.findByEmpTaskId(id));
+    }
+
+    @PostMapping("/{id}/contributors")
+    public ResponseEntity<?> assignContributors(@PathVariable Long id, @RequestBody List<TeamMemberDto> dtos) {
+        if (!repository.existsById(id)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Assignment not found: " + id));
+        }
+        if (dtos == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Request body cannot be null."));
+        }
+
+        teamMemberRepository.deleteByEmpTaskId(id);
+
+        List<TeamMember> saved = dtos.stream()
+                .filter(dto -> dto.getEmpId() != null)
+                .map(dto -> {
+                    TeamMember tm = new TeamMember();
+                    tm.setEmpTaskId(id);
+                    tm.setEmpId(dto.getEmpId());
+                    tm.setAsgnRmk(dto.getAsgnRmk());
+                    return teamMemberRepository.save(tm);
+                })
+                .toList();
+
+        return ResponseEntity.ok(saved);
+    }
+
+    @DeleteMapping("/{id}/contributors/{tmId}")
+    public ResponseEntity<?> removeContributor(@PathVariable Long id, @PathVariable Integer tmId) {
+        if (!teamMemberRepository.existsById(tmId)) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                    .body(Map.of("message", "Contributor not found: " + tmId));
+        }
+        teamMemberRepository.deleteById(tmId);
+        return ResponseEntity.ok(Map.of("message", "Contributor removed successfully."));
     }
 }

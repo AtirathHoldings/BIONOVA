@@ -43,6 +43,7 @@ public class UserDashboardResponseDto {
 
     // Bottom Right: Task Completion Status Distribution for Donut Chart
     private Map<String, Integer> taskStatusCounts;
+    private Map<String, Integer> taskStatusPercentages;
     private double overallCompletionPercentage;
 
     // Performance Metrics

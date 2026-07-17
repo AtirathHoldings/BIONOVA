@@ -164,15 +164,51 @@ public class UserDashboardController {
         }
 
         // 4. Task Status Counts (Donut Chart) Mapping
+        int completedVal = counts.path("Completed").asInt();
+        int inProgressVal = counts.path("In Progress").asInt();
+        int underReviewVal = counts.path("Under Review").asInt();
+        int overdueVal = counts.path("Overdue").asInt();
+        int openVal = counts.path("Open").asInt();
+        int reassignedVal = counts.path("Reassigned").asInt();
+        int reworkVal = counts.path("Rework").asInt();
+        int draftVal = counts.path("Draft").asInt();
+
         Map<String, Integer> taskStatusCounts = new HashMap<>();
-        taskStatusCounts.put("Completed",    counts.path("Completed").asInt());
-        taskStatusCounts.put("In Progress",  counts.path("In Progress").asInt());
-        taskStatusCounts.put("Under Review", counts.path("Under Review").asInt());
-        taskStatusCounts.put("Overdue",      counts.path("Overdue").asInt());
-        taskStatusCounts.put("Open",         counts.path("Open").asInt());
-        taskStatusCounts.put("Reassigned",   counts.path("Reassigned").asInt());
-        taskStatusCounts.put("Rework",       counts.path("Rework").asInt());
-        taskStatusCounts.put("Draft",        counts.path("Draft").asInt());
+        taskStatusCounts.put("Completed",    completedVal);
+        taskStatusCounts.put("In Progress",  inProgressVal);
+        taskStatusCounts.put("Under Review", underReviewVal);
+        taskStatusCounts.put("Overdue",      overdueVal);
+        taskStatusCounts.put("Open",         openVal);
+        taskStatusCounts.put("Reassigned",   reassignedVal);
+        taskStatusCounts.put("Rework",       reworkVal);
+        taskStatusCounts.put("Draft",        draftVal);
+
+        int mainCompleted = counts.path("MainCompleted").asInt();
+        int mainWip = counts.path("MainWIP").asInt();
+        int mainOpen = counts.path("MainOpen").asInt();
+
+        double total = mainCompleted + mainWip + mainOpen;
+
+        Map<String, Integer> taskStatusPercentages = new HashMap<>();
+        if (total > 0) {
+            taskStatusPercentages.put("Completed",    (int) Math.round((mainCompleted / total) * 100));
+            taskStatusPercentages.put("In Progress",  (int) Math.round((mainWip / total) * 100));
+            taskStatusPercentages.put("Open",         (int) Math.round((mainOpen / total) * 100));
+            taskStatusPercentages.put("Under Review", 0);
+            taskStatusPercentages.put("Overdue",      0);
+            taskStatusPercentages.put("Reassigned",   0);
+            taskStatusPercentages.put("Rework",       0);
+            taskStatusPercentages.put("Draft",        0);
+        } else {
+            taskStatusPercentages.put("Completed",    0);
+            taskStatusPercentages.put("In Progress",  0);
+            taskStatusPercentages.put("Open",         0);
+            taskStatusPercentages.put("Under Review", 0);
+            taskStatusPercentages.put("Overdue",      0);
+            taskStatusPercentages.put("Reassigned",   0);
+            taskStatusPercentages.put("Rework",       0);
+            taskStatusPercentages.put("Draft",        0);
+        }
 
         // 5. Recent Activity Feed Mapping
         List<RecentActivityDto> recentActivity = new ArrayList<>();
@@ -220,6 +256,7 @@ public class UserDashboardController {
         dto.setUpcomingTasks(upcomingTasks);
         dto.setMyProjects(myProjects);
         dto.setTaskStatusCounts(taskStatusCounts);
+        dto.setTaskStatusPercentages(taskStatusPercentages);
         dto.setOverallCompletionPercentage(summary.path("overallCompletion").asDouble());
 
         JsonNode performanceNode = root.path("performance");

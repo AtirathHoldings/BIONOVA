@@ -24,8 +24,11 @@ public class TeamMember {
     @Column(name = "tm_id")
     private Integer tmId;
 
-    @Column(name = "task_id", nullable = false)
+    @Column(name = "task_id", nullable = true)
     private Long taskId;
+
+    @Column(name = "emp_task_id", nullable = true)
+    private Long empTaskId;
 
     @Column(name = "emp_id", nullable = false)
     private Long empId;

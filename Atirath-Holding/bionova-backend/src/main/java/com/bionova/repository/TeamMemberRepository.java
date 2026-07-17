@@ -16,6 +16,9 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Integer>
     /** All team members assigned to a specific task */
     List<TeamMember> findByTaskId(Long taskId);
 
+    /** All team members assigned to a specific individual assignment */
+    List<TeamMember> findByEmpTaskId(Long empTaskId);
+
     /** All task assignments for a specific employee */
     List<TeamMember> findByEmpId(Long empId);
 
@@ -23,9 +26,18 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Integer>
     @Query("SELECT COUNT(tm) > 0 FROM TeamMember tm WHERE tm.taskId = :taskId AND tm.empId = :empId")
     boolean existsByTaskIdAndEmpId(@Param("taskId") Long taskId, @Param("empId") Long empId);
 
+    /** Check if an employee is already assigned to an assignment (avoid duplicates) */
+    @Query("SELECT COUNT(tm) > 0 FROM TeamMember tm WHERE tm.empTaskId = :empTaskId AND tm.empId = :empId")
+    boolean existsByEmpTaskIdAndEmpId(@Param("empTaskId") Long empTaskId, @Param("empId") Long empId);
+
     /** Delete all members of a task (used when replacing the entire team) */
     @Modifying
     @Transactional
     void deleteByTaskId(Long taskId);
+
+    /** Delete all members of an assignment */
+    @Modifying
+    @Transactional
+    void deleteByEmpTaskId(Long empTaskId);
 }
 

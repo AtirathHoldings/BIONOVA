@@ -133,10 +133,28 @@ public class RbacService {
             savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions(), request.getCreatedBy());
         } 
         else if (hasOverrides(request.getRoleId(), request.getPermissions())) {
-            // Save as an ad-hoc custom override role specific to this configuration
-            finalRoleNm = "Custom_Access_" + System.currentTimeMillis();
-            finalRoleId = rbacRepository.findMaxRoleId() + 1;
-            savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions(), request.getCreatedBy());
+            // Check if it matches any existing template role
+            Integer matchedRoleId = null;
+            String matchedRoleNm = null;
+            List<RoleDto> allRoles = getAllRoles();
+            for (RoleDto role : allRoles) {
+                if (!hasOverrides(role.getRoleId(), request.getPermissions())) {
+                    matchedRoleId = role.getRoleId();
+                    matchedRoleNm = role.getRoleNm();
+                    break;
+                }
+            }
+
+            if (matchedRoleId != null) {
+                finalRoleId = matchedRoleId;
+                finalRoleNm = matchedRoleNm;
+            } else {
+                // Save as an ad-hoc custom override role specific to this configuration
+                finalRoleNm = "Custom_Access_" + System.currentTimeMillis();
+                Integer maxId = rbacRepository.findMaxRoleId();
+                finalRoleId = (maxId == null ? 0 : maxId) + 1;
+                savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions(), request.getCreatedBy());
+            }
         } else if (request.getRoleId() != null) {
             // Just use the base template role, find its name
             List<RoleBasedAccessControl> existing = rbacRepository.findByRoleId(request.getRoleId());
@@ -270,11 +288,30 @@ public class RbacService {
     public void updateEmployeePermissions(Long empId, UpdateEmployeePermissionsRequest request) {
         List<RoleBasedEmployeeMapping> oldMappings = employeeMappingRepository.findByEmpId(empId);
 
-        String finalRoleNm = "Custom_Access_" + System.currentTimeMillis();
-        Integer finalRoleId = rbacRepository.findMaxRoleId();
-        finalRoleId = (finalRoleId == null ? 0 : finalRoleId) + 1;
+        Integer finalRoleId = null;
+        String finalRoleNm = null;
 
-        savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions(), request.getCreatedBy());
+        // Check if the requested permissions match any existing template role
+        List<RoleDto> allRoles = getAllRoles();
+        for (RoleDto role : allRoles) {
+            if (!hasOverrides(role.getRoleId(), request.getPermissions())) {
+                finalRoleId = role.getRoleId();
+                finalRoleNm = role.getRoleNm();
+                break;
+            }
+        }
+
+        // If no match is found, create a new custom role
+        if (finalRoleId == null) {
+            if (request.getCustomRoleName() != null && !request.getCustomRoleName().trim().isEmpty()) {
+                finalRoleNm = request.getCustomRoleName().trim();
+            } else {
+                finalRoleNm = "Custom_Access_" + System.currentTimeMillis();
+            }
+            Integer maxId = rbacRepository.findMaxRoleId();
+            finalRoleId = (maxId == null ? 0 : maxId) + 1;
+            savePermissionsForRole(finalRoleId, finalRoleNm, request.getPermissions(), request.getCreatedBy());
+        }
 
         employeeMappingRepository.deleteByEmpId(empId);
 
@@ -286,6 +323,8 @@ public class RbacService {
         // Clean up old custom roles
         for (RoleBasedEmployeeMapping oldMapping : oldMappings) {
             Integer oldRoleId = oldMapping.getRoleId();
+            if (oldRoleId.equals(finalRoleId)) continue;
+
             List<RoleBasedAccessControl> rbacList = rbacRepository.findByRoleId(oldRoleId);
             if (!rbacList.isEmpty()) {
                 String oldRoleNm = rbacList.get(0).getRoleNm();
