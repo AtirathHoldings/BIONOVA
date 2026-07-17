@@ -519,6 +519,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "  v_performance    jsonb; " +
                     "  v_productivity   INT := 100; " +
                     "  v_quality        INT := 100; " +
+                    "  v_on_time_delivery INT := 100; " +
                     "BEGIN " +
                     "  /* 1. Employee Profile Details */ " +
                     "  SELECT em.emp_id, em.fst_nm, em.lst_nm, em.photo_url, " +
@@ -1053,14 +1054,16 @@ public class DatabaseMigrator implements InitializingBean {
                     "  SELECT COALESCE( " +
                     "    ROUND( " +
                     "      (COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed' AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / " +
-                    "       NULLIF(COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed'), 0)) * 100, " +
+                    "       NULLIF(v_total_tasks, 0)) * 100, " +
                     "      0 " +
                     "    )::INT, " +
                     "    100 " +
-                    "  ) INTO v_productivity " +
+                    "  ) INTO v_on_time_delivery " +
                     "  FROM temp_all_tasks; " +
                     " " +
-                    "  v_quality := GREATEST(50, 100 - ((v_reassigned_raw + v_rework_raw) * 5)); " +
+                    "  v_productivity := CASE WHEN v_total_tasks > 0 THEN GREATEST(0, 100 - ROUND((v_overdue::NUMERIC / v_total_tasks) * 100, 0)::INT) ELSE 100 END; " +
+                    " " +
+                    "  v_quality := ROUND((v_productivity + v_on_time_delivery) / 2.0)::INT; " +
                     " " +
                     "  v_performance := jsonb_build_object( " +
                     "    'productivity', jsonb_build_object( " +
@@ -1073,11 +1076,11 @@ public class DatabaseMigrator implements InitializingBean {
                     "                END " +
                     "    ), " +
                     "    'taskCompletion', jsonb_build_object( " +
-                    "      'score', CASE WHEN v_total_tasks > 0 THEN ROUND((v_completed::NUMERIC/v_total_tasks)*100,0)::INT ELSE 100 END, " +
+                    "      'score', v_on_time_delivery, " +
                     "      'rating', CASE " +
-                    "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 90 THEN 'Excellent' " +
-                    "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 75 THEN 'Good' " +
-                    "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 50 THEN 'Satisfactory' " +
+                    "                  WHEN v_on_time_delivery >= 90 THEN 'Excellent' " +
+                    "                  WHEN v_on_time_delivery >= 75 THEN 'Good' " +
+                    "                  WHEN v_on_time_delivery >= 50 THEN 'Satisfactory' " +
                     "                  ELSE 'Needs Improvement' " +
                     "                END " +
                     "    ), " +

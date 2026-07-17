@@ -386,7 +386,12 @@ public class ProjectLiveController {
                     .body(Map.of("message", "Invalid status. Allowed: LIVE, HOLD, CLOSED"));
         }
         project.setPrjSts(newStatus);
-        return ResponseEntity.ok(projectLiveRepository.save(project));
+        ProjectLive saved = projectLiveRepository.save(project);
+        
+        // Cascade the status to milestones and tasks
+        projectStatusCascadeService.cascadeStatusFromProject(id, newStatus);
+        
+        return ResponseEntity.ok(saved);
     }
 
     /** PATCH /api/project-live/milestones/{mId}/status  Body: { "mlstnSts": "COMPLETED" } */

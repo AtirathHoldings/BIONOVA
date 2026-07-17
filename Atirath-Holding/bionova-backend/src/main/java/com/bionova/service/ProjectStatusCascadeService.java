@@ -142,4 +142,72 @@ public class ProjectStatusCascadeService {
             }
         }
     }
+
+    /**
+     * Cascades project status updates (LIVE, HOLD, CLOSED) down to all milestones and tasks of the project.
+     */
+    @Transactional(propagation = Propagation.REQUIRED)
+    public void cascadeStatusFromProject(Long projectId, String newProjectStatus) {
+        ProjectLive project = projectLiveRepository.findById(projectId).orElse(null);
+        if (project == null) return;
+
+        List<MilestoneLive> milestones = milestoneLiveRepository.findByPrjId(projectId);
+        
+        String milestoneStatus = null;
+        TaskStatusMaster taskStatus = null;
+        
+        if ("HOLD".equalsIgnoreCase(newProjectStatus)) {
+            milestoneStatus = "HOLD";
+            taskStatus = TaskStatusMaster.HOLD;
+        } else if ("CLOSED".equalsIgnoreCase(newProjectStatus)) {
+            milestoneStatus = "COMPLETED";
+            taskStatus = TaskStatusMaster.COMPLETED;
+        } else if ("LIVE".equalsIgnoreCase(newProjectStatus)) {
+            milestoneStatus = "LIVE";
+            taskStatus = TaskStatusMaster.OPEN;
+        }
+
+        if (milestoneStatus == null) return;
+
+        for (MilestoneLive ms : milestones) {
+            if ("HOLD".equals(milestoneStatus)) {
+                if (!"COMPLETED".equalsIgnoreCase(ms.getMlstnSts()) && !"CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
+                    ms.setMlstnSts("HOLD");
+                    milestoneLiveRepository.save(ms);
+                }
+            } else if ("COMPLETED".equals(milestoneStatus)) {
+                ms.setMlstnSts("COMPLETED");
+                milestoneLiveRepository.save(ms);
+            } else if ("LIVE".equals(milestoneStatus)) {
+                if ("HOLD".equalsIgnoreCase(ms.getMlstnSts())) {
+                    ms.setMlstnSts("LIVE");
+                    milestoneLiveRepository.save(ms);
+                }
+            }
+
+            List<TaskLive> tasks = taskLiveRepository.findByMilestoneId(ms.getMId());
+            for (TaskLive t : tasks) {
+                if (taskStatus == TaskStatusMaster.HOLD) {
+                    String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "";
+                    if (!"Completed".equalsIgnoreCase(sts)) {
+                        t.setTaskSts(TaskStatusMaster.HOLD);
+                        taskLiveRepository.save(t);
+                    }
+                } else if (taskStatus == TaskStatusMaster.COMPLETED) {
+                    t.setTaskSts(TaskStatusMaster.COMPLETED);
+                    if (t.getActCmpDt() == null) {
+                        t.setActCmpDt(java.time.LocalDate.now());
+                    }
+                    taskLiveRepository.save(t);
+                } else if (taskStatus == TaskStatusMaster.OPEN) {
+                    if (t.getTaskSts() != null && "Hold".equalsIgnoreCase(t.getTaskSts().getStatusNm())) {
+                        t.setTaskSts(TaskStatusMaster.OPEN);
+                        taskLiveRepository.save(t);
+                    }
+                }
+            }
+        }
+        
+        projectLeadLagService.recalculateAndPersist(projectId);
+    }
 }
