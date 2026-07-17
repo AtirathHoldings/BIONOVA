@@ -105,12 +105,18 @@ public class ProjectForecastingController {
             statusColor = "#10b981"; // green
         }
 
-        // 3. Compute Velocity
+        // 3. Compute Velocity with Bayesian smoothing for sparse data
         double velocity = 1.0;
-        if (plannedProgress > 5.0) {
+        if (allTasks.isEmpty()) {
+            velocity = 1.0;
+        } else if (plannedProgress > 5.0) {
             velocity = actualProgress / plannedProgress;
+            // Shrink velocity towards 1.0 if task count is low or project is in its early stages
+            double confidenceFactor = Math.min(1.0, (double) allTasks.size() / 5.0) * Math.min(1.0, plannedProgress / 20.0);
+            velocity = (confidenceFactor * velocity) + ((1.0 - confidenceFactor) * 1.0);
         }
-        if (velocity < 0.1) velocity = 0.1; // cap minimum speed
+        if (velocity < 0.25) velocity = 0.25; // cap minimum speed to avoid excessive date runaway
+        if (velocity > 4.0) velocity = 4.0;   // cap maximum speed to keep it realistic
 
         // 4. Calculate forecasted end date
         LocalDate forecastedEndDate = endDate;

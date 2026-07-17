@@ -52,6 +52,25 @@ public class AttachmentController {
     @Autowired
     private ActivityLogService activityLogService;
 
+    @Autowired
+    private com.bionova.repository.EmployeeRepository employeeRepository;
+
+    private String getCurrentUserName() {
+        try {
+            org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+            if (auth != null && auth.getName() != null) {
+                String email = auth.getName();
+                com.bionova.entity.Employee employee = employeeRepository.findByEmail(email).orElse(null);
+                if (employee != null) {
+                    return employee.getFirstName() + " " + (employee.getLastName() != null ? employee.getLastName() : "");
+                }
+            }
+        } catch (Exception e) {
+            // fallback
+        }
+        return "System";
+    }
+
     // ── GET single ─────────────────────────────────────────────────────────
 
     @GetMapping("/{fileId}")
@@ -89,6 +108,7 @@ public class AttachmentController {
         // Legacy fields for backward compat
         attachment.setTId(drftTaskId);
         attachment.setIsLive(false);
+        attachment.setCreatedBy(getCurrentUserName());
         return ResponseEntity.ok(attachmentRepo.save(attachment));
     }
 
@@ -117,6 +137,7 @@ public class AttachmentController {
         // Legacy fields for backward compat
         attachment.setTId(taskId);
         attachment.setIsLive(true);
+        attachment.setCreatedBy(getCurrentUserName());
         return ResponseEntity.ok(attachmentRepo.save(attachment));
     }
 
@@ -143,6 +164,7 @@ public class AttachmentController {
 
         attachment.setRefId(mId);
         attachment.setRefType("MILESTONE_LIVE");
+        attachment.setCreatedBy(getCurrentUserName());
         return ResponseEntity.ok(attachmentRepo.save(attachment));
     }
 
@@ -169,6 +191,7 @@ public class AttachmentController {
 
         attachment.setRefId(prjId);
         attachment.setRefType("PROJECT_LIVE");
+        attachment.setCreatedBy(getCurrentUserName());
         return ResponseEntity.ok(attachmentRepo.save(attachment));
     }
 

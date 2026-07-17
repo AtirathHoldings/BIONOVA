@@ -887,6 +887,11 @@ public class DatabaseMigrator implements InitializingBean {
                     "        JOIN milestone_live_master ml_all ON ml_all.m_id = t_all.m_id " +
                     "        LEFT JOIN task_status_master tsm_all ON tsm_all.status_id = t_all.task_sts " +
                     "        WHERE ml_all.prj_id = p.prj_id " +
+                    "          AND (t_all.emp_id = p_emp_id OR t_all.task_id IN ( " +
+                    "            SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
+                    "          ) OR t_all.task_id IN ( " +
+                    "            SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL " +
+                    "          )) " +
                     "      ) " +
                     "    ) AS sub " +
                     "    FROM task_live_master t " +

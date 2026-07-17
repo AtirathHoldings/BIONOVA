@@ -85,6 +85,9 @@ public class AttachmentMaster {
     @Column(name = "date_timestamp")
     private LocalDateTime dateTimestamp;
 
+    @Column(name = "created_by", length = 100)
+    private String createdBy;
+
     @PrePersist
     protected void onCreate() {
         if (dateTimestamp == null) {
