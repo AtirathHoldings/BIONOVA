@@ -46,6 +46,9 @@ public class UserDashboardResponseDto {
     private Map<String, Integer> taskStatusPercentages;
     private double overallCompletionPercentage;
 
+    // Milestone Progress Status
+    private Map<String, Integer> milestoneStatus;
+
     // Performance Metrics
     private PerformanceMetricDto productivity;
     private PerformanceMetricDto taskCompletion;
