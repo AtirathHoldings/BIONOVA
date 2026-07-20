@@ -16,6 +16,6 @@ public interface ProjectLiveRepository extends JpaRepository<ProjectLive, Long> 
     List<ProjectLive> findByCoyId(Integer coyId);
     List<ProjectLive> findByPltId(Integer pltId);
 
-    @Query("SELECT DISTINCT p FROM ProjectLive p, MilestoneLive m, TaskLive t WHERE p.prjId = m.prjId AND m.mId = t.mId AND t.empId = :empId")
+    @Query("SELECT DISTINCT p FROM ProjectLive p, MilestoneLive m, TaskLive t WHERE p.prjId = m.prjId AND m.mId = t.mId AND (t.empId = :empId OR t.taskId IN (SELECT pc.taskId FROM ProcessConfig pc WHERE pc.empId = :empId AND pc.isLive = true))")
     List<ProjectLive> findProjectsByEmpId(@Param("empId") Long empId);
 }
