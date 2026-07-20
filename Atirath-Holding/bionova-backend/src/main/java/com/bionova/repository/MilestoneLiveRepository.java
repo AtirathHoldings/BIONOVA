@@ -16,6 +16,6 @@ public interface MilestoneLiveRepository extends JpaRepository<MilestoneLive, Lo
     @Query("SELECT COUNT(m) > 0 FROM MilestoneLive m WHERE m.mlstnCd = :mlstnCd AND m.prjId = :prjId AND m.mId <> :mId")
     boolean existsByMlstnCdAndPrjIdAndMIdNot(@Param("mlstnCd") String mlstnCd, @Param("prjId") Long prjId, @Param("mId") Long mId);
 
-    @Query("SELECT DISTINCT m FROM MilestoneLive m, TaskLive t WHERE m.mId = t.mId AND t.empId = :empId")
+    @Query("SELECT DISTINCT m FROM MilestoneLive m, TaskLive t WHERE m.mId = t.mId AND (t.empId = :empId OR t.taskId IN (SELECT pc.taskId FROM ProcessConfig pc WHERE pc.empId = :empId AND pc.isLive = true))")
     List<MilestoneLive> findMilestonesByEmpId(@Param("empId") Long empId);
 }
