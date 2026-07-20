@@ -71,11 +71,19 @@ public class EmployeeController {
             departmentRepository.findById(employee.getDeptId().longValue())
                 .ifPresent(d -> employee.setDeptNm(d.getDeptNm()));
         }
+        if (employee.getRepManId() != null) {
+            employeeRepository.findById(employee.getRepManId().longValue())
+                .ifPresent(mgr -> {
+                    String name = ((mgr.getFirstName() != null ? mgr.getFirstName() : "") + " " +
+                                  (mgr.getLastName() != null ? mgr.getLastName() : "")).trim();
+                    employee.setRepManNm(name.isEmpty() ? null : name);
+                });
+        }
     }
 
     private void populateCompanyAndPlantNames(List<Employee> employees) {
         if (employees == null || employees.isEmpty()) return;
-        
+
         List<com.bionova.entity.CompanyMaster> companies = companyRepository.findAll();
         Map<Long, String> coyMap = companies.stream()
             .collect(java.util.stream.Collectors.toMap(
@@ -100,6 +108,15 @@ public class EmployeeController {
                 (v1, v2) -> v1
             ));
 
+        // Build a name map for reporting managers from the same employees list
+        Map<Long, String> empNameMap = employees.stream()
+            .collect(java.util.stream.Collectors.toMap(
+                Employee::getEmpId,
+                e -> ((e.getFirstName() != null ? e.getFirstName() : "") + " " +
+                      (e.getLastName() != null ? e.getLastName() : "")).trim(),
+                (v1, v2) -> v1
+            ));
+
         for (Employee emp : employees) {
             if (emp.getCoyId() != null) {
                 emp.setCoyNm(coyMap.get(emp.getCoyId().longValue()));
@@ -109,6 +126,12 @@ public class EmployeeController {
             }
             if (emp.getDeptId() != null) {
                 emp.setDeptNm(deptMap.get(emp.getDeptId().longValue()));
+            }
+            if (emp.getRepManId() != null) {
+                String mgrName = empNameMap.get(emp.getRepManId().longValue());
+                if (mgrName != null && !mgrName.isBlank()) {
+                    emp.setRepManNm(mgrName);
+                }
             }
         }
     }
