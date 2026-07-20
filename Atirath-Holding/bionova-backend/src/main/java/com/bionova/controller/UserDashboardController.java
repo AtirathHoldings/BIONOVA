@@ -3,7 +3,9 @@ package com.bionova.controller;
 import com.bionova.dto.UserDashboardResponseDto;
 import com.bionova.dto.UserDashboardResponseDto.*;
 import com.bionova.entity.Employee;
+import com.bionova.entity.MilestoneLive;
 import com.bionova.repository.EmployeeRepository;
+import com.bionova.repository.MilestoneLiveRepository;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
@@ -31,6 +33,9 @@ public class UserDashboardController {
     private EmployeeRepository employeeRepository;
 
     @Autowired
+    private MilestoneLiveRepository milestoneLiveRepository;
+
+    @Autowired
     private com.bionova.service.ProjectLeadLagService leadLagService;
 
     @PersistenceContext
@@ -54,7 +59,7 @@ public class UserDashboardController {
 
         try {
             JsonNode root = objectMapper.readTree(result.toString());
-            return ResponseEntity.ok(mapToResponse(root));
+            return ResponseEntity.ok(mapToResponse(root, employee.getEmpId()));
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse get_user_dashboard() response", e);
         }
@@ -82,7 +87,7 @@ public class UserDashboardController {
         }
     }
 
-    private UserDashboardResponseDto mapToResponse(JsonNode root) {
+    private UserDashboardResponseDto mapToResponse(JsonNode root, Long empId) {
         JsonNode profile = root.path("profile");
         JsonNode summary = root.path("summary");
         JsonNode counts = root.path("taskStatusCounts");
@@ -245,7 +250,7 @@ public class UserDashboardController {
         dto.setCompletedTasksCount(completedTasksCount);
 
         JsonNode trendsNode = root.path("metricsTrends");
-        dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), myTasksCount + completedTasksCount + overdueTasksCount));
+        dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), (int) total));
         dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), counts.path("Open").asInt() + counts.path("Draft").asInt()));
         dto.setInProgressCard(mapMetricCard(trendsNode.path("inProgress"), counts.path("In Progress").asInt()));
         dto.setOverdueTasksCard(mapMetricCard(trendsNode.path("overdueTasks"), overdueTasksCount));
@@ -258,6 +263,35 @@ public class UserDashboardController {
         dto.setTaskStatusCounts(taskStatusCounts);
         dto.setTaskStatusPercentages(taskStatusPercentages);
         dto.setOverallCompletionPercentage(summary.path("overallCompletion").asDouble());
+
+        // Calculate Milestone Progress
+        List<MilestoneLive> userMilestones = milestoneLiveRepository.findMilestonesByEmpId(empId);
+        int msCompleted = 0, msInProgress = 0, msOpen = 0, msDelayed = 0;
+        LocalDate today = LocalDate.now();
+        for (MilestoneLive m : userMilestones) {
+            String sts = m.getMlstnSts() != null ? m.getMlstnSts().toUpperCase() : "LIVE";
+            if (sts.equals("COMPLETED") || sts.equals("CLOSED")) {
+                msCompleted++;
+            } else if (sts.equals("HOLD")) {
+                msDelayed++;
+            } else {
+                // It is LIVE or other active state
+                if (m.getEndDt() != null && today.isAfter(m.getEndDt())) {
+                    msDelayed++;
+                } else if (m.getStDt() != null && today.isBefore(m.getStDt())) {
+                    msOpen++; // Not started yet
+                } else {
+                    msInProgress++;
+                }
+            }
+        }
+        Map<String, Integer> milestoneStatus = new HashMap<>();
+        milestoneStatus.put("total", userMilestones.size());
+        milestoneStatus.put("completed", msCompleted);
+        milestoneStatus.put("inProgress", msInProgress);
+        milestoneStatus.put("notStarted", msOpen);
+        milestoneStatus.put("delayed", msDelayed);
+        dto.setMilestoneStatus(milestoneStatus);
 
         JsonNode performanceNode = root.path("performance");
         dto.setProductivity(mapPerformanceMetric(performanceNode.path("productivity")));
