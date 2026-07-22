@@ -92,7 +92,7 @@ public class Assignment {
     private String assignedByNm;
 
     public TaskPriorityMaster getPriority() {
-        if (taskSts != null && "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm())) {
+        if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
             return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(stDt, endDt, null, taskSts, null);
         }
         return TaskPriorityMaster.calculatePriority(stDt, endDt, null, taskSts, null);

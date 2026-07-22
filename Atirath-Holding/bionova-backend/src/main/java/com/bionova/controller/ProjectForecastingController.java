@@ -71,7 +71,7 @@ public class ProjectForecastingController {
             double taskProg = 0.0;
             String sts = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "Open";
             String subSts = task.getSubStatus() != null ? task.getSubStatus() : "";
-            if ("Completed".equalsIgnoreCase(sts)) {
+            if ("Closed".equalsIgnoreCase(sts)) {
                 taskProg = 100.0;
             } else if ("WIP".equalsIgnoreCase(sts)) {
                 if ("Under Review".equalsIgnoreCase(subSts)) {

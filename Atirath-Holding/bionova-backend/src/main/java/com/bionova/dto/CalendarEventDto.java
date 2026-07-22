@@ -14,7 +14,7 @@ public class CalendarEventDto {
     private String type;         // "TASK", "MILESTONE", "HOLIDAY", "MEETING"
     private LocalDate date;      // Event date
     private String time;         // Time string (e.g. "10:30 AM", "02:00 PM") or null
-    private String status;       // Raw status (e.g., "WIP", "COMPLETED", "OPEN")
+    private String status;       // Raw status (e.g., "WIP", "CLOSED", "OPEN")
     private String code;         // E.g., "TSK-01", "MS-03"
     private String description;  // Additional remarks/notes
 }

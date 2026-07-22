@@ -79,10 +79,9 @@ public class ProjectAccessController {
     private String formatTaskStatus(String status) {
         if (status == null) return "Pending";
         switch (status.toUpperCase()) {
-            case "COMPLETED":
-            case "COMPLETE":
+            case "CLOSED":
             case "DONE":
-                return "Completed";
+                return "Closed";
             case "IN_PROGRESS":
             case "INPROGRESS":
             case "PROGRESS":
@@ -211,12 +210,13 @@ public class ProjectAccessController {
                     List<TaskLive> tasks = taskLiveRepository.findByMilestoneId(ms.getMId());
                     totalTasks += tasks.size();
                     boolean msCompleted = false;
-                    if (ms.getMlstnSts() != null && ("COMPLETED".equalsIgnoreCase(ms.getMlstnSts()) || "CLOSED".equalsIgnoreCase(ms.getMlstnSts()))) {
+                    if (ms.getMlstnSts() != null && "CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
                         msCompleted = true;
                     } else if (!tasks.isEmpty()) {
                         boolean allCompleted = true;
                         for (TaskLive task : tasks) {
-                            if (task.getTaskSts() == null || !"COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+                            String statusNm = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
+                            if (!"CLOSED".equalsIgnoreCase(statusNm)) {
                                 allCompleted = false;
                                 break;
                             }
@@ -229,7 +229,8 @@ public class ProjectAccessController {
                         completedMilestones++;
                     }
                     for (TaskLive task : tasks) {
-                        if (task.getTaskSts() != null && "COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+                        String statusNm = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
+                        if ("CLOSED".equalsIgnoreCase(statusNm)) {
                             completedTasks++;
                         }
                     }
@@ -386,12 +387,13 @@ public class ProjectAccessController {
                 List<TaskLive> tasks = taskLiveRepository.findByMilestoneId(ms.getMId());
                 totalTasks += tasks.size();
                 boolean msCompleted = false;
-                if (ms.getMlstnSts() != null && ("COMPLETED".equalsIgnoreCase(ms.getMlstnSts()) || "CLOSED".equalsIgnoreCase(ms.getMlstnSts()))) {
+                if (ms.getMlstnSts() != null && "CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
                     msCompleted = true;
                 } else if (!tasks.isEmpty()) {
                     boolean allCompleted = true;
                     for (TaskLive task : tasks) {
-                        if (task.getTaskSts() == null || !"COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+                        String statusNm = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
+                        if (!"CLOSED".equalsIgnoreCase(statusNm)) {
                             allCompleted = false;
                             break;
                         }
@@ -404,7 +406,8 @@ public class ProjectAccessController {
                     completedMilestones++;
                 }
                 for (TaskLive task : tasks) {
-                    if (task.getTaskSts() != null && "COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+                    String statusNm = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
+                    if ("CLOSED".equalsIgnoreCase(statusNm)) {
                         completedTasks++;
                     }
                 }
@@ -530,8 +533,8 @@ public class ProjectAccessController {
                     String resolvedStatus = "Pending";
                     if (task.getTaskSts() != null) {
                         String baseStatus = task.getTaskSts().getStatusNm();
-                        if ("COMPLETED".equalsIgnoreCase(baseStatus)) {
-                            resolvedStatus = "Completed";
+                        if ("CLOSED".equalsIgnoreCase(baseStatus)) {
+                            resolvedStatus = "Closed";
                         } else if ("IN_PROGRESS".equalsIgnoreCase(baseStatus)) {
                             resolvedStatus = "In Progress";
                         } else if ("OPEN".equalsIgnoreCase(baseStatus)) {
@@ -552,7 +555,7 @@ public class ProjectAccessController {
                     }
 
                     // Check time status overrides (if not completed)
-                    if (!"Completed".equalsIgnoreCase(resolvedStatus)) {
+                    if (!"Closed".equalsIgnoreCase(resolvedStatus)) {
                         com.bionova.enums.TimeStatus timeSts = task.getTimeStatus();
                         if (timeSts == com.bionova.enums.TimeStatus.OVERDUE) {
                             resolvedStatus = "Overdue";

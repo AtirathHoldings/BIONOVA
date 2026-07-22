@@ -378,9 +378,9 @@ public class TaskLiveController {
             return ResponseEntity.badRequest().body(Map.of("message", "taskSts is required"));
         }
         String upperStatus = newStatus.toUpperCase().replace(" ", "_");
-        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","SUBMIT_REVIEW","COMPLETED","REASSIGN","REWORK","OVER_DUE","HOLD").contains(upperStatus)) {
+        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","SUBMIT_REVIEW","CLOSED","REASSIGN","REWORK","OVER_DUE","HOLD").contains(upperStatus)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, SUBMIT_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE, HOLD"));
+                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, SUBMIT_REVIEW, CLOSED, REASSIGN, REWORK, OVER_DUE, HOLD"));
         }
         // SUBMIT_REVIEW is a frontend-only state → maps to WIP
         if ("SUBMIT_REVIEW".equals(upperStatus)) {

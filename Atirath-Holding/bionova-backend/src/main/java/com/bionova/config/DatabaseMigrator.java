@@ -93,7 +93,7 @@ public class DatabaseMigrator implements InitializingBean {
                 "(1, 'Draft', NULL), " +
                 "(2, 'Open', 'Overdue'), " +
                 "(3, 'WIP', 'Under Review, Reassign, Rework, Overdue'), " +
-                "(4, 'Completed', 'Lead, On Time, Lag'), " +
+                "(4, 'Closed', 'Lead, On Time, Lag'), " +
                 "(5, 'Hold', NULL) " +
                 "ON CONFLICT (status_id) DO UPDATE SET status_nm = EXCLUDED.status_nm, sub_status_nm = EXCLUDED.sub_status_nm");
 
@@ -574,7 +574,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      t.task_nm, " +
                     "      t.st_dt, " +
                     "      t.end_dt, " +
-                    "      CASE WHEN tsm.status_nm = 'Completed' THEN t.end_dt ELSE NULL END AS act_cmp_dt, " +
+                    "      CASE WHEN tsm.status_nm = 'Closed' THEN t.end_dt ELSE NULL END AS act_cmp_dt, " +
                     "      (t.end_dt - t.st_dt) AS no_of_days, " +
                     "      t.task_sts, " +
                     "      tsm.status_nm, " +
@@ -600,21 +600,21 @@ public class DatabaseMigrator implements InitializingBean {
                     "    )) AND COALESCE(t.sts, true) = true " +
                     "  ; " +
                     "  SELECT " +
-                    "    COUNT(*), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed'), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today)), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt = v_today), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'under review' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') IN ('open', 'hold') AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'reassign' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'draft' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'completed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'reassign'), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework'), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed'), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'wip'), " +
-                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') IN ('open', 'hold')) " +
+                    "    COUNT(*) FILTER (WHERE st_dt IS NULL OR st_dt <= v_today OR COALESCE(LOWER(status_nm), '') = 'closed'), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'closed'), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') <> 'closed' AND (COALESCE(LOWER(sub_status), '') = 'overdue' OR (end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') <> 'closed' AND end_dt = v_today), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') = 'wip' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'closed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'under review' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'closed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') IN ('open', 'hold') AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'closed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'reassign' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'closed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'closed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') = 'draft' AND NOT (COALESCE(LOWER(sub_status), '') = 'overdue' OR (COALESCE(LOWER(status_nm), '') <> 'closed' AND end_dt IS NOT NULL AND end_dt < v_today))), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'reassign'), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') = 'wip' AND COALESCE(LOWER(sub_status), '') = 'rework'), " +
+                    "    COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'closed'), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') = 'wip'), " +
+                    "    COUNT(*) FILTER (WHERE (st_dt IS NULL OR st_dt <= v_today) AND COALESCE(LOWER(status_nm), '') IN ('open', 'hold')) " +
                     "  INTO v_total_tasks, v_completed, v_overdue, v_due_today, " +
                     "       v_wip, v_under_review, v_open, v_reassigned, v_rework, v_draft, " +
                     "       v_reassigned_raw, v_rework_raw, " +
@@ -731,8 +731,8 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'project', t.project_info, " +
                     "      'endDt', t.end_dt, " +
                     "      'status', t.status_nm, " +
-                    "      'isOverdue', (COALESCE(LOWER(t.sub_status), '') = 'overdue' OR (COALESCE(LOWER(t.status_nm), '') <> 'completed' AND t.end_dt < v_today)), " +
-                    "      'isDueToday', (COALESCE(LOWER(t.status_nm), '') <> 'completed' AND t.end_dt = v_today), " +
+                    "      'isOverdue', (COALESCE(LOWER(t.sub_status), '') = 'overdue' OR (COALESCE(LOWER(t.status_nm), '') <> 'closed' AND t.end_dt < v_today)), " +
+                    "      'isDueToday', (COALESCE(LOWER(t.status_nm), '') <> 'closed' AND t.end_dt = v_today), " +
                     "      'priority', CASE COALESCE(t.priority_nm, 'MEDIUM') " +
                     "                    WHEN 'LOW' THEN 'Low' " +
                     "                    WHEN 'NORMAL' THEN 'Medium' " +
@@ -746,7 +746,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'employees', COALESCE(t.employees, '[]'::jsonb) " +
                     "    ) AS sub " +
                     "    FROM all_todo t " +
-                    "    WHERE COALESCE(LOWER(t.status_nm), '') <> 'completed' AND t.st_dt <= v_today " +
+                    "    WHERE COALESCE(LOWER(t.status_nm), '') <> 'closed' AND t.st_dt <= v_today " +
                     "    ORDER BY t.end_dt ASC NULLS LAST " +
                     "    LIMIT 5 " +
                     "  ) x; " +
@@ -847,7 +847,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'employees', COALESCE(t.employees, '[]'::jsonb) " +
                     "    ) AS sub " +
                     "    FROM all_upcoming t " +
-                    "    WHERE COALESCE(LOWER(t.status_nm), '') <> 'completed' AND t.st_dt > v_today " +
+                    "    WHERE COALESCE(LOWER(t.status_nm), '') <> 'closed' AND t.st_dt > v_today " +
                     "    ORDER BY t.end_dt ASC NULLS LAST " +
                     "    LIMIT 5 " +
                     "  ) x; " +
@@ -871,14 +871,14 @@ public class DatabaseMigrator implements InitializingBean {
                     "                       END, " +
                     "      'dueDate',       p.end_dt, " +
                     "      'tasksAssigned', COUNT(t.task_id), " +
-                    "      'openTasks',     COUNT(t.task_id) FILTER (WHERE COALESCE(LOWER(tsm.status_nm), '') <> 'completed'), " +
-                    "      'closedTasks',   COUNT(t.task_id) FILTER (WHERE COALESCE(LOWER(tsm.status_nm), '') = 'completed'), " +
+                    "      'openTasks',     COUNT(t.task_id) FILTER (WHERE COALESCE(LOWER(tsm.status_nm), '') <> 'closed'), " +
+                    "      'closedTasks',   COUNT(t.task_id) FILTER (WHERE COALESCE(LOWER(tsm.status_nm), '') = 'closed'), " +
                     "      'progress',      ( " +
                     "        SELECT ROUND( " +
                     "          CASE WHEN COUNT(t_all.task_id) > 0 " +
                     "            THEN ( " +
                     "              ( " +
-                    "                COUNT(t_all.task_id) FILTER (WHERE COALESCE(LOWER(tsm_all.status_nm), '') = 'completed')::NUMERIC + " +
+                    "                COUNT(t_all.task_id) FILTER (WHERE COALESCE(LOWER(tsm_all.status_nm), '') = 'closed')::NUMERIC + " +
                     "                COUNT(t_all.task_id) FILTER (WHERE COALESCE(LOWER(tsm_all.status_nm), '') IN ('under review', 'under_review', 'submit review', 'submit_review')) * 0.8 + " +
                     "                COUNT(t_all.task_id) FILTER (WHERE COALESCE(LOWER(tsm_all.status_nm), '') IN ('wip', 'in progress', 'in_progress')) * 0.5 " +
                     "              ) / COUNT(t_all.task_id) " +
@@ -1053,7 +1053,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "  /* 10. Performance Calculations */ " +
                     "  SELECT COALESCE( " +
                     "    ROUND( " +
-                    "      (COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'completed' AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / " +
+                    "      (COUNT(*) FILTER (WHERE COALESCE(LOWER(status_nm), '') = 'closed' AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / " +
                     "       NULLIF(v_total_tasks, 0)) * 100, " +
                     "      0 " +
                     "    )::INT, " +
@@ -1111,11 +1111,11 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'overallCompletion', CASE WHEN v_total_tasks > 0 " +
                     "        THEN ROUND((v_completed::NUMERIC/v_total_tasks)*100,2) ELSE 0 END), " +
                     "    'taskStatusCounts', jsonb_build_object( " +
-                    "      'Completed', v_completed, 'In Progress', v_wip, " +
+                    "      'Closed', v_completed, 'In Progress', v_wip, " +
                     "      'Under Review', v_under_review, 'Overdue', v_overdue, " +
                     "      'Open', v_open, 'Reassigned', v_reassigned, " +
                     "      'Rework', v_rework, 'Draft', v_draft, " +
-                    "      'MainCompleted', v_main_completed, 'MainWIP', v_main_wip, " +
+                    "      'MainClosed', v_main_completed, 'MainWIP', v_main_wip, " +
                     "      'MainOpen', v_main_open), " +
                     "    'todoList',      COALESCE(v_todo_list, '[]'::jsonb), " +
                     "    'upcomingTasks', COALESCE(v_upcoming, '[]'::jsonb), " +
@@ -1226,7 +1226,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      NULL::varchar AS note_txt, " +
                     "      t.st_dt AS st_dt, " +
                     "      t.end_dt AS end_dt, " +
-                    "      CASE WHEN tsm.status_nm = 'Completed' THEN t.end_dt ELSE NULL END AS act_cmp_dt, " +
+                    "      CASE WHEN tsm.status_nm = 'Closed' THEN t.end_dt ELSE NULL END AS act_cmp_dt, " +
                     "      t.prcs_flg AS prcs_flg, " +
                     "      t.prcs_yes_actn AS prcs_yes_actn, " +
                     "      tsm.status_nm AS status_nm, " +
@@ -1275,21 +1275,21 @@ public class DatabaseMigrator implements InitializingBean {
                     "          CASE " +
                     "            WHEN ( " +
                     "              COALESCE( " +
-                    "                CASE WHEN t.status_nm IN ('COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
+                    "                CASE WHEN t.status_nm IN ('CLOSED', 'COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
                     "                     THEN COALESCE(t.act_cmp_dt, v_today) " +
                     "                     ELSE v_today " +
                     "                END, v_today) - t.end_dt " +
                     "            ) = 0 THEN 'High' " +
                     "            WHEN ( " +
                     "              COALESCE( " +
-                    "                CASE WHEN t.status_nm IN ('COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
+                    "                CASE WHEN t.status_nm IN ('CLOSED', 'COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
                     "                     THEN COALESCE(t.act_cmp_dt, v_today) " +
                     "                     ELSE v_today " +
                     "                END, v_today) - t.end_dt " +
                     "            ) = 1 THEN 'Critical' " +
                     "            WHEN ( " +
                     "              COALESCE( " +
-                    "                CASE WHEN t.status_nm IN ('COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
+                    "                CASE WHEN t.status_nm IN ('CLOSED', 'COMPLETED', 'UNDER_REVIEW', 'SUBMIT_REVIEW') " +
                     "                     THEN COALESCE(t.act_cmp_dt, v_today) " +
                     "                     ELSE v_today " +
                     "                END, v_today) - t.end_dt " +
@@ -1299,7 +1299,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "        ELSE 'Medium' " +
                     "      END AS final_priority, " +
                     "      CASE " +
-                    "        WHEN UPPER(t.status_nm) = 'COMPLETED' THEN 'Completed' " +
+                    "        WHEN UPPER(t.status_nm) IN ('CLOSED', 'COMPLETED') THEN 'Closed' " +
                     "        WHEN UPPER(t.status_nm) = 'HOLD' THEN 'Hold' " +
                     "        WHEN UPPER(t.status_nm) = 'DRAFT' THEN 'Draft' " +
                     "        WHEN UPPER(t.status_nm) IN ('WIP', 'IN_PROGRESS', 'UNDER_REVIEW', 'SUBMIT_REVIEW') THEN 'In Progress' " +
@@ -1312,7 +1312,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "        ELSE 'None' " +
                     "      END AS process_sts, " +
                     "      CASE " +
-                    "        WHEN UPPER(t.status_nm) = 'COMPLETED' THEN " +
+                    "        WHEN UPPER(t.status_nm) IN ('CLOSED', 'COMPLETED') THEN " +
                     "          CASE " +
                     "            WHEN t.end_dt IS NOT NULL THEN " +
                     "              CASE " +
@@ -1341,13 +1341,13 @@ public class DatabaseMigrator implements InitializingBean {
                     "      CASE " +
                     "        WHEN NOT COALESCE(t.prcs_flg, false) THEN " +
                     "          CASE " +
-                    "            WHEN UPPER(t.status_nm) = 'COMPLETED' THEN 100 " +
+                    "            WHEN UPPER(t.status_nm) IN ('CLOSED', 'COMPLETED') THEN 100 " +
                     "            WHEN t.chk_total > 0 THEN ROUND((t.chk_completed::numeric / t.chk_total) * 100)::integer " +
                     "            ELSE 0 " +
                     "          END " +
                     "        ELSE " +
                     "          CASE " +
-                    "            WHEN UPPER(t.status_nm) = 'COMPLETED' THEN 100 " +
+                    "            WHEN UPPER(t.status_nm) IN ('CLOSED', 'COMPLETED') THEN 100 " +
                     "            WHEN UPPER(t.status_nm) = 'UNDER_REVIEW' THEN 95 " +
                     "            WHEN UPPER(t.status_nm) = 'SUBMIT_REVIEW' THEN 90 " +
                     "            WHEN t.chk_total > 0 THEN ROUND((t.chk_completed::numeric / t.chk_total) * 100)::integer " +
@@ -1493,7 +1493,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
                     "  LOOP " +
                     "    v_t_total := v_t_total + 1; " +
-                    "    IF rec.status_nm = 'Completed' THEN " +
+                    "    IF rec.status_nm IN ('Closed', 'Completed') THEN " +
                     "      v_t_completed := v_t_completed + 1; " +
                     "    ELSIF rec.status_nm = 'WIP' THEN " +
                     "      v_t_in_prog := v_t_in_prog + 1; " +
@@ -1501,7 +1501,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      v_t_todo := v_t_todo + 1; " +
                     "    END IF; " +
                     " " +
-                    "    IF rec.status_nm <> 'Completed' AND (rec.sub_status = 'Overdue' OR (rec.end_dt IS NOT NULL AND rec.end_dt < v_today)) THEN " +
+                    "    IF rec.status_nm NOT IN ('Closed', 'Completed') AND (rec.sub_status = 'Overdue' OR (rec.end_dt IS NOT NULL AND rec.end_dt < v_today)) THEN " +
                     "      v_t_overdue := v_t_overdue + 1; " +
                     "    END IF; " +
                     "  END LOOP; " +
@@ -1515,7 +1515,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "      'projectName',    p.prj_nm, " +
                     "      'projectCode',    p.prj_cd, " +
                     "      'progressPercent', ROUND(CASE WHEN COUNT(t.task_id)>0 " +
-                    "        THEN (COUNT(t.task_id) FILTER (WHERE tsm.status_nm='Completed')::NUMERIC/COUNT(t.task_id))*100 " +
+                    "        THEN (COUNT(t.task_id) FILTER (WHERE tsm.status_nm IN ('Closed', 'Completed'))::NUMERIC/COUNT(t.task_id))*100 " +
                     "        ELSE 0 END, 2) " +
                     "    ) AS sub " +
                     "    FROM project_live_master p " +

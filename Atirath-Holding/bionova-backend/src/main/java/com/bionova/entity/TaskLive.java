@@ -145,7 +145,7 @@ public class TaskLive {
     }
 
     public TimeStatus getTimeStatus() {
-        if (taskSts != null && "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm())) {
+        if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
             if (actCmpDt != null && endDt != null) {
                 if (actCmpDt.isBefore(endDt)) {
                     return TimeStatus.LEAD;
@@ -183,7 +183,7 @@ public class TaskLive {
     }
 
     public TaskPriorityMaster getPriority() {
-        if (taskSts != null && "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm())) {
+        if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
             return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, taskSts, actCmpDt);
         }
         return TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, taskSts, actCmpDt);

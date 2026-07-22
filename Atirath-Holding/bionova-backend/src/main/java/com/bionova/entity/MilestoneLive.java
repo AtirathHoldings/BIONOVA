@@ -9,7 +9,7 @@ import java.time.LocalDate;
 @Entity
 @Table(name = "milestone_live_master")
 @org.hibernate.annotations.Check(constraints =
-    "mlstn_dep_typ IN ('INDEPENDENT','SEQUENTIAL','PARALLEL') AND mlstn_sts IN ('LIVE','HOLD','COMPLETED','CLOSED')")
+    "mlstn_dep_typ IN ('INDEPENDENT','SEQUENTIAL','PARALLEL') AND mlstn_sts IN ('LIVE','HOLD','CLOSED')")
 @EntityListeners(com.bionova.config.AuditListener.class)
 @Getter
 @Setter

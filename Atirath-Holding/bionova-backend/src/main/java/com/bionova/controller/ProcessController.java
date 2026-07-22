@@ -124,7 +124,7 @@ public class ProcessController {
             }
 
             boolean needsReview = Boolean.TRUE.equals(task.getPrcsFlg());
-            TaskStatusMaster targetStatus = needsReview ? TaskStatusMaster.WIP : TaskStatusMaster.COMPLETED;
+            TaskStatusMaster targetStatus = needsReview ? TaskStatusMaster.WIP : TaskStatusMaster.CLOSED;
             String newSubStatus = needsReview ? "Under Review" : getCompletionSubStatus(task.getEndDt());
 
             task.setTaskSts(targetStatus);
@@ -161,7 +161,7 @@ public class ProcessController {
             }
 
             boolean needsReview = Boolean.TRUE.equals(task.getPrcsFlg());
-            TaskStatusMaster targetStatus = needsReview ? TaskStatusMaster.WIP : TaskStatusMaster.COMPLETED;
+            TaskStatusMaster targetStatus = needsReview ? TaskStatusMaster.WIP : TaskStatusMaster.CLOSED;
             String newSubStatus = needsReview ? "Under Review" : getCompletionSubStatus(task.getEndDt());
 
             task.setTaskSts(targetStatus);
@@ -378,7 +378,7 @@ public class ProcessController {
                         .body(Map.of("message", "Decision must be 'YES' or 'NO'."));
             }
 
-            TaskStatusMaster targetStatus = TaskStatusMaster.COMPLETED;
+            TaskStatusMaster targetStatus = TaskStatusMaster.CLOSED;
             String targetSubStatus = getCompletionSubStatus(task.getEndDt());
 
             if ("NO".equals(decision)) {
@@ -397,7 +397,7 @@ public class ProcessController {
             task.setTaskSts(targetStatus);
             task.setSubStatus(targetSubStatus);
 
-            if (TaskStatusMaster.COMPLETED.equals(targetStatus)) {
+            if (TaskStatusMaster.CLOSED.equals(targetStatus)) {
                 task.setActCmpDt(java.time.LocalDate.now());
             }
             taskLiveRepo.save(task);
@@ -417,7 +417,7 @@ public class ProcessController {
             event.setRId(rId);
             event.setPrcsSts(decision);
             event.setRemarks(getString(body, "remarks",
-                    "YES".equals(decision) ? "Approver approved — COMPLETED" : "Approver rejected — task sent back"));
+                    "YES".equals(decision) ? "Approver approved — CLOSED" : "Approver rejected — task sent back"));
 
             applyCountsFromHistory(taskId, event, decision);
             processRepo.save(event);
@@ -428,7 +428,7 @@ public class ProcessController {
             projectStatusCascadeService.cascadeStatusFromTask(taskId);
 
             String message = "YES".equals(decision)
-                    ? "Approver approved. Task COMPLETED! 🎉"
+                    ? "Approver approved. Task CLOSED! 🎉"
                     : "Approver rejected. Task moved to WIP (" + targetSubStatus + ").";
 
             return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", targetSubStatus, "message", message));
@@ -449,7 +449,7 @@ public class ProcessController {
                         .body(Map.of("message", "Decision must be 'YES' or 'NO'."));
             }
 
-            TaskStatusMaster targetStatus = TaskStatusMaster.COMPLETED;
+            TaskStatusMaster targetStatus = TaskStatusMaster.CLOSED;
             String targetSubStatus = getCompletionSubStatus(task.getEndDt());
 
             if ("NO".equals(decision)) {
@@ -481,13 +481,13 @@ public class ProcessController {
             event.setRId(rId);
             event.setPrcsSts(decision);
             event.setRemarks(getString(body, "remarks",
-                    "YES".equals(decision) ? "Approver approved — COMPLETED" : "Approver rejected — task sent back"));
+                    "YES".equals(decision) ? "Approver approved — CLOSED" : "Approver rejected — task sent back"));
 
             applyCountsFromHistoryForIndividual(taskId, event, decision);
             processRepo.save(event);
 
             String message = "YES".equals(decision)
-                    ? "Approver approved. Task COMPLETED! 🎉"
+                    ? "Approver approved. Task CLOSED! 🎉"
                     : "Approver rejected. Task moved to WIP (" + targetSubStatus + ").";
 
             return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", targetSubStatus, "message", message));

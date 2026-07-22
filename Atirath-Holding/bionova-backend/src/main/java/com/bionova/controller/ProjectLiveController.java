@@ -111,7 +111,7 @@ public class ProjectLiveController {
                 String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "Open";
                 String subSts = t.getSubStatus() != null ? t.getSubStatus() : "";
                 double taskPct = 0.0;
-                if ("Completed".equalsIgnoreCase(sts)) {
+                if ("Closed".equalsIgnoreCase(sts)) {
                     taskPct = 100.0;
                 } else if ("WIP".equalsIgnoreCase(sts)) {
                     if ("Under Review".equalsIgnoreCase(subSts)) {
@@ -394,7 +394,7 @@ public class ProjectLiveController {
         return ResponseEntity.ok(saved);
     }
 
-    /** PATCH /api/project-live/milestones/{mId}/status  Body: { "mlstnSts": "COMPLETED" } */
+    /** PATCH /api/project-live/milestones/{mId}/status  Body: { "mlstnSts": "CLOSED" } */
     @PatchMapping("/milestones/{mId}/status")
     public ResponseEntity<?> updateMilestoneStatus(
             @PathVariable Long mId,
@@ -404,9 +404,9 @@ public class ProjectLiveController {
                 .orElseThrow(() -> new RuntimeException("Milestone not found: " + mId));
 
         String newStatus = body.get("mlstnSts");
-        if (!List.of("LIVE", "HOLD", "COMPLETED", "CLOSED").contains(newStatus)) {
+        if (!List.of("LIVE", "HOLD", "CLOSED").contains(newStatus)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid status. Allowed: LIVE, HOLD, COMPLETED, CLOSED"));
+                    .body(Map.of("message", "Invalid status. Allowed: LIVE, HOLD, CLOSED"));
         }
         ms.setMlstnSts(newStatus);
         return ResponseEntity.ok(milestoneLiveRepository.save(ms));
@@ -426,9 +426,9 @@ public class ProjectLiveController {
             return ResponseEntity.badRequest().body(Map.of("message", "taskSts is required"));
         }
         String upperStatus = newStatus.toUpperCase().replace(" ", "_");
-        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","COMPLETED","REASSIGN","REWORK","OVER_DUE","HOLD").contains(upperStatus)) {
+        if (!List.of("DRAFT","OPEN","WIP","UNDER_REVIEW","CLOSED","REASSIGN","REWORK","OVER_DUE","HOLD").contains(upperStatus)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, COMPLETED, REASSIGN, REWORK, OVER_DUE, HOLD"));
+                    .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, CLOSED, REASSIGN, REWORK, OVER_DUE, HOLD"));
         }
         task.setTaskSts(TaskStatusMaster.getByName(newStatus));
         if ("UNDER_REVIEW".equals(upperStatus)) {

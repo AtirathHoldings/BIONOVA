@@ -131,7 +131,7 @@ public class GanttChartController {
 
             // Milestone progress
             double milestoneProgress = 0.0;
-            if ("COMPLETED".equalsIgnoreCase(ms.getMlstnSts()) || "CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
+            if ("CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
                 milestoneProgress = 1.0;
             } else if (!msTasks.isEmpty()) {
                 double taskProgressSum = 0.0;
@@ -247,7 +247,7 @@ public class GanttChartController {
         if (task == null || task.getTaskSts() == null) return 0.0;
         String status    = task.getTaskSts().getStatusNm();
         String subStatus = task.getSubStatus() != null ? task.getSubStatus() : "";
-        if ("Completed".equalsIgnoreCase(status)) {
+        if ("Closed".equalsIgnoreCase(status)) {
             return 1.0;
         } else if ("WIP".equalsIgnoreCase(status)) {
             if ("Under Review".equalsIgnoreCase(subStatus)) return 0.8;

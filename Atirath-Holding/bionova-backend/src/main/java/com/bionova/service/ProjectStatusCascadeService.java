@@ -35,7 +35,7 @@ public class ProjectStatusCascadeService {
         if (task == null) return;
 
         // Release downstream sequential tasks if this task is completed
-        if (task.getTaskSts() != null && "Completed".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+        if (task.getTaskSts() != null && "Closed".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
             List<TaskLive> downstreamTasks = taskLiveRepository.findByDepTaskId(taskId);
             for (TaskLive dt : downstreamTasks) {
                 String dtSts = dt.getTaskSts() != null ? dt.getTaskSts().getStatusNm() : "";
@@ -59,10 +59,10 @@ public class ProjectStatusCascadeService {
 
         for (TaskLive t : milestoneTasks) {
             String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "Open";
-            if (!"Completed".equalsIgnoreCase(sts)) {
+            if (!"Closed".equalsIgnoreCase(sts)) {
                 allCompleted = false;
             }
-            if ("WIP".equalsIgnoreCase(sts) || "Completed".equalsIgnoreCase(sts)) {
+            if ("WIP".equalsIgnoreCase(sts) || "Closed".equalsIgnoreCase(sts)) {
                 anyStarted = true;
             }
         }
@@ -71,9 +71,9 @@ public class ProjectStatusCascadeService {
         String targetMilestoneStatus = currentMilestoneStatus;
 
         if (allCompleted) {
-            targetMilestoneStatus = "COMPLETED";
+            targetMilestoneStatus = "CLOSED";
         } else if (anyStarted) {
-            if ("COMPLETED".equals(currentMilestoneStatus) || "CLOSED".equals(currentMilestoneStatus)) {
+            if ("CLOSED".equals(currentMilestoneStatus)) {
                 targetMilestoneStatus = "LIVE";
             }
         }
@@ -95,7 +95,7 @@ public class ProjectStatusCascadeService {
 
         for (MilestoneLive ms : projectMilestones) {
             String msSts = ms.getMlstnSts() != null ? ms.getMlstnSts() : "LIVE";
-            if (!"COMPLETED".equals(msSts)) {
+            if (!"CLOSED".equals(msSts)) {
                 allMilestonesCompleted = false;
                 break;
             }
@@ -160,8 +160,8 @@ public class ProjectStatusCascadeService {
             milestoneStatus = "HOLD";
             taskStatus = TaskStatusMaster.HOLD;
         } else if ("CLOSED".equalsIgnoreCase(newProjectStatus)) {
-            milestoneStatus = "COMPLETED";
-            taskStatus = TaskStatusMaster.COMPLETED;
+            milestoneStatus = "CLOSED";
+            taskStatus = TaskStatusMaster.CLOSED;
         } else if ("LIVE".equalsIgnoreCase(newProjectStatus)) {
             milestoneStatus = "LIVE";
             taskStatus = TaskStatusMaster.OPEN;
@@ -171,12 +171,12 @@ public class ProjectStatusCascadeService {
 
         for (MilestoneLive ms : milestones) {
             if ("HOLD".equals(milestoneStatus)) {
-                if (!"COMPLETED".equalsIgnoreCase(ms.getMlstnSts()) && !"CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
+                if (!"CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
                     ms.setMlstnSts("HOLD");
                     milestoneLiveRepository.save(ms);
                 }
-            } else if ("COMPLETED".equals(milestoneStatus)) {
-                ms.setMlstnSts("COMPLETED");
+            } else if ("CLOSED".equals(milestoneStatus)) {
+                ms.setMlstnSts("CLOSED");
                 milestoneLiveRepository.save(ms);
             } else if ("LIVE".equals(milestoneStatus)) {
                 if ("HOLD".equalsIgnoreCase(ms.getMlstnSts())) {
@@ -189,12 +189,12 @@ public class ProjectStatusCascadeService {
             for (TaskLive t : tasks) {
                 if (taskStatus == TaskStatusMaster.HOLD) {
                     String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "";
-                    if (!"Completed".equalsIgnoreCase(sts)) {
+                    if (!"Closed".equalsIgnoreCase(sts)) {
                         t.setTaskSts(TaskStatusMaster.HOLD);
                         taskLiveRepository.save(t);
                     }
-                } else if (taskStatus == TaskStatusMaster.COMPLETED) {
-                    t.setTaskSts(TaskStatusMaster.COMPLETED);
+                } else if (taskStatus == TaskStatusMaster.CLOSED) {
+                    t.setTaskSts(TaskStatusMaster.CLOSED);
                     if (t.getActCmpDt() == null) {
                         t.setActCmpDt(java.time.LocalDate.now());
                     }

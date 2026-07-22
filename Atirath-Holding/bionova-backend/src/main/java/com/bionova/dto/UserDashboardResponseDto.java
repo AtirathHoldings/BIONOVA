@@ -49,6 +49,14 @@ public class UserDashboardResponseDto {
     // Milestone Progress Status
     private Map<String, Integer> milestoneStatus;
 
+    public Map<String, Integer> getMilestoneStatus() {
+        return milestoneStatus;
+    }
+
+    public void setMilestoneStatus(Map<String, Integer> milestoneStatus) {
+        this.milestoneStatus = milestoneStatus;
+    }
+
     // Performance Metrics
     private PerformanceMetricDto productivity;
     private PerformanceMetricDto taskCompletion;

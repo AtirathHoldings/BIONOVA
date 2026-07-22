@@ -174,9 +174,7 @@ public class ProjectLeadLagService {
 
         // Check if all tasks are completed
         boolean allDone = !allTasks.isEmpty()
-                && allTasks.stream().allMatch(t ->
-                "COMPLETED".equalsIgnoreCase(
-                        t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : ""));
+                && allTasks.stream().allMatch(t -> t.getTaskSts() != null && "CLOSED".equalsIgnoreCase(t.getTaskSts().getStatusNm()));
 
         LocalDate today = LocalDate.now();
 
@@ -267,10 +265,8 @@ public class ProjectLeadLagService {
         detail.put("daysVariance",          daysVariance);
         detail.put("totalTasks",            allTasks.size());
         detail.put("completedTasks",
-                allTasks.stream().filter(t ->
-                        "COMPLETED".equalsIgnoreCase(
-                                t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : ""))
-                        .count());
+                allTasks.stream().filter(t -> t.getTaskSts() != null && "CLOSED".equalsIgnoreCase(t.getTaskSts().getStatusNm())
+                ).count());
         return detail;
     }
 
@@ -313,7 +309,7 @@ public class ProjectLeadLagService {
             String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "Open";
             String subSts = t.getSubStatus() != null ? t.getSubStatus() : "";
             double taskPct = 0.0;
-            if ("Completed".equalsIgnoreCase(sts)) {
+            if ("Closed".equalsIgnoreCase(sts)) {
                 taskPct = 100.0;
             } else if ("WIP".equalsIgnoreCase(sts)) {
                 if ("Under Review".equalsIgnoreCase(subSts)) {

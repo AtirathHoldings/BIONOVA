@@ -106,7 +106,7 @@ public class TaskPriorityMaster {
 
         // Determine the reference end date for calculation
         LocalDate refDate = LocalDate.now();
-        if (status != null && "COMPLETED".equalsIgnoreCase(status.getStatusNm())) {
+        if (status != null && "CLOSED".equalsIgnoreCase(status.getStatusNm())) {
             if (actCmpDt != null) {
                 refDate = actCmpDt;
             } else if (endDt != null) {

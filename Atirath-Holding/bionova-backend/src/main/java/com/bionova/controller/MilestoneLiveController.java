@@ -271,9 +271,9 @@ public class MilestoneLiveController {
                 .orElseThrow(() -> new RuntimeException("Milestone not found: " + id));
 
         String newStatus = body.get("mlstnSts");
-        if (!List.of("LIVE", "HOLD", "COMPLETED", "CLOSED").contains(newStatus)) {
+        if (!List.of("LIVE", "HOLD", "CLOSED").contains(newStatus)) {
             return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Invalid status. Allowed: LIVE, HOLD, COMPLETED, CLOSED"));
+                    .body(Map.of("message", "Invalid status. Allowed: LIVE, HOLD, CLOSED"));
         }
         ms.setMlstnSts(newStatus);
         return ResponseEntity.ok(milestoneLiveRepository.save(ms));

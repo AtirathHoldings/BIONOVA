@@ -38,7 +38,7 @@ public class TaskStatusMaster {
     public static final TaskStatusMaster DRAFT = new TaskStatusMaster(1, "Draft", null);
     public static final TaskStatusMaster OPEN = new TaskStatusMaster(2, "Open", "Overdue");
     public static final TaskStatusMaster WIP = new TaskStatusMaster(3, "WIP", "Under Review, Reassign, Rework, Overdue");
-    public static final TaskStatusMaster COMPLETED = new TaskStatusMaster(4, "Completed", "Lead, On Time, Lag");
+    public static final TaskStatusMaster CLOSED = new TaskStatusMaster(4, "Closed", "Lead, On Time, Lag");
     public static final TaskStatusMaster HOLD = new TaskStatusMaster(5, "Hold", null);
 
     public static Integer getStatusIdByName(String name) {
@@ -47,7 +47,7 @@ public class TaskStatusMaster {
             case "DRAFT": return 1;
             case "OPEN": return 2;
             case "WIP": case "IN_PROGRESS": return 3;
-            case "COMPLETED": return 4;
+            case "CLOSED": return 4;
             case "HOLD": return 5;
             // Map sub-status names to parent status IDs to support legacy frontend/controllers status updates
             case "UNDER_REVIEW":
@@ -59,7 +59,7 @@ public class TaskStatusMaster {
             case "LEAD":
             case "ON_TIME":
             case "LAG":
-                return 4; // COMPLETED parent status
+                return 4; // CLOSED parent status
             default: return null;
         }
     }
@@ -75,7 +75,7 @@ public class TaskStatusMaster {
             case 1: return DRAFT;
             case 2: return OPEN;
             case 3: return WIP;
-            case 4: return COMPLETED;
+            case 4: return CLOSED;
             case 5: return HOLD;
             default: return null;
         }

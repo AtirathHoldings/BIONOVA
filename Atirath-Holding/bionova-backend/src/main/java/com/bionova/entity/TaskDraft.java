@@ -91,7 +91,7 @@ public class TaskDraft {
     private Boolean sts = true;
 
     public TaskPriorityMaster getPriority() {
-        if (taskSts != null && "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm())) {
+        if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
             return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(tentStDt, tentEndDt, noOfDays, taskSts, null);
         }
         return TaskPriorityMaster.calculatePriority(tentStDt, tentEndDt, noOfDays, taskSts, null);

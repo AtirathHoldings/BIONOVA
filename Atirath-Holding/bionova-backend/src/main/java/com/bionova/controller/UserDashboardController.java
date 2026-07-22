@@ -169,7 +169,7 @@ public class UserDashboardController {
         }
 
         // 4. Task Status Counts (Donut Chart) Mapping
-        int completedVal = counts.path("Completed").asInt();
+        int completedVal = counts.path("Closed").asInt();
         int inProgressVal = counts.path("In Progress").asInt();
         int underReviewVal = counts.path("Under Review").asInt();
         int overdueVal = counts.path("Overdue").asInt();
@@ -179,7 +179,7 @@ public class UserDashboardController {
         int draftVal = counts.path("Draft").asInt();
 
         Map<String, Integer> taskStatusCounts = new HashMap<>();
-        taskStatusCounts.put("Completed",    completedVal);
+        taskStatusCounts.put("Closed",       completedVal);
         taskStatusCounts.put("In Progress",  inProgressVal);
         taskStatusCounts.put("Under Review", underReviewVal);
         taskStatusCounts.put("Overdue",      overdueVal);
@@ -188,7 +188,7 @@ public class UserDashboardController {
         taskStatusCounts.put("Rework",       reworkVal);
         taskStatusCounts.put("Draft",        draftVal);
 
-        int mainCompleted = counts.path("MainCompleted").asInt();
+        int mainCompleted = counts.path("MainClosed").asInt();
         int mainWip = counts.path("MainWIP").asInt();
         int mainOpen = counts.path("MainOpen").asInt();
 
@@ -196,7 +196,7 @@ public class UserDashboardController {
 
         Map<String, Integer> taskStatusPercentages = new HashMap<>();
         if (total > 0) {
-            taskStatusPercentages.put("Completed",    (int) Math.round((mainCompleted / total) * 100));
+            taskStatusPercentages.put("Closed",       (int) Math.round((mainCompleted / total) * 100));
             taskStatusPercentages.put("In Progress",  (int) Math.round((mainWip / total) * 100));
             taskStatusPercentages.put("Open",         (int) Math.round((mainOpen / total) * 100));
             taskStatusPercentages.put("Under Review", 0);
@@ -205,7 +205,7 @@ public class UserDashboardController {
             taskStatusPercentages.put("Rework",       0);
             taskStatusPercentages.put("Draft",        0);
         } else {
-            taskStatusPercentages.put("Completed",    0);
+            taskStatusPercentages.put("Closed",       0);
             taskStatusPercentages.put("In Progress",  0);
             taskStatusPercentages.put("Open",         0);
             taskStatusPercentages.put("Under Review", 0);
@@ -250,9 +250,10 @@ public class UserDashboardController {
         dto.setCompletedTasksCount(completedTasksCount);
 
         JsonNode trendsNode = root.path("metricsTrends");
-        dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), (int) total));
-        dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), counts.path("Open").asInt() + counts.path("Draft").asInt()));
-        dto.setInProgressCard(mapMetricCard(trendsNode.path("inProgress"), counts.path("In Progress").asInt()));
+        int totalActiveAssigned = (openVal + draftVal) + inProgressVal + overdueTasksCount + completedTasksCount;
+        dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), totalActiveAssigned));
+        dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), openVal + draftVal));
+        dto.setInProgressCard(mapMetricCard(trendsNode.path("inProgress"), inProgressVal));
         dto.setOverdueTasksCard(mapMetricCard(trendsNode.path("overdueTasks"), overdueTasksCount));
         dto.setCompletedTasksCard(mapMetricCard(trendsNode.path("completedTasks"), completedTasksCount));
         dto.setMyProjectsCard(mapMetricCard(trendsNode.path("myProjects"), myProjectsCount));
@@ -270,7 +271,7 @@ public class UserDashboardController {
         LocalDate today = LocalDate.now();
         for (MilestoneLive m : userMilestones) {
             String sts = m.getMlstnSts() != null ? m.getMlstnSts().toUpperCase() : "LIVE";
-            if (sts.equals("COMPLETED") || sts.equals("CLOSED")) {
+            if (sts.equals("CLOSED")) {
                 msCompleted++;
             } else if (sts.equals("HOLD")) {
                 msDelayed++;

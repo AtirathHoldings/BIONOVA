@@ -115,7 +115,7 @@ public class NotificationService {
 
         LocalDate today = LocalDate.now();
         boolean isDelayed = false;
-        if ("COMPLETED".equalsIgnoreCase(log.getStatusTo())) {
+        if ("CLOSED".equalsIgnoreCase(log.getStatusTo())) {
             if (task.getEndDt() != null) {
                 if (today.isAfter(task.getEndDt())) {
                     isDelayed = true;
@@ -176,7 +176,7 @@ public class NotificationService {
 
         LocalDate today = LocalDate.now();
         boolean isDelayed = false;
-        if ("COMPLETED".equalsIgnoreCase(log.getStatusTo()) || "CLOSED".equalsIgnoreCase(log.getStatusTo())) {
+        if ("CLOSED".equalsIgnoreCase(log.getStatusTo())) {
             if (ms.getEndDt() != null) {
                 if (today.isAfter(ms.getEndDt())) {
                     isDelayed = true;
@@ -274,7 +274,7 @@ public class NotificationService {
         List<TaskLive> activeTasks = taskLiveRepository.findAll().stream()
                 .filter(t -> {
                     String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "";
-                    return !"Completed".equalsIgnoreCase(sts);
+                    return !"Closed".equalsIgnoreCase(sts);
                 })
                 .collect(Collectors.toList());
 
@@ -283,7 +283,7 @@ public class NotificationService {
             try {
                 if (task.getEndDt() != null && today.isAfter(task.getEndDt())) {
                     String sts = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
-                    if (!"Completed".equalsIgnoreCase(sts)) {
+                    if (!"Closed".equalsIgnoreCase(sts)) {
                         if (!"Overdue".equals(task.getSubStatus())) {
                             task.setSubStatus("Overdue");
                             taskLiveRepository.save(task);
@@ -303,7 +303,7 @@ public class NotificationService {
         List<com.bionova.entity.Assignment> activeAssignments = assignmentRepository.findAll().stream()
                 .filter(a -> {
                     String sts = a.getTaskSts() != null ? a.getTaskSts().getStatusNm() : "";
-                    return !"Completed".equalsIgnoreCase(sts);
+                    return !"Closed".equalsIgnoreCase(sts);
                 })
                 .collect(Collectors.toList());
 
@@ -311,7 +311,7 @@ public class NotificationService {
             try {
                 if (assignment.getEndDt() != null && today.isAfter(assignment.getEndDt())) {
                     String sts = assignment.getTaskSts() != null ? assignment.getTaskSts().getStatusNm() : "";
-                    if (!"Completed".equalsIgnoreCase(sts)) {
+                    if (!"Closed".equalsIgnoreCase(sts)) {
                         if (!"Overdue".equals(assignment.getSubStatus())) {
                             assignment.setSubStatus("Overdue");
                             assignmentRepository.save(assignment);
@@ -325,7 +325,6 @@ public class NotificationService {
 
         // 2. Process Milestones
         List<MilestoneLive> activeMilestones = milestoneLiveRepository.findAll().stream()
-                .filter(m -> !"COMPLETED".equalsIgnoreCase(m.getMlstnSts()))
                 .filter(m -> !"CLOSED".equalsIgnoreCase(m.getMlstnSts()))
                 .collect(Collectors.toList());
 
