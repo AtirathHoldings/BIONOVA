@@ -635,6 +635,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "  WITH all_todo AS ( " +
                     "    SELECT " +
                     "      t.task_id, " +
+                    "      COALESCE(t.task_cd, 'TSK-' || t.task_id) AS task_code, " +
                     "      t.task_nm, " +
                     "      t.st_dt, " +
                     "      t.end_dt, " +
@@ -682,6 +683,7 @@ public class DatabaseMigrator implements InitializingBean {
                     " " +
                     "    SELECT " +
                     "      t.emp_task_id AS task_id, " +
+                    "      COALESCE(t.task_cd, 'IND-' || t.emp_task_id) AS task_code, " +
                     "      t.task_nm, " +
                     "      t.st_dt, " +
                     "      t.end_dt, " +
@@ -727,6 +729,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "  FROM ( " +
                     "    SELECT jsonb_build_object( " +
                     "      'taskId', t.task_id, " +
+                    "      'taskCode', t.task_code, " +
                     "      'taskNm', t.task_nm, " +
                     "      'project', t.project_info, " +
                     "      'endDt', t.end_dt, " +
@@ -755,6 +758,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "  WITH all_upcoming AS ( " +
                     "    SELECT " +
                     "      t.task_id, " +
+                    "      COALESCE(t.task_cd, 'TSK-' || t.task_id) AS task_code, " +
                     "      t.task_nm, " +
                     "      t.st_dt, " +
                     "      t.end_dt, " +
@@ -794,6 +798,7 @@ public class DatabaseMigrator implements InitializingBean {
                     " " +
                     "    SELECT " +
                     "      t.emp_task_id AS task_id, " +
+                    "      COALESCE(t.task_cd, 'IND-' || t.emp_task_id) AS task_code, " +
                     "      t.task_nm, " +
                     "      t.st_dt, " +
                     "      t.end_dt, " +
@@ -831,6 +836,7 @@ public class DatabaseMigrator implements InitializingBean {
                     "  FROM ( " +
                     "    SELECT jsonb_build_object( " +
                     "      'taskId', t.task_id, " +
+                    "      'taskCode', t.task_code, " +
                     "      'taskNm', t.task_nm, " +
                     "      'prjCd', t.prj_cd, " +
                     "      'stDt', t.st_dt, " +

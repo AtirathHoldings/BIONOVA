@@ -111,6 +111,7 @@ public class UserDashboardResponseDto {
     @NoArgsConstructor
     public static class TodoTaskDto {
         private Long taskId;
+        private String taskCode;
         private String taskName;
         private String projectCodeName; // E.g., "PRJ-001 • Excavation Work"
         private String priority;        // High, Medium, Low
@@ -128,6 +129,7 @@ public class UserDashboardResponseDto {
     @NoArgsConstructor
     public static class UpcomingTaskDto {
         private Long taskId;
+        private String taskCode;
         private String taskName;
         private String projectCode; // E.g., "PRJ-001"
         private LocalDate startDate;

@@ -95,8 +95,15 @@ public class UserDashboardController {
         // 1. To-Do List Mapping
         List<TodoTaskDto> todoList = new ArrayList<>();
         for (JsonNode t : root.path("todoList")) {
+            String taskCode = t.hasNonNull("taskCode") ? t.path("taskCode").asText() 
+                            : (t.hasNonNull("taskCd") ? t.path("taskCd").asText() : null);
+            if (taskCode == null || taskCode.isBlank()) {
+                String source = t.path("taskSource").asText("PROJECT");
+                taskCode = "INDIVIDUAL".equalsIgnoreCase(source) ? "IND-" + t.path("taskId").asLong() : "TSK-" + t.path("taskId").asLong();
+            }
             todoList.add(new TodoTaskDto(
                     t.path("taskId").asLong(),
+                    taskCode,
                     t.path("taskNm").asText(),
                     t.path("project").asText("Internal"),
                     t.path("priority").asText("Medium"),
@@ -113,8 +120,14 @@ public class UserDashboardController {
         // 2. Upcoming Tasks Mapping
         List<UpcomingTaskDto> upcomingTasks = new ArrayList<>();
         for (JsonNode t : root.path("upcomingTasks")) {
+            String taskCode = t.hasNonNull("taskCode") ? t.path("taskCode").asText() 
+                            : (t.hasNonNull("taskCd") ? t.path("taskCd").asText() : null);
+            if (taskCode == null || taskCode.isBlank()) {
+                taskCode = "TSK-" + t.path("taskId").asLong();
+            }
             upcomingTasks.add(new UpcomingTaskDto(
                     t.path("taskId").asLong(),
+                    taskCode,
                     t.path("taskNm").asText(),
                     t.path("prjCd").asText("Internal"),
                     parseDate(t.path("stDt").asText(null)),

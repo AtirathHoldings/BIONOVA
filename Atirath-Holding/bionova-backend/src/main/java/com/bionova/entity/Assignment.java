@@ -7,7 +7,12 @@ import lombok.Setter;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "employee_individual_task_master")
+@Table(name = "employee_individual_task_master", indexes = {
+        @Index(name = "idx_asgn_emp_id", columnList = "emp_id"),
+        @Index(name = "idx_asgn_assigned_by", columnList = "assigned_by"),
+        @Index(name = "idx_asgn_coy_id", columnList = "coy_id"),
+        @Index(name = "idx_asgn_task_sts", columnList = "task_sts")
+})
 @org.hibernate.annotations.Check(
         constraints = "task_asgn_to IN ('INTERNAL','EXTERNAL')"
 )

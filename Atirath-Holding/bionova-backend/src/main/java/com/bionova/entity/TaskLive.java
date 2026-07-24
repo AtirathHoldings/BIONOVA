@@ -10,7 +10,12 @@ import com.bionova.enums.TimeStatus;
 import com.bionova.entity.ProjectLive;
 
 @Entity
-@Table(name = "task_live_master")
+@Table(name = "task_live_master", indexes = {
+        @Index(name = "idx_task_live_m_id", columnList = "m_id"),
+        @Index(name = "idx_task_live_emp_id", columnList = "emp_id"),
+        @Index(name = "idx_task_live_assigned_by", columnList = "assigned_by"),
+        @Index(name = "idx_task_live_task_sts", columnList = "task_sts")
+})
 @org.hibernate.annotations.Check(constraints =
     "task_asgn_to IN ('INTERNAL','EXTERNAL') AND task_dep_typ IN ('INDEPENDENT','SEQUENTIAL','PARALLEL')")
 @EntityListeners(com.bionova.config.AuditListener.class)

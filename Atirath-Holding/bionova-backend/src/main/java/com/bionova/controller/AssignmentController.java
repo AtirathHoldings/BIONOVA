@@ -97,9 +97,58 @@ public class AssignmentController {
     }
 
     private void populateReviewerAndApprover(List<Assignment> tasks) {
-        if (tasks == null) return;
+        if (tasks == null || tasks.isEmpty()) return;
+
+        java.util.Set<Long> empIds = new java.util.HashSet<>();
+        java.util.List<Long> taskIds = new java.util.ArrayList<>();
+
+        for (Assignment t : tasks) {
+            if (t.getEmpId() != null) empIds.add(t.getEmpId());
+            if (t.getAssignedBy() != null) empIds.add(t.getAssignedBy());
+            if (t.getEmpTaskId() != null) taskIds.add(t.getEmpTaskId());
+        }
+
+        java.util.List<com.bionova.entity.ProcessConfig> allConfigs = taskIds.isEmpty() 
+                ? java.util.Collections.emptyList() 
+                : processConfigRepo.findByEmpTaskIdInOrderByOrdrIdAsc(taskIds);
+
+        for (com.bionova.entity.ProcessConfig pc : allConfigs) {
+            if (pc.getEmpId() != null) empIds.add(pc.getEmpId());
+        }
+
+        java.util.Map<Long, String> empNameMap = empIds.isEmpty() ? java.util.Collections.emptyMap() :
+                employeeRepository.findAllById(empIds).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        Employee::getEmpId,
+                        e -> ((e.getFirstName() != null ? e.getFirstName() : "") + " " + (e.getLastName() != null ? e.getLastName() : "")).trim(),
+                        (v1, v2) -> v1
+                ));
+
+        java.util.Map<Long, java.util.List<com.bionova.entity.ProcessConfig>> configMap = allConfigs.stream()
+                .filter(pc -> pc.getEmpTaskId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(com.bionova.entity.ProcessConfig::getEmpTaskId));
+
         for (Assignment task : tasks) {
-            populateReviewerAndApprover(task);
+            if (task.getEmpId() != null) {
+                task.setEmpNm(empNameMap.get(task.getEmpId()));
+            }
+            if (task.getAssignedBy() != null) {
+                task.setAssignedByNm(empNameMap.get(task.getAssignedBy()));
+            }
+            java.util.List<com.bionova.entity.ProcessConfig> configs = configMap.getOrDefault(task.getEmpTaskId(), java.util.Collections.emptyList());
+            for (com.bionova.entity.ProcessConfig pc : configs) {
+                if (pc.getOrdrId() == 1) {
+                    task.setReviewer(pc.getEmpId());
+                    if (pc.getEmpId() != null) {
+                        task.setReviewerNm(empNameMap.get(pc.getEmpId()));
+                    }
+                } else if (pc.getOrdrId() == 2) {
+                    task.setApprover(pc.getEmpId());
+                    if (pc.getEmpId() != null) {
+                        task.setApproverNm(empNameMap.get(pc.getEmpId()));
+                    }
+                }
+            }
         }
     }
 

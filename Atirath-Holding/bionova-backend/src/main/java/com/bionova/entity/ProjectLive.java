@@ -7,7 +7,10 @@ import lombok.Setter;
 import java.time.LocalDate;
 
 @Entity
-@Table(name = "project_live_master")
+@Table(name = "project_live_master", indexes = {
+        @Index(name = "idx_prj_live_coy_id", columnList = "coy_id"),
+        @Index(name = "idx_prj_live_prj_sts", columnList = "prj_sts")
+})
 @org.hibernate.annotations.Check(constraints = "prj_sts IN ('LIVE','HOLD','CLOSED')")
 @EntityListeners(com.bionova.config.AuditListener.class)
 @Getter

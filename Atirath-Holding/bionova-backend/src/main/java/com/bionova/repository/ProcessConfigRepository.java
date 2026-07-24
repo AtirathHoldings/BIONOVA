@@ -17,6 +17,10 @@ public interface ProcessConfigRepository extends JpaRepository<ProcessConfig, In
 
     List<ProcessConfig> findByEmpTaskIdOrderByOrdrIdAsc(Long empTaskId);
 
+    List<ProcessConfig> findByEmpTaskIdInOrderByOrdrIdAsc(List<Long> empTaskIds);
+
+    List<ProcessConfig> findByTaskIdInAndIsLiveOrderByOrdrIdAsc(List<Long> taskIds, Boolean isLive);
+
     @org.springframework.transaction.annotation.Transactional
     void deleteByEmpTaskId(Long empTaskId);
 }
