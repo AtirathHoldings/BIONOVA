@@ -1212,6 +1212,11 @@ const Assignment = ({ userRole, onLogout }) => {
                         const empName = task.empNm || "N/A";
                         const assignedByName = task.assignedByNm || "N/A";
                         const displayName = assignmentView === "my" ? assignedByName : empName;
+                        const isClosedTask = (() => {
+                          const sts = String(task.taskSts?.statusNm || task.taskSts || "").toUpperCase();
+                          const id = task.taskSts?.statusId || task.taskSts;
+                          return sts === "CLOSED" || sts === "COMPLETED" || id === 4;
+                        })();
 
                         return (
                           <tr key={task.empTaskId || task.id}>
@@ -1223,17 +1228,29 @@ const Assignment = ({ userRole, onLogout }) => {
                                 {task.priority || task.Priority || 'None'}
                               </span>
                             </td>
-                            <td><span style={{ color: "#2563eb", background: "#eff6ff", padding: "2px 8px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe", fontSize: 12 }}>{task.taskSts}</span></td>
+                            <td>
+                              <span style={{ 
+                                color: isClosedTask ? "#16a34a" : "#2563eb", 
+                                background: isClosedTask ? "#dcfce7" : "#eff6ff", 
+                                padding: "2px 8px", 
+                                borderRadius: 4, 
+                                fontWeight: 600, 
+                                border: isClosedTask ? "1px solid #bbf7d0" : "1px solid #bfdbfe", 
+                                fontSize: 12 
+                              }}>
+                                {isClosedTask ? "Closed" : (task.taskSts?.statusNm || task.taskSts)}
+                              </span>
+                            </td>
                             <td>{task.stDt ? String(task.stDt).substring(0, 10) : ''}</td>
                             <td>{task.endDt ? String(task.endDt).substring(0, 10) : ''}</td>
                             <td>{task.reviewerName || "N/A"}</td>
                             <td>{task.approverName || "N/A"}</td>
                             <td>{task.checklistCount || 0} Items</td>
                             <td>
-                              <button className="cit-action-btn view" title="View" style={{ color: '#64748b', marginRight: 8 }} onClick={() => handleView(task)}>
+                              <button className="cit-action-btn view" title="View" style={{ color: '#64748b', marginRight: isClosedTask ? 0 : 8 }} onClick={() => handleView(task)}>
                                 <Eye size={16} />
                               </button>
-                              {assignmentView === "assignedByMe" && (
+                              {assignmentView === "assignedByMe" && !isClosedTask && (
                                 <>
                                   <button className="cit-action-btn edit" title="Edit" style={{ color: '#3b82f6', marginRight: 8 }} onClick={() => handleEdit(task)}>
                                     <Edit3 size={16} />

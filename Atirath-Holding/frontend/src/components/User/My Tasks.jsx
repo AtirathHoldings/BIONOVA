@@ -2292,18 +2292,33 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       );
     };
 
+    const getCurrentStatusDisplay = () => {
+      const rawSts = String(rawTask?.taskSts?.statusNm || rawTask?.taskSts || task.rawStatus || task.status || "").toUpperCase();
+      const taskStsId = rawTask?.taskSts?.statusId || rawTask?.taskSts;
+      if (rawSts === "CLOSED" || rawSts === "COMPLETED" || taskStsId === 4 || isCompleted) {
+        return "CLOSED";
+      }
+      if (currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER" || currentProcess === "UNDER_REVIEW") {
+        return "UNDER_REVIEW";
+      }
+      if (isOverdue) return "OVERDUE";
+      if (currentProgress === "HOLD") return "HOLD";
+      if (currentProgress === "OPEN" || currentProgress === "DRAFT") return "OPEN";
+      return "WIP";
+    };
+
     const getStatusColor = (status) => {
-      if (status === "COMPLETED") return "#16a34a";
+      if (status === "CLOSED" || status === "COMPLETED") return "#16a34a";
       if (status === "OVERDUE") return "#ef4444";
       if (status === "UNDER_REVIEW") return "#8b5cf6";
       return "#3b82f6";
     };
 
     const getStatusBgColor = (status) => {
-      if (status === "COMPLETED") return "#dcfce7";
+      if (status === "CLOSED" || status === "COMPLETED") return "#dcfce7";
       if (status === "OVERDUE") return "#fee2e2";
       if (status === "UNDER_REVIEW") return "#f3e8ff";
-      if (status === "IN_PROGRESS") return "#dbeafe";
+      if (status === "IN_PROGRESS" || status === "WIP") return "#fef3c7";
       return "#f1f5f9";
     };
 
