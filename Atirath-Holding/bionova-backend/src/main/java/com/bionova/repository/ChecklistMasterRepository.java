@@ -31,4 +31,7 @@ public interface ChecklistMasterRepository extends JpaRepository<ChecklistMaster
 
     @org.springframework.transaction.annotation.Transactional
     void deleteByEmpTaskId(Long empTaskId);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByTaskId(Long taskId);
 }

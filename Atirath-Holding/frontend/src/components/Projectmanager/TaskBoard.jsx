@@ -142,7 +142,7 @@ const mapTaskStatus = (taskSts) => {
   if (s === "OPEN") return "Not Started";
   if (s === "WIP") return "In Progress";
   if (s === "SUBMIT_REVIEW" || s === "UNDER_REVIEW") return "Under Review";
-  if (s === "COMPLETED") return "Completed";
+  if (s === "COMPLETED" || s === "CLOSED") return "Closed";
   if (s === "REWORK") return "In Progress";
   return "Not Started";
 };
@@ -151,7 +151,7 @@ const mapStatusToApi = (uiStatus) => {
   if (uiStatus === "Not Started") return "OPEN";
   if (uiStatus === "In Progress") return "WIP";
   if (uiStatus === "Under Review") return "SUBMIT_REVIEW";
-  if (uiStatus === "Completed") return "COMPLETED";
+  if (uiStatus === "Completed" || uiStatus === "Closed") return "CLOSED";
   if (uiStatus === "Overdue") return "OPEN";
   return "OPEN";
 };
@@ -172,8 +172,8 @@ const mapBackendTask = (t, projects, milestones, employees) => {
   const employee = (employees || []).find(e => (e.empId || e.id) && String(e.empId || e.id) === String(t.empId));
 
   let status = "Not Started";
-  if (t.taskSts === "COMPLETED") {
-    status = "Completed";
+  if (t.taskSts === "COMPLETED" || t.taskSts === "CLOSED") {
+    status = "Closed";
   } else {
     const today = new Date().toISOString().split("T")[0];
     if (t.endDt && t.endDt < today) {
@@ -188,7 +188,7 @@ const mapBackendTask = (t, projects, milestones, employees) => {
   }
 
   let progress = 0;
-  if (t.taskSts === "COMPLETED") {
+  if (t.taskSts === "COMPLETED" || t.taskSts === "CLOSED") {
     progress = 100;
   } else if (t.taskSts === "SUBMIT_REVIEW" || t.taskSts === "UNDER_REVIEW") {
     progress = 90;
@@ -216,8 +216,8 @@ const mapBackendTask = (t, projects, milestones, employees) => {
     dueDate: t.endDt || t.enddt || "",
     startDate: t.stDt || t.stdt || "",
     subtasksCount: t.wrkDays || t.wrkdays || 3,
-    subtasksCompleted: status === "Completed" ? (t.wrkDays || t.wrkdays || 3) : 0,
-    priority: status === "Completed" ? "Completed" : status === "Overdue" ? "Overdue" : mapPriorityFromApi(project ? (project.prjPrty || project.prjprty) : "Medium"),
+    subtasksCompleted: (status === "Closed" || status === "Completed") ? (t.wrkDays || t.wrkdays || 3) : 0,
+    priority: (status === "Closed" || status === "Completed") ? "Closed" : status === "Overdue" ? "Overdue" : mapPriorityFromApi(project ? (project.prjPrty || project.prjprty) : "Medium"),
     taskType: (t.taskAsgnTo || t.taskasgnto) === "EXTERNAL" ? "External" : "Internal",
     status: status,
     description: t.taskDesc || t.taskdesc || "",
@@ -312,6 +312,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
     "Not Started": useRef(null),
     "In Progress": useRef(null),
     "Under Review": useRef(null),
+    "Closed": useRef(null),
     "Completed": useRef(null),
     "Overdue": useRef(null),
   };
@@ -503,7 +504,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
     }
 
     const newProgress = Math.round((nextCompleted / total) * 100);
-    const updatedStatus = newProgress === 100 ? "Completed" : selectedTask.status;
+    const updatedStatus = newProgress === 100 ? "Closed" : selectedTask.status;
     const backendSts = mapStatusToApi(updatedStatus);
 
     try {
@@ -701,8 +702,8 @@ const TaskBoard = ({ userRole, onLogout }) => {
                         <span className="tb-proj-metric-label">Total Tasks</span>
                         <span className="tb-proj-metric-val">{totalTasksCount}</span>
                       </div>
-                      <div className="tb-proj-metric-item completed" onClick={() => setSelectedStatus("Completed")} style={{ cursor: "pointer" }}>
-                        <span className="tb-proj-metric-label">Completed</span>
+                      <div className="tb-proj-metric-item completed" onClick={() => setSelectedStatus("Closed")} style={{ cursor: "pointer" }}>
+                        <span className="tb-proj-metric-label">Closed</span>
                         <span className="tb-proj-metric-val">
                           {completedCount} <span>({completedPct}%)</span>
                         </span>
@@ -739,7 +740,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
               { label: "Not Started", value: "Not Started", color: "#2563eb" },
               { label: "In Progress", value: "In Progress", color: "#f97316" },
               { label: "Under Review", value: "Under Review", color: "#a855f7" },
-              { label: "Completed", value: "Completed", color: "#16a34a" },
+              { label: "Closed", value: "Closed", color: "#16a34a" },
               { label: "Overdue", value: "Overdue", color: "#ef4444" },
             ].map(tab => (
               <button
@@ -969,21 +970,21 @@ const TaskBoard = ({ userRole, onLogout }) => {
               </div>
             )}
 
-            {/* Column 4: Completed */}
-            {(selectedStatus === "All Statuses" || selectedStatus === "Completed") && (
+            {/* Column 4: Closed */}
+            {(selectedStatus === "All Statuses" || selectedStatus === "Closed" || selectedStatus === "Completed") && (
               <div
-                ref={colRefs["Completed"]}
+                ref={colRefs["Closed"] || colRefs["Completed"]}
                 className={`tb-col completed`}
                 
               >
                 <div className="tb-col-header">
                   <div className="tb-col-title-wrap">
-                    <h3 className="tb-col-title">Completed</h3>
-                    <span className="tb-col-badge">{getTasksByStatus("Completed").length}</span>
+                    <h3 className="tb-col-title">Closed</h3>
+                    <span className="tb-col-badge">{(getTasksByStatus("Closed") || []).length + (getTasksByStatus("Completed") || []).length}</span>
                   </div>
                 </div>
                 <div className="tb-cards-container">
-                  {getTasksByStatus("Completed").map(task => (
+                  {[...getTasksByStatus("Closed"), ...getTasksByStatus("Completed")].map(task => (
                     <div
                       key={task.id}
                       className="tb-card"
@@ -992,7 +993,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                     >
                       <div className="tb-card-header">
                         <span className="tb-card-id completed">{task.id}</span>
-                        <span className="tb-card-prio completed">COMPLETED</span>
+                        <span className="tb-card-prio completed">CLOSED</span>
                       </div>
                       <h4 className="tb-card-title">{task.title}</h4>
                       <p className="tb-card-subtitle">{task.milestone}</p>

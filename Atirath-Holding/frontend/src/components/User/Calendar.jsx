@@ -1,7 +1,7 @@
 // src/components/User/Calendar.jsx
 import React, { useState, useRef, useEffect } from "react";
-import Sidebar from "../Sidebar";
-import Header from "../Header";
+import Sidebar from "../Sidebar.jsx";
+import Header from "../Header.jsx";
 import "../../styles/calendar.css";
 
 import {
@@ -36,13 +36,12 @@ const Calendar = ({ userRole, onLogout }) => {
 
   // Filter States
   const [filterTasks, setFilterTasks] = useState(true);
-  const [filterMilestones, setFilterMilestones] = useState(true);
-  const [filterMeetings, setFilterMeetings] = useState(true);
   const [filterOverdue, setFilterOverdue] = useState(true);
   const [showCompleted, setShowCompleted] = useState(false);
 
   // Selected event for detail modal
   const [selectedEvent, setSelectedEvent] = useState(null);
+  const [selectedDateEvents, setSelectedDateEvents] = useState(null);
 
   const currentMonth = currentDate.getMonth();
   const currentYear = currentDate.getFullYear();
@@ -124,7 +123,7 @@ const Calendar = ({ userRole, onLogout }) => {
     if (typeLower === 'milestone') {
       return 'milestone';
     }
-    return 'meeting'; // Holidays, Meetings, Events
+    return 'meeting'; 
   };
 
   // Filter events
@@ -138,8 +137,8 @@ const Calendar = ({ userRole, onLogout }) => {
       }
 
       if (eventType === 'task' && !filterTasks) return false;
-      if (eventType === 'milestone' && !filterMilestones) return false;
-      if (eventType === 'meeting' && !filterMeetings) return false;
+      if (eventType === 'milestone') return false;
+      if (eventType === 'meeting') return false;
       if (eventType === 'overdue' && !filterOverdue) return false;
 
       return true;
@@ -271,9 +270,7 @@ const Calendar = ({ userRole, onLogout }) => {
                 </div>
               </div>
 
-              <button className="filters-btn">
-                <Filter size={16} /> Filters
-              </button>
+             
             </div>
           </div>
 
@@ -335,7 +332,11 @@ const Calendar = ({ userRole, onLogout }) => {
                                     dayObj.getFullYear() === todayObj.getFullYear();
 
                     return (
-                      <div key={index} className={`calendar-day ${isToday ? "today-cell" : ""}`}>
+                      <div key={index} className={`calendar-day ${isToday ? "today-cell" : ""}`} onClick={(e) => {
+                        if (dayEvents.length > 0) {
+                          setSelectedDateEvents({ date: dayObj, events: dayEvents });
+                        }
+                      }}>
                         <div className="day-number-wrapper">
                           <span className={`day-number ${isToday ? "today-number" : ""}`}>{day}</span>
                         </div>
@@ -346,7 +347,6 @@ const Calendar = ({ userRole, onLogout }) => {
                               <div 
                                 key={idx} 
                                 className="calendar-event-item" 
-                                onClick={() => setSelectedEvent(evt)}
                                 style={{ cursor: "pointer" }}
                               >
                                 <span className="event-dot" style={{ backgroundColor: EVENT_COLORS[eventType] || EVENT_COLORS.task }}></span>
@@ -358,10 +358,9 @@ const Calendar = ({ userRole, onLogout }) => {
                             );
                           })}
                           {dayEvents.length > 3 && (
-                            <div className="event-more-text" style={{ cursor: "pointer", fontWeight: "600" }} onClick={() => {
-                              // Filter out events of this day and view them in 'day' view
-                              setCurrentDate(dayObj);
-                              setView("day");
+                            <div className="event-more-text" style={{ cursor: "pointer", fontWeight: "600" }} onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDateEvents({ date: dayObj, events: dayEvents });
                             }}>
                               + {dayEvents.length - 3} more
                             </div>
@@ -388,14 +387,7 @@ const Calendar = ({ userRole, onLogout }) => {
                   <span className="legend-dot" style={{ backgroundColor: EVENT_COLORS.task }}></span>
                   Task Due Date
                 </div>
-                <div className="legend-item">
-                  <span className="legend-dot" style={{ backgroundColor: EVENT_COLORS.milestone }}></span>
-                  Milestone Due Date
-                </div>
-                <div className="legend-item">
-                  <span className="legend-dot" style={{ backgroundColor: EVENT_COLORS.meeting }}></span>
-                  Meeting / Holiday
-                </div>
+
                 <div className="legend-item">
                   <span className="legend-dot" style={{ backgroundColor: EVENT_COLORS.overdue }}></span>
                   Overdue
@@ -413,7 +405,7 @@ const Calendar = ({ userRole, onLogout }) => {
               {/* Upcoming Events */}
               <div className="sidebar-card">
                 <div className="sidebar-card-header">
-                  <h3>UPCOMING <span>(Next 7 Days)</span></h3>
+                  <h3>UPCOMING DUE'S <span>(Next 7 Days)</span></h3>
                   {loading && (
                     <div style={{
                       display: "flex",
@@ -501,30 +493,7 @@ const Calendar = ({ userRole, onLogout }) => {
                     }}>{filterTasks && <Check size={12} color="white"/>}</span>
                     Tasks
                   </label>
-                  <label className="filter-checkbox">
-                    <input 
-                      type="checkbox" 
-                      checked={filterMilestones} 
-                      onChange={(e) => setFilterMilestones(e.target.checked)} 
-                    />
-                    <span className="checkmark" style={{ 
-                      backgroundColor: filterMilestones ? EVENT_COLORS.milestone : "transparent", 
-                      borderColor: EVENT_COLORS.milestone 
-                    }}>{filterMilestones && <Check size={12} color="white"/>}</span>
-                    Milestones
-                  </label>
-                  <label className="filter-checkbox">
-                    <input 
-                      type="checkbox" 
-                      checked={filterMeetings} 
-                      onChange={(e) => setFilterMeetings(e.target.checked)} 
-                    />
-                    <span className="checkmark" style={{ 
-                      backgroundColor: filterMeetings ? EVENT_COLORS.meeting : "transparent", 
-                      borderColor: EVENT_COLORS.meeting 
-                    }}>{filterMeetings && <Check size={12} color="white"/>}</span>
-                    Meetings / Holidays
-                  </label>
+
                   <label className="filter-checkbox">
                     <input 
                       type="checkbox" 
@@ -547,7 +516,7 @@ const Calendar = ({ userRole, onLogout }) => {
                       backgroundColor: showCompleted ? "#4b5563" : "transparent",
                       borderColor: "#4b5563"
                     }}>{showCompleted && <Check size={12} color="white"/>}</span>
-                    Show Completed
+                    Show Closed
                   </label>
                 </div>
               </div>
@@ -587,12 +556,119 @@ const Calendar = ({ userRole, onLogout }) => {
                   <strong>Status:</strong> <span className={`status-badge status-${selectedEvent.status.toLowerCase()}`}>{selectedEvent.status}</span>
                 </div>
               )}
+              {(selectedEvent.subStatus || selectedEvent.processStatus || selectedEvent.taskSts) && (
+                <div className="event-modal-meta">
+                  <strong>Process Status:</strong> <span className="status-badge" style={{ backgroundColor: "#e2e8f0", color: "#475569" }}>{selectedEvent.subStatus || selectedEvent.processStatus || selectedEvent.taskSts}</span>
+                </div>
+              )}
+              {selectedEvent.subTasks && selectedEvent.subTasks.length > 0 && (
+                <div className="event-modal-description">
+                  <strong>Sub Tasks:</strong>
+                  <ul style={{ paddingLeft: "20px", marginTop: "4px" }}>
+                    {selectedEvent.subTasks.map((st, i) => (
+                      <li key={i} style={{ marginBottom: "4px" }}>
+                        {st.name || st.title} 
+                        {st.status && <span style={{ marginLeft: "8px", fontSize: "11px", backgroundColor: "#e2e8f0", padding: "2px 6px", borderRadius: "10px" }}>{st.status}</span>}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
               {selectedEvent.description && (
                 <div className="event-modal-description">
                   <strong>Description:</strong>
                   <p>{selectedEvent.description}</p>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Date Events Modal */}
+      {selectedDateEvents && (
+        <div className="event-modal-overlay" onClick={() => setSelectedDateEvents(null)}>
+          <div className="event-modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '600px', width: '90%' }}>
+            <div className="event-modal-header">
+              <h3 style={{ margin: 0, fontSize: '16px', color: '#1e293b' }}>
+                Tasks for {formatDateStr(selectedDateEvents.date)}
+              </h3>
+              <button className="close-modal-btn" onClick={() => setSelectedDateEvents(null)}>&times;</button>
+            </div>
+            <div className="event-modal-body" style={{ maxHeight: '60vh', overflowY: 'auto' }}>
+              {selectedDateEvents.events.map((evt, idx) => {
+                const eventType = getEventType(evt);
+                return (
+                  <div 
+                    key={idx} 
+                    style={{ 
+                      paddingBottom: '20px', 
+                      marginBottom: '20px',
+                      borderBottom: idx !== selectedDateEvents.events.length - 1 ? '1px dashed #cbd5e1' : 'none'
+                    }}
+                  >
+                    <div style={{ marginBottom: '12px' }}>
+                      <span className="event-modal-badge" style={{ 
+                        backgroundColor: (EVENT_COLORS[eventType] || EVENT_COLORS.task) + '20', 
+                        color: EVENT_COLORS[eventType] || EVENT_COLORS.task,
+                        display: 'inline-block',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase'
+                      }}>
+                        {evt.type || 'TASK'}
+                      </span>
+                    </div>
+                    
+                    <h3 className="event-modal-title">{evt.title}</h3>
+                    
+                    {evt.code && (
+                      <div className="event-modal-meta">
+                        <strong>Code:</strong> {evt.code}
+                      </div>
+                    )}
+                    
+                    <div className="event-modal-meta">
+                      <strong>Date:</strong> {evt.date} {evt.time ? `@ ${evt.time}` : ''}
+                    </div>
+                    
+                    {evt.status && (
+                      <div className="event-modal-meta">
+                        <strong>Status:</strong> <span className={`status-badge status-${evt.status.toLowerCase()}`}>{evt.status}</span>
+                      </div>
+                    )}
+                    
+                    {(evt.subStatus || evt.processStatus || evt.taskSts) && (
+                      <div className="event-modal-meta">
+                        <strong>Process Status:</strong> <span className="status-badge" style={{ backgroundColor: "#e2e8f0", color: "#475569" }}>{evt.subStatus || evt.processStatus || evt.taskSts}</span>
+                      </div>
+                    )}
+                    
+                    {evt.subTasks && evt.subTasks.length > 0 && (
+                      <div className="event-modal-description">
+                        <strong>Sub Tasks:</strong>
+                        <ul style={{ paddingLeft: "20px", marginTop: "4px" }}>
+                          {evt.subTasks.map((st, i) => (
+                            <li key={i} style={{ marginBottom: "4px" }}>
+                              {st.name || st.title} 
+                              {st.status && <span style={{ marginLeft: "8px", fontSize: "11px", backgroundColor: "#e2e8f0", padding: "2px 6px", borderRadius: "10px" }}>{st.status}</span>}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    
+                    {evt.description && (
+                      <div className="event-modal-description">
+                        <strong>Description:</strong>
+                        <p>{evt.description}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>

@@ -19,7 +19,7 @@ const getHelperDateStr = (dateStr) => {
 
 export default function ProjectForecasting({ project }) {
   const [forecastData, setForecastData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const isDraft = project?.status === "DRAFT" || project?.status === "Draft" || project?._type === "draft";
@@ -29,7 +29,6 @@ export default function ProjectForecasting({ project }) {
       setLoading(false);
       return;
     }
-    setLoading(true);
     setError(null);
     try {
       const data = await apiGet(`/api/project-forecasting/${project.id}`);

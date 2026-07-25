@@ -1,6 +1,7 @@
+// Assignment.jsx
 import React, { useState, useRef, useEffect } from 'react';
-import Sidebar from './Sidebar';
-import Header from './Header';
+import Sidebar from './Sidebar.jsx';
+import Header from './Header.jsx';
 import {
   Lock, Calendar as CalendarIcon, Flag, ChevronDown,
   Edit3, Trash2, Plus, Info, UploadCloud, Save, Eye, X, Check, ChevronLeft
@@ -17,6 +18,9 @@ const getAuthHeaders = () => ({
   "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
 });
 
+// ============================================================
+// SearchableSelect component
+// ============================================================
 const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled, forceOpen, isMulti }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -128,7 +132,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
                     }
                     setSearch("");
                   }}
-                  style={{ padding: '10px 12px', cursor: 'pointer', backgroundColor: (isMulti ? (value || []).includes(String(opt.value)) : String(value) === String(opt.value)) ? '#f1f5f9' : 'transparent', fontSize: '14px' }}
+                  style={{ padding: '10px 12px', cursor: 'pointer', backgroundColor: (isMulti ? (value || []).includes(String(opt.value)) : String(value) === String(opt.value)) ? '#f1f5f9' : 'transparent', fontSize: '14px', color: '#0f172a' }}
                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f8fafc'}
                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = (isMulti ? (value || []).includes(String(opt.value)) : String(value) === String(opt.value)) ? '#f1f5f9' : 'transparent'}
                 >
@@ -145,6 +149,9 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
   );
 };
 
+// ============================================================
+// DateInputWithFormat component
+// ============================================================
 const DateInputWithFormat = ({ value, onChange, min, error, placeholder }) => {
   const [displayVal, setDisplayVal] = useState("");
   const [localError, setLocalError] = useState("");
@@ -240,6 +247,9 @@ const DateInputWithFormat = ({ value, onChange, min, error, placeholder }) => {
   );
 };
 
+// ============================================================
+// Utility functions
+// ============================================================
 const parseLocal = (dateStr) => {
   if (!dateStr) return null;
   const parts = dateStr.split('T')[0].split('-');
@@ -271,8 +281,11 @@ const calcEndDate = (startStr, workingDays, skipSat, skipSun, publicHolidayDates
   return formatLocal(cur);
 };
 
+// ============================================================
+// Main Assignment component
+// ============================================================
 const Assignment = ({ userRole, onLogout }) => {
-  // --- STATE FOR FORM FIELDS ---
+  // --- Form state ---
   const [taskCode, setTaskCode] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
   const [priority, setPriority] = useState("High");
@@ -284,8 +297,6 @@ const Assignment = ({ userRole, onLogout }) => {
   const [description, setDescription] = useState("");
 
   const [assignedEmployee, setAssignedEmployee] = useState("");
-
-  // Default workflow to disabled (false)
   const [enableWorkflow, setEnableWorkflow] = useState(false);
   const [reviewer, setReviewer] = useState([]);
   const [approver, setApprover] = useState([]);
@@ -296,6 +307,7 @@ const Assignment = ({ userRole, onLogout }) => {
   const [designations, setDesignations] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
   const [view, setView] = useState("list");
   const [editId, setEditId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
@@ -303,16 +315,96 @@ const Assignment = ({ userRole, onLogout }) => {
   const [goLiveTask, setGoLiveTask] = useState(null);
   const [assignmentView, setAssignmentView] = useState("my");
 
+  // --- Alert state ---
   const [alertConfig, setAlertConfig] = useState({ isOpen: false, type: 'info', title: '', message: '', onConfirm: null, confirmText: '', cancelText: '' });
   const triggerAlert = (type, title, message, onConfirm = null, confirmText = '', cancelText = '') => {
     setAlertConfig({ isOpen: true, type, title, message, onConfirm, confirmText, cancelText });
   };
 
-  // State to force open dropdowns from "+ Add" click
   const [forceOpenReviewer, setForceOpenReviewer] = useState(false);
   const [forceOpenApprover, setForceOpenApprover] = useState(false);
 
+  // --- Attachments & checklist state ---
+  const [attachments, setAttachments] = useState([]);
+  const [existingAttachments, setExistingAttachments] = useState([]);
+  const fileInputRef = useRef(null);
+  const [checklist, setChecklist] = useState([]);
+  const [editingItemId, setEditingItemId] = useState(null);
+  const [editingItemName, setEditingItemName] = useState("");
+  const [isAddingChecklist, setIsAddingChecklist] = useState(false);
+  const [newChecklistName, setNewChecklistName] = useState("");
+
+  const removeExistingAttachment = async (fileId) => {
+    try {
+      await fetch(`${apiBaseUrl}/api/attachments/${fileId}`, {
+        method: "DELETE",
+        headers: getAuthHeaders()
+      });
+      setExistingAttachments(existingAttachments.filter(a => a.fileId !== fileId));
+    } catch (e) {
+      console.error("Failed to delete attachment:", e);
+    }
+  };
+
+  // --- Helper: Task Code Formatting & Auto Generation ---
+  const formatTaskCode = (cd) => {
+    if (!cd) return "";
+    const match = String(cd).match(/^INDTSK-?(\d+)$/i);
+    if (match && match[1]) {
+      const num = parseInt(match[1], 10);
+      return `INDTSK-${String(num).padStart(3, '0')}`;
+    }
+    return cd;
+  };
+
+  const generateNextTaskCode = (allTasks) => {
+    if (!allTasks || allTasks.length === 0) return "INDTSK-001";
+    
+    let maxNum = 0;
+    allTasks.forEach(t => {
+      const cd = t.taskCd || t.task_cd || "";
+      const match = String(cd).match(/INDTSK-?(\d+)/i);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (!isNaN(num) && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+
+    const nextNum = maxNum + 1;
+    return `INDTSK-${String(nextNum).padStart(3, '0')}`;
+  };
+
+  // --- Helper: get employee name from ID ---
+  const getEmployeeName = (id) => {
+    if (!id) return 'None';
+    let emp = employees.find(e => String(e.empId || e.id) === String(id));
+    if (!emp) {
+      const numId = Number(id);
+      if (!isNaN(numId)) {
+        emp = employees.find(e => Number(e.empId || e.id) === numId);
+      }
+    }
+    if (emp) {
+      const firstName = emp.fstNm || emp.firstName || '';
+      const lastName = emp.lstNm || emp.lastName || '';
+      const fullName = `${firstName} ${lastName}`.trim();
+      if (fullName) return fullName;
+      if (emp.displayLabel) return emp.displayLabel;
+      return `Employee ${id}`;
+    }
+    const taskWithEmp = tasks.find(t => String(t.empId) === String(id) || String(t.assignedBy) === String(id));
+    if (taskWithEmp) {
+      const empName = taskWithEmp.empNm || taskWithEmp.assignedByNm;
+      if (empName && empName !== "N/A") return empName;
+    }
+    return `ID: ${id}`;
+  };
+
+  // --- Data fetching ---
   const fetchAllData = async () => {
+    setTasksLoading(true);
     try {
       const profileRes = await fetch(`${apiBaseUrl}/api/profile`, { headers: getAuthHeaders() });
       if (profileRes.ok) setCurrentUser(await profileRes.json());
@@ -358,7 +450,6 @@ const Assignment = ({ userRole, onLogout }) => {
 
       if (tasksRes.ok) {
         let rawTasks = await tasksRes.json();
-        
         if (assignedByRes && assignedByRes.ok) {
           const assignedByTasks = await assignedByRes.json();
           const existingIds = new Set(rawTasks.map(t => t.empTaskId || t.id));
@@ -369,48 +460,24 @@ const Assignment = ({ userRole, onLogout }) => {
           });
         }
         const enrichedTasks = await Promise.all(rawTasks.map(async (task) => {
-          let reviewerName = "N/A";
-          let approverName = "N/A";
-          if (task.prcsFlg) {
-            try {
-              const pcRes = await fetch(`${apiBaseUrl}/api/process-config/assignment/${task.empTaskId || task.id}?t=${new Date().getTime()}`, { headers: getAuthHeaders() });
-              if (pcRes.ok) {
-                const pcs = await pcRes.json();
-                const revs = pcs.filter(p => p.stepType === 'REVIEWER' || p.ordrId === 1);
-                if (revs.length > 0) {
-                  reviewerName = revs.map(r => {
-                    const emp = mappedEmps.find(e => String(e.empId || e.id) === String(r.empId));
-                    return emp ? `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` : "N/A";
-                  }).join(", ");
-                }
-                const apps = pcs.filter(p => p.stepType === 'APPROVER' || p.ordrId === 2);
-                if (apps.length > 0) {
-                  approverName = apps.map(a => {
-                    const emp = mappedEmps.find(e => String(e.empId || e.id) === String(a.empId));
-                    return emp ? `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` : "N/A";
-                  }).join(", ");
-                }
-              }
-            } catch (err) {
-              console.error("Failed to fetch process config for task", task.taskCd);
-            }
-          }
-          
+          let reviewerName = task.reviewerNm || "N/A";
+          let approverName = task.approverNm || "N/A";
           let checklistCount = 0;
           try {
-             const chkRes = await fetch(`${apiBaseUrl}/api/checklists/assignment/${task.empTaskId || task.id}?t=${new Date().getTime()}`, { headers: getAuthHeaders() });
-             if (chkRes.ok) {
-                 const chks = await chkRes.json();
-                 checklistCount = chks.length;
-             }
+            const chkRes = await fetch(`${apiBaseUrl}/api/checklists/assignments/${task.empTaskId || task.id}?t=${new Date().getTime()}`, { headers: getAuthHeaders() });
+            if (chkRes.ok) {
+              const chks = await chkRes.json();
+              checklistCount = chks.length;
+            }
           } catch(err) {}
-
           return { ...task, reviewerName, approverName, checklistCount };
         }));
         setTasks(enrichedTasks);
       }
     } catch (err) {
       console.error("Error fetching data", err);
+    } finally {
+      setTasksLoading(false);
     }
   };
 
@@ -418,6 +485,7 @@ const Assignment = ({ userRole, onLogout }) => {
     fetchAllData();
   }, []);
 
+  // --- QuickAddBox ---
   const [showQuickAddReviewer, setShowQuickAddReviewer] = useState(false);
   const [showQuickAddApprover, setShowQuickAddApprover] = useState(false);
 
@@ -510,9 +578,9 @@ const Assignment = ({ userRole, onLogout }) => {
     );
   };
 
-  const handleResetForm = () => {
+  // --- Form handlers ---
+  const handleResetForm = async () => {
     setEditId(null);
-    setTaskCode("");
     setTaskTitle("");
     setPriority("High");
     setStatus("Draft");
@@ -527,6 +595,21 @@ const Assignment = ({ userRole, onLogout }) => {
     setEnableWorkflow(false);
     setChecklist([]);
     setAttachments([]);
+    setExistingAttachments([]);
+
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/assignments/next-code`, { headers: getAuthHeaders() });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.nextTaskCode) {
+          setTaskCode(data.nextTaskCode);
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("Could not fetch next-code from DB endpoint:", e);
+    }
+    setTaskCode(generateNextTaskCode(tasks));
   };
 
   const handleEdit = (task) => {
@@ -556,14 +639,19 @@ const Assignment = ({ userRole, onLogout }) => {
     setAssignedEmployee(task.empId ? String(task.empId) : "");
     setDescription(task.taskDesc || "");
 
-    // Fetch process configs for this task to prefill reviewer and approver dropdowns
+    // Set workflow based on task's prcsFlg
+    const workflowEnabled = task.prcsFlg === true || task.prcsFlg === 'YES' || task.prcsFlg === 1 || task.prcsFlg === 'true';
+    setEnableWorkflow(workflowEnabled);
+    
     setReviewer([]);
     setApprover([]);
-    setEnableWorkflow(false);
+    setAttachments([]);
+    setExistingAttachments([]);
 
     const taskId = task.empTaskId || task.id;
     if (taskId) {
-      fetch(`${apiBaseUrl}/api/process-config/assignment/${taskId}?t=${new Date().getTime()}`, { headers: getAuthHeaders() })
+      // Fetch process configs
+      fetch(`${apiBaseUrl}/api/process-config/assignments/${taskId}?t=${new Date().getTime()}`, { headers: getAuthHeaders() })
         .then(res => res.ok ? res.json() : [])
         .then(pcs => {
           if (pcs && pcs.length > 0) {
@@ -576,19 +664,31 @@ const Assignment = ({ userRole, onLogout }) => {
         })
         .catch(err => console.error("Error loading process config:", err));
         
-      fetch(`${apiBaseUrl}/api/checklists/assignment/${taskId}?t=${new Date().getTime()}`, { headers: getAuthHeaders() })
+      fetch(`${apiBaseUrl}/api/checklists/assignments/${taskId}?t=${new Date().getTime()}`, { headers: getAuthHeaders() })
         .then(res => res.ok ? res.json() : [])
         .then(chks => {
-            if (chks && chks.length > 0) {
-               setChecklist(chks.map(c => ({
-                   id: c.chkId,
-                   name: c.chkNm,
-                   code: c.chkCd
-               })));
-            } else {
-               setChecklist([]);
-            }
+          if (chks && chks.length > 0) {
+            setChecklist(chks.map(c => ({
+              id: c.chkId,
+              name: c.chkNm,
+              code: c.chkCd
+            })));
+          } else {
+            setChecklist([]);
+          }
         });
+
+      // Fetch existing attachments
+      fetch(`${apiBaseUrl}/api/attachments/assignment/${taskId}?t=${new Date().getTime()}`, { headers: getAuthHeaders() })
+        .then(res => res.ok ? res.json() : [])
+        .then(atts => {
+          if (atts && Array.isArray(atts)) {
+            setExistingAttachments(atts);
+          } else {
+            setExistingAttachments([]);
+          }
+        })
+        .catch(() => setExistingAttachments([]));
     }
 
     setView("form");
@@ -596,8 +696,7 @@ const Assignment = ({ userRole, onLogout }) => {
 
   const handleView = (task) => {
     handleEdit(task);
-    setView("list");
-    setShowPreviewModal(true);
+    setView("preview");
   };
 
   const handleDelete = (id) => {
@@ -619,42 +718,12 @@ const Assignment = ({ userRole, onLogout }) => {
     }, "Delete", "Cancel");
   };
 
+  // --- Date calculations ---
   const recalculateDueDate = (start, dur, empId) => {
     if (!start || !dur) return;
-    const emp = employees.find(e => String(e.empId || e.id) === String(empId));
-    if (!emp) {
-      const end = new Date(start);
-      end.setDate(end.getDate() + Math.max(0, parseInt(dur, 10) - 1));
-      setDueDate(end.toISOString().split('T')[0]);
-      return;
-    }
-
-    const pltId = emp.pltId || emp.plantId;
-    const coyId = emp.coyId || emp.companyId;
-
-    let skipSat = false;
-    let skipSun = true;
-
-    if (pltId) {
-      const plantObj = plants.find(p => String(p.pltId || p.id) === String(pltId));
-      if (plantObj) {
-        const wrkDays = plantObj.wrkDaysPerWk;
-        if (wrkDays === 5) { skipSat = true; skipSun = true; }
-        else if (wrkDays === 6) { skipSat = false; skipSun = true; }
-        else if (wrkDays === 7) { skipSat = false; skipSun = false; }
-      }
-    } else if (coyId) {
-      const coyObj = companies.find(c => String(c.coyId || c.id) === String(coyId));
-      if (coyObj) {
-        const wrkDays = coyObj.wrkDaysPerWk || coyObj.workingDaysPerWeek;
-        if (wrkDays === 5) { skipSat = true; skipSun = true; }
-        else if (wrkDays === 6) { skipSat = false; skipSun = true; }
-        else if (wrkDays === 7) { skipSat = false; skipSun = false; }
-      }
-    }
-
-    const calculatedEnd = calcEndDate(start, parseInt(dur, 10), skipSat, skipSun, []);
-    setDueDate(calculatedEnd);
+    const end = new Date(start);
+    end.setDate(end.getDate() + Math.max(0, parseInt(dur, 10) - 1));
+    setDueDate(end.toISOString().split('T')[0]);
   };
 
   const handleStartDateChange = (e) => {
@@ -703,10 +772,7 @@ const Assignment = ({ userRole, onLogout }) => {
     }
   };
 
-  // --- ATTACHMENTS STATE & LOGIC ---
-  const [attachments, setAttachments] = useState([]);
-  const fileInputRef = useRef(null);
-
+  // --- Attachments handlers ---
   const handleFileDrop = (e) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
@@ -724,13 +790,7 @@ const Assignment = ({ userRole, onLogout }) => {
     setAttachments(attachments.filter((_, index) => index !== indexToRemove));
   };
 
-  // --- CHECKLIST STATE & LOGIC ---
-  const [checklist, setChecklist] = useState([]);
-  const [editingItemId, setEditingItemId] = useState(null);
-  const [editingItemName, setEditingItemName] = useState("");
-  const [isAddingChecklist, setIsAddingChecklist] = useState(false);
-  const [newChecklistName, setNewChecklistName] = useState("");
-
+  // --- Checklist handlers ---
   const addChecklistItem = () => {
     setIsAddingChecklist(true);
     setNewChecklistName("");
@@ -767,9 +827,7 @@ const Assignment = ({ userRole, onLogout }) => {
     setEditingItemId(null);
   };
 
-  // --- PREVIEW MODAL STATE ---
-  const [showPreviewModal, setShowPreviewModal] = useState(false);
-
+  // --- Assignment logic ---
   const handleAssignClick = () => {
     if (!taskCode.trim()) {
       triggerAlert("warning", "Missing Fields", "Please enter Task Code.");
@@ -839,6 +897,10 @@ const Assignment = ({ userRole, onLogout }) => {
       extHolidays = !!publicHolidays?.external;
     }
 
+    const existingTaskObj = editId ? (tasks || []).find(t => String(t.empTaskId || t.id) === String(editId)) : null;
+    const currentSts = existingTaskObj ? (existingTaskObj.taskSts?.statusNm || existingTaskObj.taskSts || 'ASSIGNED') : 'ASSIGNED';
+    const hasAtta = (attachments && attachments.length > 0) || (existingAttachments && existingAttachments.length > 0);
+
     const taskPayload = {
       empTaskId: editId || null,
       taskCd: taskCode,
@@ -849,7 +911,9 @@ const Assignment = ({ userRole, onLogout }) => {
       taskAsgnTo: 'INTERNAL',
       stDt: startDate ? startDate : null,
       priority: priority.toUpperCase(),
-      taskSts: 'ASSIGNED',
+      taskSts: currentSts,
+      attaFlg: hasAtta,
+      chkFlg: checklist.length > 0,
       prcsFlg: enableWorkflow,
       prcsYesActn: enableWorkflow ? "YES" : "",
       sts: true
@@ -874,13 +938,10 @@ const Assignment = ({ userRole, onLogout }) => {
 
     try {
       const url = `${apiBaseUrl}/api/assignments/assign-with-calendar`;
-         
-      const payloadToSend = payload;
-      
       const response = await fetch(url, {
         method: "POST",
         headers: getAuthHeaders(),
-        body: JSON.stringify(payloadToSend)
+        body: JSON.stringify(payload)
       });
       
       if (response.ok) {
@@ -888,8 +949,8 @@ const Assignment = ({ userRole, onLogout }) => {
         const taskId = savedTask.empTaskId || savedTask.id;
         
         if (!taskId) {
-            triggerAlert("error", "Task ID Missing", "The backend did not return a valid Task ID. Response: " + JSON.stringify(savedTask));
-            return;
+          triggerAlert("error", "Task ID Missing", "The backend did not return a valid Task ID. Response: " + JSON.stringify(savedTask));
+          return;
         }
 
         // Save Checklists
@@ -902,15 +963,56 @@ const Assignment = ({ userRole, onLogout }) => {
             sts: true
           }));
           try {
-            const chkRes = await fetch(`${apiBaseUrl}/api/checklists/assignment/${taskId}/bulk`, {
+            const chkRes = await fetch(`${apiBaseUrl}/api/checklists/assignments/${taskId}/bulk`, {
               method: "POST", headers: getAuthHeaders(),
               body: JSON.stringify(checklistItems)
             });
             if (!chkRes.ok) {
-                const errTxt = await chkRes.text();
-                triggerAlert("error", "Checklist Error", errTxt);
+              const errTxt = await chkRes.text();
+              triggerAlert("error", "Checklist Error", errTxt);
             }
           } catch (e) { triggerAlert("error", "Checklist Exception", e.message); }
+        }
+
+        // Save Attachments
+        if (attachments && attachments.length > 0) {
+          for (let file of attachments) {
+            try {
+              const formData = new FormData();
+              formData.append("file", file);
+              const uploadRes = await fetch(`${apiBaseUrl}/api/storage/upload/attachment/task`, {
+                method: "POST",
+                headers: {
+                  "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+                },
+                body: formData
+              });
+
+              if (uploadRes.ok) {
+                const uploadData = await uploadRes.json();
+                const fileUrl = uploadData?.url || "";
+                if (fileUrl) {
+                  await fetch(`${apiBaseUrl}/api/attachments/assignment/${taskId}`, {
+                    method: "POST",
+                    headers: getAuthHeaders(),
+                    body: JSON.stringify({
+                      fileNm: file.name,
+                      atPath: fileUrl,
+                      atType: "UPLOAD",
+                      refId: taskId,
+                      refType: "ASSIGNMENT",
+                      tId: taskId,
+                      isLive: true
+                    })
+                  });
+                }
+              } else {
+                console.error("Storage upload failed for file:", file.name);
+              }
+            } catch (attErr) {
+              console.error("Failed to upload attachment:", attErr);
+            }
+          }
         }
 
         // Save Process Configs
@@ -921,13 +1023,13 @@ const Assignment = ({ userRole, onLogout }) => {
           if (validReviewers && validReviewers.length > 0) {
             for (let i = 0; i < validReviewers.length; i++) {
               try {
-                const revRes = await fetch(`${apiBaseUrl}/api/process-config/assignment/${taskId}`, {
+                const revRes = await fetch(`${apiBaseUrl}/api/process-config/assignments/${taskId}`, {
                   method: "POST", headers: getAuthHeaders(),
                   body: JSON.stringify({ ordrId: i + 1, stepType: "REVIEWER", empId: parseInt(validReviewers[i]), stepLabel: `Reviewer ${i + 1}` })
                 });
                 if (!revRes.ok) {
-                    const errTxt = await revRes.text();
-                    triggerAlert("error", "Reviewer Error", errTxt);
+                  const errTxt = await revRes.text();
+                  triggerAlert("error", "Reviewer Error", errTxt);
                 }
               } catch (e) { triggerAlert("error", "Reviewer Exception", e.message); }
             }
@@ -935,58 +1037,57 @@ const Assignment = ({ userRole, onLogout }) => {
           if (validApprovers && validApprovers.length > 0) {
             for (let i = 0; i < validApprovers.length; i++) {
               try {
-                const appRes = await fetch(`${apiBaseUrl}/api/process-config/assignment/${taskId}`, {
+                const appRes = await fetch(`${apiBaseUrl}/api/process-config/assignments/${taskId}`, {
                   method: "POST", headers: getAuthHeaders(),
                   body: JSON.stringify({ ordrId: validReviewers.length + i + 1, stepType: "APPROVER", empId: parseInt(validApprovers[i]), stepLabel: `Approver ${i + 1}` })
                 });
                 if (!appRes.ok) {
-                    const errTxt = await appRes.text();
-                    triggerAlert("error", "Approver Error", errTxt);
+                  const errTxt = await appRes.text();
+                  triggerAlert("error", "Approver Error", errTxt);
                 }
               } catch (e) { triggerAlert("error", "Approver Exception", e.message); }
             }
           }
         }
 
-        // --- Send Notifications ---
+        // Send Notifications
         try {
           const sendNotification = async (empId, roleMsg) => {
-             if(!empId) return;
-             await fetch(`${apiBaseUrl}/api/notifications`, {
-                method: "POST",
-                headers: getAuthHeaders(),
-                body: JSON.stringify({
-                   empId: parseInt(empId),
-                   title: `Task Assigned: ${taskCode}`,
-                   message: `You have been assigned as the ${roleMsg} for task '${taskTitle}' (${taskCode}).`,
-                   entityTyp: "INDIVIDUAL_TASK",
-                   entityId: taskId
-                })
-             });
+            if(!empId) return;
+            await fetch(`${apiBaseUrl}/api/notifications`, {
+              method: "POST",
+              headers: getAuthHeaders(),
+              body: JSON.stringify({
+                empId: parseInt(empId),
+                title: `Task Assigned: ${taskCode}`,
+                message: `You have been assigned as the ${roleMsg} for task '${taskTitle}' (${taskCode}).`,
+                entityTyp: "INDIVIDUAL_TASK",
+                entityId: taskId
+              })
+            });
           };
 
           if (!editId) {
-             await sendNotification(assignedEmployee, "Assignee");
-             if (enableWorkflow) {
-                const validReviewers = reviewer.filter(r => r.trim() !== '');
-                const validApprovers = approver.filter(a => a.trim() !== '');
-                if (validReviewers && validReviewers.length > 0) {
-                  for (let r of validReviewers) await sendNotification(r, "Reviewer");
-                }
-                if (validApprovers && validApprovers.length > 0) {
-                  for (let a of validApprovers) await sendNotification(a, "Approver");
-                }
-             }
+            await sendNotification(assignedEmployee, "Assignee");
+            if (enableWorkflow) {
+              const validReviewers = reviewer.filter(r => r.trim() !== '');
+              const validApprovers = approver.filter(a => a.trim() !== '');
+              if (validReviewers && validReviewers.length > 0) {
+                for (let r of validReviewers) await sendNotification(r, "Reviewer");
+              }
+              if (validApprovers && validApprovers.length > 0) {
+                for (let a of validApprovers) await sendNotification(a, "Approver");
+              }
+            }
           }
         } catch (e) {
           console.error("Failed to send some notifications:", e);
         }
 
         triggerAlert("success", "Success", `Task '${taskTitle}' has been successfully assigned! Notifications sent to Assignee, Reviewer, and Approver.`);
-        setShowPreviewModal(false);
+        setView("list");
         handleResetForm();
         fetchAllData();
-        setView("list");
       } else {
         const errorText = await response.text();
         triggerAlert("error", "Failed to assignment", errorText || "An error occurred.");
@@ -996,17 +1097,16 @@ const Assignment = ({ userRole, onLogout }) => {
     }
   };
 
+  // --- Filter tasks ---
   const getFilteredTasks = () => {
     let baseTasks = tasks;
     const currentEmpId = currentUser?.empId || currentUser?.id || sessionStorage.getItem("empId");
-
 
     if (assignmentView === "my") {
       baseTasks = baseTasks.filter(task => String(task.empId) === String(currentEmpId));
     } else if (assignmentView === "assignedByMe") {
       baseTasks = baseTasks.filter(task => 
-        String(task.assignedBy) === String(currentEmpId) && 
-        String(task.empId) !== String(currentEmpId)
+        String(task.assignedBy) === String(currentEmpId)
       );
     }
 
@@ -1031,6 +1131,9 @@ const Assignment = ({ userRole, onLogout }) => {
 
   const filteredTasks = getFilteredTasks();
 
+  // ============================================================
+  // RENDER
+  // ============================================================
   return (
     <div className="cc-shell-container">
       <AlertModal {...alertConfig} onClose={() => setAlertConfig({ ...alertConfig, isOpen: false })} />
@@ -1048,12 +1151,7 @@ const Assignment = ({ userRole, onLogout }) => {
         <main className="cc-main">
           <div className="cit-container">
 
-            {view === "form" && (
-              <div className="cc-header-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 20 }}>
-
-              </div>
-            )}
-
+            {/* --- VIEW: LIST --- */}
             {view === "list" && (
               <div className="cit-card">
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
@@ -1069,7 +1167,7 @@ const Assignment = ({ userRole, onLogout }) => {
                       onChange={(e) => setSearchQuery(e.target.value)}
                       style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', minWidth: '220px' }}
                     />
-                    <button className="cit-btn-create" style={{ background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: '500' }} onClick={() => { handleResetForm(); setView("form"); }}>
+                    <button className="cit-btn-create" style={{ background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: '500' }} onClick={async () => { await handleResetForm(); setView("form"); }}>
                       <Plus size={16} /> Assign New Task
                     </button>
                   </div>
@@ -1108,22 +1206,20 @@ const Assignment = ({ userRole, onLogout }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredTasks.length > 0 ? filteredTasks.map(task => {
-                        const emp = employees.find(e => String(e.empId || e.id) === String(task.empId));
-                        const empName = emp ? `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` : "N/A";
-                        
-                        const assignedByEmp = employees.find(e => String(e.empId || e.id) === String(task.assignedBy));
-                        const assignedByName = assignedByEmp ? `${assignedByEmp.fstNm || assignedByEmp.firstName} ${assignedByEmp.lstNm || assignedByEmp.lastName}` : "N/A";
-
+                      {tasksLoading ? (
+                        <tr><td colSpan="11" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading tasks…</td></tr>
+                      ) : filteredTasks.length > 0 ? filteredTasks.map(task => {
+                        const empName = task.empNm || "N/A";
+                        const assignedByName = task.assignedByNm || "N/A";
                         const displayName = assignmentView === "my" ? assignedByName : empName;
 
                         return (
                           <tr key={task.empTaskId || task.id}>
-                            <td>{task.taskCd}</td>
+                            <td>{formatTaskCode(task.taskCd)}</td>
                             <td>{task.taskNm}</td>
                             <td>{displayName}</td>
                             <td>
-                              <span className={`cit-badge priority-${(task.priority || task.Priority || '').toLowerCase()}`}>
+                              <span className={`cit-badge priority-${(task.priority || task.Priority || '').toLowerCase() === 'critical' ? 'high' : (task.priority || task.Priority || '').toLowerCase()}`}>
                                 {task.priority || task.Priority || 'None'}
                               </span>
                             </td>
@@ -1137,17 +1233,23 @@ const Assignment = ({ userRole, onLogout }) => {
                               <button className="cit-action-btn view" title="View" style={{ color: '#64748b', marginRight: 8 }} onClick={() => handleView(task)}>
                                 <Eye size={16} />
                               </button>
-                              <button className="cit-action-btn edit" title="Edit" style={{ color: '#3b82f6', marginRight: 8 }} onClick={() => handleEdit(task)}>
-                                <Edit3 size={16} />
-                              </button>
-                              <button className="cit-action-btn delete" title="Delete" style={{ color: '#ef4444' }} onClick={() => handleDelete(task.empTaskId || task.id)}>
-                                <Trash2 size={16} />
-                              </button>
+                              {assignmentView === "assignedByMe" && (
+                                <>
+                                  <button className="cit-action-btn edit" title="Edit" style={{ color: '#3b82f6', marginRight: 8 }} onClick={() => handleEdit(task)}>
+                                    <Edit3 size={16} />
+                                  </button>
+                                  <button className="cit-action-btn delete" title="Delete" style={{ color: '#ef4444' }} onClick={() => handleDelete(task.empTaskId || task.id)}>
+                                    <Trash2 size={16} />
+                                  </button>
+                                </>
+                              )}
                             </td>
                           </tr>
                         );
                       }) : (
-                        <tr><td colSpan="11" style={{ textAlign: 'center', padding: '20px' }}>No tasks found.</td></tr>
+                        <tr><td colSpan="11" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                          No tasks found.
+                        </td></tr>
                       )}
                     </tbody>
                   </table>
@@ -1155,6 +1257,7 @@ const Assignment = ({ userRole, onLogout }) => {
               </div>
             )}
 
+            {/* --- VIEW: FORM --- */}
             {view === "form" && (
               <>
                 <div className="cc-content" style={{ paddingBottom: '80px', maxWidth: '1280px', margin: '0 auto' }}>
@@ -1166,7 +1269,6 @@ const Assignment = ({ userRole, onLogout }) => {
                     boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
                   }}>
 
-                    {/* Header */}
                     <div style={{
                       display: 'flex',
                       justifyContent: 'space-between',
@@ -1237,13 +1339,13 @@ const Assignment = ({ userRole, onLogout }) => {
                           <label className="cc-field-item">
                             <span>Priority <b style={{ color: '#ef4444' }}>*</b></span>
                             <div className="cit-input-wrapper" style={{ margin: 0 }}>
-                              <select value={priority} onChange={(e) => setPriority(e.target.value)} style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e', fontWeight: 600 }}>
+                              <select value={priority} onChange={(e) => setPriority(e.target.value)} style={{ color: priority === 'High' || priority === 'Critical' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e', fontWeight: 600 }}>
                                 <option value="High" style={{ color: '#ef4444' }}>High</option>
                                 <option value="Medium" style={{ color: '#eab308' }}>Medium</option>
                                 <option value="Normal" style={{ color: '#3b82f6' }}>Normal</option>
                                 <option value="Low" style={{ color: '#22c55e' }}>Low</option>
                               </select>
-                              <ChevronDown size={14} className="cit-input-icon-right" style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e' }} />
+                              <ChevronDown size={14} className="cit-input-icon-right" style={{ color: priority === 'High' || priority === 'Critical' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e' }} />
                             </div>
                           </label>
                         </div>
@@ -1471,115 +1573,119 @@ const Assignment = ({ userRole, onLogout }) => {
                         </div>
 
                         {activeTab === 'attachment' && (
-                        <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none' }}>
-
-                          <div
-                            className="cit-upload-box"
-                            onDragOver={(e) => e.preventDefault()}
-                            onDrop={handleFileDrop}
-                          >
-                            <UploadCloud size={32} color="#94a3b8" />
-                            <p>Drag & drop files here<br />or</p>
-                            <input
-                              type="file"
-                              ref={fileInputRef}
-                              onChange={handleFileInput}
-                              style={{ display: "none" }}
-                              multiple
-                            />
-                            <button className="cit-upload-btn" onClick={() => fileInputRef.current.click()}>Browse Files</button>
-                            <div className="cit-upload-info">Max file size: 10 MB (PDF, DOC, DOCX, XLS, XLSX, JPG, PNG)</div>
-                          </div>
-                          {attachments.length > 0 && (
-                            <div className="cit-file-list" style={{ marginTop: '16px' }}>
-                              {attachments.map((file, idx) => (
-                                <div className="cit-file-item" key={idx}>
-                                  <span>{file.name}</span>
-                                  <button className="cit-file-remove" onClick={() => removeAttachment(idx)}><Trash2 size={14} /></button>
-                                </div>
-                              ))}
+                          <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none' }}>
+                            <div
+                              className="cit-upload-box"
+                              onDragOver={(e) => e.preventDefault()}
+                              onDrop={handleFileDrop}
+                            >
+                              <UploadCloud size={32} color="#94a3b8" />
+                              <p>Drag & drop files here<br />or</p>
+                              <input
+                                type="file"
+                                ref={fileInputRef}
+                                onChange={handleFileInput}
+                                style={{ display: "none" }}
+                                multiple
+                              />
+                              <button className="cit-upload-btn" onClick={() => fileInputRef.current.click()}>Browse Files</button>
+                              <div className="cit-upload-info">Max file size: 10 MB (PDF, DOC, DOCX, XLS, XLSX, JPG, PNG)</div>
                             </div>
-                          )}
-                        </section>
+                            {(existingAttachments.length > 0 || attachments.length > 0) && (
+                              <div className="cit-file-list" style={{ marginTop: '16px' }}>
+                                {existingAttachments.map((att, idx) => (
+                                  <div className="cit-file-item" key={`ext_${att.fileId || idx}`} style={{ backgroundColor: '#eff6ff', borderColor: '#bfdbfe', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: '6px', marginBottom: '8px' }}>
+                                    <span style={{ fontWeight: 600, color: '#1e40af', fontSize: '13px' }}>📎 {att.fileNm || att.fileName} (Uploaded)</span>
+                                    <button className="cit-file-remove" type="button" onClick={() => removeExistingAttachment(att.fileId)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                                  </div>
+                                ))}
+                                {attachments.map((file, idx) => (
+                                  <div className="cit-file-item" key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 12px', borderRadius: '6px', marginBottom: '8px', backgroundColor: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                                    <span style={{ fontSize: '13px', color: '#0f172a' }}>{file.name}</span>
+                                    <button className="cit-file-remove" type="button" onClick={() => removeAttachment(idx)} style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer' }}><Trash2 size={14} /></button>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </section>
                         )}
 
                         {activeTab === 'checklist' && (
-                        <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-                            <div></div>
-                            <button className="cit-add-btn" onClick={addChecklistItem} style={{ margin: 0 }}>
-                              <Plus size={14} /> Add Checklist Item
-                            </button>
-                          </div>
-                          {(checklist.length > 0 || isAddingChecklist) && (
-                            <div className="cit-table-container">
-                              <table className="cit-table">
-                                <thead>
-                                  <tr>
-                                    <th width="10%">S.No</th>
-                                    <th width="15%">Code</th>
-                                    <th width="55%">Checklist Item</th>
-                                    <th width="20%">Actions</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {checklist.map((item, index) => (
-                                    <tr key={item.id}>
-                                      <td>{index + 1}</td>
-                                      <td>CHK-{index + 1}</td>
-                                      <td>
-                                        {editingItemId === item.id ? (
+                          <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                              <div></div>
+                              <button className="cit-add-btn" onClick={addChecklistItem} style={{ margin: 0 }}>
+                                <Plus size={14} /> Add Checklist Item
+                              </button>
+                            </div>
+                            {(checklist.length > 0 || isAddingChecklist) && (
+                              <div className="cit-table-container">
+                                <table className="cit-table">
+                                  <thead>
+                                    <tr>
+                                      <th width="10%">S.No</th>
+                                      <th width="15%">Code</th>
+                                      <th width="55%">Checklist Item</th>
+                                      <th width="20%">Actions</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {checklist.map((item, index) => (
+                                      <tr key={item.id}>
+                                        <td>{index + 1}</td>
+                                        <td>CHK-{index + 1}</td>
+                                        <td>
+                                          {editingItemId === item.id ? (
+                                            <input
+                                              type="text"
+                                              value={editingItemName}
+                                              onChange={(e) => setEditingItemName(e.target.value)}
+                                              onKeyDown={(e) => e.key === 'Enter' && saveChecklistEdit(item.id)}
+                                              autoFocus
+                                              style={{ padding: '6px 10px', width: '100%', border: '1px solid #3b82f6', borderRadius: '4px', outline: 'none' }}
+                                            />
+                                          ) : (
+                                            item.name
+                                          )}
+                                        </td>
+                                        <td>
+                                          {editingItemId === item.id ? (
+                                            <button className="cit-action-btn edit" onClick={() => saveChecklistEdit(item.id)}><Check size={14} /></button>
+                                          ) : (
+                                            <button className="cit-action-btn edit" onClick={() => startEditingChecklist(item)}><Edit3 size={14} /></button>
+                                          )}
+                                          <button className="cit-action-btn delete" onClick={() => deleteChecklistItem(item.id)}><Trash2 size={14} /></button>
+                                        </td>
+                                      </tr>
+                                    ))}
+                                    {isAddingChecklist && (
+                                      <tr>
+                                        <td>{checklist.length + 1}</td>
+                                        <td>CHK-{checklist.length + 1}</td>
+                                        <td>
                                           <input
                                             type="text"
-                                            value={editingItemName}
-                                            onChange={(e) => setEditingItemName(e.target.value)}
-                                            onKeyDown={(e) => e.key === 'Enter' && saveChecklistEdit(item.id)}
+                                            value={newChecklistName}
+                                            onChange={(e) => setNewChecklistName(e.target.value)}
+                                            onKeyDown={(e) => e.key === 'Enter' && saveNewChecklist()}
                                             autoFocus
+                                            placeholder="Enter checklist item..."
                                             style={{ padding: '6px 10px', width: '100%', border: '1px solid #3b82f6', borderRadius: '4px', outline: 'none' }}
                                           />
-                                        ) : (
-                                          item.name
-                                        )}
-                                      </td>
-                                      <td>
-                                        {editingItemId === item.id ? (
-                                          <button className="cit-action-btn edit" onClick={() => saveChecklistEdit(item.id)}><Check size={14} /></button>
-                                        ) : (
-                                          <button className="cit-action-btn edit" onClick={() => startEditingChecklist(item)}><Edit3 size={14} /></button>
-                                        )}
-                                        <button className="cit-action-btn delete" onClick={() => deleteChecklistItem(item.id)}><Trash2 size={14} /></button>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                  {isAddingChecklist && (
-                                    <tr>
-                                      <td>{checklist.length + 1}</td>
-                                      <td>CHK-{checklist.length + 1}</td>
-                                      <td>
-                                        <input
-                                          type="text"
-                                          value={newChecklistName}
-                                          onChange={(e) => setNewChecklistName(e.target.value)}
-                                          onKeyDown={(e) => e.key === 'Enter' && saveNewChecklist()}
-                                          autoFocus
-                                          placeholder="Enter checklist item..."
-                                          style={{ padding: '6px 10px', width: '100%', border: '1px solid #3b82f6', borderRadius: '4px', outline: 'none' }}
-                                        />
-                                      </td>
-                                      <td>
-                                        <button className="cit-action-btn edit" onClick={saveNewChecklist}><Check size={14} /></button>
-                                        <button className="cit-action-btn delete" onClick={() => { setIsAddingChecklist(false); setNewChecklistName(""); }}><Trash2 size={14} /></button>
-                                      </td>
-                                    </tr>
-                                  )}
-                                </tbody>
-                              </table>
-                            </div>
-                          )}
-                        </section>
+                                        </td>
+                                        <td>
+                                          <button className="cit-action-btn edit" onClick={saveNewChecklist}><Check size={14} /></button>
+                                          <button className="cit-action-btn delete" onClick={() => { setIsAddingChecklist(false); setNewChecklistName(""); }}><Trash2 size={14} /></button>
+                                        </td>
+                                      </tr>
+                                    )}
+                                  </tbody>
+                                </table>
+                              </div>
+                            )}
+                          </section>
                         )}
                       </div>
-
                     </div>
 
                     {/* Footer */}
@@ -1592,9 +1698,9 @@ const Assignment = ({ userRole, onLogout }) => {
                       borderTop: '1px solid #e2e8f0'
                     }}>
                       <button type="button" className="cc-btn primary" onClick={handleAssignClick} style={{ background: '#10b981', borderColor: '#10b981', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
-                        <Save size={14} /> Assignment
+                        <Save size={14} /> {editId ? 'Update Assign' : 'Assign'}
                       </button>
-                      <button type="button" className="cc-btn primary" onClick={() => setShowPreviewModal(true)} style={{ background: '#3b82f6', borderColor: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button type="button" className="cc-btn primary" onClick={() => setView("preview")} style={{ background: '#3b82f6', borderColor: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Eye size={14} /> Preview Task
                       </button>
                       <button type="button" className="cc-btn secondary" onClick={() => {
@@ -1604,99 +1710,173 @@ const Assignment = ({ userRole, onLogout }) => {
                         Close
                       </button>
                     </div>
-
                   </div>
                 </div>
               </>
             )}
 
+            {/* --- VIEW: PREVIEW --- */}
+            {view === "preview" && (
+              <div className="cc-content" style={{ maxWidth: '1280px', margin: '0 auto' }}>
+                <div className="cc-form-card" style={{
+                  backgroundColor: 'white',
+                  borderRadius: '8px',
+                  border: '1px solid #e2e8f0',
+                  overflow: 'hidden',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                }}>
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '20px 24px',
+                    borderBottom: '1px solid #e2e8f0',
+                    backgroundColor: '#fafbfc'
+                  }}>
+                    <div>
+                      <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', margin: 0 }}>Task Preview</h2>
+                      <p style={{ margin: '4px 0 0 0', color: '#64748b', fontSize: '14px' }}>View task details in the form below</p>
+                    </div>
+                    <button
+                      type="button"
+                      className="cc-nav-view-btn"
+                      onClick={() => {
+                        setView("list");
+                        handleResetForm();
+                      }}
+                    >
+                      <ChevronLeft size={15} /> Back to Task List
+                    </button>
+                  </div>
+
+                  <div style={{ padding: '24px' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px 48px' }}>
+                      <div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Task Code</span>
+                          <span style={{ color: '#0f172a' }}>{taskCode}</span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Task Title</span>
+                          <span style={{ color: '#0f172a' }}>{taskTitle || "-"}</span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Priority</span>
+                          <span style={{ color: priority === 'High' || priority === 'Critical' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e', fontWeight: 600 }}>{priority}</span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Status</span>
+                          <span>
+                            <span style={{ color: "#2563eb", background: "#eff6ff", padding: "2px 10px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe", fontSize: 13 }}>{status}</span>
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Duration</span>
+                          <span style={{ color: '#0f172a' }}>{duration ? `${duration} Days` : "-"}</span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Start Date</span>
+                          <span style={{ color: '#0f172a' }}>{startDate || "-"}</span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Due Date</span>
+                          <span style={{ color: '#0f172a' }}>{dueDate || "-"}</span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Assigned To</span>
+                          <span style={{ color: '#0f172a' }}>
+                            {tasks.find(t => String(t.empTaskId || t.id) === String(editId))?.empNm || "None"}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Process / Workflow</span>
+                          <span>
+                            {enableWorkflow ? (
+                              <>
+                                <span style={{ color: "#10b981", background: "#d1fae5", padding: "2px 10px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0", fontSize: 13 }}>Enabled</span>
+                                <div style={{ marginTop: '4px', fontSize: '13px', color: '#334155' }}>
+                                  <span style={{ fontWeight: '500' }}>Reviewer:</span> 
+                                  {reviewer.length === 0 ? 'Loading...' : reviewer.filter(r => r.trim() !== '').map(r => getEmployeeName(r)).join(', ') || 'None'}
+                                </div>
+                                <div style={{ fontSize: '13px', color: '#334155' }}>
+                                  <span style={{ fontWeight: '500' }}>Approver:</span> 
+                                  {approver.length === 0 ? 'Loading...' : approver.filter(a => a.trim() !== '').map(a => getEmployeeName(a)).join(', ') || 'None'}
+                                </div>
+                              </>
+                            ) : (
+                              <span style={{ color: "#64748b", background: "#f1f5f9", padding: "2px 10px", borderRadius: 4, fontWeight: 600, border: "1px solid #e2e8f0", fontSize: 13 }}>Disabled</span>
+                            )}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Checklist Items</span>
+                          <span style={{ color: '#0f172a' }}>{checklist.length} Items</span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Attachments</span>
+                          <span style={{ color: '#0f172a' }}>
+                            {((existingAttachments || []).length + (attachments || []).length) > 0 
+                              ? `${((existingAttachments || []).length + (attachments || []).length)} ${((existingAttachments || []).length + (attachments || []).length) === 1 ? 'Attachment' : 'Attachments'}` 
+                              : "No attachments"}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
+                          <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Description</span>
+                          <span style={{ color: '#0f172a', whiteSpace: 'pre-wrap' }}>{description || "-"}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
+                      <button
+                        onClick={() => {
+                          setView("list");
+                          handleResetForm();
+                        }}
+                        style={{
+                          padding: '8px 20px',
+                          borderRadius: '6px',
+                          border: '1px solid #cbd5e1',
+                          background: 'white',
+                          color: '#475569',
+                          fontWeight: '500',
+                          cursor: 'pointer',
+                          fontSize: '14px',
+                        }}
+                      >
+                        Close Preview
+                      </button>
+                      {!editId && (
+                        <button
+                          onClick={handleAssignClick}
+                          style={{
+                            padding: '8px 20px',
+                            borderRadius: '6px',
+                            border: 'none',
+                            background: '#2563eb',
+                            color: 'white',
+                            fontWeight: '500',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '6px',
+                            fontSize: '14px',
+                          }}
+                        >
+                          <Plus size={16} /> Create & Assignment
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         </main>
       </div>
-
-      {/* MODAL OVERLAY FOR PREVIEW */}
-      {showPreviewModal && (
-        <div className="cit-modal-overlay">
-          <div className="cit-modal-content">
-            <div className="cit-modal-header">
-              <h2>Task Preview</h2>
-              <button className="cit-modal-close" onClick={() => setShowPreviewModal(false)}>
-                <X size={24} />
-              </button>
-            </div>
-
-            <table className="cit-preview-table">
-              <tbody>
-                <tr>
-                  <th>Task Code</th>
-                  <td>{taskCode}</td>
-                </tr>
-                <tr>
-                  <th>Task Title</th>
-                  <td>{taskTitle || "-"}</td>
-                </tr>
-                <tr>
-                  <th>Priority</th>
-                  <td><span style={{ color: priority === 'High' ? '#ef4444' : priority === 'Medium' ? '#eab308' : priority === 'Normal' ? '#3b82f6' : '#22c55e', fontWeight: 600 }}>{priority}</span></td>
-                </tr>
-                <tr>
-                  <th>Status</th>
-                  <td><span style={{ color: "#2563eb", background: "#eff6ff", padding: "2px 8px", borderRadius: 4, fontWeight: 600, border: "1px solid #bfdbfe" }}>{status}</span></td>
-                </tr>
-                <tr>
-                  <th>Duration</th>
-                  <td>{duration ? `${duration} Days` : "-"}</td>
-                </tr>
-                <tr>
-                  <th>Start Date</th>
-                  <td>{startDate}</td>
-                </tr>
-                <tr>
-                  <th>Due Date</th>
-                  <td>{dueDate}</td>
-                </tr>
-                <tr>
-                  <th>Assigned To</th>
-                  <td>{employees.find(e => String(e.empId || e.id) === String(assignedEmployee)) ? `${employees.find(e => String(e.empId || e.id) === String(assignedEmployee)).fstNm || employees.find(e => String(e.empId || e.id) === String(assignedEmployee)).firstName} ${employees.find(e => String(e.empId || e.id) === String(assignedEmployee)).lstNm || employees.find(e => String(e.empId || e.id) === String(assignedEmployee)).lastName}` : "None"}</td>
-                </tr>
-                <tr>
-                  <th>Process / Workflow</th>
-                  <td>
-                    {enableWorkflow ? (
-                      <>
-                        <span style={{ color: "#10b981", background: "#d1fae5", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Enabled</span>
-                        <span style={{ color: '#94a3b8', margin: '0 4px' }}>|</span> Reviewer: {reviewer.filter(r => r.trim() !== '').length > 0 ? reviewer.filter(r => r.trim() !== '').map(r => employees.find(e => String(e.empId || e.id) === String(r)) ? `${employees.find(e => String(e.empId || e.id) === String(r)).fstNm || employees.find(e => String(e.empId || e.id) === String(r)).firstName} ${employees.find(e => String(e.empId || e.id) === String(r)).lstNm || employees.find(e => String(e.empId || e.id) === String(r)).lastName}` : r).join(', ') : 'None'}
-                        <span style={{ color: '#94a3b8', margin: '0 4px' }}>|</span> Approver: {approver.filter(a => a.trim() !== '').length > 0 ? approver.filter(a => a.trim() !== '').map(a => employees.find(e => String(e.empId || e.id) === String(a)) ? `${employees.find(e => String(e.empId || e.id) === String(a)).fstNm || employees.find(e => String(e.empId || e.id) === String(a)).firstName} ${employees.find(e => String(e.empId || e.id) === String(a)).lstNm || employees.find(e => String(e.empId || e.id) === String(a)).lastName}` : a).join(', ') : 'None'}
-                      </>
-                    ) : (
-                      <span style={{ color: "#64748b", background: "#f1f5f9", padding: "2px 8px", borderRadius: 4, fontWeight: 600 }}>Disabled</span>
-                    )}
-                  </td>
-                </tr>
-                <tr>
-                  <th>Checklist Items</th>
-                  <td>{checklist.length} Items</td>
-                </tr>
-                <tr>
-                  <th>Attachments</th>
-                  <td>{attachments.length > 0 ? attachments.map(f => f.name).join(", ") : "No attachments"}</td>
-                </tr>
-                <tr>
-                  <th>Description</th>
-                  <td>{description || "-"}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            <div className="cit-modal-footer" style={{ marginTop: '24px', display: 'flex', justifyContent: 'flex-end', gap: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '16px' }}>
-              <button className="cit-btn-cancel" onClick={() => setShowPreviewModal(false)}>Close Preview</button>
-              <button className="cit-btn-create" onClick={handleAssignClick}>
-                <Plus size={16} /> {editId ? 'Update Task' : 'Create & Assignment'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

@@ -31,10 +31,10 @@ const UserMyTask = ({ selectedProject, userTasks = [] }) => {
     const milestoneObj = selectedProject?.milestones?.find(m => (m.mId || m.mid || m.id) === tMId);
     const milestoneName = milestoneObj ? milestoneObj.name : "Unknown Milestone";
     const statusVal = (t.taskSts || t.tasksts || "").toUpperCase();
-    const progressVal = statusVal === 'COMPLETED' ? 100 : statusVal === 'WIP' ? 50 : (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') ? 80 : 0;
+    const progressVal = (statusVal === 'COMPLETED' || statusVal === 'CLOSED') ? 100 : statusVal === 'WIP' ? 50 : (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') ? 80 : 0;
     
     let displayStatus = "Not Started";
-    if (statusVal === 'COMPLETED') displayStatus = "Completed";
+    if (statusVal === 'COMPLETED' || statusVal === 'CLOSED') displayStatus = "Closed";
     else if (statusVal === 'WIP') displayStatus = "In Progress";
     else if (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') displayStatus = "In Progress";
     else if (statusVal === 'OPEN' || statusVal === 'REWORK') displayStatus = "Pending";
@@ -69,6 +69,7 @@ const UserMyTask = ({ selectedProject, userTasks = [] }) => {
 
   const getStatusClass = (status) => {
     switch (status) {
+      case 'Closed':
       case 'Completed': return 'ut-status-completed';
       case 'In Progress': return 'ut-status-inprogress';
       case 'Not Started': return 'ut-status-notstarted';
@@ -103,7 +104,7 @@ const UserMyTask = ({ selectedProject, userTasks = [] }) => {
               <option value="In Progress">In Progress</option>
               <option value="Pending">Pending</option>
               <option value="Not Started">Not Started</option>
-              <option value="Completed">Completed</option>
+              <option value="Closed">Closed</option>
             </select>
           </div>
           

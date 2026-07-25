@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Download, Filter, Search, ChevronDown, ChevronLeft, ChevronRight, ZoomIn, ZoomOut, Calendar, SlidersHorizontal, ArrowLeft, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import "../../styles/AllProjectGanttChart.css";
-import Sidebar from "../Sidebar";
-import Header from "../Header";
+import Sidebar from "../Sidebar.jsx";
+import Header from "../Header.jsx";
 import { useNavigate } from "react-router-dom";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL) + "/api";

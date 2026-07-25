@@ -5,8 +5,8 @@ import {
   ChevronLeft, ChevronRight, FileText, PlayCircle, PauseCircle, CheckCircle, XCircle,
   RefreshCw
 } from 'lucide-react';
-import Sidebar from '../Sidebar';
-import Header from '../Header';
+import Sidebar from '../Sidebar.jsx';
+import Header from '../Header.jsx';
 import '../../styles/projectList.css';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -31,7 +31,7 @@ export default function ProjectList({ userRole, onLogout }) {
   const location = useLocation();
   const fromDashboard = location.state?.fromDashboard || false;
   const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   // Search/filter state
   const [searchText, setSearchText] = useState('');
@@ -48,7 +48,6 @@ export default function ProjectList({ userRole, onLogout }) {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const fetchProjects = async () => {
-    setLoading(true);
     try {
       const [draftsRes, liveRes, coyRes, pltRes, deptRes] = await Promise.all([
         fetch(`${apiBaseUrl}/api/project-drafts`, { headers: getAuthHeaders() }),

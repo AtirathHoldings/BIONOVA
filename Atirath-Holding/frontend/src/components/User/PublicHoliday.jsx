@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Filter, Edit2, Trash2, Info, X, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react';
-import Sidebar from "../Sidebar";
-import Header from "../Header";
-import AlertModal from "../AlertModal";
+import Sidebar from "../Sidebar.jsx";
+import Header from "../Header.jsx";
+import AlertModal from "../AlertModal.jsx";
 import { useNavigate } from 'react-router-dom';
 import '../../styles/PublicHoliday.css';
 import { apiGet, apiPost, apiPut, apiDelete } from "../../utils/api";
@@ -71,7 +71,7 @@ const PublicHoliday = ({ userRole, onLogout }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
   const [editId, setEditId] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
 
   const [alertConfig, setAlertConfig] = useState({
     isOpen: false,
@@ -105,7 +105,6 @@ const PublicHoliday = ({ userRole, onLogout }) => {
 
   const fetchData = async () => {
     try {
-      setIsLoading(true);
       const [holidaysData, employeesData, companiesData, plantsData, profileRes] = await Promise.all([
         apiGet("/api/calendar"),
         apiGet("/api/employees").catch(() => []),

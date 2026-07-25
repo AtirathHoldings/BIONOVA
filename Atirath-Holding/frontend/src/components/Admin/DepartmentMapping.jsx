@@ -771,8 +771,15 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="7" style={{ textAlign: "center", padding: "60px 20px", color: "#64748b", fontSize: "14px" }}>
-                          {loading ? "Loading department mappings..." : "No mapping records found. Click the button above to add a mapping."}
+                        <td colSpan="7" style={{ textAlign: "center", padding: "60px 20px" }}>
+                          {loading ? (
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#64748b', fontSize: '14px' }}>
+                              <RefreshCcw className="spinning" style={{ animation: 'spin 1s linear infinite' }} size={16} />
+                              <span>Loading department mappings...</span>
+                            </div>
+                          ) : (
+                            <span style={{ color: '#64748b', fontSize: '14px' }}>No mapping records found. Click the button above to add a mapping.</span>
+                          )}
                         </td>
                       </tr>
                     )}

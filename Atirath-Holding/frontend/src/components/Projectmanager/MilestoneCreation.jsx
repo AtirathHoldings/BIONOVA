@@ -90,6 +90,18 @@ const liveMilestoneApi = {
       .catch(() => [])
 };
 
+// ── Live Task APIs ────────────────────────────────────────────
+const liveTaskApi = {
+  getAll: () =>
+    fetch(`${API_BASE}/task-live`, { headers: authHeaders() })
+      .then(res => { if (!res.ok) throw new Error("Failed to fetch live tasks"); return res.json(); })
+      .catch(() => []),
+  getByMilestone: (mId) =>
+    fetch(`${API_BASE}/task-live/by-milestone/${mId}`, { headers: authHeaders() })
+      .then(res => { if (!res.ok) throw new Error("Failed to fetch live tasks by milestone"); return res.json(); })
+};
+
+
 // ── Employee / Reviewer / Approver APIs (replace with real endpoints) ──
 const employeeApi = {
   getAll: () =>
@@ -185,7 +197,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   const [editingId, setEditingId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("ALL"); // ALL, DRAFT, LIVE
 
@@ -554,7 +566,22 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         };
       });
 
-      // 3. Fetch live projects and their milestones
+      // 3. Fetch live tasks for count
+      let allLiveTasks = [];
+      try {
+        allLiveTasks = await liveTaskApi.getAll();
+      } catch (e) {
+        console.error("Failed to fetch all live tasks for count:", e);
+      }
+      const liveTaskCountMap = {};
+      (allLiveTasks || []).forEach(t => {
+        const mId = t.mid || t.mId || t.m_id;
+        if (mId) {
+          liveTaskCountMap[mId] = (liveTaskCountMap[mId] || 0) + 1;
+        }
+      });
+
+      // 4. Fetch live projects and their milestones
       let liveMilestones = [];
       try {
         const liveProjects = await liveProjectApi.getAll();
@@ -568,23 +595,26 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       } catch (_) {
         triggerAlert("error", "API Error", "Failed to load live milestones.");
       }
-      const liveList = (liveMilestones || []).map(m => ({
-        type: 'live',
-        id: m.mId || m.id,
-        code: m.mlstnCd || m.code,
-        title: m.mlstnTtl || m.mlstnNm || m.title,
-        projectId: m.prjId || m.project?.prjId,
-        projectCd: m.project?.prjCd || '',
-        projectName: m.project?.prjNm || '',
-        duration: m.mlstnDays || m.noOfDays || m.duration,
-        startDate: m.stDt || m.tentStDt || m.startDate,
-        endDate: m.endDt || m.tentEndDt || m.endDate,
-        taskCount: m.taskCount || 0,
-        status: m.mlstnSts || 'LIVE',
-        original: m
-      }));
+      const liveList = (liveMilestones || []).map(m => {
+        const id = m.mid || m.mId || m.id;
+        return {
+          type: 'live',
+          id: id,
+          code: m.mlstnCd || m.code,
+          title: m.mlstnTtl || m.mlstnNm || m.title,
+          projectId: m.prjId || m.project?.prjId,
+          projectCd: m.project?.prjCd || '',
+          projectName: m.project?.prjNm || '',
+          duration: m.mlstnDays || m.noOfDays || m.duration,
+          startDate: m.stDt || m.tentStDt || m.startDate,
+          endDate: m.endDt || m.tentEndDt || m.endDate,
+          taskCount: liveTaskCountMap[id] || 0,
+          status: m.mlstnSts || 'LIVE',
+          original: m
+        };
+      });
 
-      // 4. Combine
+      // 5. Combine
       setMilestoneList([...draftList, ...liveList]);
 
       // 5. Load employees, reviewers, approvers (real APIs)
@@ -1152,7 +1182,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       }
 
       const savedMilestone = savedResult.data || savedResult;
-      const milestoneId = savedMilestone.drftMId || savedMilestone.drft_m_id || savedMilestone.id;
+      const milestoneId = savedMilestone.drftMId || savedMilestone.drft_m_id || savedMilestone.id || (isEditing ? editingId : null);
 
       if (isEditing && editingId) {
         setMilestoneList(prev => prev.map(m =>
@@ -1160,28 +1190,28 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             ...m,
             ...savedMilestone,
             type: 'draft',
-            id: savedMilestone.drftMId || savedMilestone.drft_m_id,
-            code: savedMilestone.mlstnCd || savedMilestone.mlstm_cd,
-            title: savedMilestone.mlstnTtl || savedMilestone.mlstm_ttl,
-            projectId: savedMilestone.drftPrjId || savedMilestone.drft_prj_id,
-            duration: savedMilestone.mlstnDays || savedMilestone.mlstm_days,
-            startDate: savedMilestone.tentStDt || savedMilestone.tent_st_dt,
-            endDate: savedMilestone.tentEndDt || savedMilestone.tent_end_dt,
-            status: savedMilestone.mlstnSts || savedMilestone.mlstm_sts
+            id: savedMilestone.drftMId || savedMilestone.drft_m_id || editingId,
+            code: savedMilestone.mlstnCd || savedMilestone.mlstm_cd || milestone.mlstm_cd,
+            title: savedMilestone.mlstnTtl || savedMilestone.mlstm_ttl || milestone.mlstm_ttl,
+            projectId: savedMilestone.drftPrjId || savedMilestone.drft_prj_id || milestone.drft_prj_id,
+            duration: savedMilestone.mlstnDays || savedMilestone.mlstm_days || milestone.mlstm_days,
+            startDate: savedMilestone.tentStDt || savedMilestone.tent_st_dt || milestone.tent_st_dt,
+            endDate: savedMilestone.tentEndDt || savedMilestone.tent_end_dt || milestone.tent_end_dt,
+            status: savedMilestone.mlstnSts || savedMilestone.mlstm_sts || status
           } : m
         ));
       } else {
         const newDraft = {
           ...savedMilestone,
           type: 'draft',
-          id: savedMilestone.drftMId || savedMilestone.drft_m_id,
-          code: savedMilestone.mlstnCd || savedMilestone.mlstm_cd,
-          title: savedMilestone.mlstnTtl || savedMilestone.mlstm_ttl,
-          projectId: savedMilestone.drftPrjId || savedMilestone.drft_prj_id,
-          duration: savedMilestone.mlstnDays || savedMilestone.mlstm_days,
-          startDate: savedMilestone.tentStDt || savedMilestone.tent_st_dt,
-          endDate: savedMilestone.tentEndDt || savedMilestone.tent_end_dt,
-          status: savedMilestone.mlstnSts || savedMilestone.mlstm_sts
+          id: savedMilestone.drftMId || savedMilestone.drft_m_id || savedMilestone.id,
+          code: savedMilestone.mlstnCd || savedMilestone.mlstm_cd || milestone.mlstm_cd,
+          title: savedMilestone.mlstnTtl || savedMilestone.mlstm_ttl || milestone.mlstm_ttl,
+          projectId: savedMilestone.drftPrjId || savedMilestone.drft_prj_id || milestone.drft_prj_id,
+          duration: savedMilestone.mlstnDays || savedMilestone.mlstm_days || milestone.mlstm_days,
+          startDate: savedMilestone.tentStDt || savedMilestone.tent_st_dt || milestone.tent_st_dt,
+          endDate: savedMilestone.tentEndDt || savedMilestone.tent_end_dt || milestone.tent_end_dt,
+          status: savedMilestone.mlstnSts || savedMilestone.mlstm_sts || status
         };
         setMilestoneList(prev => [...prev, newDraft]);
       }
@@ -1411,12 +1441,18 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         }
       }
 
-      setIsSubmitting(false);
-      triggerAlert("success", "Success", status === "DRAFT" ? "Milestone saved as draft!" : "Milestone submitted successfully!");
+      const successMsg = isEditing 
+        ? "You have updated milestone and task"
+        : (status === "DRAFT" ? "Milestone saved as draft!" : "You have created milestone and task");
+      triggerAlert("success", "Success", successMsg);
 
       // Refresh draft list
       await loadAllData();
-      setTimeout(() => { setView("list"); resetMilestoneForm(); }, 1500);
+      setTimeout(() => { 
+        setView("list"); 
+        resetMilestoneForm(); 
+        setIsSubmitting(false);
+      }, 1500);
     } catch (err) {
       console.error("Submit error:", err);
       setIsSubmitting(false);
@@ -1449,24 +1485,60 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         });
         let tasksData = [];
         try {
-          tasksData = await taskApi.getByMilestone(m.id);
+          tasksData = await liveTaskApi.getByMilestone(m.id);
         } catch (_) { }
-        const mappedTasks = (tasksData || []).map(t => {
+        const sortedTasksData = [...(tasksData || [])].sort((a, b) => {
+          const idA = a.taskId || a.task_id || 0;
+          const idB = b.taskId || b.task_id || 0;
+          return idA - idB;
+        });
+        const mappedTasks = await Promise.all(sortedTasksData.map(async (t) => {
           let depTaskCd = "";
+          const taskId = t.taskId || t.task_id;
           if (t.depTaskId) {
-            const depTask = (tasksData || []).find(dt => dt.drftTaskId === t.depTaskId);
+            const depTask = sortedTasksData.find(dt => dt.taskId === t.depTaskId);
             if (depTask) depTaskCd = depTask.taskCd;
-          } else if (t.dep_task_id) {
-            const depTask = (tasksData || []).find(dt => dt.drft_task_id === t.dep_task_id);
-            if (depTask) depTaskCd = depTask.task_cd;
+          }
+          let checklist = [];
+          try {
+            checklist = await fetch(`${API_BASE}/checklists/live-task/${taskId}`, { headers: authHeaders() })
+              .then(res => res.ok ? res.json() : []);
+          } catch (e) {
+            console.error("Failed to fetch checklist for live task:", taskId, e);
+          }
+          let attachments = [];
+          try {
+            attachments = await fetch(`${API_BASE}/attachments/live-task/${taskId}`, { headers: authHeaders() })
+              .then(res => res.ok ? res.json() : []);
+          } catch (e) {
+            console.error("Failed to fetch attachments for live task:", taskId, e);
+          }
+          let processSteps = [];
+          try {
+            processSteps = await fetch(`${API_BASE}/process-config/live-task/${taskId}`, { headers: authHeaders() })
+              .then(res => res.ok ? res.json() : []);
+          } catch (e) {
+            console.error("Failed to fetch process config for live task:", taskId, e);
+          }
+          let process = { enabled: false, reviewer_id: "", approver_id: "", steps: [] };
+          const prcsEnabled = t.prcsFlg || t.prcs_flg || false;
+          if (prcsEnabled) {
+            const reviewerStep = processSteps.find(s => s.stepType === "REVIEWER");
+            const approverStep = processSteps.find(s => s.stepType === "APPROVER");
+            process = {
+              enabled: true,
+              reviewer_id: reviewerStep ? (reviewerStep.empId || reviewerStep.emp_id || "") : "",
+              approver_id: approverStep ? (approverStep.empId || approverStep.emp_id || "") : "",
+              steps: processSteps
+            };
           }
           return {
-            drft_task_id: t.drftTaskId || t.drft_task_id,
-            drft_m_id: t.drftMId || t.drft_m_id,
+            drft_task_id: taskId,
+            drft_m_id: t.mid || t.mId || t.m_id,
             task_cd: t.taskCd || t.task_cd || "",
             task_nm: t.taskNm || t.task_nm || "",
             task_desc: t.taskDesc || t.task_desc || "",
-            task_typ: t.taskTyp || t.task_typ || "INTERNAL",
+            task_typ: t.taskAsgnTo || t.task_asgn_to || "INTERNAL",
             emp_id: t.empId || t.emp_id || "",
             ext_emp_id: t.extEmpId || t.ext_emp_id || "",
             task_dep_flg: t.taskDepFlg || t.task_dep_flg || false,
@@ -1477,18 +1549,35 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             chk_id: t.chkId || t.chk_id || null,
             file_path: t.filePath || t.file_path || "",
             note_txt: t.noteTxt || t.note_txt || "",
-            tent_st_dt: t.tentStDt || t.tent_st_dt || "",
-            tent_end_dt: t.tentEndDt || t.tent_end_dt || "",
+            tent_st_dt: t.stDt || t.st_dt || "",
+            tent_end_dt: t.endDt || t.end_dt || "",
             prcs_flg: t.prcsFlg || t.prcs_flg || false,
             prcs_yes_actn: t.prcsYesActn || t.prcs_yes_actn || "",
-            task_sts: t.taskSts || t.task_sts || "LIVE",
+            task_sts: t.taskSts || "LIVE",
             addl_rem: t.addlRem || t.addl_rem || "",
             sts: t.sts !== undefined ? t.sts : true,
-            checklist: t.checklist || [],
-            attachments: t.attachments || [],
-            process: t.process || { enabled: false, reviewer_id: "", approver_id: "", steps: [] }
+            checklist: checklist.map(c => ({
+              chk_id: c.chkId || c.chk_id,
+              task_id: c.taskId || c.task_id,
+              chk_cd: c.chkCd || c.chk_cd,
+              chk_nm: c.chkNm || c.chk_nm,
+              chk_desc: c.chkDesc || c.chk_desc,
+              chk_sts: c.chkSts || c.chk_sts,
+              seq_no: c.seqNo || c.seq_no,
+              completed_t: c.completedTs || c.completed_ts || null,
+              sts: c.sts
+            })),
+            attachments: attachments.map(a => ({
+              file_id: a.fileId || a.file_id,
+              t_id: a.tId || a.t_id,
+              at_path: a.atPath || a.at_path,
+              file_nm: a.fileNm || a.file_nm,
+              at_type: a.atType || a.at_type,
+              date_timestamp: a.dateTimestamp || a.date_timestamp
+            })),
+            process: process
           };
-        });
+        }));
         setTasks(mappedTasks);
       } else {
         const milestoneData = await milestoneApi.getById(m.id);
@@ -1500,7 +1589,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           mlstm_desc: milestoneData.mlstnDesc || milestoneData.mlstm_desc || "",
           mlstm_days: milestoneData.mlstnDays || milestoneData.mlstm_days || "",
           mlstm_dep_flg: milestoneData.mlstnDepFlg || milestoneData.mlstm_dep_flg || false,
-          mlstm_dep_typ: milestoneData.mlstnDepTyp || milestoneData.mlstm_dep_typ || "INDEPENDENT",
+          mlstm_dep_typ: milestoneData.mlstnDepTyp || milestoneData.mlstnDep_typ || "INDEPENDENT",
           mlstm_dep_m_id: milestoneData.mlstnDepMId || milestoneData.mlstm_dep_m_id || "",
           tent_st_dt: milestoneData.tentStDt || milestoneData.tent_st_dt || "",
           tent_end_dt: milestoneData.tentEndDt || milestoneData.tent_end_dt || "",
@@ -1516,8 +1605,9 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           const idB = b.drftTaskId || b.drft_task_id || 0;
           return idA - idB;
         });
-        const mappedTasks = sortedTasksData.map(t => {
+        const mappedTasks = await Promise.all(sortedTasksData.map(async (t) => {
           let depTaskCd = "";
+          const taskId = t.drftTaskId || t.drft_task_id;
           if (t.depTaskId) {
             const depTask = sortedTasksData.find(dt => dt.drftTaskId === t.depTaskId);
             if (depTask) depTaskCd = depTask.taskCd;
@@ -1525,8 +1615,41 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             const depTask = sortedTasksData.find(dt => dt.drft_task_id === t.dep_task_id);
             if (depTask) depTaskCd = depTask.task_cd;
           }
+          let checklist = [];
+          try {
+            checklist = await fetch(`${API_BASE}/checklists/draft-task/${taskId}`, { headers: authHeaders() })
+              .then(res => res.ok ? res.json() : []);
+          } catch (e) {
+            console.error("Failed to fetch checklist for task:", taskId, e);
+          }
+          let attachments = [];
+          try {
+            attachments = await fetch(`${API_BASE}/attachments/draft-task/${taskId}`, { headers: authHeaders() })
+              .then(res => res.ok ? res.json() : []);
+          } catch (e) {
+            console.error("Failed to fetch attachments for task:", taskId, e);
+          }
+          let processSteps = [];
+          try {
+            processSteps = await fetch(`${API_BASE}/process-config/draft-task/${taskId}`, { headers: authHeaders() })
+              .then(res => res.ok ? res.json() : []);
+          } catch (e) {
+            console.error("Failed to fetch process config for task:", taskId, e);
+          }
+          let process = { enabled: false, reviewer_id: "", approver_id: "", steps: [] };
+          const prcsEnabled = t.prcsFlg || t.prcs_flg || false;
+          if (prcsEnabled) {
+            const reviewerStep = processSteps.find(s => s.stepType === "REVIEWER");
+            const approverStep = processSteps.find(s => s.stepType === "APPROVER");
+            process = {
+              enabled: true,
+              reviewer_id: reviewerStep ? (reviewerStep.empId || reviewerStep.emp_id || "") : "",
+              approver_id: approverStep ? (approverStep.empId || approverStep.emp_id || "") : "",
+              steps: processSteps
+            };
+          }
           return {
-            drft_task_id: t.drftTaskId || t.drft_task_id,
+            drft_task_id: taskId,
             drft_m_id: t.drftMId || t.drft_m_id,
             task_cd: t.taskCd || t.task_cd || "",
             task_nm: t.taskNm || t.task_nm || "",
@@ -1549,11 +1672,28 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             task_sts: t.taskSts || t.task_sts || "DRAFT",
             addl_rem: t.addlRem || t.addl_rem || "",
             sts: t.sts !== undefined ? t.sts : true,
-            checklist: t.checklist || [],
-            attachments: t.attachments || [],
-            process: t.process || { enabled: false, reviewer_id: "", approver_id: "", steps: [] }
+            checklist: checklist.map(c => ({
+              chk_id: c.chkId || c.chk_id,
+              task_id: c.taskId || c.task_id,
+              chk_cd: c.chkCd || c.chk_cd,
+              chk_nm: c.chkNm || c.chk_nm,
+              chk_desc: c.chkDesc || c.chk_desc,
+              chk_sts: c.chkSts || c.chk_sts,
+              seq_no: c.seqNo || c.seq_no,
+              completed_t: c.completedTs || c.completed_ts || null,
+              sts: c.sts
+            })),
+            attachments: attachments.map(a => ({
+              file_id: a.fileId || a.file_id,
+              t_id: a.tId || a.t_id,
+              at_path: a.atPath || a.at_path,
+              file_nm: a.fileNm || a.file_nm,
+              at_type: a.atType || a.at_type,
+              date_timestamp: a.dateTimestamp || a.date_timestamp
+            })),
+            process: process
           };
-        });
+        }));
         setTasks(mappedTasks);
       }
       setView("view");
@@ -2339,8 +2479,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       <div className="mc-nav-right">
         {currentStep < STEPS.length ? <button type="button" className="mc-btn primary" onClick={goToNextStep}>Next Step <ArrowRight size={16} /></button> :
           <div className="mc-submit-group">
-            <button type="button" className="mc-btn primary" onClick={() => handleSubmit("SUBMITTED")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? "Submitting..." : "Submit Milestone"}</button>
-            <button type="button" className="mc-btn tertiary" onClick={() => handleSubmit("DRAFT")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? "Saving..." : "Save Draft"}</button>
+            <button type="button" className="mc-btn primary" onClick={() => handleSubmit("SUBMITTED")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? (isEditing ? "Updating..." : "Submitting...") : (isEditing ? "Update Milestone" : "Submit Milestone")}</button>
+            <button type="button" className="mc-btn tertiary" onClick={() => handleSubmit("DRAFT")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update Draft" : "Save Draft")}</button>
           </div>
         }
       </div>
@@ -2435,7 +2575,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   // ── Render Detail View (Read-Only) ───────────────────────────
   const renderDetailView = () => {
     const project = projects.find(p => p.prj_id === parseInt(milestone.drft_prj_id));
-    const dependentMilestone = milestoneList.find(m => m.id === parseInt(milestone.mlstm_dep_m_id));
+    const isLive = milestone.mlstm_sts !== "DRAFT" && milestone.mlstm_sts !== "draft";
+    const dependentMilestone = milestoneList.find(m => m.id === parseInt(milestone.mlstm_dep_m_id) && m.type === (isLive ? 'live' : 'draft'));
 
     return (
       <div className="mc-content">
@@ -2570,12 +2711,12 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             <table className="mc-list-table">
               <thead><tr><th style={{ width: '50px' }}>S.No</th><th>Milestone Code</th><th>Title</th><th>Project</th><th>Duration</th><th>Start Date</th><th>End Date</th><th>Tasks</th><th>Status</th><th style={{ textAlign: "center", width: '100px' }}>Actions</th></tr></thead>
               <tbody>
-                {searched.length === 0 ? <tr><td colSpan="10" style={{ textAlign: "center", padding: "40px 20px", color: '#94a3b8' }}>No milestone records found.</td></tr> :
+                {loading ? <tr><td colSpan="10" style={{ textAlign: "center", padding: "40px 20px", color: '#94a3b8' }}>Loading records...</td></tr> : searched.length === 0 ? <tr><td colSpan="10" style={{ textAlign: "center", padding: "40px 20px", color: '#94a3b8' }}>No milestone records found.</td></tr> :
                   searched.map((m, index) => {
                     const project = projects.find(p => p.prj_id === m.projectId);
                     const isDraft = m.type === 'draft';
                     return (
-                      <tr key={m.id}>
+                      <tr key={`${m.type}-${m.id}`}>
                         <td>{index + 1}</td>
                         <td><span className="mc-code-badge">{m.code}</span></td>
                         <td><strong>{m.title}</strong></td>

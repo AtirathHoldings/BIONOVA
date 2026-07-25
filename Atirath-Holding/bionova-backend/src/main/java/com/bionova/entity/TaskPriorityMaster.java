@@ -47,6 +47,7 @@ public class TaskPriorityMaster {
     public static final TaskPriorityMaster MEDIUM = new TaskPriorityMaster(3, "MEDIUM");
     public static final TaskPriorityMaster HIGH = new TaskPriorityMaster(4, "HIGH");
     public static final TaskPriorityMaster CRITICAL = new TaskPriorityMaster(5, "CRITICAL");
+    public static final TaskPriorityMaster ATMOST_CRITICAL = new TaskPriorityMaster(6, "ATMOST CRITICAL");
 
     public static Integer getPriorityIdByName(String name) {
         if (name == null) return null;
@@ -56,6 +57,8 @@ public class TaskPriorityMaster {
             case "MEDIUM": return 3;
             case "HIGH": return 4;
             case "CRITICAL": return 5;
+            case "ATMOST_CRITICAL":
+            case "AT_MOST_CRITICAL": return 6;
             default: return null;
         }
     }
@@ -68,6 +71,8 @@ public class TaskPriorityMaster {
             case "MEDIUM": return MEDIUM;
             case "HIGH": return HIGH;
             case "CRITICAL": return CRITICAL;
+            case "ATMOST_CRITICAL":
+            case "AT_MOST_CRITICAL": return ATMOST_CRITICAL;
             default: return null;
         }
     }
@@ -80,20 +85,22 @@ public class TaskPriorityMaster {
             case 3: return MEDIUM;
             case 4: return HIGH;
             case 5: return CRITICAL;
+            case 6: return ATMOST_CRITICAL;
             default: return null;
         }
     }
 
     /**
      * Dynamically calculates task priority based on start date, end date, total duration,
-     * status and actual completion date.
+     * status, actual completion date, and initial base priority.
      */
-    public static TaskPriorityMaster calculatePriority(LocalDate stDt, LocalDate endDt, Integer noOfDays, TaskStatusMaster status, LocalDate actCmpDt) {
+    public static TaskPriorityMaster calculatePriority(LocalDate stDt, LocalDate endDt, Integer noOfDays, TaskStatusMaster status, LocalDate actCmpDt, TaskPriorityMaster initialPriority) {
+        TaskPriorityMaster baseP = (initialPriority != null) ? initialPriority : TaskPriorityMaster.LOW;
         if (stDt == null) {
-            return TaskPriorityMaster.LOW;
+            return baseP;
         }
 
-        // Determine the total days
+        // Determine total days
         int totalDays = 1;
         if (noOfDays != null && noOfDays > 0) {
             totalDays = noOfDays;
@@ -104,37 +111,51 @@ public class TaskPriorityMaster {
             totalDays = 1;
         }
 
-        // Determine the reference end date for calculation
+        // Determine reference date for calculation
         LocalDate refDate = LocalDate.now();
-        if (status != null && "CLOSED".equalsIgnoreCase(status.getStatusNm())) {
-            if (actCmpDt != null) {
-                refDate = actCmpDt;
-            } else if (endDt != null) {
-                refDate = endDt; // fallback
-            }
+        if (actCmpDt != null) {
+            refDate = actCmpDt;
+        } else if (status != null && "CLOSED".equalsIgnoreCase(status.getStatusNm()) && endDt != null) {
+            refDate = endDt;
         }
 
         long elapsedDays = java.time.temporal.ChronoUnit.DAYS.between(stDt, refDate) + 1;
         if (elapsedDays <= 0) {
-            return TaskPriorityMaster.LOW;
+            return baseP;
         }
 
-        if (totalDays <= 1) {
-            return elapsedDays >= 1 ? TaskPriorityMaster.CRITICAL : TaskPriorityMaster.LOW;
+        int baseId = baseP.getPriorityId() != null ? baseP.getPriorityId() : 1;
+        if (baseId > 4) {
+            baseId = 4; // Capped base level at HIGH for duration calculations
         }
 
-        double ratio = (double) (elapsedDays - 1) / (totalDays - 1);
-        if (ratio <= 0.1) {
-            return TaskPriorityMaster.LOW;
-        } else if (ratio <= 0.35) {
-            return TaskPriorityMaster.NORMAL;
-        } else if (ratio <= 0.65) {
-            return TaskPriorityMaster.MEDIUM;
-        } else if (ratio <= 0.9) {
-            return TaskPriorityMaster.HIGH;
+        // Number of priority levels from baseId up to HIGH (4)
+        int numLevels = 4 - baseId + 1;
+        if (numLevels <= 0) numLevels = 1;
+
+        double step = (double) totalDays / numLevels;
+
+        if (elapsedDays <= totalDays) {
+            int levelIndex = (int) Math.floor((elapsedDays - 1) / step);
+            if (levelIndex >= numLevels) {
+                levelIndex = numLevels - 1;
+            }
+            int targetId = baseId + levelIndex;
+            if (targetId > 4) targetId = 4; // Cap at HIGH during normal duration
+            TaskPriorityMaster result = getById(targetId);
+            return result != null ? result : baseP;
         } else {
-            return TaskPriorityMaster.CRITICAL;
+            long overdueDays = elapsedDays - totalDays;
+            if (overdueDays <= step) {
+                return TaskPriorityMaster.CRITICAL;
+            } else {
+                return TaskPriorityMaster.ATMOST_CRITICAL;
+            }
         }
+    }
+
+    public static TaskPriorityMaster calculatePriority(LocalDate stDt, LocalDate endDt, Integer noOfDays, TaskStatusMaster status, LocalDate actCmpDt) {
+        return calculatePriority(stDt, endDt, noOfDays, status, actCmpDt, null);
     }
 
     @Override

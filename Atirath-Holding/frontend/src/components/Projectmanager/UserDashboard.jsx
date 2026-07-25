@@ -1,4 +1,4 @@
-// UserDashboard.jsx - Fixed with full page expansion and sorted upcoming tasks
+// UserDashboard.jsx - Complete Updated Version
 // ============================================================
 // SECTION 1: IMPORTS
 // ============================================================
@@ -52,10 +52,14 @@ import {
   Zap,
   Clock as ClockIcon,
   FileText,
+  CornerUpLeft,
+  Download,
+  Flag,
+  Hash
 } from "lucide-react";
 
-import Sidebar from "../Sidebar";
-import Header from "../Header";
+import Sidebar from "../Sidebar.jsx";
+import Header from "../Header.jsx";
 import AlertModal from "../AlertModal";
 import "../../styles/userDashboard.css";
 
@@ -112,58 +116,173 @@ const formatDate = (dateValue) => {
 const getStatusColor = (status) => {
   const s = status?.toUpperCase() || "";
   if (s === 'COMPLETED' || s === 'DONE' || s === 'CLOSED') return '#16a34a';
-  if (s === 'IN_PROGRESS' || s === 'WIP' || s === 'ACTIVE') return '#3b82f6';
-  if (s === 'UNDER_REVIEW' || s === 'REVIEW' || s === 'SUBMIT_REVIEW') return '#8b5cf6';
-  if (s === 'OVERDUE' || s === 'DELAYED' || s === 'OVER_DUE') return '#ef4444';
-  if (s === 'REASSIGNED' || s === 'REASSIGN') return '#f59e0b';
-  if (s === 'OPEN' || s === 'PENDING' || s === 'NOT_STARTED') return '#f59e0b';
+  if (s === 'IN_PROGRESS' || s === 'WIP' || s === 'ACTIVE') return '#f59e0b';
+  if (s === 'HOLD' || s === 'ON_HOLD') return '#7c3aed';
+  if (s === 'DRAFT') return '#9ca3af';
+  if (s === 'OPEN' || s === 'PENDING' || s === 'NOT_STARTED') return '#2563eb';
   return '#94a3b8';
 };
 
 const getStatusLabel = (status) => {
   const s = status?.toUpperCase() || "";
-  if (s === 'COMPLETED' || s === 'DONE' || s === 'CLOSED') return 'Completed';
+  if (s === 'COMPLETED' || s === 'DONE' || s === 'CLOSED') return 'Closed';
   if (s === 'IN_PROGRESS' || s === 'WIP' || s === 'ACTIVE') return 'In Progress';
-  if (s === 'UNDER_REVIEW' || s === 'REVIEW' || s === 'SUBMIT_REVIEW') return 'Under Review';
-  if (s === 'OVERDUE' || s === 'DELAYED' || s === 'OVER_DUE') return 'Overdue';
-  if (s === 'REASSIGNED' || s === 'REASSIGN') return 'Reassigned';
+  if (s === 'HOLD' || s === 'ON_HOLD') return 'Hold';
+  if (s === 'DRAFT') return 'Draft';
   if (s === 'OPEN' || s === 'PENDING' || s === 'NOT_STARTED') return 'Open';
   return 'Open';
 };
 
+const getProcessStatusBadge = (processStatus) => {
+  const s = processStatus?.toUpperCase() || "";
+  if (s === 'UNDER_REVIEW' || s === 'REVIEW' || s === 'SUBMIT_REVIEW') {
+    return <Eye size={14} color="#8b5cf6" title="Under Review" />;
+  }
+  if (s === 'REWORK') {
+    return <RotateCw size={14} color="#f97316" title="Rework" />;
+  }
+  if (s === 'REASSIGN' || s === 'REASSIGNED') {
+    return <CornerUpLeft size={14} color="#4f46e5" title="Reassigned" />;
+  }
+  return null;
+};
+
+const getTimeStatusBadge = (timeStatus, isOverdue) => {
+  const s = timeStatus?.toUpperCase() || (isOverdue ? 'OVERDUE' : "");
+  if (s === 'LEAD') {
+    return <ClockIcon size={14} color="#22c55e" title="Lead" />;
+  }
+  if (s === 'ON_TIME' || s === 'ON TIME' || s === 'ONTIME') {
+    return <ClockIcon size={14} color="#3b82f6" title="On Time" />;
+  }
+  if (s === 'DUE_TODAY' || s === 'DUE TODAY' || s === 'DUETODAY') {
+    return <ClockIcon size={14} color="#f59e0b" title="Due Today" />;
+  }
+  if (s === 'OVERDUE' || s === 'DELAYED') {
+    return <ClockIcon size={14} color="#ef4444" title="Overdue" />;
+  }
+  if (s === 'LAG') {
+    return <ClockIcon size={14} color="#dc2626" title="Lag" />;
+  }
+  return null;
+};
+
 // ============================================================
-// SECTION 4: FALLBACK DATA
+// SECTION 4: DONUT CHART COMPONENT
 // ============================================================
 
-const getFallbackData = () => ({
-  fullName: "Employee",
-  role: "Staff",
-  empId: null,
-  taskCounts: {
-    assigned: 0,
-    open: 0,
-    inProgress: 0,
-    overdue: 0,
-    completed: 0,
-  },
-  completionRate: 0,
-  todoList: [],
-  upcomingTasks: [],
-  myProjects: [],
-  totalProjects: 0,
-  recentActivities: [],
-  performanceData: {
-    tasksCompleted: 0,
-    tasksInProgress: 0,
-    tasksOverdue: 0,
-    efficiency: 100,
-    onTimeDelivery: 100,
-    qualityScore: 5.0,
-  },
-});
+const buildGradient = (items, total) => {
+  let angle = 0;
+  const parts = items.map(item => {
+    const pct = (item.count / total) * 100;
+    const start = angle;
+    angle += pct;
+    return `${item.color} ${start.toFixed(1)}% ${angle.toFixed(1)}%`;
+  });
+  return `conic-gradient(${parts.join(", ")})`;
+};
+
+const DonutChart = ({ data, total, centerValue, centerLabel, size = 140 }) => {
+  const gradient = buildGradient(data, total);
+  return (
+    <div className="ud-donut-wrap">
+      <div
+        className="ud-donut"
+        style={{ width: size, height: size, background: gradient }}
+      >
+        <div className="ud-donut-inner">
+          <span className="ud-donut-value">{centerValue}</span>
+          <span className="ud-donut-label">{centerLabel}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // ============================================================
-// SECTION 5: GREETINGS BANNER COMPONENT
+// SECTION 5: PIE CHART COMPONENT
+// ============================================================
+
+const PieChartComponent = ({ data, size = 120 }) => {
+  const total = data.reduce((sum, item) => sum + item.value, 0);
+  const stroke = 16;
+  const radius = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * radius;
+  
+  let currentAngle = 0;
+  const filteredData = data.filter(item => item.value > 0);
+  
+  if (filteredData.length === 0) {
+    return (
+      <div className="ud-pie-chart-wrapper">
+        <div className="ud-empty-state">
+          <PieChart size={40} />
+          <strong>No data available</strong>
+          <span>No tasks to display</span>
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="ud-pie-chart-wrapper">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+        {filteredData.map((item, index) => {
+          const percentage = total > 0 ? (item.value / total) * 100 : 0;
+          const dashLength = (percentage / 100) * circumference;
+          const offset = -currentAngle * circumference / 100;
+          currentAngle += percentage;
+          
+          return percentage > 0 ? (
+            <circle
+              key={index}
+              cx={size / 2}
+              cy={size / 2}
+              r={radius}
+              fill="none"
+              stroke={item.color}
+              strokeWidth={stroke}
+              strokeDasharray={`${dashLength} ${circumference - dashLength}`}
+              strokeDashoffset={offset}
+              strokeLinecap="butt"
+              transform={`rotate(-90 ${size / 2} ${size / 2})`}
+            />
+          ) : null;
+        })}
+        <text 
+          x="50%" 
+          y="46%" 
+          textAnchor="middle" 
+          dominantBaseline="middle"
+          className="ud-pie-center-value"
+        >
+          {total}
+        </text>
+        <text 
+          x="50%" 
+          y="58%" 
+          textAnchor="middle" 
+          dominantBaseline="middle"
+          className="ud-pie-center-label"
+        >
+          Total Tasks
+        </text>
+      </svg>
+      <div className="ud-pie-legend">
+        {filteredData.map((item, index) => (
+          <div className="ud-pie-legend-item" key={index}>
+            <span className="ud-pie-legend-dot" style={{ background: item.color }} />
+            <span className="ud-pie-legend-label">{item.label}</span>
+            <span className="ud-pie-legend-value">{item.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+// ============================================================
+// SECTION 6: GREETINGS BANNER COMPONENT
 // ============================================================
 
 const GreetingsBanner = ({ userName, onClose }) => {
@@ -212,89 +331,6 @@ const GreetingsBanner = ({ userName, onClose }) => {
 };
 
 // ============================================================
-// SECTION 6: PIE CHART COMPONENT
-// ============================================================
-
-const PieChartComponent = ({ data }) => {
-  const total = data.reduce((sum, item) => sum + item.value, 0);
-  const size = 160;
-  const stroke = 20;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  
-  let currentAngle = 0;
-  const filteredData = data.filter(item => item.value > 0);
-  
-  if (filteredData.length === 0) {
-    return (
-      <div className="ud-pie-chart-wrapper">
-        <div className="ud-empty-state">
-          <PieChart size={40} />
-          <strong>No data available</strong>
-          <span>No tasks to display</span>
-        </div>
-      </div>
-    );
-  }
-  
-  return (
-    <div className="ud-pie-chart-wrapper">
-      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
-        {filteredData.map((item, index) => {
-          const percentage = total > 0 ? (item.value / total) * 100 : 0;
-          const dashLength = (percentage / 100) * circumference;
-          const offset = -currentAngle * circumference / 100;
-          currentAngle += percentage;
-          
-          return percentage > 0 ? (
-            <circle
-              key={index}
-              cx={size / 2}
-              cy={size / 2}
-              r={radius}
-              fill="none"
-              stroke={item.color}
-              strokeWidth={stroke}
-              strokeDasharray={`${dashLength} ${circumference - dashLength}`}
-              strokeDashoffset={offset}
-              strokeLinecap="butt"
-              transform={`rotate(-90 ${size / 2} ${size / 2})`}
-            />
-          ) : null;
-        })}
-        <text 
-          x="50%" 
-          y="48%" 
-          textAnchor="middle" 
-          dominantBaseline="middle"
-          className="ud-pie-center-value"
-        >
-          {total}
-        </text>
-        <text 
-          x="50%" 
-          y="60%" 
-          textAnchor="middle" 
-          dominantBaseline="middle"
-          className="ud-pie-center-label"
-        >
-          Total Tasks
-        </text>
-      </svg>
-      <div className="ud-pie-legend">
-        {filteredData.map((item, index) => (
-          <div className="ud-pie-legend-item" key={index}>
-            <span className="ud-pie-legend-dot" style={{ background: item.color }} />
-            <span className="ud-pie-legend-label">{item.label}</span>
-            <span className="ud-pie-legend-value">{item.value}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// ============================================================
 // SECTION 7: MAIN COMPONENT
 // ============================================================
 
@@ -302,21 +338,50 @@ const UserDashboard = ({ userRole, onLogout }) => {
   const navigate = useNavigate();
   
   // 7.1: State Management
-  const [loading, setLoading] = useState(true);
-  const [dashboardData, setDashboardData] = useState(null);
-  const [userName, setUserName] = useState("Employee");
-  const [userRoleState, setUserRoleState] = useState("Staff");
-  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [dashboardData, setDashboardData] = useState(() => {
+    try {
+      const cached = localStorage.getItem("cached_user_dashboard");
+      return cached ? JSON.parse(cached) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+  const [userName, setUserName] = useState(() => {
+    try {
+      const cached = localStorage.getItem("cached_user_dashboard");
+      return cached ? JSON.parse(cached).fullName || "" : "";
+    } catch {
+      return "";
+    }
+  });
+  const [userRoleState, setUserRoleState] = useState(() => {
+    try {
+      const cached = localStorage.getItem("cached_user_dashboard");
+      return cached ? JSON.parse(cached).role || "" : "";
+    } catch {
+      return "";
+    }
+  });
+  const [empId, setEmpId] = useState(() => {
+    try {
+      const cached = localStorage.getItem("cached_user_dashboard");
+      return cached ? JSON.parse(cached).empId || null : null;
+    } catch {
+      return null;
+    }
+  });
+
   const [showAllTasks, setShowAllTasks] = useState(false);
   const [showAllUpcoming, setShowAllUpcoming] = useState(false);
   const [selectedTask, setSelectedTask] = useState(null);
   const [showTaskDetail, setShowTaskDetail] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertConfig, setAlertConfig] = useState({ type: "success", title: "", message: "" });
-  const [showGreeting, setShowGreeting] = useState(true);
   const [updatingTaskId, setUpdatingTaskId] = useState(null);
+  const [showGreeting, setShowGreeting] = useState(false);
 
-  // Helper for dynamic star rendering
   const renderStars = (score) => {
     const stars = [];
     const fullStars = Math.floor(score);
@@ -335,146 +400,362 @@ const UserDashboard = ({ userRole, onLogout }) => {
 
   // 7.2: Data Fetching
   const fetchDashboardData = async () => {
-    setLoading(true);
+    if (!dashboardData) setLoading(true);
+    setError(null);
 
     try {
       const token = getAuthToken();
-      const fallback = getFallbackData();
-      let processedData = { ...fallback };
-
-      if (token) {
-        const response = await fetch(`${API_BASE}/user-dashboard`, {
-          headers: authHeaders()
-        });
-
-        if (response.ok) {
-          const data = await response.json();
-
-          // Map profile details
-          processedData.fullName = data.fullName || "Employee";
-          processedData.role = data.role || "Staff";
-          
-          // Map task status counts
-          const sc = data.taskStatusCounts || {};
-          const completedCount = sc["Completed"] || 0;
-          const wipCount = sc["In Progress"] || 0;
-          const overdueCount = sc["Overdue"] || 0;
-          const openCount = sc["Open"] || 0;
-          const reassignedCount = sc["Reassigned"] || 0;
-          const reworkCount = sc["Rework"] || 0;
-          const draftCount = sc["Draft"] || 0;
-          const underReviewCount = sc["Under Review"] || 0;
-          
-          processedData.taskCounts = {
-            assigned: data.assignedTasksCard?.currentCount || data.myTasksCount || 0,
-            open: openCount + reassignedCount + reworkCount + draftCount + underReviewCount,
-            inProgress: wipCount,
-            overdue: overdueCount,
-            completed: completedCount,
-          };
-
-          processedData.completionRate = Math.round(data.overallCompletionPercentage || 0);
-
-          // Helper for relative time in activities
-          const formatRelativeTime = (dtStr) => {
-            if (!dtStr) return "Just now";
-            try {
-              const diffMs = new Date() - new Date(dtStr);
-              const diffMins = Math.floor(diffMs / 60000);
-              if (diffMins < 1) return "Just now";
-              if (diffMins < 60) return `${diffMins}m ago`;
-              const diffHours = Math.floor(diffMins / 60);
-              if (diffHours < 24) return `${diffHours}h ago`;
-              const diffDays = Math.floor(diffHours / 24);
-              return `${diffDays}d ago`;
-            } catch {
-              return "Recent";
-            }
-          };
-
-          // Map todoList
-          processedData.todoList = (data.todoList || []).map((t, index) => ({
-            id: t.taskId || index + 100,
-            code: `TSK-${t.taskId || index + 100}`,
-            name: t.taskName || "Task",
-            project: t.projectCodeName || "Project",
-            milestone: "-",
-            endDate: t.dueDate,
-            startDate: null,
-            status: (t.status || "OPEN").toUpperCase(),
-            isOverdue: t.overdue || false,
-            employees: (t.employees || []).map(e => ({ name: e.fullName, photoUrl: e.photoUrl })),
-            priority: t.priority || "Medium",
-            description: "",
-            rawTask: t,
-            isIndividual: t.projectCodeName === "Individual Task"
-          }));
-
-          // Map upcomingTasks
-          processedData.upcomingTasks = (data.upcomingTasks || []).map((t, index) => ({
-            id: t.taskId || index + 100,
-            code: `TSK-${t.taskId || index + 100}`,
-            name: t.taskName || "Task",
-            project: t.projectCode || "Project",
-            startDate: t.startDate,
-            endDate: t.dueDate,
-            status: "OPEN",
-            employees: (t.employees || []).map(e => ({ name: e.fullName, photoUrl: e.photoUrl })),
-            priority: t.priority || "Medium"
-          }));
-
-          // SORT UPCOMING TASKS BY START DATE
-          processedData.upcomingTasks.sort((a, b) => {
-            if (!a.startDate) return 1;
-            if (!b.startDate) return -1;
-            return new Date(a.startDate) - new Date(b.startDate);
-          });
-
-          // Map performanceData
-          processedData.performanceData = {
-            tasksCompleted: completedCount,
-            tasksInProgress: wipCount,
-            tasksOverdue: overdueCount,
-            efficiency: data.productivity?.score || 100,
-            onTimeDelivery: data.taskCompletion?.score || 100,
-            qualityScore: data.qualityScore?.score ? parseFloat((data.qualityScore.score / 20).toFixed(1)) : 5.0,
-          };
-
-          // Map myProjects
-          processedData.myProjects = (data.myProjects || []).map(p => ({
-            id: p.projectId,
-            name: p.projectName || "Project",
-            status: p.status || "Active",
-            progress: p.progress || 0,
-            quality: "Good",
-            employees: p.tasksAssigned || 0,
-            client: p.clientName || "N/A",
-            location: p.location || "N/A",
-            logo: p.logo
-          }));
-          processedData.totalProjects = processedData.myProjects.length;
-
-          // Map recent activities
-          processedData.recentActivities = (data.recentActivity || []).map(log => ({
-            id: log.logId || Math.random(),
-            user: "System",
-            action: log.message || `Updated ${log.entityTyp} #${log.entityId}`,
-            time: formatRelativeTime(log.logDt),
-            type: (log.entityTyp || '').toLowerCase() === 'task' ? 'task' : 'project'
-          }));
-        }
+      if (!token) {
+        throw new Error("Authentication token not found. Please login again.");
       }
 
-      setDashboardData(processedData);
-      setUserName(processedData.fullName || "Employee");
-      setUserRoleState(processedData.role || "Staff");
+      const response = await fetch(`${API_BASE}/user-dashboard`, {
+        headers: authHeaders()
+      });
+
+      if (!response.ok) {
+        const errMsg = await response.text().catch(() => "Failed to fetch dashboard data");
+        throw new Error(`Server responded with ${response.status}: ${errMsg}`);
+      }
+
+      const data = await response.json();
+
+      const sc = data.taskStatusCounts || {};
+      const completedCount = sc["Closed"] || sc["CLOSED"] || sc["Completed"] || sc["COMPLETED"] || 0;
+      const wipCount = sc["In Progress"] || 0;
+      const overdueCount = sc["Overdue"] || 0;
+      const openCount = sc["Open"] || 0;
+      const draftCount = sc["Draft"] || 0;
+      const underReviewCount = sc["Under Review"] || 0;
+
+      const totalAssignedTasks = data.assignedTasksCard?.currentCount || data.myTasksCount || 0;
+
+      const taskCounts = {
+        assigned: totalAssignedTasks,
+        open: openCount,
+        inProgress: wipCount,
+        overdue: overdueCount,
+        completed: completedCount,
+      };
+
+      const formatRelativeTime = (dtStr) => {
+        if (!dtStr) return "Just now";
+        try {
+          const diffMs = new Date() - new Date(dtStr);
+          const diffMins = Math.floor(diffMs / 60000);
+          if (diffMins < 1) return "Just now";
+          if (diffMins < 60) return `${diffMins}m ago`;
+          const diffHours = Math.floor(diffMins / 60);
+          if (diffHours < 24) return `${diffHours}h ago`;
+          const diffDays = Math.floor(diffHours / 24);
+          return `${diffDays}d ago`;
+        } catch {
+          return "Recent";
+        }
+      };
+
+      const todoList = (data.todoList || []).map((t, index) => ({
+        id: t.taskId || index + 100,
+        code: t.taskCode || t.taskCd || (t.taskSource === "INDIVIDUAL" ? `IND-${t.taskId || index + 100}` : `TSK-${t.taskId || index + 100}`),
+        name: t.taskName || "",
+        project: t.projectCodeName || t.projectName || "",
+        milestone: "",
+        endDate: t.dueDate,
+        startDate: null,
+        status: (t.status || "OPEN").toUpperCase(),
+        processStatus: (t.processStatus || t.subStatus || "").toUpperCase(),
+        timeStatus: (t.timeStatus || "").toUpperCase(),
+        isOverdue: t.overdue || false,
+        employees: (t.employees || []).map(e => {
+          let rawRole = e.participantType || e.stepType || e.taskRole || e.type || e.role || e.designation || "";
+          let cleanRole = rawRole;
+          if (rawRole.toUpperCase() === 'REVIEWER') cleanRole = 'Reviewer';
+          else if (rawRole.toUpperCase() === 'APPROVER') cleanRole = 'Approver';
+          else if (rawRole.toUpperCase() === 'ASSIGNEE') cleanRole = 'Assignee';
+          return { name: e.fullName || "", photoUrl: e.photoUrl || "", role: cleanRole };
+        }),
+        priority: t.priority || "",
+        description: "",
+        rawTask: t,
+        isIndividual: t.taskSource === "INDIVIDUAL"
+      }));
+
+      const upcomingTasks = (data.upcomingTasks || []).map((t, index) => ({
+        id: t.taskId || index + 100,
+        code: t.taskCode || t.taskCd || `TSK-${t.taskId || index + 100}`,
+        name: t.taskName || "",
+        project: t.projectCodeName || t.projectName || "",
+        startDate: t.startDate,
+        endDate: t.dueDate,
+        status: "UPCOMING",
+        isUpcoming: true,
+        processStatus: (t.processStatus || t.subStatus || "").toUpperCase(),
+        timeStatus: (t.timeStatus || "").toUpperCase(),
+        employees: (t.employees || []).map(e => {
+          let rawRole = e.participantType || e.stepType || e.taskRole || e.type || e.role || e.designation || "";
+          let cleanRole = rawRole;
+          if (rawRole.toUpperCase() === 'REVIEWER') cleanRole = 'Reviewer';
+          else if (rawRole.toUpperCase() === 'APPROVER') cleanRole = 'Approver';
+          else if (rawRole.toUpperCase() === 'ASSIGNEE') cleanRole = 'Assignee';
+          return { name: e.fullName || "", photoUrl: e.photoUrl || "", role: cleanRole };
+        }),
+        priority: t.priority || ""
+      }));
+
+      upcomingTasks.sort((a, b) => {
+        if (!a.startDate) return 1;
+        if (!b.startDate) return -1;
+        return new Date(a.startDate) - new Date(b.startDate);
+      });
+
+      // ============================================================
+      // MY PROJECTS - ENHANCED PROGRESS EXTRACTION
+      // ============================================================
+      const myProjects = (data.myProjects || []).map(p => {
+        const extractProgress = (obj) => {
+          if (obj.status && obj.status.toUpperCase() === 'COMPLETED') {
+            return 100;
+          }
+          
+          const knownKeys = [
+            'progress', 'completionPercentage', 'completion', 'percentage',
+            'progressPercent', 'percentComplete', 'completionPercent',
+            'projectProgress', 'progressValue', 'pctComplete',
+            'progressPercentage', 'completePercent', 'progressPct',
+            'completionPct', 'percent', 'pct'
+          ];
+          
+          for (const key of knownKeys) {
+            if (obj[key] !== undefined && obj[key] !== null) {
+              let val = obj[key];
+              if (typeof val === 'string') {
+                val = parseFloat(val.replace('%', ''));
+              }
+              if (!isNaN(val) && val > 0 && val <= 1) {
+                return val * 100;
+              }
+              if (!isNaN(val) && val >= 0 && val <= 100) {
+                return val;
+              }
+            }
+          }
+          
+          const allKeys = Object.keys(obj);
+          for (const key of allKeys) {
+            const lowerKey = key.toLowerCase();
+            if (lowerKey.includes('id') || lowerKey.includes('count') || 
+                lowerKey.includes('number') || lowerKey.includes('total')) continue;
+            
+            if (lowerKey.includes('progress') || lowerKey.includes('completion') || 
+                lowerKey.includes('percent') || lowerKey.includes('pct')) {
+              let val = obj[key];
+              if (typeof val === 'string') {
+                val = parseFloat(val.replace('%', ''));
+              }
+              if (typeof val === 'number' && val >= 0 && val <= 100) {
+                return val;
+              }
+              if (typeof val === 'number' && val > 0 && val <= 1) {
+                return val * 100;
+              }
+            }
+          }
+          
+          for (const key of allKeys) {
+            const val = obj[key];
+            if (typeof val === 'number' && val >= 0 && val <= 100 && 
+                key !== 'id' && key !== 'projectId' && key !== 'employeeId') {
+              return val;
+            }
+            if (typeof val === 'number' && val > 0 && val <= 1 && 
+                key !== 'id' && key !== 'projectId' && key !== 'employeeId') {
+              return val * 100;
+            }
+            if (typeof val === 'string') {
+              const parsed = parseFloat(val.replace('%', ''));
+              if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
+                return parsed;
+              }
+              if (!isNaN(parsed) && parsed > 0 && parsed <= 1) {
+                return parsed * 100;
+              }
+            }
+          }
+          
+          return 0;
+        };
+        
+        const progress = extractProgress(p);
+        
+        return {
+          id: p.projectId || p.id,
+          name: p.projectName || p.name || "",
+          status: p.status || "Active",
+          progress: progress,
+          quality: p.quality || "",
+          employees: p.tasksAssigned || p.employeeCount || 0,
+          client: p.clientName || "",
+          location: p.location || "",
+          logo: p.logo
+        };
+      });
+
+      const recentActivities = (data.recentActivity || []).map(log => ({
+        id: log.logId || Math.random(),
+        user: log.user || "",
+        action: log.message || `Updated ${log.entityTyp} #${log.entityId}`,
+        time: formatRelativeTime(log.logDt),
+        type: (log.entityTyp || '').toLowerCase() === 'task' ? 'task' : 'project'
+      }));
+
+      // ============================================================
+      // Performance Data Calculation
+      // ============================================================
+      const totalAssigned = taskCounts.assigned || 0;
+      const compCount = taskCounts.completed || 0;
+      const overDueCount = taskCounts.overdue || 0;
+      const inProgressCount = taskCounts.inProgress || 0;
+
+      let calcEfficiency = 0;
+      if (totalAssigned > 0) {
+        calcEfficiency = Math.round((compCount / totalAssigned) * 100);
+      }
+
+      let calcOnTime = 0;
+      if (totalAssigned > 0) {
+        calcOnTime = Math.round(((totalAssigned - overDueCount) / totalAssigned) * 100);
+      }
+
+      let calcQuality = 0;
+      if (totalAssigned > 0) {
+        calcQuality = (compCount / totalAssigned) * 5;
+        calcQuality = Math.min(5, Math.round(calcQuality * 10) / 10);
+      } else {
+        calcQuality = 0;
+      }
+
+      const performanceData = {
+        tasksCompleted: compCount,
+        tasksInProgress: inProgressCount,
+        tasksOverdue: overDueCount,
+        efficiency: calcEfficiency,
+        onTimeDelivery: calcOnTime,
+        qualityScore: calcQuality,
+      };
+
+      // ============================================================
+      // Calculate Chart Data
+      // ============================================================
+      
+      const projectCount = myProjects.length;
+      
+      let totalProgress = 0;
+      myProjects.forEach(p => {
+        let prog = p.progress || 0;
+        if (prog > 0 && prog <= 1) prog = prog * 100;
+        totalProgress += prog;
+      });
+      const overallProgress = projectCount > 0 ? (totalProgress / projectCount) : 0;
+      
+      const completedProjects = myProjects.filter(p => p.status?.toUpperCase() === 'COMPLETED' || p.status?.toUpperCase() === 'CLOSED').length;
+      const inProgressProjects = myProjects.filter(p => p.status?.toUpperCase() === 'IN_PROGRESS' || p.status?.toUpperCase() === 'WIP' || p.status?.toUpperCase() === 'ACTIVE').length;
+      const notStartedProjects = myProjects.filter(p => p.status?.toUpperCase() === 'NOT_STARTED' || p.status?.toUpperCase() === 'OPEN' || p.status?.toUpperCase() === 'DRAFT').length;
+      const delayedProjects = myProjects.filter(p => p.status?.toUpperCase() === 'DELAYED' || p.status?.toUpperCase() === 'OVERDUE' || p.status?.toUpperCase() === 'HOLD').length;
+      
+      const portfolioItems = [
+        { label: "Closed", count: completedProjects, pct: projectCount > 0 ? ((completedProjects / projectCount) * 100).toFixed(1) + "%" : "0.0%", color: "#10b981" },
+        { label: "In Progress", count: inProgressProjects, pct: projectCount > 0 ? ((inProgressProjects / projectCount) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
+        { label: "Not Started", count: notStartedProjects, pct: projectCount > 0 ? ((notStartedProjects / projectCount) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
+        { label: "Delayed", count: delayedProjects, pct: projectCount > 0 ? ((delayedProjects / projectCount) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
+      ];
+      
+      let milestoneTotal = 0;
+      let milestoneCompleted = 0;
+      let milestoneInProgress = 0;
+      let milestoneNotStarted = 0;
+      let milestoneDelayed = 0;
+      
+      if (data.milestoneStatus) {
+        milestoneTotal = data.milestoneStatus.total || 0;
+        milestoneCompleted = data.milestoneStatus.completed || 0;
+        milestoneInProgress = data.milestoneStatus.inProgress || 0;
+        milestoneNotStarted = data.milestoneStatus.notStarted || 0;
+        milestoneDelayed = data.milestoneStatus.delayed || 0;
+      } else {
+        myProjects.forEach(project => {
+          const status = project.status?.toUpperCase() || '';
+          if (status === 'COMPLETED' || status === 'CLOSED') {
+            milestoneCompleted += 1;
+          } else if (status === 'IN_PROGRESS' || status === 'WIP' || status === 'ACTIVE') {
+            milestoneInProgress += 1;
+          } else if (status === 'NOT_STARTED' || status === 'OPEN' || status === 'DRAFT') {
+            milestoneNotStarted += 1;
+          } else if (status === 'DELAYED' || status === 'OVERDUE' || status === 'HOLD') {
+            milestoneDelayed += 1;
+          }
+          milestoneTotal += 1;
+        });
+      }
+      
+      const milestoneItems = [
+        { label: "Closed", count: milestoneCompleted, pct: milestoneTotal > 0 ? ((milestoneCompleted / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#10b981" },
+        { label: "In Progress", count: milestoneInProgress, pct: milestoneTotal > 0 ? ((milestoneInProgress / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
+        { label: "Not Started", count: milestoneNotStarted, pct: milestoneTotal > 0 ? ((milestoneNotStarted / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
+        { label: "Delayed", count: milestoneDelayed, pct: milestoneTotal > 0 ? ((milestoneDelayed / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
+      ];
+      
+      const taskTotal = taskCounts.assigned || 0;
+      const taskStatusItems = [
+        { label: "Closed", count: taskCounts.completed || 0, pct: taskTotal > 0 ? ((taskCounts.completed / taskTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#10b981" },
+        { label: "In Progress", count: taskCounts.inProgress || 0, pct: taskTotal > 0 ? ((taskCounts.inProgress / taskTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
+        { label: "Under Review", count: underReviewCount || 0, pct: taskTotal > 0 ? ((underReviewCount / taskTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#8b5cf6" },
+        { label: "Not Started", count: taskCounts.open || 0, pct: taskTotal > 0 ? ((taskCounts.open / taskTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
+        { label: "Overdue", count: taskCounts.overdue || 0, pct: taskTotal > 0 ? ((taskCounts.overdue / taskTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
+      ];
+
+      const dashboard = {
+        fullName: data.fullName || "",
+        role: data.role || "",
+        empId: data.empId || null,
+        taskCounts,
+        completionRate: Math.round(data.overallCompletionPercentage || 0),
+        todoList,
+        upcomingTasks,
+        myProjects,
+        totalProjects: projectCount,
+        recentActivities,
+        performanceData,
+        portfolioItems,
+        portfolioTotal: projectCount,
+        portfolioPercentage: overallProgress.toFixed(2) + "%",
+        milestoneItems,
+        milestoneTotal,
+        taskStatusItems,
+        taskTotal,
+      };
+
+      setDashboardData(dashboard);
+      try {
+        localStorage.setItem("cached_user_dashboard", JSON.stringify(dashboard));
+      } catch (e) {
+        console.warn("Failed to save dashboard to cache", e);
+      }
+      setUserName(dashboard.fullName);
+      setUserRoleState(dashboard.role);
+      setEmpId(dashboard.empId);
+
+      // Show greeting banner only once per session
+      const userId = dashboard.empId || dashboard.fullName || 'user';
+      const greetingKey = `greetingShown_${userId}`;
+      const greetingShown = sessionStorage.getItem(greetingKey);
+      if (!greetingShown) {
+        setShowGreeting(true);
+        sessionStorage.setItem(greetingKey, 'true');
+      }
 
     } catch (err) {
-      console.error("Error in dashboard:", err);
-      const fallback = getFallbackData();
-      setDashboardData(fallback);
-      setUserName(fallback.fullName);
-      setUserRoleState(fallback.role);
+      console.error("Dashboard fetch error:", err);
+      setError(err.message || "Failed to load dashboard. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -484,56 +765,20 @@ const UserDashboard = ({ userRole, onLogout }) => {
     fetchDashboardData();
   }, []);
 
-  // 7.3: Computed Data
-  const data = dashboardData || getFallbackData();
-  
-  const taskCounts = data.taskCounts || {
-    assigned: 0,
-    open: 0,
-    inProgress: 0,
-    overdue: 0,
-    completed: 0,
-  };
-
-  const todoList = data.todoList || [];
-  const upcomingTasks = data.upcomingTasks || [];
-  const projects = data.myProjects || [];
-  const totalProjects = data.totalProjects || projects.length;
-  const completionRate = data.completionRate || 0;
-  const recentActivities = data.recentActivities || getFallbackData().recentActivities;
-  const performanceData = data.performanceData || getFallbackData().performanceData;
-
-  // Sort upcoming tasks by start date (earliest first)
-  const sortedUpcomingTasks = [...upcomingTasks].sort((a, b) => {
-    if (!a.startDate) return 1;
-    if (!b.startDate) return -1;
-    return new Date(a.startDate) - new Date(b.startDate);
-  });
-
-  const displayedTasks = showAllTasks ? todoList : todoList.slice(0, 5);
-  const displayedUpcoming = showAllUpcoming ? sortedUpcomingTasks : sortedUpcomingTasks.slice(0, 5);
-  const totalTasks = taskCounts.assigned || 0;
-
-  const pieData = [
-    { label: "Completed", value: taskCounts.completed || 0, color: "#16a34a" },
-    { label: "In Progress", value: taskCounts.inProgress || 0, color: "#3b82f6" },
-    { label: "Open", value: taskCounts.open || 0, color: "#f59e0b" },
-    { label: "Overdue", value: taskCounts.overdue || 0, color: "#ef4444" },
-  ];
-
-  // 7.4: Event Handlers
+  // 7.3: Event Handlers
   const triggerAlert = (type, title, message) => {
     setAlertConfig({ type, title, message });
     setAlertOpen(true);
   };
 
   const handleTaskClick = (task) => {
-    setSelectedTask(task);
-    setShowTaskDetail(true);
+    const taskId = task?.taskId || task?.id;
+    navigate('/my-tasks', { state: { selectedTaskId: taskId } });
   };
 
   const handleProjectClick = (project) => {
-    navigate(`/project-details/${project.id}`);
+    const projId = project?.id || project?.projectId || project?.prjId;
+    navigate('/projects', { state: { selectedProjectId: projId } });
   };
 
   const handleStartTask = async (task) => {
@@ -542,74 +787,105 @@ const UserDashboard = ({ userRole, onLogout }) => {
     setUpdatingTaskId(task.id);
     
     try {
-      const originalTask = task.rawTask;
-      if (originalTask) {
-        const updatedTask = {
-          ...originalTask,
-          taskSts: "WIP",
-          stDt: new Date().toISOString().split('T')[0],
-        };
-        
-        const updatePath = task.isIndividual 
-          ? `/api/assignments/${task.id}`
-          : `/api/task-live/${task.id}`;
-        
-        const response = await fetch(`${API_BASE}${updatePath}?_t=${Date.now()}`, {
-          method: "PUT",
-          headers: authHeaders(),
-          body: JSON.stringify(updatedTask),
-        });
+      const payload = { taskSts: "WIP" };
+      const endpoint = task.isIndividual
+        ? `/assignments/${task.id}/status`
+        : `/task-live/${task.id}/status`;
+      const url = `${API_BASE}${endpoint}`;
 
-        if (response.ok) {
-          setDashboardData(prevData => {
-            if (!prevData) return prevData;
-            
-            const updatedTodoList = prevData.todoList.map(t => {
-              if (t.id === task.id) {
-                return { 
-                  ...t, 
-                  status: "WIP", 
-                  rawTask: { ...t.rawTask, taskSts: "WIP" },
-                  isOverdue: false
-                };
-              }
-              return t;
-            });
-            
-            const newTaskCounts = { ...prevData.taskCounts };
-            newTaskCounts.open = Math.max(0, (newTaskCounts.open || 0) - 1);
-            newTaskCounts.inProgress = (newTaskCounts.inProgress || 0) + 1;
-            
-            return {
-              ...prevData,
-              todoList: updatedTodoList,
-              taskCounts: newTaskCounts,
-            };
-          });
-          
-          triggerAlert("success", "Started", "Task moved to In Progress.");
-          
-          setTimeout(() => {
-            fetchDashboardData();
-          }, 500);
-        } else {
-          triggerAlert("danger", "Error", "Failed to start task. Please try again.");
-        }
+      const response = await fetch(url, {
+        method: "PATCH",
+        headers: authHeaders(),
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server responded with ${response.status}: ${errorText || "Unknown error"}`);
       }
+
+      setDashboardData(prevData => {
+        if (!prevData) return prevData;
+        
+        const updatedTodoList = prevData.todoList.map(t => {
+          if (t.id === task.id) {
+            return { 
+              ...t, 
+              status: "IN_PROGRESS",
+              rawTask: { ...t.rawTask, taskSts: "WIP", status: "IN_PROGRESS" },
+              isOverdue: false
+            };
+          }
+          return t;
+        });
+        
+        const newTaskCounts = { ...prevData.taskCounts };
+        newTaskCounts.open = Math.max(0, (newTaskCounts.open || 0) - 1);
+        newTaskCounts.inProgress = (newTaskCounts.inProgress || 0) + 1;
+        
+        return {
+          ...prevData,
+          todoList: updatedTodoList,
+          taskCounts: newTaskCounts,
+        };
+      });
+      
+      triggerAlert("success", "Started", "Task moved to In Progress.");
+      
+      setTimeout(() => {
+        fetchDashboardData();
+      }, 500);
+
     } catch (err) {
       console.error("Error starting task:", err);
-      triggerAlert("danger", "Error", "Failed to start task: " + err.message);
+      triggerAlert("danger", "Error", `Failed to start task: ${err.message}`);
     } finally {
       setUpdatingTaskId(null);
     }
   };
 
-  // 7.5: Loading State
+  const handleGreetingClose = () => {
+    setShowGreeting(false);
+  };
+
+  const handleExportData = () => {
+    if (!dashboardData) return;
+    
+    let csvContent = "data:text/csv;charset=utf-8,";
+    csvContent += `User Dashboard Export\n\n`;
+    csvContent += `User,${dashboardData.fullName}\n`;
+    csvContent += `Role,${dashboardData.role}\n\n`;
+    
+    csvContent += "Task Summary\nTask Type,Count\n";
+    csvContent += `Assigned Tasks,${dashboardData.taskCounts.assigned || 0}\n`;
+    csvContent += `Open Tasks,${dashboardData.taskCounts.open || 0}\n`;
+    csvContent += `In Progress,${dashboardData.taskCounts.inProgress || 0}\n`;
+    csvContent += `Overdue Tasks,${dashboardData.taskCounts.overdue || 0}\n`;
+    csvContent += `Closed Tasks,${dashboardData.taskCounts.completed || 0}\n\n`;
+    
+    csvContent += "My To-Do List\nTask Name,Project,Due Date,Status\n";
+    dashboardData.todoList.forEach(t => {
+      csvContent += `"${t.name}","${t.project}","${formatDate(t.endDate)}","${getStatusLabel(t.status)}"\n`;
+    });
+
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement("a");
+    link.setAttribute("href", encodedUri);
+    link.setAttribute("download", `User_Dashboard_Export.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // ============================================================
+  // 7.4: Loading & Error States
+  // ============================================================
+
   if (loading) {
     return (
       <div className="ud-container">
         <Sidebar userRole={userRoleState} onLogout={onLogout} />
-        <div className={`ud-shell ${!sidebarOpen ? 'expanded' : ''}`}>
+        <div className="ud-shell">
           <Header 
             title="User Dashboard" 
             showSearch={false} 
@@ -628,15 +904,118 @@ const UserDashboard = ({ userRole, onLogout }) => {
     );
   }
 
+  if (error) {
+    return (
+      <div className="ud-container">
+        <Sidebar userRole={userRoleState} onLogout={onLogout} />
+        <div className="ud-shell">
+          <Header 
+            title="User Dashboard" 
+            showSearch={false} 
+            userName={userName} 
+            userRole={userRoleState} 
+            initials={getInitials(userName)} 
+          />
+          <main className="ud-main">
+            <div className="ud-error-container">
+              <AlertTriangle size={48} color="#ef4444" />
+              <h2>Something went wrong</h2>
+              <p>{error}</p>
+              <button className="ud-retry-btn" onClick={fetchDashboardData}>
+                <RotateCw size={16} /> Retry
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
+  if (!dashboardData) {
+    return (
+      <div className="ud-container">
+        <Sidebar userRole={userRoleState} onLogout={onLogout} />
+        <div className="ud-shell">
+          <Header 
+            title="User Dashboard" 
+            showSearch={false} 
+            userName={userName} 
+            userRole={userRoleState} 
+            initials={getInitials(userName)} 
+          />
+          <main className="ud-main">
+            <div className="ud-error-container">
+              <AlertTriangle size={48} color="#f59e0b" />
+              <h2>No data available</h2>
+              <p>We couldn't load your dashboard data.</p>
+              <button className="ud-retry-btn" onClick={fetchDashboardData}>
+                <RotateCw size={16} /> Retry
+              </button>
+            </div>
+          </main>
+        </div>
+      </div>
+    );
+  }
+
   // ============================================================
-  // SECTION 8: RENDER - 4 ROW LAYOUT
+  // 7.5: Render – 4 Row Layout
   // ============================================================
+
+  const data = dashboardData;
+  const taskCounts = data.taskCounts;
+  const todoList = data.todoList || [];
+  const upcomingTasks = data.upcomingTasks || [];
+  const projects = data.myProjects || [];
+  const totalProjects = data.totalProjects || projects.length;
+  const recentActivities = data.recentActivities || [];
+  const performanceData = data.performanceData || {
+    tasksCompleted: 0,
+    tasksInProgress: 0,
+    tasksOverdue: 0,
+    efficiency: 0,
+    onTimeDelivery: 0,
+    qualityScore: 0,
+  };
+
+  const portfolioItems = data.portfolioItems || [];
+  const portfolioTotal = data.portfolioTotal || 0;
+  const portfolioPercentage = data.portfolioPercentage || "0.00%";
+  const milestoneItems = data.milestoneItems || [];
+  const milestoneTotal = data.milestoneTotal || 0;
+  const taskStatusItems = data.taskStatusItems || [];
+  const taskTotal = data.taskTotal || 0;
+
+  const sortedUpcomingTasks = [...upcomingTasks].sort((a, b) => {
+    if (!a.startDate) return 1;
+    if (!b.startDate) return -1;
+    return new Date(a.startDate) - new Date(b.startDate);
+  });
+
+  const activeTodoList = todoList.filter(t => {
+    const s = t.status?.toUpperCase() || "";
+    return s !== "COMPLETED" && s !== "CLOSED" && s !== "DONE";
+  });
+  const displayedTasks = showAllTasks ? activeTodoList : activeTodoList.slice(0, 5);
+  const displayedUpcoming = showAllUpcoming ? sortedUpcomingTasks : sortedUpcomingTasks.slice(0, 5);
+  const totalTasks = taskCounts.assigned || 0;
+
+  const pieData = [
+    { label: "Closed", value: taskCounts.completed || 0, color: "#16a34a" },
+    { label: "In Progress", value: taskCounts.inProgress || 0, color: "#f59e0b" },
+    { label: "Open", value: taskCounts.open || 0, color: "#2563eb" },
+  ];
+
+  const pieDataDetails = [
+    ...pieData,
+    { label: "Overdue", value: taskCounts.overdue || 0, color: "#ef4444" },
+  ];
 
   return (
     <div className="ud-container">
-      <Sidebar userRole={userRoleState} onLogout={onLogout} sidebarOpen={sidebarOpen} />
+      <Sidebar userRole={userRoleState} onLogout={onLogout} />
 
-      <div className={`ud-shell ${!sidebarOpen ? 'expanded' : ''}`}>
+      <div className="ud-shell">
         <Header 
           title="User Dashboard" 
           showSearch={false} 
@@ -648,434 +1027,443 @@ const UserDashboard = ({ userRole, onLogout }) => {
         <main className="ud-main">
           
           {/* ==========================================================
-              ROW 1: GREETINGS BANNER (Sliding from Right)
+              SLIDING GREETINGS BANNER
           ========================================================== */}
           {showGreeting && (
-            <GreetingsBanner userName={userName} onClose={() => setShowGreeting(false)} />
+            <GreetingsBanner userName={userName} onClose={handleGreetingClose} />
           )}
 
+          {/* ==========================================================
+              FILTER BAR - Only User Name & Export
+          ========================================================== */}
+          <div className="ud-filter-bar">
+            <div className="ud-filter-group">
+              <div className="ud-user-greeting">
+                <span className="ud-user-greeting-text">
+                  {getGreeting()}, <strong>{userName}</strong>
+                </span>
+                <span className="ud-user-role-badge">{userRoleState || 'User'}</span>
+              </div>
+            </div>
+            <button className="ud-export-btn" onClick={handleExportData}>
+              <Download size={14}/> Export
+            </button>
+          </div>
 
           {/* ==========================================================
-              ROW 2: KPI CARDS (6 Cards)
+              ROW 1: KPI CARDS (6 Cards - Single Row)
           ========================================================== */}
-          <div className="ud-row ud-row-kpi">
-            <div className="ud-kpi-grid">
-              <div className="ud-kpi-card" onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }}>
-                <div className="ud-kpi-icon-wrapper blue"><ListTodo size={20} /></div>
-                <div className="ud-kpi-content">
-                  <span className="ud-kpi-label">Assigned Tasks</span>
-                  <span className="ud-kpi-value">{taskCounts.assigned || 0}</span>
-                  <span className="ud-kpi-trend up">↑ {taskCounts.assigned || 0} total</span>
-                </div>
+          <div className="ud-stats-container">
+            <div className="ud-stat-item ud-stat-blue">
+              <div className="ud-stat-icon-box filled">
+                <ListTodo size={24} color="white" />
               </div>
-
-              <div className="ud-kpi-card" onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }}>
-                <div className="ud-kpi-icon-wrapper yellow"><CircleDot size={20} /></div>
-                <div className="ud-kpi-content">
-                  <span className="ud-kpi-label">Open Tasks</span>
-                  <span className="ud-kpi-value">{taskCounts.open || 0}</span>
-                  <span className="ud-kpi-trend up">Need attention</span>
-                </div>
+              <div className="ud-stat-info">
+                <div className="ud-stat-value">{taskCounts.assigned || 0}</div>
+                <div className="ud-stat-label">Assigned Tasks</div>
+                <div className="ud-stat-sub">All Tasks</div>
               </div>
+            </div>
 
-              <div className="ud-kpi-card" onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }}>
-                <div className="ud-kpi-icon-wrapper blue-light"><Activity size={20} /></div>
-                <div className="ud-kpi-content">
-                  <span className="ud-kpi-label">In Progress</span>
-                  <span className="ud-kpi-value">{taskCounts.inProgress || 0}</span>
-                  <span className="ud-kpi-trend up">Active tasks</span>
-                </div>
+            <div className="ud-stat-item ud-stat-purple">
+              <div className="ud-stat-icon-box filled">
+                <CircleDot size={24} color="white" />
               </div>
-
-              <div className="ud-kpi-card" onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }}>
-                <div className="ud-kpi-icon-wrapper red"><AlertTriangle size={20} /></div>
-                <div className="ud-kpi-content">
-                  <span className="ud-kpi-label">Overdue Tasks</span>
-                  <span className="ud-kpi-value">{taskCounts.overdue || 0}</span>
-                  <span className="ud-kpi-trend down">Need action</span>
-                </div>
+              <div className="ud-stat-info">
+                <div className="ud-stat-value">{taskCounts.open || 0}</div>
+                <div className="ud-stat-label">Open Tasks</div>
+                <div className="ud-stat-sub">Need attention</div>
               </div>
+            </div>
 
-              <div className="ud-kpi-card" onClick={() => navigate("/my-tasks")} style={{ cursor: 'pointer' }}>
-                <div className="ud-kpi-icon-wrapper green"><CheckCircle2 size={20} /></div>
-                <div className="ud-kpi-content">
-                  <span className="ud-kpi-label">Completed Tasks</span>
-                  <span className="ud-kpi-value">{taskCounts.completed || 0}</span>
-                  <span className="ud-kpi-trend up">Well done!</span>
-                </div>
+            <div className="ud-stat-item ud-stat-orange">
+              <div className="ud-stat-icon-box filled">
+                <Activity size={24} color="white" />
               </div>
+              <div className="ud-stat-info">
+                <div className="ud-stat-value">{taskCounts.inProgress || 0}</div>
+                <div className="ud-stat-label">In Progress</div>
+                <div className="ud-stat-sub">Active tasks</div>
+              </div>
+            </div>
 
-              <div className="ud-kpi-card" onClick={() => navigate("/projects")} style={{ cursor: 'pointer' }}>
-                <div className="ud-kpi-icon-wrapper purple"><FolderKanban size={20} /></div>
-                <div className="ud-kpi-content">
-                  <span className="ud-kpi-label">My Projects</span>
-                  <span className="ud-kpi-value">{totalProjects || 0}</span>
-                  <span className="ud-kpi-trend up">Active projects</span>
-                </div>
+            <div className="ud-stat-item ud-stat-red">
+              <div className="ud-stat-icon-box filled">
+                <AlertTriangle size={24} color="white" />
+              </div>
+              <div className="ud-stat-info">
+                <div className="ud-stat-value">{taskCounts.overdue || 0}</div>
+                <div className="ud-stat-label">Overdue Tasks</div>
+                <div className="ud-stat-sub">Need action</div>
+              </div>
+            </div>
+
+            <div className="ud-stat-item ud-stat-green">
+              <div className="ud-stat-icon-box filled">
+                <CheckCircle2 size={24} color="white" />
+              </div>
+              <div className="ud-stat-info">
+                <div className="ud-stat-value">{taskCounts.completed || 0}</div>
+                <div className="ud-stat-label">Closed Tasks</div>
+                <div className="ud-stat-sub">Well done!</div>
+              </div>
+            </div>
+
+            <div className="ud-stat-item ud-stat-teal">
+              <div className="ud-stat-icon-box filled">
+                <FolderKanban size={24} color="white" />
+              </div>
+              <div className="ud-stat-info">
+                <div className="ud-stat-value">{totalProjects || 0}</div>
+                <div className="ud-stat-label">My Projects</div>
+                <div className="ud-stat-sub">Active projects</div>
               </div>
             </div>
           </div>
 
           {/* ==========================================================
-              ROW 3: 3 TILES - ToDo List, Upcoming Tasks, My Projects
+              ROW 2: To Do List (5 Tasks), Milestone Progress, Task Progress
           ========================================================== */}
-          <div className="ud-row ud-row-tiles">
-            <div className="ud-main-grid">
-              
-              {/* Tile 1: My To-Do List */}
-              <div className="ud-panel ud-todo-panel">
-                <div className="ud-panel-header">
-                  <h3>My To-Do List</h3>
-                  <div className="ud-panel-actions">
-                    <button className="ud-view-all-btn" onClick={() => setShowAllTasks(!showAllTasks)}>
-                      {showAllTasks ? 'Show Less' : 'View All'} <ArrowUpRight size={14} />
-                    </button>
-                  </div>
-                </div>
-                <div className="ud-todo-table-wrapper">
-                  <table className="ud-todo-table">
-                    <thead>
-                      <tr>
-                        <th>Task Name</th>
-                        <th>End Date</th>
-                        <th>Status</th>
-                        <th>Employees</th>
-                        <th>Action</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {displayedTasks && displayedTasks.length > 0 ? (
-                        displayedTasks.map((task, index) => {
-                          const isOpen = task.status === "OPEN" || task.status === "PENDING" || task.status === "NOT_STARTED";
-                          const isInProgress = task.status === "WIP" || task.status === "IN_PROGRESS";
-                          const isCompleted = task.status === "COMPLETED" || task.status === "DONE" || task.status === "CLOSED";
-                          
-                          return (
-                            <tr key={task.id || index} className="ud-todo-row">
-                              <td onClick={() => handleTaskClick(task)} style={{ cursor: 'pointer' }}>
-                                <div className="ud-task-name">
-                                  <span className={`ud-task-indicator ${task.isOverdue ? 'overdue' : ''}`} />
-                                  <span className="ud-task-title">{task.name || 'Task'}</span>
-                                  <span className="ud-task-project">{task.project || 'Project'}</span>
-                                </div>
-                              </td>
-                              <td onClick={() => handleTaskClick(task)} style={{ cursor: 'pointer' }}>
-                                <span className={task.isOverdue ? 'ud-date-overdue' : ''}>
-                                  {formatDate(task.endDate)}
-                                </span>
-                              </td>
-                              <td onClick={() => handleTaskClick(task)} style={{ cursor: 'pointer' }}>
-                                <span className="ud-status-badge" style={{ backgroundColor: getStatusColor(task.status) }}>
-                                  {getStatusLabel(task.status)}
-                                </span>
-                              </td>
-                              <td onClick={() => handleTaskClick(task)} style={{ cursor: 'pointer' }}>
-                                <div className="ud-employee-avatars">
-                                  {task.employees && task.employees.length > 0 ? (
-                                    <>
-                                      {task.employees.slice(0, 2).map((emp, i) => (
-                                        <span key={i} className="ud-avatar-small" title={emp.name || emp}>
-                                          {emp.photoUrl ? (
-                                            <img src={emp.photoUrl} alt={emp.name || emp} />
-                                          ) : (
-                                            getInitials(emp.name || emp)
-                                          )}
-                                        </span>
-                                      ))}
-                                      {task.employees.length > 2 && (
-                                        <span className="ud-avatar-more">+{task.employees.length - 2}</span>
-                                      )}
-                                    </>
-                                  ) : (
-                                    <span className="ud-no-employees">—</span>
-                                  )}
-                                </div>
-                              </td>
-                              <td>
-                                {isOpen && (
-                                  <button 
-                                    className="ud-start-btn" 
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      handleStartTask(task);
-                                    }}
-                                    disabled={updatingTaskId === task.id}
-                                  >
-                                    {updatingTaskId === task.id ? 'Starting...' : 'Start'}
-                                  </button>
-                                )}
-                                {isInProgress && (
-                                  <span className="ud-inprogress-label">In Progress</span>
-                                )}
-                                {isCompleted && (
-                                  <span className="ud-completed-label">✓ Done</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr>
-                          <td colSpan="5" className="ud-empty-cell">
-                            <div className="ud-empty-state">
-                              <CheckCircle2 size={28} />
-                              <strong>All caught up!</strong>
-                              <span>No pending tasks</span>
+          <div className="ud-row-2-grid">
+            
+            {/* Tile 1: My To-Do List - 5 Tasks */}
+            <div className="ud-card ud-todo-panel">
+              <div className="ud-card-header">
+                <span className="ud-card-title">My To-Do List</span>
+                <button className="ud-view-all-btn" onClick={() => navigate("/my-tasks", { state: { selectedStatus: "To Do" } })}>
+                  View All <ArrowUpRight size={14} />
+                </button>
+              </div>
+              <div className="ud-todo-list-container">
+                {displayedTasks && displayedTasks.length > 0 ? (
+                  displayedTasks.map((task, index) => {
+                    const isCompleted = task.status === "COMPLETED" || task.status === "DONE" || task.status === "CLOSED";
+                    
+                    return (
+                      <div key={task.id || index} className="ud-todo-card" onClick={() => handleTaskClick(task)}>
+                        <div className="ud-todo-card-left">
+                          <div className={`ud-todo-status-dot ${task.isOverdue ? 'overdue' : ''} ${isCompleted ? 'completed' : ''}`} />
+                          <div className="ud-todo-card-info">
+                            <div className="ud-todo-card-title">{task.name || 'Task'}</div>
+                            <div className="ud-todo-card-meta">
+                              <span className="ud-todo-card-project">{task.project || 'Project'}</span>
+                              <span className="ud-todo-card-code">
+                                <Hash size={10} />
+                                {task.code || 'TSK-001'}
+                              </span>
+                              <span className="ud-todo-card-date">
+                                <ClockIcon size={10} />
+                                {formatDate(task.endDate)}
+                              </span>
                             </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-
-              {/* Tile 2: Upcoming Tasks - Sorted by Start Date */}
-              <div className="ud-panel ud-upcoming-panel">
-                <div className="ud-panel-header">
-                  <h3>Upcoming Tasks</h3>
-                  <div className="ud-panel-actions">
-                    <button className="ud-view-all-btn" onClick={() => setShowAllUpcoming(!showAllUpcoming)}>
-                      {showAllUpcoming ? 'Show Less' : 'View All'} <ArrowUpRight size={14} />
-                    </button>
-                  </div>
-                </div>
-                <div className="ud-upcoming-list">
-                  {displayedUpcoming && displayedUpcoming.length > 0 ? (
-                    displayedUpcoming.map((task, index) => (
-                      <div className="ud-upcoming-item" key={task.id || index} onClick={() => handleTaskClick(task)}>
-                        <div className="ud-upcoming-date">
-                          <span className="ud-upcoming-day">
-                            {task.startDate ? new Date(task.startDate).getDate() : '--'}
-                          </span>
-                          <span className="ud-upcoming-month">
-                            {task.startDate ? new Date(task.startDate).toLocaleString('en', { month: 'short' }) : 'N/A'}
-                          </span>
+                          </div>
                         </div>
-                        <div className="ud-upcoming-info">
-                          <div className="ud-upcoming-name">{task.name || 'Task'}</div>
-                          <div className="ud-upcoming-project">{task.project || 'Project'}</div>
-                        </div>
-                        <div className="ud-upcoming-employees">
-                          {task.employees && task.employees.length > 0 ? (
-                            <>
-                              {task.employees.slice(0, 2).map((emp, i) => (
-                                <span key={i} className="ud-avatar-small" title={emp.name || emp}>
-                                  {emp.photoUrl ? (
-                                    <img src={emp.photoUrl} alt={emp.name || emp} />
-                                  ) : (
-                                    getInitials(emp.name || emp)
-                                  )}
-                                </span>
-                              ))}
-                              {task.employees.length > 2 && (
-                                <span className="ud-avatar-more">+{task.employees.length - 2}</span>
-                              )}
-                            </>
-                          ) : (
-                            <span className="ud-no-employees">—</span>
-                          )}
+                        <div className="ud-todo-card-right-compact">
+                          <span className="ud-status-badge-small" style={{ backgroundColor: getStatusColor(task.status) }}>
+                            {getStatusLabel(task.status)}
+                          </span>
+                          <div className="ud-todo-card-badges">
+                            {getProcessStatusBadge(task.processStatus)}
+                            {getTimeStatusBadge(task.timeStatus, task.isOverdue)}
+                          </div>
+                          <div className="ud-todo-card-employees-compact">
+                            {task.employees && task.employees.length > 0 ? (
+                              <>
+                                {task.employees.slice(0, 2).map((emp, i) => (
+                                  <span key={i} className="ud-avatar-tiny" title={emp.role ? `${emp.name} - ${emp.role}` : emp.name || emp}>
+                                    {emp.photoUrl ? (
+                                      <img src={emp.photoUrl} alt={emp.name || emp} />
+                                    ) : (
+                                      getInitials(emp.name || emp)
+                                    )}
+                                  </span>
+                                ))}
+                                {task.employees.length > 2 && (
+                                  <span className="ud-avatar-tiny-more">+{task.employees.length - 2}</span>
+                                )}
+                              </>
+                            ) : (
+                              <span className="ud-no-employees-tiny">—</span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="ud-empty-state">
-                      <Calendar size={28} />
-                      <strong>No upcoming tasks</strong>
-                      <span>Your schedule is clear.</span>
+                    );
+                  })
+                ) : (
+                  <div className="ud-empty-state-todo">
+                    <CheckCircle2 size={32} />
+                    <strong>All caught up!</strong>
+                    <span>No pending tasks</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tile 2: Milestone Progress - Chart Top, Data Bottom */}
+            <div className="ud-card ud-milestone-progress-panel">
+              <div className="ud-card-header">
+                <span className="ud-card-title">Milestone Progress</span>
+              </div>
+              <div className="ud-milestone-content-vertical">
+                <div className="ud-milestone-chart-top">
+                  <DonutChart
+                    data={milestoneItems}
+                    total={milestoneItems.reduce((a, b) => a + b.count, 0)}
+                    centerValue={milestoneTotal}
+                    centerLabel="Total Milestones"
+                    size={120}
+                  />
+                </div>
+                <div className="ud-milestone-data-bottom">
+                  {milestoneItems.map((item, index) => (
+                    <div key={index} className="ud-milestone-data-row">
+                      <span className="ud-milestone-data-dot" style={{ background: item.color }} />
+                      <span className="ud-milestone-data-label">{item.label}</span>
+                      <span className="ud-milestone-data-value">{item.count}</span>
+                      <span className="ud-milestone-data-pct">{item.pct}</span>
                     </div>
-                  )}
+                  ))}
                 </div>
               </div>
+            </div>
 
-              {/* Tile 3: My Active Projects */}
-              <div className="ud-panel ud-projects-panel">
-                <div className="ud-panel-header">
-                  <h3>My Active Projects</h3>
-                  <div className="ud-panel-actions">
-                    <button className="ud-view-all-btn" onClick={() => navigate("/projects")}>
-                      View All <ArrowUpRight size={14} />
-                    </button>
-                  </div>
+            {/* Tile 3: Task Progress - Chart Top, Data Bottom */}
+            <div className="ud-card ud-progress-pie-panel">
+              <div className="ud-card-header">
+                <span className="ud-card-title">Task Progress</span>
+              </div>
+              <div className="ud-pie-content-vertical">
+                <div className="ud-pie-chart-top">
+                  <PieChartComponent data={pieData} size={120} />
                 </div>
-                <div className="ud-projects-list">
-                  {projects && projects.length > 0 ? (
-                    projects.slice(0, 6).map((project, index) => (
-                      <div className="ud-project-item" key={project.id || index} onClick={() => handleProjectClick(project)} style={{ cursor: 'pointer' }}>
-                        {project.logo ? (
-                          <img src={project.logo} alt={project.name} className="ud-project-logo" />
+                <div className="ud-pie-data-bottom">
+                  {pieDataDetails.map((item, index) => (
+                    <div key={index} className="ud-pie-data-row">
+                      <span className="ud-pie-data-dot" style={{ background: item.color }} />
+                      <span className="ud-pie-data-label">{item.label}</span>
+                      <span className="ud-pie-data-value">{item.value}</span>
+                      <span className="ud-pie-data-pct">
+                        {totalTasks > 0 ? ((item.value / totalTasks) * 100).toFixed(1) + '%' : '0.0%'}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ==========================================================
+              ROW 3: Upcoming Tasks (5 Tasks), My Active Projects (3 Projects), My Performance
+          ========================================================== */}
+          <div className="ud-row-3-grid">
+            
+            {/* Tile 1: Upcoming Tasks - 5 Tasks */}
+            <div className="ud-card ud-upcoming-panel">
+              <div className="ud-card-header">
+                <span className="ud-card-title">Upcoming Tasks</span>
+                <button className="ud-view-all-btn" onClick={() => navigate("/my-tasks", { state: { selectedStatus: "Upcoming" } })}>
+                  View All <ArrowUpRight size={14} />
+                </button>
+              </div>
+              <div className="ud-upcoming-list">
+                {displayedUpcoming && displayedUpcoming.length > 0 ? (
+                  displayedUpcoming.map((task, index) => (
+                    <div className="ud-upcoming-item" key={task.id || index} onClick={() => navigate("/my-tasks", { state: { selectedStatus: "Upcoming" } })} style={{ cursor: 'pointer' }}>
+                      <div className="ud-upcoming-date">
+                        <span className="ud-upcoming-day">
+                          {task.startDate ? new Date(task.startDate).getDate() : '--'}
+                        </span>
+                        <span className="ud-upcoming-month">
+                          {task.startDate ? new Date(task.startDate).toLocaleString('en', { month: 'short' }) : 'N/A'}
+                        </span>
+                      </div>
+                      <div className="ud-upcoming-info">
+                        <div className="ud-upcoming-name">{task.name || 'Task'}</div>
+                        <div className="ud-upcoming-project-name">{task.project || 'Project'}</div>
+                        <div className="ud-upcoming-code">
+                          <Hash size={10} />
+                          {task.code || 'TSK-001'}
+                        </div>
+                      </div>
+                      <div className="ud-upcoming-status">
+                        <span className="ud-status-badge-small" style={{ backgroundColor: getStatusColor(task.status) }}>
+                          {getStatusLabel(task.status)}
+                        </span>
+                      </div>
+                      <div className="ud-upcoming-employees">
+                        {task.employees && task.employees.length > 0 ? (
+                          <>
+                            {task.employees.slice(0, 2).map((emp, i) => (
+                              <span key={i} className="ud-avatar-tiny" title={emp.name || emp}>
+                                {emp.photoUrl ? (
+                                  <img src={emp.photoUrl} alt={emp.name || emp} />
+                                ) : (
+                                  getInitials(emp.name || emp)
+                                )}
+                              </span>
+                            ))}
+                            {task.employees.length > 2 && (
+                              <span className="ud-avatar-tiny-more">+{task.employees.length - 2}</span>
+                            )}
+                          </>
                         ) : (
-                          <div className="ud-project-logo-fallback">
-                            <FolderKanban size={16} />
-                          </div>
+                          <span className="ud-no-employees-tiny">—</span>
                         )}
-                        <div className="ud-project-info">
-                          <div className="ud-project-name">{project.name || 'Project'}</div>
-                          <div className="ud-project-meta">
-                            <span className="ud-project-status" style={{ color: getStatusColor(project.status) }}>
-                              {project.status || 'Active'}
-                            </span>
-                            <span className="ud-project-employees">
-                              <Users size={12} /> {project.employees || 0}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="ud-project-progress">
-                          {project.progress !== undefined && (
-                            <>
-                              <div className="ud-progress-ring">
-                                <svg viewBox="0 0 36 36" className="ud-ring-svg">
-                                  <circle cx="18" cy="18" r="15.9" fill="none" stroke="#e2e8f0" strokeWidth="3" />
-                                  <circle 
-                                    cx="18" cy="18" r="15.9" fill="none" 
-                                    stroke={getStatusColor(project.status)}
-                                    strokeWidth="3"
-                                    strokeDasharray={`${project.progress * 1.0} 100`}
-                                    strokeDashoffset="0"
-                                    strokeLinecap="round"
-                                    transform="rotate(-90 18 18)"
-                                  />
-                                </svg>
-                                <span className="ud-ring-value">{project.progress}%</span>
-                              </div>
-                              {project.quality && (
-                                <span className="ud-project-quality">{project.quality}</span>
-                              )}
-                            </>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="ud-empty-state">
+                    <Calendar size={28} />
+                    <strong>No upcoming tasks</strong>
+                    <span>Your schedule is clear.</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Tile 2: My Active Projects - 3 Projects */}
+            <div className="ud-card ud-projects-panel">
+              <div className="ud-card-header">
+                <span className="ud-card-title">My Active Projects</span>
+                <button className="ud-view-all-btn" onClick={() => navigate("/projects")}>
+                  View All <ArrowUpRight size={14} />
+                </button>
+              </div>
+              <div className="ud-projects-list">
+                {projects && projects.length > 0 ? (
+                  projects.slice(0, 3).map((project, index) => {
+                    let progressValue = project.progress || 0;
+                    if (progressValue > 0 && progressValue <= 1) {
+                      progressValue = progressValue * 100;
+                    }
+                    progressValue = Math.min(100, Math.max(0, progressValue));
+                    
+                    const progressColor = progressValue >= 80 ? '#16a34a' : 
+                                         progressValue >= 50 ? '#f59e0b' : 
+                                         progressValue >= 30 ? '#ea580c' : '#ef4444';
+                    
+                    return (
+                      <div className="ud-project-card" key={project.id || index} onClick={() => handleProjectClick(project)}>
+                        <div className="ud-project-card-left">
+                          {project.logo ? (
+                            <img src={project.logo} alt={project.name} className="ud-project-card-logo" />
+                          ) : (
+                            <div className="ud-project-card-logo-fallback">
+                              <FolderKanban size={20} />
+                            </div>
                           )}
+                          <div className="ud-project-card-info">
+                            <div className="ud-project-card-name">{project.name || 'Project'}</div>
+                            <div className="ud-project-card-meta">
+                              <span className="ud-project-card-status" style={{ color: getStatusColor(project.status) }}>
+                                {project.status || 'Active'}
+                              </span>
+                              <span className="ud-project-card-employees">
+                                <Users size={12} /> {project.employees || 0}
+                              </span>
+                              {project.quality && (
+                                <span className="ud-project-card-quality">{project.quality}</span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="ud-project-card-right">
+                          <div className="ud-project-card-progress">
+                            <div className="ud-project-card-progress-ring">
+                              <svg viewBox="0 0 44 44" className="ud-card-ring-svg">
+                                <circle cx="22" cy="22" r="19" fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                                <circle 
+                                  cx="22" cy="22" r="19" fill="none" 
+                                  stroke={progressColor}
+                                  strokeWidth="4"
+                                  strokeDasharray={`${Math.min(progressValue, 100)} ${Math.max(100 - progressValue, 0)}`}
+                                  strokeDashoffset="0"
+                                  strokeLinecap="round"
+                                  transform="rotate(-90 22 22)"
+                                />
+                              </svg>
+                              <span className="ud-card-ring-value">{Math.round(progressValue)}%</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
-                    ))
-                  ) : (
-                    <div className="ud-empty-state">
-                      <FolderKanban size={28} />
-                      <strong>No projects</strong>
-                      <span>You are not assigned to any projects yet.</span>
-                    </div>
-                  )}
-                </div>
+                    );
+                  })
+                ) : (
+                  <div className="ud-empty-state">
+                    <FolderKanban size={28} />
+                    <strong>No projects</strong>
+                    <span>You are not assigned to any projects yet.</span>
+                  </div>
+                )}
               </div>
             </div>
-          </div>
 
-          {/* ==========================================================
-              ROW 4: 3 TILES - Task Progress (Pie), Recent Activity, My Performance
-          ========================================================== */}
-          <div className="ud-row ud-row-analytics">
-            <div className="ud-analytics-grid">
-              
-              {/* Tile 1: Task Progress (Pie Chart) */}
-              <div className="ud-panel ud-progress-pie-panel">
-                <div className="ud-panel-header">
-                  <h3>Task Progress</h3>
-                  <span className="ud-total-tasks-badge">Total: {totalTasks}</span>
-                </div>
-                <div className="ud-pie-content">
-                  <PieChartComponent data={pieData} />
+            {/* Tile 3: My Performance */}
+            <div className="ud-card ud-performance-panel">
+              <div className="ud-card-header">
+                <span className="ud-card-title">My Performance</span>
+                <div className="ud-performance-rating">
+                  {renderStars(performanceData.qualityScore || 0)}
+                  <span className="ud-rating-text">{performanceData.qualityScore || 0}</span>
                 </div>
               </div>
-
-              {/* Tile 2: Recent Activity */}
-              <div className="ud-panel ud-activity-panel">
-                <div className="ud-panel-header">
-                  <h3>Recent Activity</h3>
-                  <button className="ud-view-all-btn" onClick={() => navigate("/activity")}>
-                    View All <ArrowUpRight size={14} />
-                  </button>
-                </div>
-                <div className="ud-activity-list">
-                  {recentActivities && recentActivities.length > 0 ? (
-                    recentActivities.slice(0, 5).map((activity, index) => (
-                      <div className="ud-activity-item" key={activity.id || index}>
-                        <div className="ud-activity-icon-wrapper">
-                          <div className={`ud-activity-icon ${activity.type || 'default'}`}>
-                            {activity.type === 'task' ? <CheckCircle2 size={14} /> :
-                             activity.type === 'project' ? <FolderKanban size={14} /> :
-                             activity.type === 'submission' ? <FileText size={14} /> :
-                             <MessageSquare size={14} />}
-                          </div>
-                          {index < recentActivities.length - 1 && <span className="ud-activity-timeline-line" />}
-                        </div>
-                        <div className="ud-activity-content">
-                          <div className="ud-activity-action">{activity.action}</div>
-                          <div className="ud-activity-meta">
-                            <span className="ud-activity-user">{activity.user}</span>
-                            <span className="ud-activity-time">{activity.time}</span>
-                          </div>
-                        </div>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="ud-empty-state">
-                      <Activity size={28} />
-                      <strong>No recent activity</strong>
-                      <span>Your recent actions will appear here.</span>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Tile 3: My Performance */}
-              <div className="ud-panel ud-performance-panel">
-                <div className="ud-panel-header">
-                  <h3>My Performance</h3>
-                  <div className="ud-performance-rating">
-                    {renderStars(performanceData.qualityScore || 5.0)}
-                    <span className="ud-rating-text">{performanceData.qualityScore || 5.0}</span>
-                  </div>
-                </div>
-                <div className="ud-performance-content">
-                  <div className="ud-performance-stats">
-                    <div className="ud-performance-stat">
-                      <div className="ud-stat-icon green"><CheckCircle2 size={18} /></div>
-                      <div className="ud-stat-info">
-                        <span className="ud-stat-value">{performanceData.tasksCompleted || 0}</span>
-                        <span className="ud-stat-label">Tasks Completed</span>
-                      </div>
-                    </div>
-                    <div className="ud-performance-stat">
-                      <div className="ud-stat-icon blue"><Activity size={18} /></div>
-                      <div className="ud-stat-info">
-                        <span className="ud-stat-value">{performanceData.tasksInProgress || 0}</span>
-                        <span className="ud-stat-label">In Progress</span>
-                      </div>
-                    </div>
-                    <div className="ud-performance-stat">
-                      <div className="ud-stat-icon red"><AlertTriangle size={18} /></div>
-                      <div className="ud-stat-info">
-                        <span className="ud-stat-value">{performanceData.tasksOverdue || 0}</span>
-                        <span className="ud-stat-label">Overdue</span>
-                      </div>
+              <div className="ud-performance-content">
+                <div className="ud-performance-stats">
+                  <div className="ud-performance-stat">
+                    <div className="ud-stat-icon green"><CheckCircle2 size={18} /></div>
+                    <div className="ud-stat-info">
+                      <span className="ud-stat-value">{performanceData.tasksCompleted || 0}</span>
+                      <span className="ud-stat-label">Closed</span>
                     </div>
                   </div>
-                  
-                  <div className="ud-performance-metrics">
-                    <div className="ud-metric-item">
-                      <div className="ud-metric-header">
-                        <span className="ud-metric-label">Efficiency</span>
-                        <span className="ud-metric-value">{performanceData.efficiency || 100}%</span>
-                      </div>
-                      <div className="ud-metric-bar">
-                        <div className="ud-metric-fill" style={{ width: `${performanceData.efficiency || 100}%`, background: '#3b82f6' }} />
-                      </div>
+                  <div className="ud-performance-stat">
+                    <div className="ud-stat-icon blue"><Activity size={18} /></div>
+                    <div className="ud-stat-info">
+                      <span className="ud-stat-value">{performanceData.tasksInProgress || 0}</span>
+                      <span className="ud-stat-label">In Progress</span>
                     </div>
-                    <div className="ud-metric-item">
-                      <div className="ud-metric-header">
-                        <span className="ud-metric-label">On-Time Delivery</span>
-                        <span className="ud-metric-value">{performanceData.onTimeDelivery || 100}%</span>
-                      </div>
-                      <div className="ud-metric-bar">
-                        <div className="ud-metric-fill" style={{ width: `${performanceData.onTimeDelivery || 100}%`, background: '#16a34a' }} />
-                      </div>
+                  </div>
+                  <div className="ud-performance-stat">
+                    <div className="ud-stat-icon red"><AlertTriangle size={18} /></div>
+                    <div className="ud-stat-info">
+                      <span className="ud-stat-value">{performanceData.tasksOverdue || 0}</span>
+                      <span className="ud-stat-label">Overdue</span>
                     </div>
-                    <div className="ud-metric-item">
-                      <div className="ud-metric-header">
-                        <span className="ud-metric-label">Quality Score</span>
-                        <span className="ud-metric-value">{performanceData.qualityScore || 5.0}/5</span>
-                      </div>
-                      <div className="ud-metric-bar">
-                        <div className="ud-metric-fill" style={{ width: `${(performanceData.qualityScore || 5.0) / 5 * 100}%`, background: '#8b5cf6' }} />
-                      </div>
+                  </div>
+                </div>
+                
+                <div className="ud-performance-metrics">
+                  <div className="ud-metric-item">
+                    <div className="ud-metric-header">
+                      <span className="ud-metric-label">Efficiency</span>
+                      <span className="ud-metric-value">{performanceData.efficiency || 0}%</span>
+                    </div>
+                    <div className="ud-metric-bar">
+                      <div className="ud-metric-fill" style={{ width: `${Math.min(performanceData.efficiency || 0, 100)}%`, background: '#3b82f6' }} />
+                    </div>
+                  </div>
+                  <div className="ud-metric-item">
+                    <div className="ud-metric-header">
+                      <span className="ud-metric-label">On-Time Delivery</span>
+                      <span className="ud-metric-value">{performanceData.onTimeDelivery || 0}%</span>
+                    </div>
+                    <div className="ud-metric-bar">
+                      <div className="ud-metric-fill" style={{ width: `${Math.min(performanceData.onTimeDelivery || 0, 100)}%`, background: '#16a34a' }} />
+                    </div>
+                  </div>
+                  <div className="ud-metric-item">
+                    <div className="ud-metric-header">
+                      <span className="ud-metric-label">Quality Score</span>
+                      <span className="ud-metric-value">{performanceData.qualityScore || 0}/5</span>
+                    </div>
+                    <div className="ud-metric-bar">
+                      <div className="ud-metric-fill" style={{ 
+                        width: `${Math.min(((performanceData.qualityScore || 0) / 5) * 100, 100)}%`, 
+                        background: '#8b5cf6' 
+                      }} />
                     </div>
                   </div>
                 </div>
@@ -1084,38 +1472,25 @@ const UserDashboard = ({ userRole, onLogout }) => {
           </div>
 
           {/* ==========================================================
-              ROW 5: QUICK ACTIONS
+              ROW 4: QUICK ACTIONS
           ========================================================== */}
-          <div className="ud-row ud-row-actions">
-            <div className="ud-quick-actions">
-              <h4>Quick Actions</h4>
-              <div className="ud-actions-grid">
-                <button className="ud-action-btn" onClick={() => navigate("/my-tasks")}>
-                  <ListTodo size={20} />
-                  <span>My Tasks</span>
-                  <small>View all tasks</small>
-                </button>
-                <button className="ud-action-btn" onClick={() => navigate("/projects")}>
-                  <FolderKanban size={20} />
-                  <span>My Projects</span>
-                  <small>View all projects</small>
-                </button>
-                <button className="ud-action-btn" onClick={() => navigate("/calendar")}>
-                  <CalendarDays size={20} />
-                  <span>Calendar</span>
-                  <small>View calendar</small>
-                </button>
-                <button className="ud-action-btn" onClick={() => navigate("/all-project-gantt-chart")}>
-                  <BarChart3 size={20} />
-                  <span>Gantt View</span>
-                  <small>View Gantt chart</small>
-                </button>
-                <button className="ud-action-btn primary" onClick={() => navigate("/tasks/create")}>
-                  <Plus size={20} />
-                  <span>Assign Task</span>
-                  <small>Assign new task</small>
-                </button>
-              </div>
+          <div className="ud-card ud-quick-actions-card">
+            <div className="ud-card-header">
+              <span className="ud-card-title">Quick Actions</span>
+            </div>
+            <div className="ud-quick-grid">
+              <button className="ud-action-btn ud-action-blue" onClick={() => navigate("/my-tasks")}>
+                <ListTodo size={18}/> My Tasks
+              </button>
+              <button className="ud-action-btn ud-action-green" onClick={() => navigate("/projects")}>
+                <FolderKanban size={18}/> My Projects
+              </button>
+              <button className="ud-action-btn ud-action-purple" onClick={() => navigate("/calendar")}>
+                <CalendarDays size={18}/> Calendar
+              </button>
+              <button className="ud-action-btn ud-action-orange" onClick={() => navigate("/assignment")}>
+                <Plus size={18}/> Assign Task
+              </button>
             </div>
           </div>
 
@@ -1140,6 +1515,10 @@ const UserDashboard = ({ userRole, onLogout }) => {
                 <span className="ud-detail-value">{selectedTask.name || 'Task'}</span>
               </div>
               <div className="ud-detail-row">
+                <span className="ud-detail-label">Task Code</span>
+                <span className="ud-detail-value">{selectedTask.code || 'TSK-001'}</span>
+              </div>
+              <div className="ud-detail-row">
                 <span className="ud-detail-label">Project</span>
                 <span className="ud-detail-value">{selectedTask.project || 'Project'}</span>
               </div>
@@ -1149,20 +1528,20 @@ const UserDashboard = ({ userRole, onLogout }) => {
               </div>
               <div className="ud-detail-row">
                 <span className="ud-detail-label">Status</span>
-                <span className="ud-status-badge" style={{ backgroundColor: getStatusColor(selectedTask.status) }}>
-                  {getStatusLabel(selectedTask.status)}
-                </span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', alignItems: 'flex-start' }}>
+                  <span className="ud-status-badge" style={{ backgroundColor: getStatusColor(selectedTask.status) }}>
+                    {getStatusLabel(selectedTask.status)}
+                  </span>
+                  <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center' }}>
+                    {getProcessStatusBadge(selectedTask.processStatus)}
+                    {getTimeStatusBadge(selectedTask.timeStatus, selectedTask.isOverdue)}
+                  </div>
+                </div>
               </div>
               <div className="ud-detail-row">
                 <span className="ud-detail-label">Due Date</span>
                 <span className={`ud-detail-value ${selectedTask.isOverdue ? 'ud-date-overdue' : ''}`}>
                   {formatDate(selectedTask.endDate)}
-                </span>
-              </div>
-              <div className="ud-detail-row">
-                <span className="ud-detail-label">Priority</span>
-                <span className={`ud-priority-badge ${(selectedTask.priority || 'medium').toLowerCase()}`}>
-                  {selectedTask.priority || 'Medium'}
                 </span>
               </div>
               {selectedTask.description && (
@@ -1173,7 +1552,7 @@ const UserDashboard = ({ userRole, onLogout }) => {
               )}
             </div>
             <div className="ud-modal-footer">
-              {(selectedTask.status === "OPEN" || selectedTask.status === "PENDING" || selectedTask.status === "NOT_STARTED") && (
+              {!selectedTask.isUpcoming && selectedTask.status !== "UPCOMING" && selectedTask.status !== "Upcoming" && (selectedTask.status === "OPEN" || selectedTask.status === "PENDING" || selectedTask.status === "NOT_STARTED") && (
                 <button 
                   className="ud-btn-primary" 
                   onClick={() => { 

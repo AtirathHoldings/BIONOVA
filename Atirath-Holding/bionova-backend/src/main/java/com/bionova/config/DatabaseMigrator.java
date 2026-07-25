@@ -103,76 +103,7 @@ public class DatabaseMigrator implements InitializingBean {
 
             System.out.println("task_status_master initialized with 5 statuses.");
 
-            // Update some tasks for emp_id = 5 to cover various scenarios
-            try {
-                System.out.println("Updating select tasks of emp_id = 5 for scenario demonstration...");
-                
-                // Get task_ids for emp_id = 5
-                List<Long> taskIds = new ArrayList<>();
-                try (ResultSet rs = stmt.executeQuery("SELECT task_id FROM task_live_master WHERE emp_id = 5 ORDER BY task_id")) {
-                    while (rs.next()) {
-                        taskIds.add(rs.getLong("task_id"));
-                    }
-                }
-                
-                // Set various scenarios on task_live_master
-                if (taskIds.size() > 0) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 1, sub_status = NULL WHERE task_id = " + taskIds.get(0)); // Draft
-                }
-                if (taskIds.size() > 1) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 2, sub_status = NULL WHERE task_id = " + taskIds.get(1)); // Open
-                }
-                if (taskIds.size() > 2) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 2, sub_status = 'Overdue' WHERE task_id = " + taskIds.get(2)); // Open (Overdue)
-                }
-                if (taskIds.size() > 3) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = 'Under Review' WHERE task_id = " + taskIds.get(3)); // WIP (Under Review)
-                }
-                if (taskIds.size() > 4) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = 'Reassign' WHERE task_id = " + taskIds.get(4)); // WIP (Reassign)
-                }
-                if (taskIds.size() > 5) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = 'Rework' WHERE task_id = " + taskIds.get(5)); // WIP (Rework)
-                }
-                if (taskIds.size() > 6) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = 'Overdue' WHERE task_id = " + taskIds.get(6)); // WIP (Overdue)
-                }
-                if (taskIds.size() > 7) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 3, sub_status = NULL WHERE task_id = " + taskIds.get(7)); // WIP
-                }
-                if (taskIds.size() > 8) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 4, sub_status = 'Lead' WHERE task_id = " + taskIds.get(8)); // Completed (Lead)
-                }
-                if (taskIds.size() > 9) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 4, sub_status = 'On Time' WHERE task_id = " + taskIds.get(9)); // Completed (On Time)
-                }
-                if (taskIds.size() > 10) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 4, sub_status = 'Lag' WHERE task_id = " + taskIds.get(10)); // Completed (Lag)
-                }
-                if (taskIds.size() > 11) {
-                    stmt.execute("UPDATE task_live_master SET task_sts = 5, sub_status = NULL WHERE task_id = " + taskIds.get(11)); // Hold
-                }
-                
-                // Get individual task_ids for emp_id = 5
-                List<Long> individualTaskIds = new ArrayList<>();
-                try (ResultSet rs = stmt.executeQuery("SELECT emp_task_id FROM employee_individual_task_master WHERE emp_id = 5 ORDER BY emp_task_id")) {
-                    while (rs.next()) {
-                        individualTaskIds.add(rs.getLong("emp_task_id"));
-                    }
-                }
-                
-                // Set some scenarios on employee_individual_task_master
-                if (individualTaskIds.size() > 0) {
-                    stmt.execute("UPDATE employee_individual_task_master SET task_sts = 3, sub_status = 'Rework' WHERE emp_task_id = " + individualTaskIds.get(0));
-                }
-                if (individualTaskIds.size() > 1) {
-                    stmt.execute("UPDATE employee_individual_task_master SET task_sts = 4, sub_status = 'On Time' WHERE emp_task_id = " + individualTaskIds.get(1));
-                }
-                
-                System.out.println("Demo tasks updated successfully for emp_id = 5.");
-            } catch (Exception ex) {
-                System.err.println("Could not update demo tasks for emp_id = 5: " + ex.getMessage());
-            }
+
 
             // 1c. Ensure screen_master has screen_code column and populate it
             // This is critical for RBAC enforcement — RbacGuardFilter maps

@@ -104,6 +104,8 @@ public class ChecklistController {
                     .body(Map.of("message", "Request body must be a non-empty list."));
         }
 
+        checklistRepo.deleteByTaskId(taskId);
+
         List<ChecklistMaster> saved = new ArrayList<>();
         int seq = 1;
         for (ChecklistMaster item : items) {
@@ -130,6 +132,8 @@ public class ChecklistController {
             return ResponseEntity.badRequest()
                     .body(Map.of("message", "Request body must be a non-empty list."));
         }
+
+        checklistRepo.deleteByEmpTaskId(empTaskId);
 
         List<ChecklistMaster> saved = new ArrayList<>();
         int seq = 1;
@@ -194,6 +198,8 @@ public class ChecklistController {
             return ResponseEntity.badRequest()
                     .body(Map.of("message", "Request body must be a non-empty list."));
         }
+
+        checklistRepo.deleteByTaskId(taskId);
 
         List<ChecklistMaster> saved = new ArrayList<>();
         int seq = 1;

@@ -28,12 +28,16 @@ import {
   Briefcase,
   Upload,
   CheckCircle2,
-  FileText
+  AlertCircle,
+  FileText,
+  CheckSquare
 } from "lucide-react";
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
 import AlertModal from "../AlertModal.jsx";
 import "../../styles/EmployeeMaster.css";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
@@ -140,19 +144,84 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
   );
 };
 
+const MaskedDateInput = React.forwardRef(({ value, onClick, onChange, placeholder, style, className }, ref) => {
+  const [localValue, setLocalValue] = React.useState(value || "");
+
+  React.useEffect(() => {
+    if (value === "" && localValue.length > 0 && localValue.length < 10) return;
+    setLocalValue(value || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const handleChange = (e) => {
+    let input = e.target.value.replace(/\D/g, ""); 
+    if (input.length > 8) input = input.slice(0, 8); 
+
+    let formatted = input;
+    if (input.length >= 5) {
+      formatted = `${input.slice(0, 2)}/${input.slice(2, 4)}/${input.slice(4)}`;
+    } else if (input.length >= 3) {
+      formatted = `${input.slice(0, 2)}/${input.slice(2)}`;
+    }
+
+    setLocalValue(formatted);
+    if (onChange) {
+      if (formatted.length === 10) { e.target.value = formatted; onChange(e); }
+      else { e.target.value = ""; onChange(e); }
+    }
+  };
+
+  const handleBlur = () => {
+    if (localValue.length > 0 && localValue.length < 10) {
+      setLocalValue("");
+      if (onChange) onChange({ target: { value: "" } });
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      ref={ref}
+      value={localValue}
+      onClick={onClick}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      style={style}
+      className={className}
+      maxLength="10"
+    />
+  );
+});
+MaskedDateInput.displayName = 'MaskedDateInput';
+
 const EmployeeCreation = ({ userRole, onLogout }) => {
   // API States
   const [employees, setEmployees] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [plants, setPlants] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Views & UI States
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
   const [isViewing, setIsViewing] = useState(false);
   const [editId, setEditId] = useState(null);
+  const [assignments, setAssignments] = useState([]);
+  const [liveTasks, setLiveTasks] = useState([]);
+  const [activeOverviewTab, setActiveOverviewTab] = useState(null);
+
+  useEffect(() => {
+    fetch(`${apiBaseUrl}/api/assignments`, { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setAssignments(data))
+      .catch(err => console.error("Error fetching assignments:", err));
+    fetch(`${apiBaseUrl}/api/task-live`, { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setLiveTasks(data))
+      .catch(err => console.error("Error fetching live tasks:", err));
+  }, []);
   const [photo, setPhoto] = useState(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
@@ -182,6 +251,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
   // Designation Modal State
   const [showDesigModal, setShowDesigModal] = useState(false);
+  const [isEditingDesig, setIsEditingDesig] = useState(false);
+  const [editingDesigId, setEditingDesigId] = useState(null);
   const [desigForm, setDesigForm] = useState({
     code: "",
     name: "",
@@ -218,6 +289,36 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     employmentType: "",
     role: "user"
   });
+
+  const generateEmployeeCode = (empList = employees) => {
+    let maxNum = 0;
+    if (Array.isArray(empList)) {
+      empList.forEach(e => {
+        const code = e.empCode || e.employeeCode || "";
+        const match = code.match(/^EMP-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+    }
+    return `EMP-${String(maxNum + 1).padStart(3, '0')}`;
+  };
+
+  const generateDesignationCode = (dList = designations) => {
+    let maxNum = 0;
+    if (Array.isArray(dList)) {
+      dList.forEach(d => {
+        const code = d.desigCd || d.code || d.designationCode || "";
+        const match = code.match(/^DESG-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+    }
+    return `DESG-${String(maxNum + 1).padStart(3, '0')}`;
+  };
 
   const fetchAllData = async () => {
     setLoading(true);
@@ -299,10 +400,16 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
             employmentType: displayEmpTyp,
             designation: resolvedDesignation,
             reportingManager: repManagerName,
-            workingFor: emp.pltId ? "plant" : "company"  // <-- NEW: determine workingFor
+            workingFor: emp.pltId ? "plant" : "company"
           };
         });
         setEmployees(mappedEmps);
+        setForm(prev => {
+          if (!prev.employeeCode || /^EMP-\d+$/i.test(prev.employeeCode)) {
+            return { ...prev, employeeCode: generateEmployeeCode(mappedEmps) };
+          }
+          return prev;
+        });
       }
 
       setCompanies(coyData);
@@ -377,6 +484,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
     // Check if user clicked "+ Create Designation"
     if (name === "designation" && value === "CREATE_NEW") {
+      setDesigForm({ code: generateDesignationCode(designations), name: "", description: "" });
       setShowDesigModal(true);
       setForm((prev) => ({ ...prev, designation: "" }));
       return;
@@ -512,7 +620,49 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     setDesigForm((prev) => ({ ...prev, [name]: value }));
   };
 
-  // Save New Designation from Modal
+  const handleEditDesignation = () => {
+    const selectedDesig = designations.find(d => d.desigNm === form.designation);
+    if (selectedDesig) {
+      setDesigForm({
+        code: selectedDesig.desigCd || "",
+        name: selectedDesig.desigNm || "",
+        description: selectedDesig.desigDesc || ""
+      });
+      setIsEditingDesig(true);
+      setEditingDesigId(selectedDesig.desigId);
+      setShowDesigModal(true);
+    }
+  };
+
+  const handleDeleteDesignation = async () => {
+    const selectedDesig = designations.find(d => d.desigNm === form.designation);
+    if (!selectedDesig) return;
+
+    if (window.confirm(`Are you sure you want to delete designation "${selectedDesig.desigNm}"?`)) {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/designations/${selectedDesig.desigId}`, {
+          method: "DELETE",
+          headers: getAuthHeaders(),
+        });
+
+        if (response.ok) {
+          triggerAlert("success", "Deleted", "Designation deleted successfully!");
+          setForm(prev => ({ ...prev, designation: "" }));
+          const desigRes = await fetch(`${apiBaseUrl}/api/designations`, { headers: getAuthHeaders() });
+          if (desigRes.ok) {
+            setDesignations(await desigRes.json());
+          }
+        } else {
+          triggerAlert("error", "Error", "Failed to delete designation.");
+        }
+      } catch (err) {
+        console.error("Error deleting designation:", err);
+        triggerAlert("error", "Error", "Server error occurred.");
+      }
+    }
+  };
+
+  // Save New or Edit Designation from Modal
   const handleSaveNewDesignation = async () => {
     if (!desigForm.code.trim() || !desigForm.name.trim()) {
       triggerAlert("error", "Validation Error", "Designation code and name are required.");
@@ -524,19 +674,22 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       desigNm: desigForm.name.trim(),
       desigDesc: desigForm.description.trim()
     };
-
     try {
-      const response = await fetch(`${apiBaseUrl}/api/designations`, {
-        method: "POST",
+      const url = isEditingDesig ? `${apiBaseUrl}/api/designations/${editingDesigId}` : `${apiBaseUrl}/api/designations`;
+      const method = isEditingDesig ? "PUT" : "POST";
+      const response = await fetch(url, {
+        method: method,
         headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
+        body: JSON.stringify(payload),
       });
 
       if (response.ok) {
         const newDesig = await response.json();
-        triggerAlert("success", "Success", "Designation created successfully!");
+        triggerAlert("success", "Success", isEditingDesig ? "Designation updated successfully!" : "Designation created successfully!");
         setDesigForm({ code: "", name: "", description: "" });
         setShowDesigModal(false);
+        setIsEditingDesig(false);
+        setEditingDesigId(null);
         const desigRes = await fetch(`${apiBaseUrl}/api/designations`, { headers: getAuthHeaders() });
         if (desigRes.ok) {
           setDesignations(await desigRes.json());
@@ -592,9 +745,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   };
 
   // Reset Employee Form
-  const handleReset = () => {
+  const handleReset = (empList = employees) => {
     setForm({
-      employeeCode: "",
+      employeeCode: generateEmployeeCode(empList),
       firstName: "",
       lastName: "",
       gender: "",
@@ -769,6 +922,12 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
     if (form.workLocation.length > 100) {
       triggerAlert("error", "Validation Error", "Work Location cannot exceed 100 characters.");
+      return;
+    }
+
+    // 16. Reporting Manager check
+    if (!form.reportingManager) {
+      triggerAlert("error", "Validation Error", "Reporting Manager is required.");
       return;
     }
 
@@ -1146,7 +1305,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 <div style={{ padding: '24px' }}>
                 {isViewing ? (
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
-                    {/* Photo Row (Optional: Only if photo exists) */}
+                    {/* Photo Row & Header */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: '24px', marginBottom: '32px' }}>
                       <div style={{ width: '80px', height: '80px', borderRadius: '50%', backgroundColor: '#f1f5f9', overflow: 'hidden', border: '1px solid #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         {form.photoPath || photo ? (
@@ -1173,7 +1332,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Date of Birth</span>
-                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.dateOfBirth || '-'}</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.dateOfBirth ? form.dateOfBirth.split('T')[0].split('-').reverse().join('/') : '-'}</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Email</span>
@@ -1197,7 +1356,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', columnGap: '40px', rowGap: '16px', marginBottom: '32px' }}>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Joining Date</span>
-                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.joiningDate || '-'}</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.joiningDate ? form.joiningDate.split('T')[0].split('-').reverse().join('/') : '-'}</span>
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Designation</span>
@@ -1298,7 +1457,25 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Date of Birth <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Calendar size={16} /></span>
-                          <input type="date" name="dateOfBirth" value={form.dateOfBirth} onChange={handleChange} max={new Date().toISOString().split('T')[0]} required />
+                          <DatePicker
+                            selected={form.dateOfBirth ? new Date(form.dateOfBirth) : null}
+                            onChange={(date) => {
+                              if (date) {
+                                const offset = date.getTimezoneOffset();
+                                const adjustedDate = new Date(date.getTime() - (offset * 60 * 1000));
+                                const dateString = adjustedDate.toISOString().split('T')[0];
+                                handleChange({ target: { name: 'dateOfBirth', value: dateString } });
+                              } else {
+                                handleChange({ target: { name: 'dateOfBirth', value: '' } });
+                              }
+                            }}
+                            dateFormat="dd/MM/yyyy"
+                            placeholderText="DD/MM/YYYY"
+                            customInput={<MaskedDateInput />}
+                            showMonthDropdown
+                            showYearDropdown
+                            dropdownMode="select"
+                          />
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -1388,25 +1565,55 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Joining Date <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Calendar size={16} /></span>
-                          <input type="date" name="joiningDate" value={form.joiningDate} onChange={handleChange} max={new Date().toISOString().split('T')[0]} required />
+                          <DatePicker
+                            selected={form.joiningDate ? new Date(form.joiningDate) : null}
+                            onChange={(date) => {
+                              if (date) {
+                                const offset = date.getTimezoneOffset();
+                                const adjustedDate = new Date(date.getTime() - (offset * 60 * 1000));
+                                const dateString = adjustedDate.toISOString().split('T')[0];
+                                handleChange({ target: { name: 'joiningDate', value: dateString } });
+                              } else {
+                                handleChange({ target: { name: 'joiningDate', value: '' } });
+                              }
+                            }}
+                            dateFormat="dd/MM/yyyy"
+                            placeholderText="DD/MM/YYYY"
+                            customInput={<MaskedDateInput />}
+                            showMonthDropdown
+                            showYearDropdown
+                            dropdownMode="select"
+                          />
                         </div>
                       </div>
                       <div className="emp-form-item">
                         <label>Designation <span className="emp-req-star">*</span></label>
-                        <div className="emp-input-icon-wrap">
-                          <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
-                          <SearchableSelect 
-                            name="designation" 
-                            value={form.designation} 
-                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })} 
-                            placeholder="Select designation"
-                            bottomFixedOption={{ value: "CREATE_NEW", label: "+ Create Designation" }}
-                            options={[
-                              ...[...new Set([...designations.map(d => d.desigNm).filter(Boolean), ...employees.map(emp => emp.designation).filter(Boolean)])]
-                                .map(d => ({ value: d, label: d }))
-                                .sort((a, b) => a.label.localeCompare(b.label))
-                            ]}
-                          />
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                          <div className="emp-input-icon-wrap" style={{ flex: 1, margin: 0 }}>
+                            <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
+                            <SearchableSelect 
+                              name="designation" 
+                              value={form.designation} 
+                              onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })} 
+                              placeholder="Select designation"
+                              bottomFixedOption={{ value: "CREATE_NEW", label: "+ Create Designation" }}
+                              options={[
+                                ...[...new Set([...designations.map(d => d.desigNm).filter(Boolean), ...employees.map(emp => emp.designation).filter(Boolean)])]
+                                  .map(d => ({ value: d, label: d }))
+                                  .sort((a, b) => a.label.localeCompare(b.label))
+                              ]}
+                            />
+                          </div>
+                          {form.designation && designations.some(d => d.desigNm === form.designation) && (
+                            <div style={{ display: 'flex', gap: '4px' }}>
+                              <button type="button" onClick={handleEditDesignation} style={{ padding: '6px', background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: '4px', cursor: 'pointer', color: '#2563eb', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Edit Designation">
+                                <Edit size={16} />
+                              </button>
+                              <button type="button" onClick={handleDeleteDesignation} style={{ padding: '6px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '4px', cursor: 'pointer', color: '#dc2626', display: 'flex', alignItems: 'center', justifyContent: 'center' }} title="Delete Designation">
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          )}
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -1526,7 +1733,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
                     <div className="emp-form-row-4" style={{ marginTop: '16px' }}>
                       <div className="emp-form-item">
-                        <label>Reporting Manager</label>
+                        <label>Reporting Manager <b style={{ color: '#ef4444' }}>*</b></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
                           <SearchableSelect
@@ -1634,8 +1841,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 {/* Form Footer Buttons */}
                 {!isViewing && (
                 <div className="emp-form-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#fafbfc', borderTop: '1px solid #e2e8f0' }}>
-                  <button type="button" className="emp-btn primary" onClick={handleSave}>
-                    <Save size={14} /> {isEditing ? "Update Employee" : "Save Employee"}
+                  <button type="button" className="emp-btn primary" onClick={handleSave} disabled={loading} style={loading ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>
+                    <Save size={14} /> {loading ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update Employee" : "Save Employee")}
                   </button>
                   <button type="button" className="emp-btn secondary" onClick={() => { setView("list"); handleReset(); setIsEditing(false); setIsViewing(false); setEditId(null); }}>
                     Cancel
@@ -1696,7 +1903,16 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredEmployees.length === 0 ? (
+                      {loading ? (
+                        <tr>
+                          <td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                              <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
+                              Loading employees...
+                            </div>
+                          </td>
+                        </tr>
+                      ) : filteredEmployees.length === 0 ? (
                         <tr><td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No employee records found. Add a new employee using the button above.</td></tr>
                       ) : (
                         filteredEmployees.map((emp, index) => (
@@ -1710,12 +1926,12 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                               </div>
                             </td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.gender}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.dateOfBirth}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.dateOfBirth ? emp.dateOfBirth.split('T')[0].split('-').reverse().join('/') : '-'}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.email}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.mobile}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.bloodGroup || "-"}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={emp.address}>{emp.address}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.joiningDate}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.joiningDate ? emp.joiningDate.split('T')[0].split('-').reverse().join('/') : '-'}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.designation}</td>
                             <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.employmentType || "N/A"}</td>
                             {/* Working For column: show company if workingFor === "company", else show plant */}
@@ -1849,11 +2065,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 </div>
 
                 <div style={{ padding: '16px 24px', borderTop: '1px solid #e2e8f0', display: 'flex', justifyContent: 'flex-end', gap: '12px', backgroundColor: '#fafbfc' }}>
-                  <button type="button" onClick={() => { setShowDesigModal(false); setForm(p => ({ ...p, designation: "" })); }} style={{ padding: '8px 16px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#475569', cursor: 'pointer', fontWeight: '500' }}>
+                  <button type="button" onClick={() => { setShowDesigModal(false); setIsEditingDesig(false); setEditingDesigId(null); setForm(p => ({ ...p, designation: "" })); }} style={{ padding: '8px 16px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', color: '#475569', cursor: 'pointer', fontWeight: '500' }}>
                     Cancel
                   </button>
                   <button type="button" onClick={handleSaveNewDesignation} style={{ padding: '8px 16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: '6px', cursor: 'pointer', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                    <Save size={14} /> Save Designation
+                    <Save size={14} /> {isEditingDesig ? "Update Designation" : "Save Designation"}
                   </button>
                 </div>
               </div>

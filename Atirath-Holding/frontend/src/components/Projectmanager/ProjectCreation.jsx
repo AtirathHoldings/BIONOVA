@@ -442,7 +442,8 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     priorityDetails: "",
     budget: "",
     remarks: "",
-    uploadImage: null
+    uploadImage: null,
+    organizationType: "company" // "company" or "plant"
   });
 
   const [imagePreview, setImagePreview] = useState(null);
@@ -621,15 +622,19 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       priorityDetails: "",
       budget: "",
       remarks: "",
-      uploadImage: null
+      uploadImage: null,
+      organizationType: "company"
     });
     setImagePreview(null);
   };
 
   const handleSave = async () => {
+    // Validate based on organization type
     if (
       !form.projectName.trim() || !form.startDate || !form.endDate ||
-      !form.projectDescription.trim() || !form.companyName || !form.plantName || !form.department
+      !form.projectDescription.trim() || 
+      (form.organizationType === "company" ? !form.companyName : !form.plantName) ||
+      !form.department
     ) {
       triggerAlert("error", "Validation Error", "Please fill in all required fields marked with *");
       return;
@@ -644,8 +649,8 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         prjObjtv: (form.projectObjective || "").trim() || "N/A",
         expDlvbls: (form.expectedDeliverables || "").trim() || null,
         prjPrty: form.priority,
-        coyId: parseInt(form.companyName),
-        pltId: parseInt(form.plantName),
+        coyId: form.organizationType === "company" ? parseInt(form.companyName) : null,
+        pltId: form.organizationType === "plant" ? parseInt(form.plantName) : null,
         deptId: parseInt(form.department),
         tentStDt: form.startDate,
         tentEndDt: form.endDate,
@@ -684,12 +689,26 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       }
 
       if (response.ok) {
+        let newId = editingId;
+        let pType = isEditing ? (projects.find(p => p.id === editingId)?._type || "live") : (isLive ? "live" : "draft");
+        if (!isEditing) {
+          try {
+            const data = await response.clone().json();
+            newId = isLive ? data.prjId : data.drftPrjId;
+          } catch (e) {
+            console.error("Error parsing response:", e);
+          }
+        }
         triggerAlert("success", "Success", isEditing ? "Project updated successfully!" : "Project saved successfully!");
         handleResetForm();
         setIsEditing(false);
         setEditingId(null);
         setView("list");
-        fetchAllData();
+        if (newId) {
+          navigate("/milestone-creation", { state: { projectId: newId, projectType: pType, showSuccessAlert: true } });
+        } else {
+          fetchAllData();
+        }
       } else {
         let msg = `Failed to save project. (Status: ${response.status})`;
         try {
@@ -731,7 +750,8 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       priorityDetails: "",
       budget: "",
       remarks: project.remarks || "",
-      uploadImage: null
+      uploadImage: null,
+      organizationType: project.companyId ? "company" : "plant"
     });
     if (project.logo) setImagePreview(project.logo);
     else setImagePreview(null);
@@ -1167,27 +1187,52 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                     <section className="proj-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
                       <h3 className="proj-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Organization Details</h3>
 
+                      {/* ─── Radio Buttons for Company / Plant ─── */}
+                      <div style={{ marginBottom: '16px' }}>
+                        <label style={{ marginRight: '20px', fontSize: '14px', fontWeight: '500', color: '#334155' }}>
+                          <input
+                            type="radio"
+                            name="organizationType"
+                            value="company"
+                            checked={form.organizationType === 'company'}
+                            onChange={() => setForm(prev => ({ ...prev, organizationType: 'company', companyName: '', plantName: '' }))}
+                          /> Company
+                        </label>
+                        <label style={{ fontSize: '14px', fontWeight: '500', color: '#334155' }}>
+                          <input
+                            type="radio"
+                            name="organizationType"
+                            value="plant"
+                            checked={form.organizationType === 'plant'}
+                            onChange={() => setForm(prev => ({ ...prev, organizationType: 'plant', companyName: '', plantName: '' }))}
+                          /> Plant
+                        </label>
+                      </div>
+
                       <div className="proj-form-layout-row columns-4">
-                        <label className="proj-field-item">
-                          <span>Company <b style={{ color: '#ef4444' }}>*</b></span>
-                          <SearchableSelect
-                            name="companyName"
-                            value={form.companyName}
-                            onChange={handleChange}
-                            placeholder="Select Company"
-                            options={companies.map(c => ({ value: c.coyId, label: c.coyNm }))}
-                          />
-                        </label>
-                        <label className="proj-field-item">
-                          <span>Plant <b style={{ color: '#ef4444' }}>*</b></span>
-                          <SearchableSelect
-                            name="plantName"
-                            value={form.plantName}
-                            onChange={handleChange}
-                            placeholder="Select Plant"
-                            options={plants.filter(p => !form.companyName || String(p.coyId) === String(form.companyName)).map(p => ({ value: p.pltId, label: p.pltNm }))}
-                          />
-                        </label>
+                        {form.organizationType === 'company' ? (
+                          <label className="proj-field-item">
+                            <span>Company <b style={{ color: '#ef4444' }}>*</b></span>
+                            <SearchableSelect
+                              name="companyName"
+                              value={form.companyName}
+                              onChange={handleChange}
+                              placeholder="Select Company"
+                              options={companies.map(c => ({ value: c.coyId, label: c.coyNm }))}
+                            />
+                          </label>
+                        ) : (
+                          <label className="proj-field-item">
+                            <span>Plant <b style={{ color: '#ef4444' }}>*</b></span>
+                            <SearchableSelect
+                              name="plantName"
+                              value={form.plantName}
+                              onChange={handleChange}
+                              placeholder="Select Plant"
+                              options={plants.map(p => ({ value: p.pltId, label: p.pltNm }))}
+                            />
+                          </label>
+                        )}
                         <label className="proj-field-item">
                           <span>Department <b style={{ color: '#ef4444' }}>*</b></span>
                           <SearchableSelect
@@ -1443,258 +1488,274 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                 </div>
 
                 <div className="proj-table-container" style={{ overflowX: 'auto', paddingBottom: '140px' }}>
-                  <table className="proj-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2800px' }}>
-                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                      <tr>
-                        <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
-                        <th
-                          className="sortable"
-                          onClick={() => handleSort("projectCode")}
-                          style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                        >
-                          PROJECT CODE{" "}
-                          {sortConfig.key === "projectCode" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
-                        </th>
-                        <th
-                          className="sortable"
-                          onClick={() => handleSort("projectName")}
-                          style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                        >
-                          PROJECT NAME{" "}
-                          {sortConfig.key === "projectName" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
-                        </th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>COMPANY</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PLANT</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DEPARTMENT</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DESCRIPTION</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OBJECTIVE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DELIVERABLES</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PRIORITY</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>START DATE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>END DATE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TOTAL DAYS</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>REMARKS</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
-                        <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          ACTIONS
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {currentItems.length > 0 ? (
-                        currentItems.map((project, index) => (
-                          <tr key={project.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td data-label="S.NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
-                            <td data-label="LOGO" style={{ padding: '14px 20px' }}>
-                              {project.logo ? (
-                                <img src={project.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
-                              ) : (
-                                <div style={{ width: '32px', height: '32px', borderRadius: '4px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
-                                  <ImageIcon size={16} style={{ color: '#94a3b8' }} />
-                                </div>
-                              )}
-                            </td>
-                            <td data-label="PROJECT CODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
-                              <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
-                                {project.projectCode}
-                              </span>
-                            </td>
-                            <td data-label="PROJECT NAME" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{project.projectName}</strong></td>
-                            <td data-label="COMPANY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.companyName || "N/A"}</td>
-                            <td data-label="PLANT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.plantName || "N/A"}</td>
-                            <td data-label="DEPARTMENT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.department || "N/A"}</td>
-                            <td data-label="DESCRIPTION" style={{ 
-                              padding: '14px 20px', 
-                              fontSize: '14px', 
-                              color: '#334155',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: '150px'
-                            }}>
-                              {project.projectDescription || "N/A"}
-                            </td>
-                            <td data-label="OBJECTIVE" style={{ 
-                              padding: '14px 20px', 
-                              fontSize: '13px', 
-                              color: '#334155',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: '150px'
-                            }}>
-                              {project.projectObjective || "N/A"}
-                            </td>
-                            <td data-label="DELIVERABLES" style={{ 
-                              padding: '14px 20px', 
-                              fontSize: '13px', 
-                              color: '#334155',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: '150px'
-                            }}>
-                              {project.expectedDeliverables || "N/A"}
-                            </td>
-                            <td data-label="PRIORITY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
-                              <span style={{
-                                padding: '4px 10px',
-                                borderRadius: '4px',
-                                fontSize: '12px',
-                                fontWeight: '600',
-                                display: 'inline-block',
-                                backgroundColor: project.priority === 'HIGH' ? '#fef2f2' :
-                                  project.priority === 'NORMAL' ? '#eff6ff' :
-                                    project.priority === 'MEDIUM' ? '#fefce8' : '#f0fdf4',
-                                color: project.priority === 'HIGH' ? '#dc2626' :
-                                  project.priority === 'NORMAL' ? '#2563eb' :
-                                    project.priority === 'MEDIUM' ? '#ca8a04' : '#16a34a'
-                              }}>
-                                {project.priority}
-                              </span>
-                            </td>
-                            <td data-label="START DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.startDate || "N/A"}</td>
-                            <td data-label="END DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.endDate || "N/A"}</td>
-                            <td data-label="TOTAL DAYS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.totalProjectDays || "N/A"}</td>
-                            <td data-label="REMARKS" style={{ 
-                              padding: '14px 20px', 
-                              fontSize: '14px', 
-                              color: '#334155',
-                              whiteSpace: 'nowrap',
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              maxWidth: '150px'
-                            }}>
-                              {project.remarks || "N/A"}
-                            </td>
-                            <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
-                              {project.status.toUpperCase() === 'CLOSED' ? (
-                                <span style={{
-                                  padding: '6px 12px',
-                                  borderRadius: '8px',
-                                  fontSize: '13px',
-                                  fontWeight: '600',
-                                  backgroundColor: '#fee2e2',
-                                  color: '#991b1b',
-                                  display: 'inline-block',
-                                  border: '1px solid #fecaca'
-                                }}>
-                                  Closed
+                  {/* ─── Loading Spinner ─────────────────────────────── */}
+                  {loading ? (
+                    <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
+                      <div style={{ display: 'inline-block', width: '40px', height: '40px', border: '4px solid #e2e8f0', borderTop: '4px solid #2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite' }} />
+                      <p style={{ marginTop: '12px', fontSize: '14px' }}>Loading projects...</p>
+                    </div>
+                  ) : (
+                    <table className="proj-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2800px' }}>
+                      <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                        <tr>
+                          <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
+                          <th
+                            className="sortable"
+                            onClick={() => handleSort("projectCode")}
+                            style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                          >
+                            PROJECT CODE{" "}
+                            {sortConfig.key === "projectCode" &&
+                              (sortConfig.direction === "asc" ? "▲" : "▼")}
+                          </th>
+                          <th
+                            className="sortable"
+                            onClick={() => handleSort("projectName")}
+                            style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                          >
+                            PROJECT NAME{" "}
+                            {sortConfig.key === "projectName" &&
+                              (sortConfig.direction === "asc" ? "▲" : "▼")}
+                          </th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>COMPANY</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PLANT</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DEPARTMENT</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DESCRIPTION</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OBJECTIVE</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DELIVERABLES</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PRIORITY</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>START DATE</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>END DATE</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TOTAL DAYS</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>REMARKS</th>
+                          <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
+                          <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                            ACTIONS
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {currentItems.length > 0 ? (
+                          currentItems.map((project, index) => (
+                            <tr key={project.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td data-label="S.NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
+                              <td data-label="LOGO" style={{ padding: '14px 20px' }}>
+                                {project.logo ? (
+                                  <img src={project.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
+                                ) : (
+                                  <div style={{ width: '32px', height: '32px', borderRadius: '4px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+                                    <ImageIcon size={16} style={{ color: '#94a3b8' }} />
+                                  </div>
+                                )}
+                              </td>
+                              <td data-label="PROJECT CODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                                <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
+                                  {project.projectCode}
                                 </span>
-                              ) : (
-                                <select
-                                  value={project.status}
-                                  onChange={(e) => handleStatusChange(project, e.target.value)}
-                                  style={{
+                              </td>
+                              <td data-label="PROJECT NAME" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{project.projectName}</strong></td>
+                              <td data-label="COMPANY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.companyName || "N/A"}</td>
+                              <td data-label="PLANT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.plantName || "N/A"}</td>
+                              <td data-label="DEPARTMENT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.department || "N/A"}</td>
+                              <td data-label="DESCRIPTION" style={{ 
+                                padding: '14px 20px', 
+                                fontSize: '14px', 
+                                color: '#334155',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '150px'
+                              }}>
+                                {project.projectDescription || "N/A"}
+                              </td>
+                              <td data-label="OBJECTIVE" style={{ 
+                                padding: '14px 20px', 
+                                fontSize: '13px', 
+                                color: '#334155',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '150px'
+                              }}>
+                                {project.projectObjective || "N/A"}
+                              </td>
+                              <td data-label="DELIVERABLES" style={{ 
+                                padding: '14px 20px', 
+                                fontSize: '13px', 
+                                color: '#334155',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '150px'
+                              }}>
+                                {project.expectedDeliverables || "N/A"}
+                              </td>
+                              <td data-label="PRIORITY" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                                <span style={{
+                                  padding: '4px 10px',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: '600',
+                                  display: 'inline-block',
+                                  backgroundColor: project.priority === 'HIGH' ? '#fef2f2' :
+                                    project.priority === 'NORMAL' ? '#eff6ff' :
+                                      project.priority === 'MEDIUM' ? '#fefce8' : '#f0fdf4',
+                                  color: project.priority === 'HIGH' ? '#dc2626' :
+                                    project.priority === 'NORMAL' ? '#2563eb' :
+                                      project.priority === 'MEDIUM' ? '#ca8a04' : '#16a34a'
+                                }}>
+                                  {project.priority}
+                                </span>
+                              </td>
+                              <td data-label="START DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.startDate || "N/A"}</td>
+                              <td data-label="END DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.endDate || "N/A"}</td>
+                              <td data-label="TOTAL DAYS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.totalProjectDays || "N/A"}</td>
+                              <td data-label="REMARKS" style={{ 
+                                padding: '14px 20px', 
+                                fontSize: '14px', 
+                                color: '#334155',
+                                whiteSpace: 'nowrap',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                maxWidth: '150px'
+                              }}>
+                                {project.remarks || "N/A"}
+                              </td>
+                              <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                                {project.status.toUpperCase() === 'CLOSED' ? (
+                                  <span style={{
                                     padding: '6px 12px',
                                     borderRadius: '8px',
                                     fontSize: '13px',
                                     fontWeight: '600',
-                                    border: '1px solid #cbd5e1',
-                                    outline: 'none',
-                                    cursor: 'pointer',
-                                    backgroundColor: project.status === 'LIVE' || project.status === 'Live' ? '#dcfce7' :
-                                      project.status === 'DRAFT' || project.status === 'Draft' ? '#fefce8' :
-                                        project.status === 'IN_PROGRESS' || project.status === 'In Progress' ? '#eff6ff' :
-                                          project.status === 'HOLD' || project.status === 'Hold' ? '#fef3c7' : '#fee2e2',
-                                    color: project.status === 'LIVE' || project.status === 'Live' ? '#166534' :
-                                      project.status === 'DRAFT' || project.status === 'Draft' ? '#854d0e' :
-                                        project.status === 'IN_PROGRESS' || project.status === 'In Progress' ? '#1e40af' :
-                                          project.status === 'HOLD' || project.status === 'Hold' ? '#92400e' : '#991b1b'
-                                  }}
+                                    backgroundColor: '#fee2e2',
+                                    color: '#991b1b',
+                                    display: 'inline-block',
+                                    border: '1px solid #fecaca'
+                                  }}>
+                                    Closed
+                                  </span>
+                                ) : (
+                                  <select
+                                    value={project.status}
+                                    onChange={(e) => handleStatusChange(project, e.target.value)}
+                                    style={{
+                                      padding: '6px 12px',
+                                      borderRadius: '8px',
+                                      fontSize: '13px',
+                                      fontWeight: '600',
+                                      border: '1px solid #cbd5e1',
+                                      outline: 'none',
+                                      cursor: 'pointer',
+                                      backgroundColor: project.status === 'LIVE' || project.status === 'Live' ? '#dcfce7' :
+                                        project.status === 'DRAFT' || project.status === 'Draft' ? '#fefce8' :
+                                          project.status === 'IN_PROGRESS' || project.status === 'In Progress' ? '#eff6ff' :
+                                            project.status === 'HOLD' || project.status === 'Hold' ? '#fef3c7' : '#fee2e2',
+                                      color: project.status === 'LIVE' || project.status === 'Live' ? '#166534' :
+                                        project.status === 'DRAFT' || project.status === 'Draft' ? '#854d0e' :
+                                          project.status === 'IN_PROGRESS' || project.status === 'In Progress' ? '#1e40af' :
+                                            project.status === 'HOLD' || project.status === 'Hold' ? '#92400e' : '#991b1b'
+                                    }}
+                                  >
+                                    {(() => {
+                                      const upper = project.status.toUpperCase();
+                                      if (upper === "DRAFT") {
+                                        return (
+                                          <>
+                                            <option value={project.status} disabled style={{ display: 'none' }}>Draft</option>
+                                            <option value="LIVE">Live</option>
+                                          </>
+                                        );
+                                      } else {
+                                        return (
+                                          <>
+                                            {upper !== "LIVE" && <option value="LIVE">Live</option>}
+                                            {upper !== "HOLD" && <option value="HOLD">Hold</option>}
+                                            {upper !== "CLOSED" && <option value="CLOSED">Closed</option>}
+                                            <option value={project.status} disabled style={{ display: 'none' }}>
+                                              {project.status === "LIVE" ? "Live" : project.status === "HOLD" ? "Hold" : "Closed"}
+                                            </option>
+                                          </>
+                                        );
+                                      }
+                                    })()}
+                                  </select>
+                                )}
+                              </td>
+                              <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
+                                <button
+                                  type="button"
+                                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
+                                  onClick={() => toggleDropdown(project.id)}
+                                  onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                  onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
-                                  {(() => {
-                                    const upper = project.status.toUpperCase();
-                                    if (upper === "DRAFT") {
-                                      return (
-                                        <>
-                                          <option value={project.status} disabled style={{ display: 'none' }}>Draft</option>
-                                          <option value="LIVE">Live</option>
-                                        </>
-                                      );
-                                    } else {
-                                      return (
-                                        <>
-                                          {upper !== "LIVE" && <option value="LIVE">Live</option>}
-                                          {upper !== "HOLD" && <option value="HOLD">Hold</option>}
-                                          {upper !== "CLOSED" && <option value="CLOSED">Closed</option>}
-                                          <option value={project.status} disabled style={{ display: 'none' }}>
-                                            {project.status === "LIVE" ? "Live" : project.status === "HOLD" ? "Hold" : "Closed"}
-                                          </option>
-                                        </>
-                                      );
-                                    }
-                                  })()}
-                                </select>
-                              )}
-                            </td>
-                            <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
-                              <button
-                                type="button"
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
-                                onClick={() => toggleDropdown(project.id)}
-                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                              >
-                                <MoreVertical size={18} />
-                              </button>
+                                  <MoreVertical size={18} />
+                                </button>
 
-                              {activeDropdown === project.id && (
-                                <>
-                                  <div
-                                    className="proj-actions-dropdown-backdrop"
-                                    onClick={() => setActiveDropdown(null)}
-                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }}
-                                  />
-                                  <div className="proj-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => {
-                                        navigate(`/project-details/${project.id}`, { state: { viewMode: 'milestones_only' } });
-                                        setActiveDropdown(null);
-                                      }}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Eye size={15} /> View
-                                    </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleEdit(project)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Edit size={15} /> Edit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleDelete(project.id)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Trash2 size={15} /> Delete
-                                    </button>
-                                  </div>
-                                </>
-                              )}
+                                {activeDropdown === project.id && (
+                                  <>
+                                    <div
+                                      className="proj-actions-dropdown-backdrop"
+                                      onClick={() => setActiveDropdown(null)}
+                                      style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }}
+                                    />
+                                    <div className="proj-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => {
+                                          if (project._type === 'live') {
+                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'live' } });
+                                          } else {
+                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'milestones_only' } });
+                                          }
+                                          setActiveDropdown(null);
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Eye size={15} /> View
+                                      </button>
+                                      {project._type !== 'live' && (
+                                        <>
+                                          <button
+                                            type="button"
+                                            style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
+                                            onClick={() => handleEdit(project)}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                          >
+                                            <Edit size={15} /> Edit
+                                          </button>
+                                          <button
+                                            type="button"
+                                            style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
+                                            onClick={() => handleDelete(project.id)}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                          >
+                                            <Trash2 size={15} /> Delete
+                                          </button>
+                                        </>
+                                      )}
+                                    </div>
+                                  </>
+                                )}
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="17" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                              No project records found. Add a new project using the button above.
                             </td>
                           </tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="17" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
-                            No project records found. Add a new project using the button above.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+                        )}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
 
               </div>
@@ -1761,6 +1822,12 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         />
       )}
 
+      <style>{`
+        @keyframes spin {
+          0% { transform: rotate(0deg); }
+          100% { transform: rotate(360deg); }
+        }
+      `}</style>
     </div>
   );
 };

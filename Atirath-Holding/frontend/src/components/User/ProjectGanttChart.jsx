@@ -50,7 +50,27 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     }
   };
 
-  const [loading, setLoading] = useState(true);
+  // NEW: Expand / collapse all projects and milestones
+  const toggleExpandAll = () => {
+    // Collect all project and milestone IDs from the original rows (before filtering)
+    const allProjectIds = ganttRows.filter(r => r.type === 'project').map(r => r.id);
+    const allMilestoneIds = ganttRows.filter(r => r.type === 'milestone').map(r => r.id);
+
+    const allProjectsExpanded = allProjectIds.every(id => expandedProjects.has(id));
+    const allMilestonesExpanded = allMilestoneIds.every(id => expandedMilestones.has(id));
+
+    if (allProjectsExpanded && allMilestonesExpanded) {
+      // Collapse all
+      setExpandedProjects(new Set());
+      setExpandedMilestones(new Set());
+    } else {
+      // Expand all
+      setExpandedProjects(new Set(allProjectIds));
+      setExpandedMilestones(new Set(allMilestoneIds));
+    }
+  };
+
+  const [loading, setLoading] = useState(false);
   const [ganttRows, setGanttRows] = useState([]);
   const [ganttDeps, setGanttDeps] = useState([]);
   const [timelineStart, setTimelineStart] = useState(new Date());
@@ -627,6 +647,14 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
               if (scrollContainerRef.current) scrollContainerRef.current.scrollTo({ left: Math.max(0, todayOffFixed - 100), behavior: 'smooth' });
             }}>
               <Calendar size={13} /> Today
+            </button>
+
+            {/* NEW: Expand / Collapse All button */}
+            <button className="gc-today-btn" onClick={toggleExpandAll}>
+              {expandedProjects.size === ganttRows.filter(r => r.type === 'project').length &&
+               expandedMilestones.size === ganttRows.filter(r => r.type === 'milestone').length
+                ? 'Collapse All'
+                : 'Expand All'}
             </button>
           </div>
 

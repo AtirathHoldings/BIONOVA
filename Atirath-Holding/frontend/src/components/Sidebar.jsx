@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { House, Building, Flag, Users, Calendar, Settings, Factory, MapPinned, FolderPlus, ChevronDown, ChevronRight, ChevronLeft, LogOut, ClipboardCheck, User, X, PanelLeftOpen, PanelLeftClose, FileText } from "lucide-react";
+import { House, Building, Flag, Users, Calendar, Settings, Factory, MapPinned, FolderPlus, ChevronDown, ChevronRight, ChevronLeft, LogOut, ClipboardCheck, User, X, PanelLeftOpen, PanelLeftClose, FileText, Briefcase } from "lucide-react";
 import "../styles/sidebar.css";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -57,12 +57,13 @@ const Sidebar = ({ onLogout }) => {
             'LAND_CREATION': { path: '/agriland-allocation', icon: MapPinned },
             'DEPARTMENT_CREATION': { path: '/department-creation', icon: Settings },
             'DEPARTMENT_MAPPING': { path: '/department-mapping', icon: Settings },
+            'DESIGNATION_CREATION': { path: '/designation-creation', icon: Briefcase },
             'EMPLOYEE_CREATION': { path: '/employee-creation', icon: User },
 
             'PROJECT_CREATION': { path: '/project-creation', icon: FolderPlus },
             'MILESTONE_CREATION': { path: '/milestone-creation', icon: FolderPlus },
             'PROJECT_DASHBOARD': { path: '/pm-dashboard', icon: FolderPlus },
-            'LIVE_PROJECT_LIST': { path: '/project-list', icon: FolderPlus },
+
             'TASK_BOARD': { path: '/task-board', icon: FolderPlus },
             'GANTT_CHART': { path: '/all-project-gantt-chart', icon: FolderPlus },
             'ALL_PROJECT_GANTT_CHART': { path: '/all-project-gantt-chart', icon: FolderPlus },
@@ -129,7 +130,6 @@ const Sidebar = ({ onLogout }) => {
             'PROJECT_DASHBOARD',
             'PROJECT_CREATION',
             'MILESTONE_CREATION',
-            'LIVE_PROJECT_LIST',
             'TASK_BOARD',
             'GANTT_CHART',
             'ALL_PROJECT_GANTT_CHART',

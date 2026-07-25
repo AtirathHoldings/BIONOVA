@@ -68,7 +68,7 @@ BEGIN
     LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority 
     WHERE (t.emp_id = p_emp_id OR t.task_id IN ( 
       SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true 
-    )) 
+    )) AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' AND (t.st_dt IS NULL OR t.st_dt <= v_today)
  
     UNION ALL 
  
@@ -97,20 +97,20 @@ BEGIN
     LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority 
     WHERE (t.emp_id = p_emp_id OR t.emp_task_id IN ( 
       SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL 
-    )) AND COALESCE(t.sts, true) = true 
+    )) AND COALESCE(t.sts, true) = true AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' AND (t.st_dt IS NULL OR t.st_dt <= v_today)
   ; 
  
   SELECT 
     COUNT(*), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'COMPLETED'), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'OVER_DUE' OR (UPPER(status_nm) <> 'COMPLETED' AND end_dt IS NOT NULL AND end_dt < v_today)), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) <> 'COMPLETED' AND end_dt = v_today), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'WIP' AND NOT (end_dt IS NOT NULL AND end_dt < v_today) AND (sub_status IS NULL OR UPPER(sub_status) NOT IN ('UNDER REVIEW', 'REASSIGN', 'REWORK'))), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'WIP' AND UPPER(sub_status) = 'UNDER REVIEW' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'OPEN' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'WIP' AND UPPER(sub_status) = 'REASSIGN' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'WIP' AND UPPER(sub_status) = 'REWORK' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)), 
-    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'DRAFT' AND NOT (end_dt IS NOT NULL AND end_dt < v_today)) 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'COMPLETED' OR UPPER(status_nm) = 'CLOSED'), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'OVER_DUE' OR (UPPER(status_nm) <> 'COMPLETED' AND UPPER(status_nm) <> 'CLOSED' AND end_dt IS NOT NULL AND end_dt < v_today)), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) <> 'COMPLETED' AND UPPER(status_nm) <> 'CLOSED' AND end_dt = v_today), 
+    COUNT(*) FILTER (WHERE (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS')), 
+    COUNT(*) FILTER (WHERE (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS') AND UPPER(sub_status) = 'UNDER REVIEW'), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'OPEN' OR status_nm IS NULL), 
+    COUNT(*) FILTER (WHERE (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS') AND UPPER(sub_status) = 'REASSIGN'), 
+    COUNT(*) FILTER (WHERE (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS') AND UPPER(sub_status) = 'REWORK'), 
+    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'DRAFT') 
   INTO v_total_tasks, v_completed, v_overdue, v_due_today, 
        v_wip, v_under_review, v_open, v_reassigned, v_rework, v_draft 
   FROM temp_all_tasks; 
@@ -128,6 +128,7 @@ BEGIN
   WITH all_todo AS ( 
     SELECT 
       t.task_id, 
+      t.task_cd,
       t.task_nm, 
       t.st_dt, 
       t.end_dt, 
@@ -141,6 +142,7 @@ BEGIN
         ELSE 'Executor' 
       END AS user_badge, 
       pm.priority_nm, 
+      'PROJECT' AS task_source,
       ( 
         SELECT jsonb_agg(jsonb_build_object( 
           'empId', em.emp_id, 
@@ -165,6 +167,7 @@ BEGIN
 
     SELECT 
       t.emp_task_id AS task_id, 
+      t.task_cd,
       t.task_nm, 
       t.st_dt, 
       t.end_dt, 
@@ -178,6 +181,7 @@ BEGIN
         ELSE 'Executor' 
       END AS user_badge, 
       pm.priority_nm, 
+      'INDIVIDUAL' AS task_source,
       ( 
         SELECT jsonb_agg(jsonb_build_object( 
           'empId', em.emp_id, 
@@ -200,6 +204,7 @@ BEGIN
   FROM ( 
     SELECT jsonb_build_object( 
       'taskId', t.task_id, 
+      'taskCode', COALESCE(t.task_cd, CASE WHEN t.task_source = 'INDIVIDUAL' THEN 'IND-' || t.task_id ELSE 'TSK-' || t.task_id END),
       'taskNm', t.task_nm, 
       'project', t.project_info, 
       'endDt', t.end_dt, 
@@ -215,10 +220,13 @@ BEGIN
                     ELSE 'Medium' 
                   END, 
       'badge', t.user_badge, 
+      'taskSource', t.task_source,
       'employees', COALESCE(t.employees, '[]'::jsonb) 
     ) AS sub 
     FROM all_todo t 
-    WHERE UPPER(t.status_nm) <> 'COMPLETED' AND t.st_dt <= v_today 
+    WHERE UPPER(COALESCE(t.status_nm, '')) <> 'COMPLETED' 
+      AND UPPER(COALESCE(t.status_nm, '')) <> 'CLOSED' 
+      AND (t.st_dt IS NULL OR t.st_dt <= v_today) 
     ORDER BY t.end_dt ASC NULLS LAST 
     LIMIT 5 
   ) x; 
@@ -227,6 +235,7 @@ BEGIN
   WITH all_upcoming AS ( 
     SELECT 
       t.task_id, 
+      t.task_cd,
       t.task_nm, 
       t.st_dt, 
       t.end_dt, 
@@ -235,6 +244,7 @@ BEGIN
       tsm.status_nm, 
       COALESCE(p.prj_cd, '') AS prj_cd, 
       pm.priority_nm, 
+      'PROJECT' AS task_source,
       ( 
         SELECT jsonb_agg(jsonb_build_object( 
           'empId', em.emp_id, 
@@ -259,6 +269,7 @@ BEGIN
 
     SELECT 
       t.emp_task_id AS task_id, 
+      t.task_cd,
       t.task_nm, 
       t.st_dt, 
       t.end_dt, 
@@ -267,6 +278,7 @@ BEGIN
       tsm.status_nm, 
       COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, 
       pm.priority_nm, 
+      'INDIVIDUAL' AS task_source,
       ( 
         SELECT jsonb_agg(jsonb_build_object( 
           'empId', em.emp_id, 
@@ -289,6 +301,7 @@ BEGIN
   FROM ( 
     SELECT jsonb_build_object( 
       'taskId', t.task_id, 
+      'taskCode', COALESCE(t.task_cd, CASE WHEN t.task_source = 'INDIVIDUAL' THEN 'IND-' || t.task_id ELSE 'TSK-' || t.task_id END),
       'taskNm', t.task_nm, 
       'prjCd', t.prj_cd, 
       'stDt', t.st_dt, 
@@ -334,8 +347,8 @@ BEGIN
         SELECT ROUND(
           (SUM(
             CASE 
-              WHEN UPPER(tsm_all.status_nm) = 'COMPLETED' THEN 1.0
-              WHEN UPPER(tsm_all.status_nm) = 'WIP' THEN 
+              WHEN UPPER(tsm_all.status_nm) = 'COMPLETED' OR UPPER(tsm_all.status_nm) = 'CLOSED' THEN 1.0
+              WHEN UPPER(tsm_all.status_nm) = 'WIP' OR UPPER(tsm_all.status_nm) = 'IN PROGRESS' THEN 
                 CASE 
                   WHEN UPPER(t_all.sub_status) = 'UNDER REVIEW' THEN 0.8
                   WHEN UPPER(t_all.sub_status) = 'REWORK' THEN 0.2
@@ -348,6 +361,9 @@ BEGIN
         JOIN milestone_live_master ml_all ON ml_all.m_id = t_all.m_id
         LEFT JOIN task_status_master tsm_all ON tsm_all.status_id = t_all.task_sts
         WHERE ml_all.prj_id = p.prj_id
+          AND (t_all.emp_id = p_emp_id OR t_all.task_id IN (
+            SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true
+          ))
       ), 0)
     ) AS sub 
     FROM task_live_master t 
@@ -534,6 +550,7 @@ BEGIN
       'department', COALESCE(v_emp.dept_nm, 'Projects Department'), 
       'photoUrl', v_emp.photo_url), 
     'summary', jsonb_build_object( 
+      'totalTasks', v_total_tasks,
       'myTasksCount', (v_total_tasks - v_completed - v_overdue), 
       'completedTasksCount', v_completed, 
       'overdueTasksCount', v_overdue, 

@@ -188,15 +188,10 @@ public class TaskLive {
     }
 
     public TaskPriorityMaster getPriority() {
+        TaskPriorityMaster baseP = (this.priority != null) ? this.priority : TaskPriorityMaster.LOW;
         if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
-            return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, taskSts, actCmpDt);
+            return TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, taskSts, actCmpDt, baseP);
         }
-        return TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, taskSts, actCmpDt);
-    }
-
-    @PrePersist
-    @PreUpdate
-    public void preSave() {
-        this.priority = getPriority();
+        return TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, taskSts, actCmpDt, baseP);
     }
 }

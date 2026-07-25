@@ -21,10 +21,16 @@ import {
   Map,
   Upload,
   Image as ImageIcon,
-  Info
+  Info,
+  Building2,
+  Factory,
+  FileText,
+  Users
 } from "lucide-react";
 import '../../styles/LandMaster.css';
 import AlertModal from "../AlertModal.jsx";
+import DatePicker from "react-datepicker";
+import "react-datepicker/dist/react-datepicker.css";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
@@ -101,6 +107,67 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
   );
 };
 
+const MaskedDateInput = React.forwardRef(({ value, onClick, onChange, placeholder, style, className }, ref) => {
+  const [localValue, setLocalValue] = React.useState(value || "");
+
+  React.useEffect(() => {
+    if (value === "" && localValue.length > 0 && localValue.length < 10) {
+      return;
+    }
+    setLocalValue(value || "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [value]);
+
+  const handleChange = (e) => {
+    let input = e.target.value.replace(/\D/g, ""); 
+    if (input.length > 8) input = input.slice(0, 8); 
+
+    let formatted = input;
+    if (input.length >= 5) {
+      formatted = `${input.slice(0, 2)}/${input.slice(2, 4)}/${input.slice(4)}`;
+    } else if (input.length >= 3) {
+      formatted = `${input.slice(0, 2)}/${input.slice(2)}`;
+    }
+
+    setLocalValue(formatted);
+
+    if (onChange) {
+      if (formatted.length === 10) {
+        e.target.value = formatted;
+        onChange(e);
+      } else {
+        e.target.value = "";
+        onChange(e);
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    if (localValue.length > 0 && localValue.length < 10) {
+      setLocalValue("");
+      if (onChange) {
+        onChange({ target: { value: "" } });
+      }
+    }
+  };
+
+  return (
+    <input
+      type="text"
+      ref={ref}
+      value={localValue}
+      onClick={onClick}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      placeholder={placeholder}
+      style={style}
+      className={className}
+      maxLength="10"
+    />
+  );
+});
+MaskedDateInput.displayName = 'MaskedDateInput';
+
 const AgriLandAllocation = ({ userRole, onLogout }) => {
   const navigate = useNavigate();
 
@@ -118,13 +185,25 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   const [allocations, setAllocations] = useState([]);
   const [plants, setPlants] = useState([]);
   const [states, setStates] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   const calculateDuration = (startDt, endDt) => {
     if (!startDt || !endDt) return "";
-    const start = new Date(startDt);
-    const end = new Date(endDt);
-    if (end < start) return "Invalid Dates (End before Start)";
+
+    const parseDateLocal = (dtString) => {
+      const parts = dtString.split('T')[0].split('-');
+      if (parts.length === 3) {
+        return new Date(parts[0], parts[1] - 1, parts[2]);
+      }
+      return new Date(dtString);
+    };
+
+    const start = parseDateLocal(startDt);
+    const end = parseDateLocal(endDt);
+    if (!start || !end || end < start) return "Invalid Dates (End before Start)";
+
+    // Inclusive of the end date
+    end.setDate(end.getDate() + 1);
 
     let years = end.getFullYear() - start.getFullYear();
     let months = end.getMonth() - start.getMonth();
@@ -149,8 +228,23 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     return durationStr.join(', ');
   };
 
+  const generateLandCode = (lList = allocations) => {
+    let maxNum = 0;
+    if (Array.isArray(lList)) {
+      lList.forEach(l => {
+        const code = l.landCd || l.lndCd || l.landCode || "";
+        const match = code.match(/^LND-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+    }
+    return `LND-${String(maxNum + 1).padStart(3, '0')}`;
+  };
+
   const fetchLands = async () => {
-    // setLoading(true);
+    setLoading(true);
     try {
       const response = await fetch(`${apiBaseUrl}/api/lands`, { headers: getAuthHeaders() });
       if (response.ok) {
@@ -182,17 +276,23 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
             mandal: land.mdl || "",
             village: land.vlg || "",
             pincode: land.pin || "",
-            leaseStartDate: land.leaseDt || "",
-            leaseEndDate: land.leaseEndDt || "",
+            leaseStartDate: land.leaseDt ? land.leaseDt.split('T')[0] : "",
+            leaseEndDate: land.leaseEndDt ? land.leaseEndDt.split('T')[0] : "",
             leaseDuration: calculateDuration(land.leaseDt, land.leaseEndDt)
           };
         });
         setAllocations(enriched);
+        setForm(prev => {
+          if (!prev.landCode || /^LND-\d+$/i.test(prev.landCode)) {
+            return { ...prev, landCode: generateLandCode(enriched) };
+          }
+          return prev;
+        });
       }
     } catch (err) {
       console.error("Error fetching lands:", err);
     } finally {
-      // setLoading(false);
+      setLoading(false);
     }
   };
 
@@ -236,6 +336,20 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [isViewing, setIsViewing] = useState(false);
   const [editingId, setEditingId] = useState(null);
+  const [projects, setProjects] = useState([]);
+  const [companies, setCompanies] = useState([]);
+  const [activeOverviewTab, setActiveOverviewTab] = useState(null);
+
+  useEffect(() => {
+    fetch(`${apiBaseUrl}/api/companies`, { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setCompanies(data))
+      .catch(err => console.error("Error fetching companies:", err));
+    fetch(`${apiBaseUrl}/api/project-live`, { headers: getAuthHeaders() })
+      .then(res => res.ok ? res.json() : [])
+      .then(data => setProjects(data))
+      .catch(err => console.error("Error fetching projects for land overview:", err));
+  }, []);
 
   // Form state – all empty by default
   const [form, setForm] = useState({
@@ -464,10 +578,10 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     reader.readAsDataURL(file);
   };
 
-  const handleResetForm = () => {
+  const handleResetForm = (lList = allocations) => {
     setLogoFile(null);
     setForm({
-      landCode: '',
+      landCode: generateLandCode(lList),
       plant: '',
       allotedFor: '',
       surveyNo: [],
@@ -649,7 +763,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       return;
     }
 
-    // setLoading(true);
+    setLoading(true);
 
     let finalLogoUrl = form.logo;
     if (logoFile) {
@@ -731,8 +845,35 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
         triggerAlert("error", "Error", err.message || "Could not save land record.");
       })
       .finally(() => {
-        // setLoading(false);
+        setLoading(false);
       });
+  };
+
+  const handleView = (land) => {
+    const targetId = land.lndId || land.id || land.landId;
+    const pltIdVal = land.plant || land.pltId;
+    setForm({
+      ...land,
+      landCode: land.landCode || land.lndCd || '',
+      plant: pltIdVal || '',
+      landArea: land.landArea || land.lndAr || land.landSize || '',
+      surveyNo: Array.isArray(land.surveyNo) ? land.surveyNo : (land.surveyNo ? String(land.surveyNo).split(',') : []),
+      surveyInput: '',
+      landOwnerName: Array.isArray(land.landOwnerName) ? land.landOwnerName : (land.landOwnerName ? String(land.landOwnerName).split(',') : []),
+      ownerInput: '',
+      mobileNo: land.mobileNo || land.mobNo || land.mobNum || '',
+      district: land.district || land.dist || '',
+      village: land.village || land.vlg || '',
+      mandal: land.mandal || land.mdl || '',
+      state: land.state || land.stId || ''
+    });
+    setFormErrors({});
+    setIsViewing(true);
+    setIsEditing(false);
+    setEditingId(targetId);
+    setActiveDropdown(null);
+    setView("form");
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleEdit = (land) => {
@@ -981,6 +1122,153 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                   <div style={{ padding: '24px' }}>
                     {isViewing ? (
                       <div className="al-view-unified" style={{ padding: '12px 0' }}>
+                        {/* Land Overview Section */}
+                        <div style={{ 
+                          marginBottom: '32px', 
+                          backgroundColor: '#ffffff', 
+                          border: '1px solid #e2e8f0', 
+                          borderRadius: '12px', 
+                          padding: '24px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                        }}>
+                          <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '4px', marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <MapPin size={18} style={{ color: '#16a34a' }} />
+                            Land Overview
+                          </h3>
+                          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px', marginTop: 0 }}>
+                            Click on any card below to view its corresponding list details.
+                          </p>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
+                            {/* Card 1: Plant */}
+                            <div 
+                              onClick={() => setActiveOverviewTab(activeOverviewTab === 'plant' ? null : 'plant')}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)', 
+                                border: activeOverviewTab === 'plant' ? '2px solid #2563eb' : '1px solid #bfdbfe', 
+                                borderRadius: '12px', 
+                                padding: '20px', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                position: 'relative', 
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                transform: activeOverviewTab === 'plant' ? 'scale(1.02)' : 'none',
+                                boxShadow: activeOverviewTab === 'plant' ? '0 4px 12px rgba(37,99,235,0.15)' : 'none'
+                              }}
+                            >
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#1e40af', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Associated Plant</span>
+                              <strong style={{ fontSize: '20px', color: '#1e3a8a', marginTop: '8px', zIndex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {plants.find(p => String(p.pltId || p.id) === String(form.plant) || (p.pltNm || p.plantName || '').trim().toLowerCase() === String(form.plant || '').trim().toLowerCase())?.pltNm || form.plant || 'N/A'}
+                              </strong>
+                            </div>
+                            {/* Card 2: Company */}
+                            <div 
+                              onClick={() => setActiveOverviewTab(activeOverviewTab === 'company' ? null : 'company')}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #f0fdfa 0%, #ccfbf1 100%)', 
+                                border: activeOverviewTab === 'company' ? '2px solid #0d9488' : '1px solid #99f6e4', 
+                                borderRadius: '12px', 
+                                padding: '20px', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                position: 'relative', 
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                transform: activeOverviewTab === 'company' ? 'scale(1.02)' : 'none',
+                                boxShadow: activeOverviewTab === 'company' ? '0 4px 12px rgba(13,148,136,0.15)' : 'none'
+                              }}
+                            >
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#0f766e', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Associated Company</span>
+                              <strong style={{ fontSize: '20px', color: '#115e59', marginTop: '8px', zIndex: 1, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {(() => {
+                                  const pltObj = plants.find(p => String(p.pltId || p.id) === String(form.plant) || (p.pltNm || p.plantName || '').trim().toLowerCase() === String(form.plant || '').trim().toLowerCase());
+                                  return pltObj?.coyNm || (Array.isArray(companies) ? companies.find(c => String(c.coyId || c.id) === String(pltObj?.coyId))?.coyNm : 'N/A') || 'N/A';
+                                })()}
+                              </strong>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Interactive Overview Detail List Container */}
+                        {activeOverviewTab && (
+                          <div style={{ 
+                            marginBottom: '32px', 
+                            backgroundColor: '#f8fafc', 
+                            border: '1px solid #e2e8f0', 
+                            borderRadius: '12px', 
+                            padding: '20px',
+                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                              <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0, textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {activeOverviewTab === 'plant' && <Factory size={16} style={{ color: '#2563eb' }} />}
+                                {activeOverviewTab === 'company' && <Building2 size={16} style={{ color: '#0d9488' }} />}
+                                Associated {activeOverviewTab} Details
+                              </h4>
+                              <button 
+                                type="button" 
+                                onClick={() => setActiveOverviewTab(null)} 
+                                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}
+                              >
+                                Close Table
+                              </button>
+                            </div>
+                            
+                            <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                                <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                  {activeOverviewTab === 'plant' && (
+                                    <tr>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Plant Code</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Plant Name</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Capacity (TPD)</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Email</th>
+                                    </tr>
+                                  )}
+                                  {activeOverviewTab === 'company' && (
+                                    <tr>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Company Code</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Company Name</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>CIN Number</th>
+                                    </tr>
+                                  )}
+                                </thead>
+                                <tbody>
+                                  {activeOverviewTab === 'plant' && (() => {
+                                    const p = plants.find(plt => String(plt.pltId || plt.id) === String(form.plant) || (plt.pltNm || plt.plantName || '').trim().toLowerCase() === String(form.plant || '').trim().toLowerCase());
+                                    return p ? (
+                                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                        <td style={{ padding: '10px 12px', fontWeight: '600', color: '#2563eb' }}>{p.pltCd || p.plantCode || 'N/A'}</td>
+                                        <td style={{ padding: '10px 12px', fontWeight: '500', color: '#0f172a' }}>{p.pltNm || p.plantName || 'N/A'}</td>
+                                        <td style={{ padding: '10px 12px', color: '#475569' }}>{(p.cap !== undefined && p.cap !== null) ? `${p.cap} TPD` : (p.cpcty || p.capacity || p.plantCapacity || 'N/A')}</td>
+                                        <td style={{ padding: '10px 12px', color: '#2563eb' }}>{p.email || 'N/A'}</td>
+                                      </tr>
+                                    ) : (
+                                      <tr><td colSpan={4} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No plant associated.</td></tr>
+                                    );
+                                  })()}
+                                  {activeOverviewTab === 'company' && (() => {
+                                    const pltObj = plants.find(p => String(p.pltId || p.id) === String(form.plant) || (p.pltNm || p.plantName || '').trim().toLowerCase() === String(form.plant || '').trim().toLowerCase());
+                                    const coyObj = Array.isArray(companies) ? companies.find(c => String(c.coyId || c.id) === String(pltObj?.coyId)) : null;
+                                    return coyObj ? (
+                                      <tr style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                        <td style={{ padding: '10px 12px', fontWeight: '600', color: '#0d9488' }}>{coyObj.coyCd || coyObj.companyCode || 'N/A'}</td>
+                                        <td style={{ padding: '10px 12px', fontWeight: '500', color: '#0f172a' }}>{coyObj.coyNm || coyObj.companyName || 'N/A'}</td>
+                                        <td style={{ padding: '10px 12px', color: '#475569' }}>{coyObj.cin || coyObj.cinNo || coyObj.cinNumber || 'N/A'}</td>
+                                      </tr>
+                                    ) : (
+                                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No company associated.</td></tr>
+                                    );
+                                  })()}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b', marginBottom: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '24px' }}>
+                          Land Details
+                        </h3>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' }}>
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
                             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
@@ -1040,11 +1328,11 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease Start Date :</span>
-                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseStartDate || '-'}</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseStartDate ? form.leaseStartDate.split('-').reverse().join('/') : '-'}</span>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease End Date :</span>
-                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseEndDate || '-'}</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseEndDate ? form.leaseEndDate.split('-').reverse().join('/') : '-'}</span>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Duration :</span>
@@ -1222,11 +1510,69 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                           <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
                             <label className="al-field-item">
                               <span>Lease Start Date <b style={{ color: '#ef4444' }}>*</b></span>
-                              <input type="date" name="leaseStartDate" value={form.leaseStartDate || ""} onChange={handleChange} max={form.leaseEndDate || ""} required />
+                              <DatePicker
+                                selected={form.leaseStartDate ? new Date(form.leaseStartDate) : null}
+                                onChange={(date) => {
+                                  if (date) {
+                                    const offset = date.getTimezoneOffset();
+                                    const adjustedDate = new Date(date.getTime() - (offset * 60 * 1000));
+                                    const dateString = adjustedDate.toISOString().split('T')[0];
+                                    handleChange({ target: { name: 'leaseStartDate', value: dateString } });
+                                  } else {
+                                    handleChange({ target: { name: 'leaseStartDate', value: '' } });
+                                  }
+                                }}
+                                dateFormat="dd/MM/yyyy"
+                                placeholderText="DD/MM/YYYY"
+                                maxDate={form.leaseEndDate ? new Date(form.leaseEndDate) : null}
+                                customInput={
+                                  <MaskedDateInput 
+                                    style={{
+                                      width: '100%',
+                                      padding: '8px 12px',
+                                      border: '1px solid #cbd5e1',
+                                      borderRadius: '6px',
+                                      fontSize: '14px',
+                                      outline: 'none',
+                                      boxSizing: 'border-box',
+                                      height: '40px'
+                                    }}
+                                  />
+                                }
+                              />
                             </label>
                             <label className="al-field-item">
                               <span>Lease End Date <b style={{ color: '#ef4444' }}>*</b></span>
-                              <input type="date" name="leaseEndDate" value={form.leaseEndDate || ""} onChange={handleChange} min={form.leaseStartDate || ""} required />
+                              <DatePicker
+                                selected={form.leaseEndDate ? new Date(form.leaseEndDate) : null}
+                                onChange={(date) => {
+                                  if (date) {
+                                    const offset = date.getTimezoneOffset();
+                                    const adjustedDate = new Date(date.getTime() - (offset * 60 * 1000));
+                                    const dateString = adjustedDate.toISOString().split('T')[0];
+                                    handleChange({ target: { name: 'leaseEndDate', value: dateString } });
+                                  } else {
+                                    handleChange({ target: { name: 'leaseEndDate', value: '' } });
+                                  }
+                                }}
+                                dateFormat="dd/MM/yyyy"
+                                placeholderText="DD/MM/YYYY"
+                                minDate={form.leaseStartDate ? new Date(form.leaseStartDate) : null}
+                                customInput={
+                                  <MaskedDateInput 
+                                    style={{
+                                      width: '100%',
+                                      padding: '8px 12px',
+                                      border: '1px solid #cbd5e1',
+                                      borderRadius: '6px',
+                                      fontSize: '14px',
+                                      outline: 'none',
+                                      boxSizing: 'border-box',
+                                      height: '40px'
+                                    }}
+                                  />
+                                }
+                              />
                             </label>
                             <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
                               <span>Lease Duration</span>
@@ -1341,8 +1687,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                     backgroundColor: '#fafbfc',
                     borderTop: '1px solid #e2e8f0'
                   }}>
-                    <button type="button" className="al-btn primary" onClick={handleSave}>
-                      <Save size={14} /> {isEditing ? "Update Land" : "Save Land"}
+                    <button type="button" className="al-btn primary" onClick={handleSave} disabled={loading} style={loading ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>
+                      <Save size={14} /> {loading ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update Land" : "Save Land")}
                     </button>
                     <button type="button" className="al-btn secondary" onClick={() => {
                       setView("list");
@@ -1401,7 +1747,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         setView("form");
                       }}
                     >
-                      <Plus size={16} /> Add New Allocation
+                      <Plus size={16} /> Add New Land
                     </button>
                   </div>
                 </div>
@@ -1413,23 +1759,11 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                       <tr>
                         <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
-                        <th
-                          className="sortable"
-                          onClick={() => handleSort("landCode")}
-                          style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                        >
-                          LAND CODE{" "}
-                          {sortConfig.key === "landCode" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          LAND CODE
                         </th>
-                        <th
-                          className="sortable"
-                          onClick={() => handleSort("plant")}
-                          style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                        >
-                          PLANT{" "}
-                          {sortConfig.key === "plant" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          PLANT
                         </th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OWNER NAME</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MOBILE NO</th>
@@ -1454,7 +1788,16 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {currentItems.length > 0 ? (
+                      {loading ? (
+                        <tr>
+                          <td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                              <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
+                              Loading land records...
+                            </div>
+                          </td>
+                        </tr>
+                      ) : currentItems.length > 0 ? (
                         currentItems.map((land, index) => (
                           <tr key={land.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td data-label="#" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{index + 1}</td>
@@ -1493,8 +1836,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                             </td>
                             <td data-label="LATITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.latitude}</td>
                             <td data-label="LONGITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.longitude}</td>
-                            <td data-label="LEASE START" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseStartDate || "N/A"}</td>
-                            <td data-label="LEASE END" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseEndDate || "N/A"}</td>
+                            <td data-label="LEASE START" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseStartDate ? land.leaseStartDate.split('-').reverse().join('/') : "N/A"}</td>
+                            <td data-label="LEASE END" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseEndDate ? land.leaseEndDate.split('-').reverse().join('/') : "N/A"}</td>
                             <td data-label="DURATION" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseDuration || "N/A"}</td>
                             <td data-label="ALLOTED FOR" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
@@ -1539,14 +1882,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                     <button
                                       type="button"
                                       style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => {
-                                        window.scrollTo({ top: 0, behavior: 'smooth' });
-                                        setForm(land);
-                                        setView("form");
-                                        setIsViewing(true);
-                                        setIsEditing(false);
-                                        setActiveDropdown(null);
-                                      }}
+                                      onClick={() => handleView(land)}
                                       onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                                       onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                     >

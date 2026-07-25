@@ -51,4 +51,10 @@ public interface AssignmentRepository
     // Employee + Active
     List<Assignment> findByEmpIdAndSts(Long empId, Boolean sts);
 
+    @org.springframework.data.jpa.repository.Query("SELECT t.taskCd FROM Assignment t WHERE t.taskCd IS NOT NULL")
+    List<String> findAllTaskCodes();
+
+    @org.springframework.data.jpa.repository.Query("SELECT MAX(t.empTaskId) FROM Assignment t")
+    Long findMaxEmpTaskId();
+
 }

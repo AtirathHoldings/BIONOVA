@@ -47,7 +47,7 @@ public class TaskStatusMaster {
             case "DRAFT": return 1;
             case "OPEN": return 2;
             case "WIP": case "IN_PROGRESS": return 3;
-            case "CLOSED": return 4;
+            case "CLOSED": case "COMPLETED": case "COMPLETE": return 4;
             case "HOLD": return 5;
             // Map sub-status names to parent status IDs to support legacy frontend/controllers status updates
             case "UNDER_REVIEW":

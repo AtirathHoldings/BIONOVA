@@ -3,6 +3,7 @@ import { Menu, Search, Bell, User, ExternalLink, X, FolderOpen, CheckSquare, Fla
 import { useNavigate, useLocation } from "react-router-dom";
 
 const STATUS_COLORS = {
+  'Closed':      { bar: '#10b981', bg: '#d1fae5' },
   'Completed':   { bar: '#10b981', bg: '#d1fae5' },
   'In Progress': { bar: '#3b82f6', bg: '#dbeafe' },
   'Not Started': { bar: '#f59e0b', bg: '#fef3c7' },

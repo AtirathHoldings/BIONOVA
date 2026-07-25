@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import { useLocation } from "react-router-dom";
 import Sidebar from "../Sidebar";
 import Header from "../Header";
 import AlertModal from "../AlertModal";
@@ -10,282 +11,1065 @@ import {
   AlertCircle,
   Eye,
   Play,
-  Filter,
   RotateCw,
   ChevronLeft,
   ChevronRight,
   Check,
+  Undo,
   Undo2,
+  Redo2,
+  ClipboardList,
+  Layers,
+  Clock,
+  RefreshCcw,
+  RefreshCw,
+  Loader2,
+  Filter,
+  User,
+  Users,
+  Calendar,
+  Flag,
+  FileText,
+  CheckSquare,
+  Clock as ClockIcon,
+  AlertTriangle,
+  ArrowLeft,
+  UserCheck,
+  UserX,
+  UserPlus,
+  Briefcase,
+  ListChecks,
+  MessageSquare,
+  Paperclip,
+  History,
+  MoreVertical
 } from "lucide-react";
 import "../../styles/MyTasks.css";
 import { apiGet, apiPut, apiPatch, apiPost } from "../../utils/api";
 
-const mapBackendTask = (t, projects, milestones) => {
-  const milestone = milestones.find(m => String(m.mId) === String(t.mId));
-  const project = milestone ? projects.find(p => String(p.prjId) === String(milestone.prjId)) : null;
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 
-  let status = "To-Do";
-  if (t.taskSts === "COMPLETED") {
-    status = "Completed";
-  } else if (t.taskSts === "SUBMIT_REVIEW" || t.taskSts === "UNDER_REVIEW") {
-    status = "Under Review";
-  } else if (t.taskSts === "REASSIGN") {
-    status = "Reassigned";
-  } else if (t.taskSts === "REWORK") {
-    status = "Rework";
-  } else {
-    const today = new Date().toISOString().split("T")[0];
-    if (t.endDt && t.endDt < today) {
-      status = "Overdue";
-    } else if (t.taskSts === "WIP") {
-      status = "In Progress";
-    } else {
-      status = "To-Do";
-    }
+// ============================================
+// CONSTANTS - COLORS & STATUS
+// ============================================
+
+const ReassignIcon = ({ size = 16, color = "#4F46E5", className = "", style = {} }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke={color} 
+    strokeWidth="2.5" 
+    strokeLinecap="round" 
+    strokeLinejoin="round" 
+    className={className}
+    style={{ display: "inline-block", verticalAlign: "middle", ...style }}
+  >
+    <polyline points="9 14 4 18 9 22" />
+    <path d="M4 18h11a5 5 0 0 0 0-10H8" />
+  </svg>
+);
+
+const PROGRESS_COLORS = {
+  "OPEN": { bg: "#DBEAFE", color: "#2563EB", label: "OPEN" },
+  "DRAFT": { bg: "#F3F4F6", color: "#9CA3AF", label: "DRAFT" },
+  "WIP": { bg: "#FEF3C7", color: "#F59E0B", label: "WORK IN PROGRESS" },
+  "HOLD": { bg: "#EDE9FE", color: "#7C3AED", label: "HOLD" },
+  "COMPLETED": { bg: "#DCFCE7", color: "#16A34A", label: "CLOSED" },
+  "CLOSED": { bg: "#DCFCE7", color: "#16A34A", label: "CLOSED" }
+};
+
+const PRIORITY_COLORS = {
+  "Low": { bg: "#DCFCE7", color: "#22C55E" },
+  "Normal": { bg: "#DBEAFE", color: "#3B82F6" },
+  "Medium": { bg: "#FEF3C7", color: "#F59E0B" },
+  "High": { bg: "#FEE2E2", color: "#EF4444" },
+  "Critical": { bg: "#FEE2E2", color: "#B91C1C" },
+  "Atmost Critical": { bg: "#FEE2E2", color: "#7F1D1D" },
+  "Rework": { bg: "#FFF7ED", color: "#F97316" },
+  "REWORK": { bg: "#FFF7ED", color: "#F97316" },
+  "Reassigned": { bg: "#EEF2FF", color: "#4F46E5" },
+  "REASSIGN": { bg: "#EEF2FF", color: "#4F46E5" }
+};
+
+const PROCESS_COLORS = {
+  "PENDING_REVIEWER": { color: "#8B5CF6", icon: Eye, title: "Under Review" },
+  "PENDING_APPROVER": { color: "#8B5CF6", icon: Eye, title: "Under Review" },
+  "REWORK": { color: "#F97316", icon: RefreshCw, title: "Rework" },
+  "REASSIGN": { color: "#4F46E5", icon: ReassignIcon, title: "Reassign" }
+};
+
+const TIME_COLORS = {
+  "Lead": { color: "#22C55E", icon: Clock, title: "Lead" },
+  "On Time": { color: "#3B82F6", icon: Clock, title: "On Time" },
+  "Due Today": { color: "#F59E0B", icon: Clock, title: "Due Today" },
+  "Overdue": { color: "#EF4444", icon: Clock, title: "Overdue" },
+  "Lag": { color: "#DC2626", icon: Clock, title: "Lag" }
+};
+
+// ============================================
+// HELPER FUNCTIONS
+// ============================================
+
+const calculateTimeStatus = (task) => {
+  if (!task) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+  
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  const dueDate = task.endDt ? new Date(task.endDt) : null;
+  const completedDate = task.actCmpDt ? new Date(task.actCmpDt) : null;
+  
+  if (!dueDate) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+  
+  dueDate.setHours(0, 0, 0, 0);
+  
+  if (task.taskSts === "COMPLETED" && completedDate) {
+    completedDate.setHours(0, 0, 0, 0);
+    if (completedDate < dueDate) return { status: "Lead", color: "#22C55E", icon: Clock, title: "Lead" };
+    if (completedDate.getTime() === dueDate.getTime()) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+    if (completedDate > dueDate) return { status: "Lag", color: "#DC2626", icon: Clock, title: "Lag" };
   }
+  
+  if (today < dueDate) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+  if (today.getTime() === dueDate.getTime()) return { status: "Due Today", color: "#F59E0B", icon: Clock, title: "Due Today" };
+  if (today > dueDate) return { status: "Overdue", color: "#EF4444", icon: Clock, title: "Overdue" };
+  
+  return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+};
 
-  const progress = 0;
+// ============================================
+// GET EMPLOYEE DETAILS
+// ============================================
 
-  let calculatedPriority = "Low";
-  if (t.endDt) {
-    const [year, month, day] = t.endDt.split('-');
-    const endDtObj = new Date(year, month - 1, day);
-    endDtObj.setHours(0, 0, 0, 0);
-
-    let compareDateObj = new Date();
-    compareDateObj.setHours(0, 0, 0, 0);
-
-    if (t.taskSts === "COMPLETED" || t.taskSts === "UNDER_REVIEW" || t.taskSts === "SUBMIT_REVIEW") {
-       if (t.actCmpDt) {
-           compareDateObj = new Date(t.actCmpDt);
-           compareDateObj.setHours(0,0,0,0);
-       } else if (compareDateObj > endDtObj) {
-           compareDateObj = endDtObj;
-       }
-    }
-
-    const diffTime = compareDateObj.getTime() - endDtObj.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      calculatedPriority = "High";
-    } else if (diffDays === 1) {
-      calculatedPriority = "Critical";
-    } else if (diffDays >= 2) {
-      calculatedPriority = "Atmost Critical";
-    }
+const getEmployeeName = (empId, employeesList) => {
+  if (!empId) return "Unknown";
+  if (!employeesList || employeesList.length === 0) {
+    return `User ${empId}`;
   }
+  
+  const emp = employeesList.find(e => {
+    const target = String(empId).trim();
+    return String(e.empId).trim() === target || 
+           String(e.employeeId).trim() === target || 
+           String(e.employeeCode).trim() === target || 
+           String(e.id).trim() === target || 
+           String(e._id).trim() === target || 
+           String(e.employee_code).trim() === target || 
+           String(e.empCode).trim() === target ||
+           String(e.userId).trim() === target;
+  });
+  
+  if (!emp) return `User ${empId}`;
+  
+  if (emp.employeeName) return emp.employeeName;
+  if (emp.fullName) return emp.fullName;
+  if (emp.name) return emp.name;
+  if (emp.employee_name) return emp.employee_name;
+  if (emp.empName) return emp.empName;
+  if (emp.fstNm && emp.lstNm) return `${emp.fstNm} ${emp.lstNm}`.trim();
+  if (emp.firstName && emp.lastName) return `${emp.firstName} ${emp.lastName}`.trim();
+  if (emp.first_name && emp.last_name) return `${emp.first_name} ${emp.last_name}`.trim();
+  if (emp.fstNm) return emp.fstNm;
+  if (emp.firstName) return emp.firstName;
+  if (emp.first_name) return emp.first_name;
+  if (emp.displayName) return emp.displayName;
+  if (emp.username) return emp.username;
+  if (emp.email) return emp.email.split('@')[0];
+  
+  return emp.empCode || emp.employee_code || `User ${empId}`;
+};
 
+const getEmployeeInitials = (empId, employeesList) => {
+  const name = getEmployeeName(empId, employeesList);
+  if (!name || name === "Unknown" || name.startsWith('User ')) {
+    const idStr = String(empId);
+    return idStr.substring(0, 2).toUpperCase();
+  }
+  const parts = name.trim().split(" ");
+  if (parts.length >= 2) {
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
+  return parts[0].substring(0, 2).toUpperCase();
+};
+
+const getEmployeePhoto = (empId, employeesList) => {
+  if (!empId) return null;
+  if (!employeesList || employeesList.length === 0) return null;
+  
+  const emp = employeesList.find(e => {
+    const target = String(empId).trim();
+    return String(e.empId).trim() === target || 
+           String(e.employeeId).trim() === target || 
+           String(e.employeeCode).trim() === target || 
+           String(e.id).trim() === target || 
+           String(e._id).trim() === target || 
+           String(e.employee_code).trim() === target || 
+           String(e.empCode).trim() === target ||
+           String(e.userId).trim() === target;
+  });
+  if (!emp) return null;
+  
+  if (emp.photoUrl) return emp.photoUrl;
+  if (emp.profileImageBase64) return emp.profileImageBase64;
+  if (emp.profileImage) return emp.profileImage;
+  if (emp.photo) return emp.photo;
+  if (emp.imageUrl) return emp.imageUrl;
+  if (emp.avatar) return emp.avatar;
+  if (emp.picture) return emp.picture;
+  
+  return null;
+};
+
+// ============================================
+// FORMAT DATE FUNCTION
+// ============================================
+const formatDate = (dateStr) => {
+  if (!dateStr) return "";
+  try {
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const parts = dateStr.split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}-${months[parseInt(parts[1], 10) - 1]}-${parts[0]}`;
+    }
+    return dateStr;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
+// ============================================
+// ACTION BUTTON - DYNAMIC BASED ON PROGRESS, PROCESS, PRIORITY, TIME
+// ============================================
+
+const getActionButton = (task, currentUserEmpId) => {
+  if (!task) return { label: "View", action: "view", variant: "secondary" };
+  
+  const rawTask = task.rawTask || task;
+  
+  // Get user roles
+  const executorId = rawTask.empId || rawTask.assignedTo || rawTask.executorId || rawTask.doerId;
+  const reviewerId = rawTask.reviewerId || rawTask.reviewer || rawTask.reviewerEmpId;
+  const approverId = rawTask.approverId || rawTask.approver || rawTask.approverEmpId;
+  
+  const isDoer = String(executorId) === String(currentUserEmpId);
+  const isReviewer = String(reviewerId) === String(currentUserEmpId);
+  const isApprover = String(approverId) === String(currentUserEmpId);
+  
+  // Get progress (status)
+  const progress = (rawTask.taskSts || rawTask.status || rawTask.taskStatus || task.status || "OPEN").toUpperCase();
+  
+  // Get process
+  const process = (rawTask.prcsYesActn || rawTask.processAction || rawTask.process || "NONE").toUpperCase();
+  
+  // Calculate time status
+  const timeStatus = calculateTimeStatus(rawTask);
+  
+  // Calculate priority
+  let calculatedPriority = "Normal";
+  const endDt = rawTask.endDt || rawTask.dueDate;
+  if (progress === "REASSIGN" || progress === "REWORK") {
+    calculatedPriority = progress;
+  } else if (endDt) {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = new Date(endDt);
+      dueDate.setHours(0, 0, 0, 0);
+      
+      const diffTime = today.getTime() - dueDate.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) calculatedPriority = "High";
+      else if (diffDays === 1) calculatedPriority = "Critical";
+      else if (diffDays >= 2) calculatedPriority = "Atmost Critical";
+    } catch (e) {}
+  }
+  
+  // Normalize progress
+  let normalizedProgress = progress;
+  if (progress === "WIP" || progress === "IN_PROGRESS" || progress === "INPROGRESS") {
+    normalizedProgress = "WORK_IN_PROGRESS";
+  }
+  if (progress === "OPEN") normalizedProgress = "OPEN";
+  if (progress === "COMPLETED" || progress === "CLOSED") normalizedProgress = "COMPLETED";
+  if (progress === "HOLD") normalizedProgress = "HOLD";
+  if (progress === "DRAFT") normalizedProgress = "OPEN";
+  
+  // Normalize process
+  let normalizedProcess = process;
+  if (process === "NONE" || !process || process === "NULL") normalizedProcess = "NONE";
+  if (process === "PENDING_REVIEWER" || process === "UNDER_REVIEW") normalizedProcess = "UNDER_REVIEW";
+  if (process === "PENDING_APPROVER") normalizedProcess = "UNDER_REVIEW";
+  if (process === "REWORK") normalizedProcess = "REWORK";
+  if (process === "REASSIGN") normalizedProcess = "REASSIGN";
+  
+  // Log for debugging
+  console.log(`🔍 Dynamic Action Check - Task: ${task.id || task.taskId}`);
+  console.log(`   Progress: ${normalizedProgress}, Process: ${normalizedProcess}`);
+  console.log(`   Time Status: ${timeStatus.status}, Priority: ${calculatedPriority}`);
+  console.log(`   IsDoer: ${isDoer}, IsReviewer: ${isReviewer}, IsApprover: ${isApprover}`);
+  
+  // If user has no role in this task, show View
+  if (!isDoer && !isReviewer && !isApprover) {
+    return { label: "View", action: "view", variant: "secondary" };
+  }
+  
+  // ============================================
+  // EXECUTOR (DOER) ACTIONS - DYNAMIC
+  // ============================================
+  if (isDoer) {
+    // OPEN / DRAFT -> Start
+    if (normalizedProgress === "OPEN") {
+      return { label: "Start", action: "start", variant: "primary" };
+    }
+    
+    // WORK_IN_PROGRESS with NONE -> Update
+    if (normalizedProgress === "WORK_IN_PROGRESS" && normalizedProcess === "NONE") {
+      return { label: "Update", action: "update", variant: "warning" };
+    }
+    
+    // WORK_IN_PROGRESS with UNDER_REVIEW -> View
+    if (normalizedProgress === "WORK_IN_PROGRESS" && normalizedProcess === "UNDER_REVIEW") {
+      return { label: "View", action: "view", variant: "secondary" };
+    }
+    
+    // WORK_IN_PROGRESS with REWORK -> Update
+    if (normalizedProgress === "WORK_IN_PROGRESS" && normalizedProcess === "REWORK") {
+      return { label: "Update", action: "update", variant: "warning" };
+    }
+    
+    // WORK_IN_PROGRESS with REASSIGN -> Update
+    if (normalizedProgress === "WORK_IN_PROGRESS" && normalizedProcess === "REASSIGN") {
+      return { label: "Update", action: "update", variant: "warning" };
+    }
+    
+    // HOLD -> View
+    if (normalizedProgress === "HOLD") {
+      return { label: "View", action: "view", variant: "secondary" };
+    }
+    
+    // COMPLETED -> View
+    if (normalizedProgress === "COMPLETED") {
+      return { label: "View", action: "view", variant: "secondary" };
+    }
+    
+    // Default fallback for executor
+    return { label: "Update", action: "update", variant: "warning" };
+  }
+  
+  // ============================================
+  // REVIEWER ACTIONS - DYNAMIC
+  // ============================================
+  if (isReviewer) {
+    // WORK_IN_PROGRESS with UNDER_REVIEW -> Review
+    if (normalizedProgress === "WORK_IN_PROGRESS" && normalizedProcess === "UNDER_REVIEW") {
+      return { label: "Review", action: "review", variant: "review" };
+    }
+    
+    // All other cases -> View
+    return { label: "View", action: "view", variant: "secondary" };
+  }
+  
+  // ============================================
+  // APPROVER ACTIONS - DYNAMIC
+  // ============================================
+  if (isApprover) {
+    // WORK_IN_PROGRESS with UNDER_REVIEW -> Approve
+    if (normalizedProgress === "WORK_IN_PROGRESS" && normalizedProcess === "UNDER_REVIEW") {
+      return { label: "Approve", action: "approve", variant: "success" };
+    }
+    
+    // All other cases -> View
+    return { label: "View", action: "view", variant: "secondary" };
+  }
+  
+  return { label: "View", action: "view", variant: "secondary" };
+};
+
+const getProcessIcon = (process) => {
+  if (!process || process === "NONE" || process === "REJECTED") return null;
+  const processData = PROCESS_COLORS[process];
+  if (!processData) return null;
   return {
-    id: t.taskCd || `TSK-${t.taskId}`,
-    taskId: t.taskId,
-    title: t.taskNm,
-    project: project ? project.prjNm : "Unknown Project",
-    milestone: milestone ? milestone.mlstnTtl : "Unknown Milestone",
-    priority: calculatedPriority,
-    dueDate: t.endDt || "",
-    status: status,
-    progress: progress,
-    rawStatus: t.taskSts,
-    rawTask: t,
-    description: t.taskDesc || "",
-    assignedBy: "Project Manager"
+    icon: processData.icon,
+    color: processData.color,
+    title: processData.title
   };
 };
 
-const mapIndividualTask = (t) => {
-  let status = "To-Do";
-  if (t.taskSts === "COMPLETED") {
-    status = "Completed";
-  } else if (t.taskSts === "SUBMIT_REVIEW" || t.taskSts === "UNDER_REVIEW") {
-    status = "Under Review";
-  } else if (t.taskSts === "REASSIGN") {
-    status = "Reassigned";
-  } else if (t.taskSts === "REWORK") {
-    status = "Rework";
-  } else {
-    const today = new Date().toISOString().split("T")[0];
-    if (t.endDt && t.endDt < today) {
-      status = "Overdue";
-    } else if (t.taskSts === "WIP") {
-      status = "In Progress";
-    } else {
-      status = "To-Do";
-    }
+const getProgressBadge = (status) => {
+  let normalizedStatus = "OPEN";
+  if (typeof status === 'object' && status !== null) {
+    normalizedStatus = String(status.statusNm || status.status_nm || status.statusId || "OPEN").toUpperCase();
+    if (status.statusId === 4 || status.status_id === 4) normalizedStatus = "CLOSED";
+  } else if (typeof status === 'string') {
+    normalizedStatus = status.toUpperCase();
+  } else if (typeof status === 'number') {
+    if (status === 4) normalizedStatus = "CLOSED";
+    if (status === 3) normalizedStatus = "WIP";
+    if (status === 2) normalizedStatus = "OPEN";
+    if (status === 1) normalizedStatus = "DRAFT";
   }
-
-  let calculatedPriority = "Low";
-  if (t.endDt) {
-    const [year, month, day] = t.endDt.split('-');
-    const endDtObj = new Date(year, month - 1, day);
-    endDtObj.setHours(0, 0, 0, 0);
-
-    let compareDateObj = new Date();
-    compareDateObj.setHours(0, 0, 0, 0);
-
-    if (t.taskSts === "COMPLETED" || t.taskSts === "UNDER_REVIEW" || t.taskSts === "SUBMIT_REVIEW") {
-       if (t.actCmpDt) {
-           compareDateObj = new Date(t.actCmpDt);
-           compareDateObj.setHours(0,0,0,0);
-       } else if (compareDateObj > endDtObj) {
-           compareDateObj = endDtObj;
-       }
-    }
-
-    const diffTime = compareDateObj.getTime() - endDtObj.getTime();
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 0) {
-      calculatedPriority = "High";
-    } else if (diffDays === 1) {
-      calculatedPriority = "Critical";
-    } else if (diffDays >= 2) {
-      calculatedPriority = "Atmost Critical";
-    }
-  }
-
-  return {
-    id: t.taskCd || `IND-${t.empTaskId}`,
-    taskId: t.empTaskId,
-    isIndividual: true,
-    title: t.taskNm,
-    project: "Individual Task",
-    milestone: "-",
-    priority: calculatedPriority,
-    dueDate: t.endDt || "",
-    status: status,
-    progress: 0,
-    rawStatus: t.taskSts,
-    rawTask: t,
-    description: t.taskDesc || "",
-    assignedBy: "Task Manager"
-  };
+  const progressData = PROGRESS_COLORS[normalizedStatus] || PROGRESS_COLORS["OPEN"];
+  return progressData;
 };
 
+const getPriorityBadge = (priority) => {
+  const normalizedPriority = priority || "Normal";
+  const priorityData = PRIORITY_COLORS[normalizedPriority];
+  if (!priorityData) return { bg: "#F3F4F6", color: "#6B7280" };
+  return priorityData;
+};
+
+// ============================================
+// MAIN COMPONENT
+// ============================================
 const MyTasks = ({ userRole, onLogout }) => {
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserEmpId, setCurrentUserEmpId] = useState(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState(null);
+  const [isAdmin, setIsAdmin] = useState(false);
   const [employeesList, setEmployeesList] = useState([]);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [apiError, setApiError] = useState(null);
+  const [loadingAction, setLoadingAction] = useState(null);
+  const [userName, setUserName] = useState("");
+  const [showDetailView, setShowDetailView] = useState(false);
+  const [selectedTask, setSelectedTask] = useState(null);
+  const [updateProgressVal, setUpdateProgressVal] = useState(0);
+  const [updateChecklist, setUpdateChecklist] = useState([]);
+  const [updateRemarks, setUpdateRemarks] = useState("");
+  const [showDenyForm, setShowDenyForm] = useState(false);
+  const [isRaiseRequest, setIsRaiseRequest] = useState(false);
+  const [denyData, setDenyData] = useState({ type: "", reason: "", milestone: "", deliverable: "", impact: "Medium" });
 
+  // ============================================
+  // FETCH TASKS
+  // ============================================
   const fetchTasks = async () => {
     try {
       setIsLoading(true);
-      const [projectsData, milestonesData, tasksData, indTasksData, profileRes, employeesData] = await Promise.all([
-        apiGet("/api/project-live").catch(() => []),
-        apiGet("/api/milestone-live").catch(() => []),
-        apiGet("/api/task-live").catch(() => []),
-        apiGet("/api/individual-tasks").catch(() => []),
-        apiGet("/api/profile").catch(() => ({})),
-        apiGet("/api/employees").catch(() => [])
+      setApiError(null);
+      
+      console.log("🔄 ===== FETCHING REAL TIME TASKS FROM BACKEND =====");
+      const startTime = Date.now();
+      
+      let empId = null;
+      let userEmail = null;
+      let adminCheck = false;
+      
+      let employeesData = employeesList;
+      let projectsData = [];
+      let milestonesData = [];
+      let tasksData = [];
+      let indTasksData = [];
+
+      // Always fetch fresh data but use parallel requests for maximum speed
+      console.log("📡 Fetching bulk data in parallel (including profile and employees)...");
+      const [profileRes, empRes, projRes, mileRes, mileDraftRes, taskRes, indTaskRes, dashRes] = await Promise.allSettled([
+        apiGet("/api/profile"),
+        apiGet("/api/employees/directory").catch(() => apiGet("/api/employees")),
+        apiGet("/api/project-live"),
+        apiGet("/api/milestone-live"),
+        apiGet("/api/milestone-drafts"),
+        apiGet("/api/task-live"),
+        apiGet("/api/assignments"),
+        apiGet("/api/user-dashboard")
       ]);
 
-      setEmployeesList(employeesData || []);
-      const empId = profileRes?.empId;
-      const isAdmin = profileRes?.email === 'vsv.vempati@gmail.com';
+      // Handle Profile
+      if (profileRes.status === 'fulfilled' && profileRes.value) {
+        empId = profileRes.value.empId;
+        userEmail = profileRes.value.email;
+        const profileName = profileRes.value.name || profileRes.value.employeeName || profileRes.value.fullName;
+        if (profileName) {
+          setUserName(profileName);
+          sessionStorage.setItem("userName", profileName);
+        }
+        adminCheck = userEmail === 'vsv.vempati@gmail.com' || userEmail === 'admin@example.com' || userRole === 'admin';
+      } else {
+        empId = sessionStorage.getItem("empId");
+        userEmail = sessionStorage.getItem("userEmail");
+        const storedName = sessionStorage.getItem("userName");
+        if (storedName) setUserName(storedName);
+        adminCheck = userEmail === 'vsv.vempati@gmail.com' || userRole === 'admin';
+      }
+      
       setCurrentUserEmpId(empId);
+      setCurrentUserEmail(userEmail);
+      setIsAdmin(adminCheck);
 
-      const liveTasksWithConfigs = await Promise.all((tasksData || []).map(async task => {
-         try {
-             const pcs = await apiGet(`/api/process-config/live-task/${task.taskId}`);
-             const configs = pcs || [];
-             const revCfg = configs.find(pc => pc.ordrId === 1);
-             const appCfg = configs.find(pc => pc.ordrId === 2);
-             return {
-                ...task,
-                reviewerId: revCfg ? revCfg.empId : task.reviewerId,
-                approverId: appCfg ? appCfg.empId : task.approverId
-             };
-         } catch(e) { return task; }
-      }));
+      // Handle Employees
+      if (empRes.status === 'fulfilled' && empRes.value) {
+        employeesData = empRes.value;
+        setEmployeesList(employeesData);
+      }
 
-      const indTasksWithConfigs = await Promise.all((indTasksData || []).map(async task => {
-         try {
-             const pcs = await apiGet(`/api/process-config/individual-task/${task.empTaskId}`);
-             const configs = pcs || [];
-             const revCfg = configs.find(pc => pc.ordrId === 1);
-             const appCfg = configs.find(pc => pc.ordrId === 2);
-             return {
-                ...task,
-                reviewerId: revCfg ? revCfg.empId : task.reviewerId,
-                approverId: appCfg ? appCfg.empId : task.approverId
-             };
-         } catch(e) { return task; }
-      }));
+      if (!empId && !adminCheck) {
+        console.log("📱 No user logged in - showing demo tasks");
+        const demoTasks = getDemoTasks(empId, employeesData);
+        setTasks(demoTasks);
+        setIsLoading(false);
+        return;
+      }
 
-      const userTasks = liveTasksWithConfigs.filter(t => isAdmin || String(t.empId) === String(empId) || String(t.reviewerId) === String(empId) || String(t.approverId) === String(empId));
-      const userIndTasks = indTasksWithConfigs.filter(t => isAdmin || String(t.empId) === String(empId) || String(t.reviewerId) === String(empId) || String(t.approverId) === String(empId));
+      projectsData = projRes.status === 'fulfilled' && projRes.value ? projRes.value : [];
+      setProjectsList(projectsData);
+      if (projRes.status === 'rejected') console.warn("⚠️ Projects API Error:", projRes.reason);
+      else console.log("✅ Projects loaded:", projectsData.length);
 
-      let mapped = userTasks.map(t => mapBackendTask(t, projectsData || [], milestonesData || []));
-      let mappedInd = userIndTasks.map(t => mapIndividualTask(t));
+      const liveMiles = mileRes.status === 'fulfilled' && mileRes.value ? mileRes.value : [];
+      const draftMiles = mileDraftRes.status === 'fulfilled' && mileDraftRes.value ? mileDraftRes.value : [];
+      milestonesData = [...liveMiles, ...draftMiles];
+      setMilestonesList(milestonesData);
+      console.log("✅ Milestones loaded:", milestonesData.length);
+
+      tasksData = taskRes.status === 'fulfilled' && taskRes.value ? taskRes.value : [];
+      if (taskRes.status === 'rejected') console.error("❌ Tasks API Error:", taskRes.reason);
+      else console.log("✅ Tasks loaded:", tasksData.length);
+
+      indTasksData = indTaskRes.status === 'fulfilled' && indTaskRes.value ? indTaskRes.value : [];
+      if (indTaskRes.status === 'rejected') console.warn("⚠️ Assignments API Error:", indTaskRes.reason);
+      else console.log("✅ Individual tasks loaded:", indTasksData.length);
+      
+      if (dashRes.status === 'fulfilled' && dashRes.value?.upcomingTasks) {
+        setUpcomingTaskIds(dashRes.value.upcomingTasks.map(t => String(t.taskId || t.id)));
+      } else {
+        setUpcomingTaskIds([]);
+      }
+
+      // Extract employees from all tasks to populate missing profiles (for restricted users)
+      try {
+        const extractedEmployees = new Map();
+        
+        const allTasksSource = [
+          ...(dashRes.status === 'fulfilled' && dashRes.value ? [
+            ...(dashRes.value.todoList || []),
+            ...(dashRes.value.upcomingTasks || []),
+            ...(dashRes.value.completedTasks || []),
+            ...(dashRes.value.closedTasks || [])
+          ] : []),
+          ...tasksData,
+          ...indTasksData
+        ];
+
+        allTasksSource.forEach(t => {
+          // Extract from embedded employees array
+          if (t.employees && Array.isArray(t.employees)) {
+            t.employees.forEach(e => {
+              const id = String(e.empId || e.employeeId || e.id || "");
+              if (id) {
+                extractedEmployees.set(id, {
+                  empId: id,
+                  empNm: e.fullName || e.empName || e.name || e.employeeName,
+                  profileImage: e.photoUrl || e.photo || e.profileImage || null
+                });
+              }
+            });
+          }
+          // Extract from flat fields
+          if (t.empId || t.assignedTo || t.executorId) {
+            const id = String(t.empId || t.assignedTo || t.executorId);
+            const name = t.executorName || t.empNm || t.empName || t.assignedToName || t.executorNm;
+            if (name && !extractedEmployees.has(id)) {
+              extractedEmployees.set(id, { empId: id, empNm: name, profileImage: t.executorPhoto || t.empPhoto });
+            }
+          }
+          if (t.reviewerId || t.reviewer) {
+            const id = String(t.reviewerId || t.reviewer);
+            const name = t.reviewerName || t.reviewerNm || t.revNm || t.revName;
+            if (name && !extractedEmployees.has(id)) {
+              extractedEmployees.set(id, { empId: id, empNm: name, profileImage: t.reviewerPhoto || t.revPhoto });
+            }
+          }
+          if (t.approverId || t.approver) {
+            const id = String(t.approverId || t.approver);
+            const name = t.approverName || t.approverNm || t.appNm || t.appName;
+            if (name && !extractedEmployees.has(id)) {
+              extractedEmployees.set(id, { empId: id, empNm: name, profileImage: t.approverPhoto || t.appPhoto });
+            }
+          }
+        });
+
+        const existingEmpIds = new Set(employeesData.map(e => String(e.empId)));
+        const newEmployees = Array.from(extractedEmployees.values()).filter(e => !existingEmpIds.has(e.empId));
+        
+        if (newEmployees.length > 0) {
+          console.log(`➕ Extracted ${newEmployees.length} employees from tasks (Fallback)`);
+          employeesData = [...employeesData, ...newEmployees];
+          setEmployeesList(employeesData);
+        }
+      } catch (e) {
+        console.error("Error extracting employees", e);
+      }
+
+      if ((!tasksData || tasksData.length === 0) && (!indTasksData || indTasksData.length === 0)) {
+        console.log("📡 No tasks found, trying alternative endpoint /api/tasks...");
+        try {
+          const altTasks = await apiGet("/api/tasks");
+          if (altTasks && altTasks.length > 0) {
+            tasksData = altTasks;
+            console.log("✅ Found tasks from /api/tasks:", tasksData.length);
+          }
+        } catch (altErr) {
+          console.warn("⚠️ Alternative tasks API also failed");
+        }
+        
+        if ((!tasksData || tasksData.length === 0) && (!indTasksData || indTasksData.length === 0)) {
+          console.log("📱 No tasks - showing demo tasks");
+          const demo = getDemoTasks(empId, employeesData || []);
+          setTasks(demo);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      let filteredLiveTasks = [];
+      let filteredIndTasks = [];
+
+      if (adminCheck) {
+        filteredLiveTasks = tasksData || [];
+        filteredIndTasks = indTasksData || [];
+        console.log(`✅ Admin: Showing all ${filteredLiveTasks.length} live tasks and ${filteredIndTasks.length} individual tasks`);
+      } else {
+        const userEmpId = String(empId);
+        console.log(`🔍 Filtering tasks for user ID: ${userEmpId}`);
+        
+        filteredLiveTasks = (tasksData || []).filter(task => {
+          const taskEmpId = String(task.empId || task.assignedTo || task.executorId || '');
+          const taskReviewerId = String(task.reviewerId || task.reviewer || '');
+          const taskApproverId = String(task.approverId || task.approver || '');
+          return taskEmpId === userEmpId || taskReviewerId === userEmpId || taskApproverId === userEmpId;
+        });
+
+        filteredIndTasks = (indTasksData || []).filter(task => {
+          const taskEmpId = String(task.empId || task.assignedTo || task.executorId || '');
+          const taskReviewerId = String(task.reviewerId || task.reviewer || '');
+          const taskApproverId = String(task.approverId || task.approver || '');
+          return taskEmpId === userEmpId || taskReviewerId === userEmpId || taskApproverId === userEmpId;
+        });
+
+        console.log(`✅ User tasks (Live): ${filteredLiveTasks.length} (out of ${(tasksData || []).length})`);
+        console.log(`✅ User tasks (Individual): ${filteredIndTasks.length} (out of ${(indTasksData || []).length})`);
+      }
+
+      let mapped = filteredLiveTasks.map(t => mapBackendTask(t, projectsData || [], milestonesData || [], employeesData || []));
+      let mappedInd = filteredIndTasks.map(t => mapIndividualTask(t, employeesData || []));
       mapped = [...mapped, ...mappedInd];
 
-      const checklistPromises = mapped.map(task => {
-        const path = task.isIndividual
-          ? `/api/checklists/individual-task/${task.taskId}`
-          : `/api/checklists/live-task/${task.taskId}`;
-        
-        return apiGet(path)
-          .then(items => {
-            const checklist = (items || []).map(item => ({
-              id: item.chkId,
-              completed: item.chkSts || false
-            }));
-            const completed = checklist.filter(item => item.completed).length;
-            const total = checklist.length;
-            
-            let progress = 0;
-            const prcsFlg = task.rawTask?.prcsFlg;
-            const taskSts = task.rawStatus;
-
-            if (!prcsFlg) {
-              progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-              if (taskSts === 'COMPLETED') progress = 100;
-            } else {
-              if (taskSts === 'COMPLETED') {
-                progress = 100;
-              } else if (taskSts === 'UNDER_REVIEW') {
-                progress = 95;
-              } else if (taskSts === 'SUBMIT_REVIEW') {
-                progress = 90;
-              } else {
-                progress = total > 0 ? Math.round((completed / total) * 100) : 0;
-              }
-            }
-            return { taskId: task.taskId, progress };
-          })
-          .catch(() => ({ taskId: task.taskId, progress: 0 }));
+      // Build comprehensive set of existing task identifiers (IDs, taskIds, taskCodes)
+      const existingKeySet = new Set();
+      mapped.forEach(t => {
+        if (t.id) existingKeySet.add(String(t.id).toUpperCase());
+        if (t.taskId) existingKeySet.add(String(t.taskId).toUpperCase());
+        if (t.taskCode) existingKeySet.add(String(t.taskCode).toUpperCase());
       });
 
-      const progressResults = await Promise.all(checklistPromises);
-      const progressMap = {};
-      progressResults.forEach(p => { progressMap[p.taskId] = p.progress; });
+      // Add missing todo tasks from dashRes without duplicating
+      if (dashRes.status === 'fulfilled' && dashRes.value?.todoList) {
+        dashRes.value.todoList.forEach(dashTask => {
+          const dashId = String(dashTask.taskId || dashTask.id || '').toUpperCase();
+          const dashCode = String(dashTask.taskCode || dashTask.taskCd || dashTask.code || '').toUpperCase();
+          const isInd = dashTask.taskSource === "INDIVIDUAL";
+          
+          const alreadyExists = mapped.some(m => {
+            const mId = String(m.taskId || m.id || '').toUpperCase();
+            const mCode = String(m.taskCode || m.code || '').toUpperCase();
+            return (dashId && mId === dashId) || (dashCode && mCode === dashCode);
+          });
+          
+          if (!alreadyExists) {
+            const mappedTask = isInd 
+              ? mapIndividualTask(dashTask, employeesData || []) 
+              : mapBackendTask(dashTask, projectsData || [], milestonesData || [], employeesData || []);
+            mapped.push(mappedTask);
+          }
+        });
+      }
 
-      mapped = mapped.map(task => ({
-        ...task,
-        progress: progressMap[task.taskId] !== undefined ? progressMap[task.taskId] : task.progress
-      }));
+      // Add missing upcoming tasks from dashRes without duplicating
+      if (dashRes.status === 'fulfilled' && dashRes.value?.upcomingTasks) {
+        const uIds = dashRes.value.upcomingTasks.map(t => String(t.taskId || t.id || t.taskCode || ''));
+        setUpcomingTaskIds(uIds);
+        const missingUpcoming = dashRes.value.upcomingTasks.filter(t => {
+          const idStr = String(t.taskId || t.id || '').toUpperCase();
+          const cdStr = String(t.taskCode || t.code || t.taskCd || '').toUpperCase();
+          return idStr && !existingKeySet.has(idStr) && (!cdStr || !existingKeySet.has(cdStr));
+        });
+        const mappedMissing = missingUpcoming.map(t => mapBackendTask(t, projectsData || [], milestonesData || [], employeesData || []));
+        mapped = [...mapped, ...mappedMissing];
+      }
 
+      // Final strict deduplication by unique key
+      const uniqueMapped = [];
+      const seenKeys = new Set();
+      mapped.forEach(t => {
+        const idKey = `${t.isIndividual ? 'IND' : 'LIVE'}_${t.taskId || t.id || t.empTaskId}`;
+        if (!seenKeys.has(idKey)) {
+          seenKeys.add(idKey);
+          uniqueMapped.push(t);
+        }
+      });
+      mapped = uniqueMapped;
+
+      mapped = mapped.map(task => {
+        let progress = 0;
+        const taskSts = String(task.rawStatus || task.status || "").toUpperCase();
+        
+        if (taskSts === 'COMPLETED' || taskSts === 'CLOSED') {
+          progress = 100;
+        } else if (taskSts === 'WIP' || taskSts === 'IN_PROGRESS' || taskSts === 'UNDER_REVIEW') {
+          progress = 50;
+        } else if (taskSts === 'OPEN' || taskSts === 'DRAFT') {
+          progress = 0;
+        }
+        
+        return {
+          ...task,
+          progress: progress,
+          status: getDisplayStatus(progress, task.status, false)
+        };
+      });
+
+      mapped = mapped.filter(task => {
+        const s = String(task.rawStatus || task.status || "").toUpperCase();
+        return s !== "DRAFT";
+      });
+
+      console.log(`✅ Final tasks loaded: ${mapped.length} (Loaded in ${Date.now() - startTime}ms)`);
       setTasks(mapped);
+      return mapped;
+      
     } catch (err) {
-      console.error("Error loading tasks:", err);
+      console.error("❌ Error loading tasks:", err);
+      setApiError(err.message || "Failed to load tasks. Please try again.");
+      return [];
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const getDemoTasks = (empId, employees) => {
+    const userId = empId || "1";
+    return [
+      {
+        id: "DEMO-001",
+        taskId: 1,
+        title: "Design Homepage (Demo)",
+        project: "Website Redesign",
+        milestone: "Design Phase",
+        priority: "High",
+        dueDate: "2026-07-20",
+        status: "WIP",
+        progress: 50,
+        rawStatus: "WIP",
+        rawTask: {
+          taskId: 1,
+          taskNm: "Design Homepage",
+          empId: userId,
+          reviewerId: "2",
+          approverId: "3",
+          taskSts: "WIP",
+          prcsYesActn: "NONE",
+          endDt: "2026-07-20"
+        },
+        description: "Create the main homepage design with hero section"
+      },
+      {
+        id: "DEMO-002",
+        taskId: 2,
+        title: "API Integration (Demo)",
+        project: "Mobile App",
+        milestone: "Backend",
+        priority: "Critical",
+        dueDate: "2026-07-15",
+        status: "OPEN",
+        progress: 0,
+        rawStatus: "OPEN",
+        rawTask: {
+          taskId: 2,
+          taskNm: "API Integration",
+          empId: userId,
+          reviewerId: "4",
+          approverId: "5",
+          taskSts: "OPEN",
+          prcsYesActn: "NONE",
+          endDt: "2026-07-15"
+        },
+        description: "Integrate REST APIs for mobile app"
+      },
+      {
+        id: "DEMO-003",
+        taskId: 3,
+        title: "Testing and QA (Demo)",
+        project: "Website Redesign",
+        milestone: "Testing",
+        priority: "Normal",
+        dueDate: "2026-07-25",
+        status: "COMPLETED",
+        progress: 100,
+        rawStatus: "COMPLETED",
+        rawTask: {
+          taskId: 3,
+          taskNm: "Testing and QA",
+          empId: userId,
+          reviewerId: "2",
+          approverId: "3",
+          taskSts: "COMPLETED",
+          prcsYesActn: "NONE",
+          endDt: "2026-07-25",
+          actCmpDt: "2026-07-24"
+        },
+        description: "Complete testing and quality assurance"
+      }
+    ];
+  };
+
+  const getDisplayStatus = (progress, originalStatus, prcsFlg) => {
+    if (progress === 100) return "COMPLETED";
+    if (progress > 0) return "WIP";
+    return "OPEN";
+  };
+
+const formatTaskCode = (code, taskId, isIndividual) => {
+  if (code && typeof code === 'string' && code.trim() !== '') {
+    const raw = code.trim();
+    const match = raw.match(/^(TSK|INDTSK|INDKTSK|IND|INDTASK|TST|T)-?(\d+)$/i);
+    if (match) {
+      const p = match[1].toUpperCase();
+      const num = parseInt(match[2], 10);
+      if (p.startsWith('IND')) {
+        return `INDTSK-${String(num).padStart(3, '0')}`;
+      } else {
+        return `TSK-${String(num).padStart(3, '0')}`;
+      }
+    }
+    return raw.toUpperCase();
+  }
+  const prefix = isIndividual ? 'INDTSK' : 'TSK';
+  const num = parseInt(taskId, 10);
+  return `${prefix}-${String(isNaN(num) ? 1 : num).padStart(3, '0')}`;
+};
+
+  const mapBackendTask = (t, projects, milestones, employees) => {
+    const targetMId = t.mId || t.m_id || t.drftMId || t.milestoneId || t.mid;
+    const milestoneObj = milestones?.find(m => 
+      String(m.mId || m.id || m.m_id || m.milestoneId || '') === String(targetMId || '')
+    );
+    
+    const targetPrjId = milestoneObj 
+      ? (milestoneObj.prjId || milestoneObj.projectId || milestoneObj.prj_id) 
+      : (t.prjId || t.projectId || t.prj_id);
+    const projectObj = projects?.find(p => 
+      String(p.prjId || p.id || p.prj_id || '') === String(targetPrjId || '')
+    );
+
+    const milestoneName = 
+      (milestoneObj ? (milestoneObj.mlstnTtl || milestoneObj.title || milestoneObj.name || milestoneObj.mlstn_ttl || milestoneObj.mlstnNm) : null) ||
+      t.milestoneName || t.mlstnTtl || t.milestoneTitle || t.milestone || t.mlstnNm || t.mlstn_ttl ||
+      "—";
+
+    const projectName =
+      (projectObj ? (projectObj.prjNm || projectObj.name || projectObj.prj_nm) : null) ||
+      t.projectName || t.projectCodeName || t.prjNm || t.project ||
+      "Internal";
+
+    const taskCodeFormatted = formatTaskCode(t.taskCd || t.taskCode || t.task_cd || t.code, t.taskId || t.id, false);
+
+    let status = "OPEN";
+    const taskSts = String(t.taskSts || t.status || "OPEN").toUpperCase();
+    if (taskSts === "COMPLETED" || taskSts === "CLOSED") status = "COMPLETED";
+    else if (taskSts === "WIP" || taskSts === "IN_PROGRESS") status = "WIP";
+    else if (taskSts === "OPEN") status = "OPEN";
+    else if (taskSts === "DRAFT") status = "DRAFT";
+    else if (taskSts === "HOLD") status = "HOLD";
+    else status = "WIP";
+
+    let calculatedPriority = "Normal";
+    const endDt = t.endDt || t.dueDate || t.endDate;
+    if (taskSts === "REASSIGN" || taskSts === "REWORK") {
+      calculatedPriority = taskSts;
+    } else if (endDt) {
+      try {
+        const dateStr = endDt.split('T')[0];
+        const [year, month, day] = dateStr.split('-');
+        const endDtObj = new Date(year, month - 1, day);
+        endDtObj.setHours(0, 0, 0, 0);
+
+        let compareDateObj = new Date();
+        compareDateObj.setHours(0, 0, 0, 0);
+
+        const actCmpDt = t.actCmpDt || t.actualCompletionDate || t.completedDate;
+        if (taskSts === "COMPLETED" || taskSts === "CLOSED" || taskSts === "UNDER_REVIEW") {
+          if (actCmpDt) {
+            const cmpDateStr = actCmpDt.split('T')[0];
+            const [cYear, cMonth, cDay] = cmpDateStr.split('-');
+            compareDateObj = new Date(cYear, cMonth - 1, cDay);
+            compareDateObj.setHours(0,0,0,0);
+          } else if (compareDateObj > endDtObj) {
+            compareDateObj = endDtObj;
+          }
+        }
+
+        const diffTime = compareDateObj.getTime() - endDtObj.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) calculatedPriority = "High";
+        else if (diffDays === 1) calculatedPriority = "Critical";
+        else if (diffDays >= 2) calculatedPriority = "Atmost Critical";
+      } catch (e) {}
+    }
+
+    return {
+      id: taskCodeFormatted,
+      taskCode: taskCodeFormatted,
+      taskId: t.taskId || t.id,
+      title: t.taskNm || t.taskName || t.name || "Untitled Task",
+      project: projectName,
+      milestone: milestoneName,
+      priority: calculatedPriority,
+      dueDate: endDt ? endDt.split('T')[0] : "",
+      status: status,
+      progress: 0,
+      rawStatus: taskSts,
+      rawTask: {
+        ...t,
+        empId: t.empId || t.assignedTo || t.executorId,
+        reviewerId: t.reviewerId || t.reviewer,
+        approverId: t.approverId || t.approver,
+      },
+      description: t.taskDesc || t.description || ""
+    };
+  };
+
+  const mapIndividualTask = (t, employees) => {
+    const taskCodeFormatted = formatTaskCode(t.taskCd || t.taskCode || t.task_cd || t.code, t.empTaskId || t.id, true);
+
+    let status = "OPEN";
+    const taskSts = String(t.taskSts || t.status || "OPEN").toUpperCase();
+    if (taskSts === "COMPLETED") status = "COMPLETED";
+    else if (taskSts === "WIP" || taskSts === "IN_PROGRESS") status = "WIP";
+    else if (taskSts === "OPEN") status = "OPEN";
+    else if (taskSts === "DRAFT") status = "DRAFT";
+    else if (taskSts === "HOLD") status = "HOLD";
+    else status = "WIP";
+
+    let calculatedPriority = "Normal";
+    const endDt = t.endDt || t.dueDate || t.endDate;
+    if (taskSts === "REASSIGN" || taskSts === "REWORK") {
+      calculatedPriority = taskSts;
+    } else if (endDt) {
+      try {
+        const dateStr = endDt.split('T')[0];
+        const [year, month, day] = dateStr.split('-');
+        const endDtObj = new Date(year, month - 1, day);
+        endDtObj.setHours(0, 0, 0, 0);
+
+        let compareDateObj = new Date();
+        compareDateObj.setHours(0, 0, 0, 0);
+
+        const actCmpDt = t.actCmpDt || t.actualCompletionDate || t.completedDate;
+        if (taskSts === "COMPLETED" || taskSts === "UNDER_REVIEW") {
+          if (actCmpDt) {
+            const cmpDateStr = actCmpDt.split('T')[0];
+            const [cYear, cMonth, cDay] = cmpDateStr.split('-');
+            compareDateObj = new Date(cYear, cMonth - 1, cDay);
+            compareDateObj.setHours(0,0,0,0);
+          } else if (compareDateObj > endDtObj) {
+            compareDateObj = endDtObj;
+          }
+        }
+
+        const diffTime = compareDateObj.getTime() - endDtObj.getTime();
+        const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+        if (diffDays === 0) calculatedPriority = "High";
+        else if (diffDays === 1) calculatedPriority = "Critical";
+        else if (diffDays >= 2) calculatedPriority = "Atmost Critical";
+      } catch (e) {}
+    }
+
+    return {
+      id: taskCodeFormatted,
+      taskCode: taskCodeFormatted,
+      taskId: t.empTaskId || t.id,
+      isIndividual: true,
+      title: t.taskNm || t.taskName || t.name || "Untitled Task",
+      project: "Individual Task",
+      milestone: "—",
+      priority: calculatedPriority,
+      dueDate: endDt ? endDt.split('T')[0] : "",
+      status: status,
+      progress: 0,
+      rawStatus: taskSts,
+      rawTask: {
+        ...t,
+        empId: t.empId || t.assignedTo || t.executorId,
+        reviewerId: t.reviewerId || t.reviewer,
+        approverId: t.approverId || t.approver,
+      },
+      description: t.taskDesc || t.description || ""
+    };
   };
 
   useEffect(() => {
     fetchTasks();
   }, []);
 
+  // ============================================
+  // SIDEBAR COLLAPSE LISTENER
+  // ============================================
+  useEffect(() => {
+    const handleSidebarToggle = (event) => {
+      const collapsed = event.detail?.collapsed || false;
+      setIsSidebarCollapsed(collapsed);
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+    };
+    
+    window.addEventListener('sidebarToggle', handleSidebarToggle);
+    
+    const sidebar = document.querySelector('.sidebar');
+    if (sidebar) {
+      const collapsed = sidebar.classList.contains('collapsed');
+      setIsSidebarCollapsed(collapsed);
+      document.body.classList.toggle('sidebar-collapsed', collapsed);
+    }
+    
+    return () => {
+      window.removeEventListener('sidebarToggle', handleSidebarToggle);
+      document.body.classList.remove('sidebar-collapsed');
+    };
+  }, []);
+
+  // ============================================
+  // STATE
+  // ============================================
   const [searchInput, setSearchInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedProject, setSelectedProject] = useState("All Projects");
   const [selectedMilestone, setSelectedMilestone] = useState("All Milestones");
   const [selectedPriority, setSelectedPriority] = useState("All Priorities");
-  const [selectedStatus, setSelectedStatus] = useState("To-Do (Not Started)");
+  const location = useLocation();
+  const [selectedStatus, setSelectedStatus] = useState(location.state?.selectedStatus || "To Do");
+
+  useEffect(() => {
+    if (location.state?.selectedStatus) {
+      setSelectedStatus(location.state.selectedStatus);
+      setCurrentPage(1);
+    }
+  }, [location.state]);
+  const [projectsList, setProjectsList] = useState([]);
+  const [milestonesList, setMilestonesList] = useState([]);
+  const [upcomingTaskIds, setUpcomingTaskIds] = useState([]);
+  const [taskAttachments, setTaskAttachments] = useState([]);
+  const [loadingAttachments, setLoadingAttachments] = useState(false);
+  const [previewModalFile, setPreviewModalFile] = useState(null);
   const [selectedDueDate, setSelectedDueDate] = useState("");
   const [showFilters, setShowFilters] = useState(true);
+  const [taskFilter, setTaskFilter] = useState("All");
 
   const handleStatusFilterChange = (statusVal) => {
     if (selectedStatus === statusVal) {
@@ -296,131 +1080,27 @@ const MyTasks = ({ userRole, onLogout }) => {
   };
 
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const itemsPerPage = 10;
 
-  const [selectedTask, setSelectedTask] = useState(null);
-  const [showDetailModal, setShowDetailModal] = useState(false);
-  const [updatingTask, setUpdatingTask] = useState(null);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertConfig, setAlertConfig] = useState({ type: "success", title: "", message: "" });
 
-  const [updateProgressVal, setUpdateProgressVal] = useState(0);
-  const [updateChecklist, setUpdateChecklist] = useState([]);
-  const [updateRemarks, setUpdateRemarks] = useState("");
-
-  const [showDenyForm, setShowDenyForm] = useState(false);
-  const [denyData, setDenyData] = useState({
-    milestone: "",
-    deliverable: "",
-    reason: "",
-    impact: "Low",
-    type: "REASSIGN"
-  });
-
-  // Lock body scroll when modals open
+  // Lock body scroll
   useEffect(() => {
-    if (showDetailModal || showUpdateModal || alertOpen) {
+    if (alertOpen) {
       document.body.style.overflow = "hidden";
     } else {
       document.body.style.overflow = "";
     }
     return () => { document.body.style.overflow = ""; };
-  }, [showDetailModal, showUpdateModal, alertOpen]);
+  }, [alertOpen]);
 
-  const visibleTasks = tasks.filter(task => {
-    const isExec = String(task.rawTask.empId) === String(currentUserEmpId);
-    const isRev = String(task.rawTask.reviewerId) === String(currentUserEmpId);
-    const isApp = String(task.rawTask.approverId) === String(currentUserEmpId);
-    let isVisible = false;
-    if (isExec) isVisible = true;
-    if (isRev && (task.rawStatus === "SUBMIT_REVIEW" || task.rawStatus === "UNDER_REVIEW" || task.rawStatus === "COMPLETED")) isVisible = true;
-    if (isApp && (task.rawStatus === "UNDER_REVIEW" || task.rawStatus === "COMPLETED")) isVisible = true;
-    return isVisible;
-  });
-
-  const countTodo = visibleTasks.filter(t => {
-      const isExec = String(t.rawTask.empId) === String(currentUserEmpId);
-      return isExec && (t.status === "To-Do" || t.status === "Reassigned" || t.status === "Rework");
-  }).length;
-  
-  const countInProgress = visibleTasks.filter(t => t.status === "In Progress").length;
-  
-  const countUnderReview = visibleTasks.filter(t => t.status === "Under Review").length;
-
-  const countCompleted = visibleTasks.filter(t => t.status === "Completed").length;
-  
-  const countOverdue = visibleTasks.filter(t => {
-      const isExec = String(t.rawTask.empId) === String(currentUserEmpId);
-      return isExec && t.status === "Overdue";
-  }).length;
-
-  const projectsList = ["All Projects", ...new Set(tasks.map(t => t.project))];
-  const milestonesList = ["All Milestones", ...new Set(tasks.map(t => t.milestone))];
-
-  const formatDate = (dateStr) => {
-    if (!dateStr) return "";
-    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-    const parts = dateStr.split("-");
-    if (parts.length === 3) {
-      const year = parts[0];
-      const month = months[parseInt(parts[1], 10) - 1];
-      const day = parts[2];
-      return `${day}-${month}-${year}`;
-    }
-    return dateStr;
-  };
-
-  const triggerAlert = (type, title, message) => {
-    setAlertConfig({ type, title, message });
-    setAlertOpen(true);
-  };
-
-  const openDetails = (task) => {
-    setSelectedTask(task);
-    setShowDetailModal(true);
-  };
-
-  const computeProgress = (checklist, task) => {
-    if (!checklist || checklist.length === 0) return 0;
-    const completed = checklist.filter(item => item.completed).length;
-    const prcsFlg = task?.rawTask?.prcsFlg;
-    const taskSts = task?.rawStatus;
-
-    if (!prcsFlg) {
-      return Math.round((completed / checklist.length) * 100);
-    } else {
-       if (taskSts === 'COMPLETED') return 100;
-       if (taskSts === 'UNDER_REVIEW') return 95;
-       if (taskSts === 'SUBMIT_REVIEW') return 90;
-       return Math.round((completed / checklist.length) * 100);
-    }
-  };
-
-  const getDisplayStatus = (progress, originalStatus, prcsFlg) => {
-    if (progress === 100 && !prcsFlg) return "Completed";
-    if (progress === 100 && prcsFlg) {
-      if (originalStatus === "Completed") return "Completed";
-      return "In Progress";
-    }
-    if (prcsFlg && (progress === 90 || progress === 95)) {
-      if (progress === 95) return "Under Review";
-      if (progress === 90 && originalStatus === "Under Review") return "Under Review"; 
-      return "In Progress";
-    }
-    if (progress > 0) return "In Progress";
-    
-    if (originalStatus === "In Progress" || originalStatus === "Under Review" || originalStatus === "Overdue" || originalStatus === "Reassigned" || originalStatus === "Rework") {
-      return originalStatus;
-    }
-    return "To-Do";
-  };
+  // ============================================
+  // WORKFLOW ACTIONS - DYNAMIC
+  // ============================================
 
   const sendNotification = async (empId, message, taskContext = null) => {
-    if (!empId) {
-      console.warn("sendNotification aborted: empId is missing", { empId, message });
-      return;
-    }
+    if (!empId) return;
     try {
       const payload = {
         empId: parseInt(empId, 10),
@@ -428,188 +1108,499 @@ const MyTasks = ({ userRole, onLogout }) => {
         message
       };
       if (taskContext) {
-         payload.entityTyp = taskContext.isIndividual ? "INDIVIDUAL_TASK" : "TASK";
-         payload.entityId = parseInt(taskContext.taskId, 10);
+        payload.entityTyp = taskContext.isIndividual ? "INDIVIDUAL_TASK" : "TASK";
+        payload.entityId = parseInt(taskContext.taskId, 10);
       }
       await apiPost("/api/notifications", payload);
-      console.log("Notification sent successfully to empId:", empId);
     } catch (e) {
-      console.warn("Failed to send notification (likely unauthorized)", e);
+      console.warn("Failed to send notification:", e);
     }
   };
 
-  const handleStartTask = async (task) => {
+  const handleStartTask = async (task, skipAlert = false) => {
+    if (!task) return task;
     try {
-      const originalTask = task.rawTask;
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // OPEN + NONE -> WORK_IN_PROGRESS + NONE
       const updatedTaskObj = {
         ...originalTask,
         taskSts: "WIP",
+        prcsYesActn: "NONE"
       };
       
+      const taskId = task.taskId || task.id;
       const updatePath = task.isIndividual 
-        ? `/api/individual-tasks/${task.taskId}`
-        : `/api/task-live/${task.taskId}`;
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
         
+      console.log(`🚀 Starting task ${taskId}`);
       await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
-
-      if (originalTask.reviewerId) {
-         await sendNotification(originalTask.reviewerId, `Task started: ${task.title} (${task.id})`, task);
-      }
+      const latestTasks = await fetchTasks();
+      if (!skipAlert) triggerAlert("success", "Started", "Task moved to Work In Progress.");
       
-      if (originalTask.approverId) {
-         await sendNotification(originalTask.approverId, `Task started: ${task.title} (${task.id})`, task);
+      let returnedTask = task;
+      if (latestTasks) {
+        const found = latestTasks.find(t => t.id === task.id);
+        if (found) {
+          returnedTask = found;
+          if (selectedTask && selectedTask.id === task.id) {
+            setSelectedTask(found);
+          }
+        }
       }
-
-      await fetchTasks();
-      triggerAlert("success", "Started", "Task moved to In Progress.");
+      return returnedTask;
     } catch (err) {
       console.error("Error starting task:", err);
-      triggerAlert("danger", "Error", "Failed to start task: " + err.message);
+      if (!skipAlert) triggerAlert("danger", "Error", "Failed to start task: " + err.message);
+      return task;
+    } finally {
+      setLoadingAction(null);
     }
   };
 
-  const openUpdateModal = async (task) => {
-    setUpdatingTask(task);
-    setUpdateRemarks(task.rawTask?.addlRem || "");
-    setShowDenyForm(false);
-    setDenyData({
-      milestone: "",
-      deliverable: "",
-      reason: "",
-      impact: "Low",
-      type: "REASSIGN"
-    });
-
+  const handleSubmitReview = async (task) => {
+    if (!task) return;
     try {
-      const path = task.isIndividual
-        ? `/api/checklists/individual-task/${task.taskId}`
-        : `/api/checklists/live-task/${task.taskId}`;
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // WORK_IN_PROGRESS + NONE/REWORK -> WORK_IN_PROGRESS + UNDER_REVIEW
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: "WIP",
+        prcsYesActn: originalTask.reviewerId ? "PENDING_REVIEWER" : "PENDING_APPROVER"
+      };
+      
+      const taskId = task.taskId || task.id;
+      const updatePath = task.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
         
-      const items = await apiGet(path);
-      const mapped = (items || []).map(item => ({
-        id: item.chkId,
-        text: item.chkNm,
-        completed: item.chkSts || false
-      }));
-      setUpdateChecklist(mapped);
-      const progress = computeProgress(mapped, task);
-      setUpdateProgressVal(progress);
+      console.log(`📤 Submitting task ${taskId} for review`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+      
+      const targetId = originalTask.reviewerId || originalTask.approverId;
+      if (targetId) {
+        await sendNotification(targetId, `Task submitted for review: ${task.id}`, task);
+      }
+      
+      const latestTasks = await fetchTasks();
+      triggerAlert("success", "Submitted", "Task submitted for review.");
+      if (selectedTask && latestTasks) {
+        const updatedTask = latestTasks.find(t => t.id === task.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
     } catch (err) {
-      console.error("Failed to load checklist:", err);
-      setUpdateChecklist([]);
-      setUpdateProgressVal(0);
+      console.error("Error submitting for review:", err);
+      triggerAlert("danger", "Error", "Failed to submit: " + err.message);
+    } finally {
+      setLoadingAction(null);
     }
-
-    setShowUpdateModal(true);
   };
 
-  const handleToggleChecklist = (id) => {
-    if (updatingTask?.status === "Under Review" || updatingTask?.status === "Completed" || String(updatingTask?.rawTask?.empId) !== String(currentUserEmpId)) return;
+  const handleCompleteTask = async (task) => {
+    if (!task) return;
+    try {
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // 1. Complete all checklists
+      if (updateChecklist && updateChecklist.length > 0) {
+        await Promise.all(updateChecklist
+          .filter(item => item.id != null)
+          .map(item => apiPatch(`/api/checklists/${item.id}/complete?_t=${Date.now()}`, {}))
+        );
+      }
 
-    setUpdateChecklist(prev => {
-      const newList = prev.map(item =>
-        item.id === id ? { ...item, completed: !item.completed } : item
+      // 2. Build updated remarks
+      let newRem = originalTask.remarks || originalTask.addlRem || "";
+      if (updateRemarks) {
+        newRem = newRem ? `${newRem}\n---\n[Executor]: ${updateRemarks}` : updateRemarks;
+      }
+
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: { statusId: 4, statusNm: "Closed" },
+        prcsYesActn: "NONE",
+        actCmpDt: new Date().toISOString().split("T")[0]
+      };
+      if (task.isIndividual) {
+        updatedTaskObj.remarks = newRem;
+      } else {
+        updatedTaskObj.addlRem = newRem;
+      }
+      
+      const taskId = task.taskId || task.id;
+      const updatePath = task.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
+        
+      console.log(`✅ Direct completing task ${taskId}`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+
+      // 3. Patch status endpoint to guarantee status_id = 4 in DB
+      const statusPath = task.isIndividual 
+        ? `/api/assignments/${taskId}/status`
+        : `/api/task-live/${taskId}/status`;
+      await apiPatch(`${statusPath}?_t=${Date.now()}`, { taskSts: "CLOSED" });
+      
+      const latestTasks = await fetchTasks();
+      triggerAlert("success", "Completed", "Task completed successfully.");
+      if (selectedTask && latestTasks) {
+        const updatedTask = latestTasks.find(t => t.id === task.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
+    } catch (err) {
+      console.error("Error completing task:", err);
+      triggerAlert("danger", "Error", "Failed to complete: " + err.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleReviewerApprove = async (task) => {
+    if (!task) return;
+    try {
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // WORK_IN_PROGRESS + UNDER_REVIEW -> WORK_IN_PROGRESS + UNDER_REVIEW (to approver) or COMPLETED
+      let finalStatus = "WIP";
+      let finalProcess = "PENDING_APPROVER";
+      
+      if (!originalTask.approverId) {
+        finalStatus = "COMPLETED";
+        finalProcess = "NONE";
+      }
+      
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: finalStatus,
+        prcsYesActn: finalProcess,
+        actCmpDt: finalStatus === "COMPLETED" ? new Date().toISOString().split("T")[0] : originalTask.actCmpDt
+      };
+      
+      const taskId = task.taskId || task.id;
+      const updatePath = task.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
+        
+      console.log(`✅ Reviewer approving task ${taskId}`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+      
+      if (finalStatus === "COMPLETED") {
+        await sendNotification(originalTask.empId, `Task Closed: ${task.id}`, task);
+      } else if (originalTask.approverId) {
+        await sendNotification(originalTask.approverId, `Task ready for approval: ${task.id}`, task);
+      }
+      
+      const latestTasks = await fetchTasks();
+      triggerAlert("success", "Approved", "Task approved successfully.");
+      if (selectedTask && latestTasks) {
+        const updatedTask = latestTasks.find(t => t.id === task.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
+    } catch (err) {
+      console.error("Error approving task:", err);
+      triggerAlert("danger", "Error", "Failed to approve: " + err.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleApproverApprove = async (task) => {
+    if (!task) return;
+    try {
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // WORK_IN_PROGRESS + UNDER_REVIEW -> COMPLETED + NONE
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: "COMPLETED",
+        prcsYesActn: "NONE",
+        actCmpDt: new Date().toISOString().split("T")[0]
+      };
+      
+      const taskId = task.taskId || task.id;
+      const updatePath = task.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
+        
+      console.log(`✅ Approver approving task ${taskId}`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+      
+      await sendNotification(originalTask.empId, `Task Closed: ${task.id}`, task);
+      if (originalTask.reviewerId) {
+        await sendNotification(originalTask.reviewerId, `Task Closed: ${task.id}`, task);
+      }
+      
+      const latestTasks = await fetchTasks();
+      triggerAlert("success", "Closed", "Task closed successfully.");
+      if (selectedTask && latestTasks) {
+        const updatedTask = latestTasks.find(t => t.id === task.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
+    } catch (err) {
+      console.error("Error closing task:", err);
+      triggerAlert("danger", "Error", "Failed to close: " + err.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleReviewerReject = async (task, reason) => {
+    if (!task) return;
+    try {
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // WORK_IN_PROGRESS + UNDER_REVIEW -> WORK_IN_PROGRESS + REWORK
+      const prefix = `[Rejected - ${sessionStorage.getItem("userName") || 'Reviewer'}]`;
+      const existingRem = task.isIndividual ? originalTask.remarks : originalTask.addlRem;
+      const newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${reason}` : `${prefix}: ${reason}`;
+
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: "WIP",
+        prcsYesActn: "REWORK"
+      };
+
+      if (task.isIndividual) {
+        updatedTaskObj.remarks = newRem;
+      } else {
+        updatedTaskObj.addlRem = newRem;
+      }
+      
+      const taskId = task.taskId || task.id;
+      const updatePath = task.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
+        
+      console.log(`❌ Reviewer rejecting task ${taskId}`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+      await sendNotification(originalTask.empId, `Task rejected, needs rework: ${task.id}`, task);
+      
+      await fetchTasks();
+      triggerAlert("warning", "Rejected", "Task sent back for rework.");
+      if (selectedTask) {
+        const updatedTask = tasks.find(t => t.id === task.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
+    } catch (err) {
+      console.error("Error rejecting task:", err);
+      triggerAlert("danger", "Error", "Failed to reject: " + err.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleReviewerReassign = async (task, reason, newExecutorId) => {
+    if (!task) return;
+    try {
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // WORK_IN_PROGRESS + UNDER_REVIEW -> WORK_IN_PROGRESS + REASSIGN
+      const prefix = `[Reassigned - ${sessionStorage.getItem("userName") || 'Reviewer'}]`;
+      const existingRem = task.isIndividual ? originalTask.remarks : originalTask.addlRem;
+      const newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${reason}` : `${prefix}: ${reason}`;
+
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: "WIP",
+        prcsYesActn: "REASSIGN",
+        empId: newExecutorId || originalTask.empId
+      };
+
+      if (task.isIndividual) {
+        updatedTaskObj.remarks = newRem;
+      } else {
+        updatedTaskObj.addlRem = newRem;
+      }
+      
+      const taskId = task.taskId || task.id;
+      const updatePath = task.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
+        
+      console.log(`🔄 Reviewer reassigning task ${taskId}`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+      
+      if (newExecutorId) {
+        await sendNotification(newExecutorId, `Task reassigned to you: ${task.id}`, task);
+      }
+      
+      await fetchTasks();
+      triggerAlert("info", "Reassigned", "Task reassigned successfully.");
+      if (selectedTask) {
+        const updatedTask = tasks.find(t => t.id === task.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
+    } catch (err) {
+      console.error("Error reassigning task:", err);
+      triggerAlert("danger", "Error", "Failed to reassign: " + err.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleApproverReject = async (task, reason) => {
+    if (!task) return;
+    try {
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // WORK_IN_PROGRESS + UNDER_REVIEW -> WORK_IN_PROGRESS + REWORK
+      const prefix = `[Rejected by Approver - ${sessionStorage.getItem("userName") || 'Approver'}]`;
+      const existingRem = task.isIndividual ? originalTask.remarks : originalTask.addlRem;
+      const newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${reason}` : `${prefix}: ${reason}`;
+
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: "WIP",
+        prcsYesActn: "REWORK"
+      };
+
+      if (task.isIndividual) {
+        updatedTaskObj.remarks = newRem;
+      } else {
+        updatedTaskObj.addlRem = newRem;
+      }
+      
+      const taskId = task.taskId || task.id;
+      const updatePath = task.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
+        
+      console.log(`❌ Approver rejecting task ${taskId}`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+      await sendNotification(originalTask.empId, `Task rejected by approver, needs rework: ${task.id}`, task);
+      
+      await fetchTasks();
+      triggerAlert("warning", "Rejected", "Task sent back for rework.");
+      if (selectedTask) {
+        const updatedTask = tasks.find(t => t.id === task.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
+    } catch (err) {
+      console.error("Error rejecting task:", err);
+      triggerAlert("danger", "Error", "Failed to reject: " + err.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleResumeTask = async (task) => {
+    if (!task) return;
+    try {
+      setLoadingAction(task.id || task.taskId);
+      const originalTask = task.rawTask || task;
+      
+      // HOLD + NONE -> WORK_IN_PROGRESS + NONE
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: "WIP",
+        prcsYesActn: "NONE"
+      };
+      
+      const taskId = task.taskId || task.id;
+      const updatePath = task.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
+        
+      console.log(`▶️ Resuming task ${taskId}`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+      await fetchTasks();
+      triggerAlert("success", "Resumed", "Task resumed.");
+      if (selectedTask) {
+        const updatedTask = tasks.find(t => t.id === task.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
+    } catch (err) {
+      console.error("Error resuming task:", err);
+      triggerAlert("danger", "Error", "Failed to resume: " + err.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleUpdateProgress = async () => {
+    if (!selectedTask) return;
+    try {
+      setLoadingAction(selectedTask.id || selectedTask.taskId);
+      const originalTask = selectedTask.rawTask || selectedTask;
+      
+      await Promise.all(updateChecklist
+        .filter(item => item.id != null)
+        .map(item => {
+          const path = `/api/checklists/${item.id}/${item.completed ? 'complete' : 'reopen'}?_t=${Date.now()}`;
+          return apiPatch(path, {});
+        })
       );
-      const progress = computeProgress(newList, updatingTask);
-      setUpdateProgressVal(progress);
-      return newList;
-    });
-  };
 
-  const handleAction = async (newStatus) => {
-    if (!updatingTask) return;
-    try {
-      const originalTask = updatingTask.rawTask;
-      const updatedTaskObj = {
-        ...originalTask,
-        taskSts: newStatus,
-        addlRem: updateRemarks || originalTask.addlRem
-      };
-
-      const updatePath = updatingTask.isIndividual 
-        ? `/api/individual-tasks/${updatingTask.taskId}`
-        : `/api/task-live/${updatingTask.taskId}`;
-        
-      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
-
-      const taskCode = updatingTask.id;
-      if (newStatus === "REASSIGN") {
-          await sendNotification(originalTask.empId, `Task Reassigned: ${taskCode}`, updatingTask);
-      } else if (newStatus === "UNDER_REVIEW") { 
-          if (originalTask.approverId) {
-             await sendNotification(originalTask.approverId, `Task ready for Approval: ${taskCode}`, updatingTask);
-          }
-      } else if (newStatus === "COMPLETED") { 
-          await sendNotification(originalTask.empId, `Task Completed: ${taskCode}`, updatingTask);
-          if (originalTask.reviewerId) {
-             await sendNotification(originalTask.reviewerId, `Task Completed: ${taskCode}`, updatingTask);
-          }
+      if (updateRemarks) {
+        const existingRem = selectedTask.isIndividual ? originalTask.remarks : originalTask.addlRem;
+        const newRem = existingRem ? `${existingRem}\n---\n[Executor]: ${updateRemarks}` : updateRemarks;
+        const updatedTaskObj = {
+          ...originalTask
+        };
+        if (selectedTask.isIndividual) {
+          updatedTaskObj.remarks = newRem;
+        } else {
+          updatedTaskObj.addlRem = newRem;
+        }
+        const taskId = selectedTask.taskId || selectedTask.id;
+        const updatePath = selectedTask.isIndividual 
+          ? `/api/assignments/${taskId}`
+          : `/api/task-live/${taskId}`;
+        await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
       }
-
+      
       await fetchTasks();
-      setShowUpdateModal(false);
-      triggerAlert("success", "Success", `Task status updated to ${newStatus}.`);
-    } catch (err) {
-      console.error("Error updating task:", err);
-      triggerAlert("danger", "Error", "Failed to update task: " + err.message);
-    }
-  };
-
-  const handleSubmitDeny = async () => {
-    if (!updatingTask) return;
-    try {
-      const originalTask = updatingTask.rawTask;
-      const newStatus = denyData.type; // "REASSIGN" or "REWORK"
-      const updatedTaskObj = {
-        ...originalTask,
-        taskSts: newStatus,
-        addlRem: denyData.reason
-      };
-
-      const updatePath = updatingTask.isIndividual 
-        ? `/api/individual-tasks/${updatingTask.taskId}`
-        : `/api/task-live/${updatingTask.taskId}`;
-        
-      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
-
-      const taskCode = updatingTask.id;
-      if (newStatus === "REASSIGN") {
-          await sendNotification(originalTask.empId, `Task Reassigned: ${taskCode}. Reason: ${denyData.reason}`, updatingTask);
-      } else if (newStatus === "REWORK") {
-          await sendNotification(originalTask.empId, `Task sent back for Rework: ${taskCode}. Reason: ${denyData.reason}`, updatingTask);
+      triggerAlert("success", "Updated", "Progress updated successfully.");
+      if (selectedTask) {
+        const updatedTask = tasks.find(t => t.id === selectedTask.id);
+        if (updatedTask) setSelectedTask(updatedTask);
       }
-
-      await fetchTasks();
-      setShowDenyForm(false);
-      setShowUpdateModal(false);
-      triggerAlert("success", "Success", `Task sent back to Executor.`);
     } catch (err) {
-      console.error("Error denying task:", err);
-      triggerAlert("danger", "Error", "Failed to deny task: " + err.message);
+      console.error("Error updating progress:", err);
+      triggerAlert("danger", "Error", "Failed to update: " + err.message);
+    } finally {
+      setLoadingAction(null);
     }
   };
 
   const handleSaveProgress = async () => {
-    if (!updatingTask) return;
+    if (!selectedTask) return;
     let progress = updateProgressVal;
-    const originalTask = updatingTask.rawTask;
-    const prcsFlg = originalTask?.prcsFlg || originalTask?.prcsflg || !!originalTask?.reviewerId || !!originalTask?.approverId || false;
-    const currentSts = updatingTask.rawStatus;
+    const originalTask = selectedTask.rawTask || selectedTask;
+    const prcsFlg = originalTask?.prcsFlg || originalTask?.prcsflg || false;
+    const currentSts = selectedTask.rawStatus || selectedTask.status;
 
     if (updateChecklist.length === 0 && currentSts !== "SUBMIT_REVIEW" && currentSts !== "UNDER_REVIEW") {
        progress = 100;
     }
 
     let backendSts = "OPEN";
+    let newPrcsActn = originalTask.prcsYesActn || "NONE";
+    const allChecked = updateChecklist.length > 0 && updateChecklist.every(c => c.completed);
     
-    if (currentSts === "SUBMIT_REVIEW") {
-       backendSts = "UNDER_REVIEW";
-    } else if (currentSts === "UNDER_REVIEW") {
+    if (currentSts === "UNDER_REVIEW") {
        backendSts = "COMPLETED";
     } else {
-       if (prcsFlg && progress === 100) {
-           backendSts = "SUBMIT_REVIEW";
-       } else if (!prcsFlg && progress === 100) {
+       if (prcsFlg && (progress === 100 || allChecked)) {
+           backendSts = "UNDER_REVIEW";
+           if (originalTask?.reviewerId) {
+               newPrcsActn = "PENDING_REVIEWER";
+           } else if (originalTask?.approverId) {
+               newPrcsActn = "PENDING_APPROVER";
+           } else {
+               backendSts = "COMPLETED";
+           }
+       } else if (!prcsFlg && (progress === 100 || allChecked)) {
            backendSts = "COMPLETED";
        } else if (progress > 0) {
            backendSts = "WIP";
@@ -619,13 +1610,23 @@ const MyTasks = ({ userRole, onLogout }) => {
     }
 
     try {
+      setLoadingAction(selectedTask.id || selectedTask.taskId);
+      const existingRem = selectedTask.isIndividual ? originalTask.remarks : originalTask.addlRem;
+      const newRem = updateRemarks ? (existingRem ? `${existingRem}\n---\n[Executor]: ${updateRemarks}` : updateRemarks) : existingRem;
+
       const updatedTaskObj = {
         ...originalTask,
         taskSts: backendSts,
-        addlRem: updateRemarks || originalTask.addlRem
+        prcsYesActn: newPrcsActn,
       };
 
-      if (currentSts !== "SUBMIT_REVIEW" && currentSts !== "UNDER_REVIEW") {
+      if (selectedTask.isIndividual) {
+        updatedTaskObj.remarks = newRem;
+      } else {
+        updatedTaskObj.addlRem = newRem;
+      }
+
+      if (currentSts !== "UNDER_REVIEW") {
         await Promise.all(updateChecklist
           .filter(item => item.id != null)
           .map(item => {
@@ -635,33 +1636,292 @@ const MyTasks = ({ userRole, onLogout }) => {
         );
       }
 
-      const updatePath = updatingTask.isIndividual 
-        ? `/api/individual-tasks/${updatingTask.taskId}`
-        : `/api/task-live/${updatingTask.taskId}`;
+      const taskId = selectedTask.taskId || selectedTask.id;
+      const updatePath = selectedTask.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
         
+      console.log(`💾 Saving progress for task ${taskId}`);
       await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
 
-      if (backendSts === "SUBMIT_REVIEW") {
-          if (originalTask.reviewerId) {
-             await sendNotification(originalTask.reviewerId, `Task submitted for review: ${updatingTask.id}`, updatingTask);
-          }
-          if (originalTask.approverId) {
-             await sendNotification(originalTask.approverId, `Task submitted for review: ${updatingTask.id}`, updatingTask);
-          }
-      } else if (backendSts === "COMPLETED") {
-          await sendNotification(originalTask.empId, `Task Completed: ${updatingTask.id}`, updatingTask);
-      } else if (backendSts === "WIP" || progress > 0) {
-          const msg = `Task ${updatingTask.id} progress updated to ${progress}%`;
-          if (originalTask.reviewerId) await sendNotification(originalTask.reviewerId, msg, updatingTask);
-          if (originalTask.approverId) await sendNotification(originalTask.approverId, msg, updatingTask);
+      const latestTasks = await fetchTasks();
+      triggerAlert("success", "Success", "Task progress updated successfully.");
+      
+      if (originalTask?.reviewerId) {
+        await sendNotification(originalTask.reviewerId, `${userName || "Executor"} updated progress for task: ${originalTask.taskNm || originalTask.task_nm || "Task"}`, selectedTask);
+      }
+      if (originalTask?.approverId) {
+        await sendNotification(originalTask.approverId, `${userName || "Executor"} updated progress for task: ${originalTask.taskNm || originalTask.task_nm || "Task"}`, selectedTask);
+      }
+
+      if (selectedTask && latestTasks) {
+        const updatedTask = latestTasks.find(t => t.id === selectedTask.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
+    } catch (err) {
+      console.error("Error saving progress:", err);
+      triggerAlert("danger", "Error", "Failed to update task: " + err.message);
+    } finally {
+      setLoadingAction(null);
+    }
+  };
+
+  const handleToggleChecklist = (id) => {
+    if (!id) return;
+    if (selectedTask?.status === "WIP" && selectedTask?.rawTask?.prcsYesActn === "PENDING_APPROVER") return;
+    if (selectedTask?.status === "COMPLETED") return;
+    const executorId = selectedTask?.rawTask?.empId || selectedTask?.rawTask?.assignedTo;
+    if (String(executorId) !== String(currentUserEmpId)) return;
+
+    setUpdateChecklist(prev => {
+      const newList = prev.map(item =>
+        item.id === id ? { ...item, completed: !item.completed } : item
+      );
+      const progress = computeProgress(newList, selectedTask);
+      setUpdateProgressVal(progress);
+      return newList;
+    });
+  };
+
+  const handleSendReminder = async (targetId, role) => {
+    if (!targetId) return;
+    try {
+      await sendNotification(targetId, `Reminder: Task "${selectedTask.title}" (${selectedTask.id}) is pending for your action.`, selectedTask);
+      triggerAlert("success", "Sent", `Reminder sent to ${role}!`);
+      setShowDetailView(false);
+    } catch (err) {
+      console.error("Failed to send reminder:", err);
+      triggerAlert("danger", "Error", "Failed to send reminder.");
+    }
+  };
+
+  const handleSubmitDeny = async (actionType) => {
+    if (!selectedTask) return;
+    try {
+      const originalTask = selectedTask.rawTask || selectedTask;
+      
+      const newStatus = actionType || denyData.type;
+      const prefix = `[${newStatus === "REWORK" ? 'Rejected' : 'Reassigned'} - ${sessionStorage.getItem("userName") || 'Reviewer'}]`;
+      const existingRem = selectedTask.isIndividual ? originalTask.remarks : originalTask.addlRem;
+      const newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${denyData.reason}` : `${prefix}: ${denyData.reason}`;
+
+      const updatedTaskObj = {
+        ...originalTask,
+        taskSts: "WIP",
+        prcsYesActn: newStatus === "REWORK" ? "REWORK" : "REASSIGN"
+      };
+
+      if (newStatus === "REASSIGN" && denyData.milestone) {
+        updatedTaskObj.empId = denyData.milestone;
+      }
+
+      if (selectedTask.isIndividual) {
+        updatedTaskObj.remarks = newRem;
+      } else {
+        updatedTaskObj.addlRem = newRem;
+      }
+
+      const taskId = selectedTask.taskId || selectedTask.id;
+      const updatePath = selectedTask.isIndividual 
+        ? `/api/assignments/${taskId}`
+        : `/api/task-live/${taskId}`;
+        
+      console.log(`📝 Processing denial for task ${taskId}`);
+      await apiPut(`${updatePath}?_t=${Date.now()}`, updatedTaskObj);
+
+      if (updateChecklist.length > 0) {
+        await Promise.all(updateChecklist
+          .filter(item => item.id != null)
+          .map(item => {
+            const path = `/api/checklists/${item.id}/reopen?_t=${Date.now()}`;
+            return apiPatch(path, {});
+          })
+        );
       }
 
       await fetchTasks();
-      setShowUpdateModal(false);
-      triggerAlert("success", "Success", "Task progress updated successfully.");
+      setShowDenyForm(false);
+      triggerAlert("success", "Success", `Task ${newStatus === "REWORK" ? 'sent back for rework' : 'reassigned'}.`);
+      if (selectedTask) {
+        const updatedTask = tasks.find(t => t.id === selectedTask.id);
+        if (updatedTask) setSelectedTask(updatedTask);
+      }
     } catch (err) {
-      console.error("Error updating task:", err);
-      triggerAlert("danger", "Error", "Failed to update task: " + err.message);
+      console.error("Error processing denial:", err);
+      triggerAlert("danger", "Error", "Failed to process: " + err.message);
+    }
+  };
+
+  const computeProgress = (checklist, task) => {
+    if (!checklist || checklist.length === 0) return 0;
+    const completed = checklist.filter(item => item.completed).length;
+    const prcsFlg = task?.rawTask?.prcsFlg || task?.rawTask?.prcsflg || false;
+    const taskSts = task?.rawStatus || task?.status;
+
+    if (!prcsFlg) {
+      return Math.round((completed / checklist.length) * 100);
+    } else {
+       if (taskSts === 'COMPLETED') return 100;
+       if (taskSts === 'UNDER_REVIEW') return task?.rawTask?.prcsYesActn === "PENDING_APPROVER" ? 95 : 90;
+       if (taskSts === 'SUBMIT_REVIEW') return 90;
+       let prog = Math.round((completed / checklist.length) * 100);
+       if (prog === 100 && taskSts !== 'COMPLETED' && taskSts !== 'UNDER_REVIEW' && taskSts !== 'SUBMIT_REVIEW') {
+           return 85;
+       }
+       return prog;
+    }
+  };
+
+  const triggerAlert = (type, title, message) => {
+    setAlertConfig({ type, title, message });
+    setAlertOpen(true);
+  };
+
+  // ============================================
+  // FILTERING & PAGINATION
+  // ============================================
+
+  const visibleTasks = tasks;
+
+  const isCompletedTab = (task) => {
+    const rawTask = task.rawTask || task;
+    const sts = String(rawTask.taskSts || rawTask.status || task.rawStatus || task.status || "").toUpperCase();
+    return sts === "COMPLETED" || sts === "CLOSED" || sts === "DONE" || task.progress === 100;
+  };
+
+  const isUpcomingTab = (task) => {
+    if (isCompletedTab(task)) return false;
+
+    const rawTask = task.rawTask || task;
+    const sts = String(rawTask.taskSts || rawTask.status || task.rawStatus || task.status || "").toUpperCase();
+    if (sts === "WIP" || sts === "IN_PROGRESS" || sts.includes("PROGRESS") || sts === "UNDER_REVIEW" || sts === "REWORK" || sts === "REASSIGN" || sts === "DRAFT") {
+      return false;
+    }
+
+    const startDtStr = rawTask.stDt || rawTask.startDate || rawTask.start_dt || task.startDate || task.startDt;
+    if (startDtStr) {
+      try {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        const dateOnly = String(startDtStr).split('T')[0];
+        const [year, month, day] = dateOnly.split('-');
+        const startDateObj = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+        startDateObj.setHours(0, 0, 0, 0);
+
+        if (startDateObj > today) {
+          return true;
+        } else {
+          return false;
+        }
+      } catch (e) {}
+    }
+
+    if (sts === "UPCOMING" || task.status === "UPCOMING" || task.status === "Upcoming" || task.isUpcoming === true) {
+      return true;
+    }
+
+    return false;
+  };
+
+  const isToDo = (task) => {
+    if (isCompletedTab(task)) return false;
+    if (isUpcomingTab(task)) return false;
+    return true;
+  };
+
+  const getTaskStatusFilter = (task) => {
+    const rawTask = task.rawTask || task;
+    const sts = (rawTask.taskSts || rawTask.status || task.status || "OPEN").toUpperCase();
+    const process = (rawTask.prcsYesActn || "NONE").toUpperCase();
+    
+    if (sts === "OPEN" || sts === "DRAFT") {
+      return "OPEN";
+    }
+    
+    if (sts === "COMPLETED" || sts === "CLOSED") {
+      return "COMPLETED";
+    }
+    
+    if (sts === "WIP" || sts === "IN_PROGRESS") {
+      if (process === "PENDING_REVIEWER" || process === "PENDING_APPROVER" || process === "UNDER_REVIEW") {
+        return "UNDER_REVIEW";
+      }
+      if (process === "REASSIGN") {
+        return "REASSIGNED";
+      }
+      return "IN_PROGRESS";
+    }
+    
+    if (sts === "HOLD") {
+      return "HOLD";
+    }
+    
+    return sts;
+  };
+
+  const isTaskOverdue = (task) => {
+    const rawTask = task.rawTask || task;
+    if (!rawTask.endDt) return false;
+    const sts = String(rawTask.taskSts || "").toUpperCase();
+    if (sts === "COMPLETED" || sts === "CLOSED") return false;
+    
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const dueDate = new Date(rawTask.endDt);
+    dueDate.setHours(0, 0, 0, 0);
+    
+    return today > dueDate;
+  };
+
+  const filteredTasks = tasks.filter(task => {
+    // 1. Basic filters
+    if (selectedProject !== "All Projects" && task.project !== selectedProject) return false;
+    if (selectedMilestone !== "All Milestones" && task.milestone !== selectedMilestone) return false;
+    if (selectedPriority !== "All Priorities" && task.priority !== selectedPriority) return false;
+    
+    if (taskFilter !== "All" && selectedStatus !== "Completed") {
+      const statusFilter = getTaskStatusFilter(task);
+      if (taskFilter === "OVERDUE") {
+        if (!isTaskOverdue(task)) return false;
+      } else if (statusFilter !== taskFilter) {
+        return false;
+      }
+    }
+    
+    // 2. Status card filter (To Do, Upcoming, Completed, All)
+    if (selectedStatus !== "All Statuses" && selectedStatus !== "All Tasks") {
+      if (selectedStatus === "To Do") {
+        if (!isToDo(task)) return false;
+      } else if (selectedStatus === "Upcoming") {
+        if (!isUpcomingTab(task)) return false;
+      } else if (selectedStatus === "Completed" || selectedStatus === "Closed") {
+        if (!isCompletedTab(task)) return false;
+      }
+    }
+    
+    if (selectedDueDate && task.dueDate !== selectedDueDate) return false;
+    return true;
+  });
+
+  const sortedTasks = [...filteredTasks].sort((a, b) => {
+    const aOverdue = isTaskOverdue(a);
+    const bOverdue = isTaskOverdue(b);
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
+    if (a.dueDate && b.dueDate) {
+      return a.dueDate.localeCompare(b.dueDate);
+    }
+    return 0;
+  });
+
+  const totalPages = Math.ceil(sortedTasks.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedTasks = sortedTasks.slice(startIndex, startIndex + itemsPerPage);
+
+  const handlePageChange = (page) => {
+    if (page >= 1 && page <= totalPages) {
+      setCurrentPage(page);
     }
   };
 
@@ -678,12 +1938,13 @@ const MyTasks = ({ userRole, onLogout }) => {
     setSelectedPriority("All Priorities");
     setSelectedStatus("All Statuses");
     setSelectedDueDate("");
+    setTaskFilter("All");
     setCurrentPage(1);
   };
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, selectedProject, selectedMilestone, selectedPriority, selectedStatus, selectedDueDate]);
+  }, [searchQuery, selectedProject, selectedMilestone, selectedPriority, selectedStatus, selectedDueDate, taskFilter]);
 
   const handleSearchKeyDown = (e) => {
     if (e.key === "Enter") {
@@ -692,685 +1953,2068 @@ const MyTasks = ({ userRole, onLogout }) => {
     }
   };
 
-  const filteredTasks = tasks.filter(task => {
-    const isExec = String(task.rawTask.empId) === String(currentUserEmpId);
-    const isRev = String(task.rawTask.reviewerId) === String(currentUserEmpId);
-    const isApp = String(task.rawTask.approverId) === String(currentUserEmpId);
-    
-    let isVisible = false;
-    if (isExec) isVisible = true;
-    if (isRev && (task.rawStatus === "SUBMIT_REVIEW" || task.rawStatus === "UNDER_REVIEW" || task.rawStatus === "COMPLETED")) isVisible = true;
-    if (isApp && (task.rawStatus === "UNDER_REVIEW" || task.rawStatus === "COMPLETED")) isVisible = true;
-
-    if (!isVisible) return false;
-
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      if (!task.id.toLowerCase().includes(q) && !task.title.toLowerCase().includes(q)) return false;
-    }
-    if (selectedProject !== "All Projects" && task.project !== selectedProject) return false;
-    if (selectedMilestone !== "All Milestones" && task.milestone !== selectedMilestone) return false;
-    if (selectedPriority !== "All Priorities" && task.priority !== selectedPriority) return false;
-    if (selectedStatus !== "All Statuses") {
-      let filterStatus = selectedStatus;
-      if (filterStatus === "To-Do (Not Started)") filterStatus = "To-Do";
-      if (filterStatus === "To-Do") {
-        if (task.status !== "To-Do" && task.status !== "Reassigned" && task.status !== "Rework") return false;
-      } else if (task.status !== filterStatus) {
-        return false;
-      }
-    }
-    if (selectedDueDate && task.dueDate !== selectedDueDate) return false;
-    return true;
-  });
-
-  const totalPages = Math.ceil(filteredTasks.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedTasks = filteredTasks.slice(startIndex, startIndex + itemsPerPage);
-
-  const handlePageChange = (page) => {
-    if (page >= 1 && page <= totalPages) {
-      setCurrentPage(page);
-    }
-  };
-
   const getCurrentStatusDisplay = () => {
-    if (!updatingTask) return "To-Do";
-    const prcsFlg = updatingTask.rawTask?.prcsFlg || false;
-    return getDisplayStatus(updateProgressVal, updatingTask.status, prcsFlg);
+    if (!selectedTask) return "OPEN";
+    const prcsFlg = selectedTask.rawTask?.prcsFlg || false;
+    return getDisplayStatus(updateProgressVal, selectedTask.status, prcsFlg);
   };
 
-  // ===== MAIN RENDER =====
-  return (
-    <div className="cc-shell-container">
-      <Sidebar onLogout={onLogout} />
-      <div className="cc-shell">
-        <Header title="My Tasks" subtitle="View and manage all tasks assigned to you." onLogout={onLogout} userRole={userRole} />
+  // ============================================
+  // OPEN TASK DETAIL SCREEN
+  // ============================================
+  const openTaskDetail = async (task) => {
+    if (!task) return;
+    setSelectedTask(task);
+    setUpdateRemarks("");
+    setShowDenyForm(false);
+    setDenyData({ type: "", reason: "", milestone: "", deliverable: "", impact: "Medium" });
 
-        <main className="cc-main">
-          {(!showDetailModal && !showUpdateModal) && (
-            <>
-          {/* Metrics Cards */}
-          <div className="myt-metrics-grid" style={{ marginBottom: "24px" }}>
-            <div className={`myt-metric-card todo ${selectedStatus === "To-Do" || selectedStatus === "To-Do (Not Started)" ? "active" : ""}`} onClick={() => handleStatusFilterChange("To-Do")}>
-              <div className="myt-metric-icon-box blue"><CalendarIcon size={20} /></div>
-              <div className="myt-metric-info">
-                <span className="myt-metric-label">To-Do</span>
-                <span className="myt-metric-value">{countTodo} <small className="myt-small-label">Tasks</small></span>
-              </div>
+    try {
+      const taskId = task.taskId || task.id;
+      const path = task.isIndividual
+        ? `/api/checklists/assignments/${taskId}`
+        : `/api/checklists/live-task/${taskId}`;
+        
+      const items = await apiGet(path);
+      const mapped = (items || []).map(item => ({
+        id: item.chkId || item.id,
+        text: item.chkNm || item.name || item.text,
+        completed: item.chkSts || item.completed || false
+      }));
+      setUpdateChecklist(mapped);
+      const progress = computeProgress(mapped, task);
+      setUpdateProgressVal(progress);
+    } catch (err) {
+      console.error("Failed to load checklist:", err);
+      setUpdateChecklist([]);
+      setUpdateProgressVal(0);
+    }
+
+    // Load attachments
+    setLoadingAttachments(true);
+    setTaskAttachments([]);
+    try {
+      const rawT = task.rawTask || task;
+      const tId = rawT.taskId || rawT.empTaskId || rawT.id || task.taskId || task.id;
+      
+      let attList = [];
+      const isInd = task.isIndividual || rawT.taskSource === "INDIVIDUAL";
+      const primaryPath = isInd
+        ? `/api/attachments/assignment/${tId}`
+        : `/api/attachments/live-task/${tId}`;
+      const fallbackPath = isInd
+        ? `/api/attachments/live-task/${tId}`
+        : `/api/attachments/draft-task/${tId}`;
+
+      try {
+        const res = await apiGet(primaryPath);
+        if (Array.isArray(res) && res.length > 0) attList = res;
+      } catch (e1) {}
+
+      if (attList.length === 0) {
+        try {
+          const res2 = await apiGet(fallbackPath);
+          if (Array.isArray(res2) && res2.length > 0) attList = res2;
+        } catch (e2) {}
+      }
+      
+      // Also check if rawTask or task has direct attachment url/path
+      const directPath = rawT.atPath || rawT.attachmentUrl || rawT.filePath || rawT.photoUrl || task.atPath;
+      if (directPath) {
+        const fileName = rawT.fileNm || rawT.fileName || "Task Attachment";
+        if (!attList.some(a => a.atPath === directPath)) {
+          attList.push({ fileId: 'raw_1', fileNm: fileName, atPath: directPath });
+        }
+      }
+      
+      setTaskAttachments(attList);
+    } catch (err) {
+      console.error("Failed to load attachments:", err);
+      setTaskAttachments([]);
+    } finally {
+      setLoadingAttachments(false);
+    }
+
+    setShowDetailView(true);
+  };
+
+  const parseRemarksHistory = (rawStr, task, employeesList) => {
+    if (!rawStr || typeof rawStr !== 'string') return [];
+    
+    const rawBlocks = rawStr.split(/\n---\n|\n(?=\[[^\]]+\]:)/).map(s => s.trim()).filter(Boolean);
+    const parsed = [];
+    
+    rawBlocks.forEach((block, idx) => {
+      let name = "";
+      let role = "TEAM";
+      let action = "Remark";
+      let text = block;
+      
+      const bracketMatch = block.match(/^\[([^\]]+)\]:\s*([\s\S]*)/);
+      if (bracketMatch) {
+        const header = bracketMatch[1].trim();
+        text = bracketMatch[2].trim();
+        
+        if (header.includes('-')) {
+          const parts = header.split('-');
+          action = parts[0].trim();
+          name = parts.slice(1).join('-').trim();
+        } else {
+          name = header;
+        }
+      }
+      
+      const rawTask = task?.rawTask || task || {};
+      const appName = getEmployeeName(rawTask.approverId || rawTask.approver, employeesList);
+      const revName = getEmployeeName(rawTask.reviewerId || rawTask.reviewer, employeesList);
+      const exeName = getEmployeeName(rawTask.empId || rawTask.assignedTo, employeesList);
+      
+      if (name) {
+        const lowerName = name.toLowerCase();
+        if (appName && appName.toLowerCase().includes(lowerName)) role = "APPROVER";
+        else if (revName && revName.toLowerCase().includes(lowerName)) role = "REVIEWER";
+        else if (exeName && exeName.toLowerCase().includes(lowerName)) role = "EXECUTOR";
+        else if (lowerName.includes("approver")) role = "APPROVER";
+        else if (lowerName.includes("reviewer")) role = "REVIEWER";
+        else if (lowerName.includes("executor")) role = "EXECUTOR";
+      } else {
+        name = "Team Member";
+      }
+      
+      const initials = name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2) || "TM";
+      
+      parsed.push({
+        id: idx,
+        name,
+        initials,
+        role: role.toUpperCase(),
+        action: action.charAt(0).toUpperCase() + action.slice(1),
+        text
+      });
+    });
+    
+    return parsed;
+  };
+
+  // ============================================
+  // TASK DETAIL SCREEN RENDERER - DYNAMIC (INLINE HELPER)
+  // ============================================
+  const renderTaskDetailScreen = (task, onBack) => {
+    if (!task) return null;
+
+    const rawTask = task.rawTask || task;
+
+    const getProjectInfo = () => {
+      if (task.isIndividual || task.project === "Individual Task") {
+        return { isIndividual: true };
+      }
+
+      let pName = null;
+      let mName = null;
+
+      // 1. Check if rawTask has project_info (e.g. "PRJ-01 - m1")
+      if (rawTask.project_info && typeof rawTask.project_info === 'string' && rawTask.project_info.includes(' - ')) {
+        const parts = rawTask.project_info.split(' - ');
+        if (parts[0] && parts[0].trim()) pName = parts[0].trim();
+        if (parts[1] && parts[1].trim()) mName = parts[1].trim();
+      }
+
+      // 2. Resolve Milestone via milestonesList or raw properties
+      const targetMId = String(rawTask.mId || rawTask.m_id || rawTask.mid || rawTask.drftMId || rawTask.milestoneId || '');
+      let targetPrjId = String(rawTask.prjId || rawTask.prj_id || rawTask.prjid || rawTask.projectId || '');
+
+      let foundM = null;
+      if (targetMId && milestonesList && milestonesList.length > 0) {
+        foundM = milestonesList.find(m => {
+          const idStr = String(m.mId || m.m_id || m.mid || m.id || m.milestoneId || '');
+          return idStr && idStr === targetMId;
+        });
+        if (foundM) {
+          mName = foundM.mlstnTtl || foundM.title || foundM.name || foundM.mlstn_ttl || foundM.mlstnNm || mName;
+          if (!targetPrjId) {
+            targetPrjId = String(foundM.prjId || foundM.prj_id || foundM.prjid || foundM.projectId || '');
+          }
+        }
+      }
+
+      if (!mName) {
+        const mCandidates = [task.milestone, rawTask.milestoneName, rawTask.mlstnTtl, rawTask.milestoneTitle, rawTask.mlstnNm, rawTask.mlstn_ttl];
+        for (const c of mCandidates) {
+          if (c && typeof c === 'string' && c.trim() !== '' && c.trim() !== '—' && c.trim() !== 'Internal') {
+            mName = c.trim();
+            break;
+          }
+        }
+      }
+
+      // Title pattern fallback: "Task Name(Milestone Name)"
+      if (!mName && task.title && task.title.includes('(') && task.title.includes(')')) {
+        const matchM = task.title.match(/\(([^)]+)\)$/);
+        if (matchM && matchM[1]) {
+          mName = matchM[1].trim();
+        }
+      }
+
+      // 3. Resolve Project via projectsList or raw properties
+      let foundP = null;
+      if (targetPrjId && projectsList && projectsList.length > 0) {
+        foundP = projectsList.find(p => {
+          const idStr = String(p.prjId || p.prj_id || p.prjid || p.id || p.projectId || '');
+          return idStr && idStr === targetPrjId;
+        });
+        if (foundP) {
+          pName = foundP.prjNm || foundP.name || foundP.prj_nm || foundP.prjCd || pName;
+        }
+      }
+
+      if (pName && projectsList && projectsList.length > 0) {
+        // If pName is code like "PRJ-01", try finding full name in projectsList
+        const codeMatch = projectsList.find(p => 
+          String(p.prjCd || '').toUpperCase() === pName.toUpperCase() ||
+          String(p.prjNm || '').toUpperCase() === pName.toUpperCase()
+        );
+        if (codeMatch) {
+          pName = codeMatch.prjNm || codeMatch.name || codeMatch.prj_nm || pName;
+        }
+      }
+
+      if (!pName || pName === "Internal") {
+        const pCandidates = [task.project, rawTask.projectName, rawTask.prjNm, rawTask.prj_nm, rawTask.projectCodeName, rawTask.prjCd];
+        for (const c of pCandidates) {
+          if (c && typeof c === 'string' && c.trim() !== '' && c.trim() !== 'Internal') {
+            pName = c.trim();
+            break;
+          }
+        }
+      }
+
+      return {
+        isIndividual: false,
+        projectName: pName || "Internal",
+        milestoneName: mName || "—"
+      };
+    };
+
+    const projectInfo = getProjectInfo();
+    const timeStatus = calculateTimeStatus(rawTask);
+    const progressBadge = getProgressBadge(task.status || task.rawStatus);
+    const priorityBadge = getPriorityBadge(task.priority);
+    
+    // Get dynamic action based on current state
+    const action = getActionButton(rawTask, currentUserEmpId);
+    
+    const isOverdue = (() => {
+      if (!rawTask?.endDt) return false;
+      if (rawTask?.taskSts === "COMPLETED" || rawTask?.taskSts === "CLOSED") return false;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dueDate = new Date(rawTask.endDt);
+      dueDate.setHours(0, 0, 0, 0);
+      return today > dueDate;
+    })();
+
+    const isCompleted = task.rawStatus === "COMPLETED" || task.rawStatus === "CLOSED";
+    const isDoer = String(rawTask.empId || rawTask.assignedTo) === String(currentUserEmpId);
+    const isReviewer = String(rawTask.reviewerId || rawTask.reviewer) === String(currentUserEmpId);
+    const isApprover = String(rawTask.approverId || rawTask.approver) === String(currentUserEmpId);
+
+    // Get current progress and process for display
+    const currentProgress = task.rawStatus || task.status || "OPEN";
+    const currentProcess = rawTask.prcsYesActn || "NONE";
+    
+    // Determine if task is in review
+    const isUnderReview = currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER" || currentProcess === "UNDER_REVIEW";
+
+    const renderTeamMember = (empId, role, label) => {
+      if (!empId) return null;
+      const name = getEmployeeName(empId, employeesList);
+      const initials = getEmployeeInitials(empId, employeesList);
+      const photo = getEmployeePhoto(empId, employeesList);
+      
+      const roleColors = {
+        "Executor": { bg: "#3B82F6", light: "#DBEAFE" },
+        "Reviewer": { bg: "#8B5CF6", light: "#EDE9FE" },
+        "Approver": { bg: "#F59E0B", light: "#FEF3C7" }
+      };
+      const color = roleColors[role] || { bg: "#64748B", light: "#F1F5F9" };
+
+      return (
+        <div style={{ 
+          display: "flex", 
+          alignItems: "center", 
+          gap: "12px",
+          padding: "8px 12px",
+          borderRadius: "8px",
+          backgroundColor: color.light,
+          border: `1px solid ${color.bg}33`
+        }}>
+          <div style={{
+            width: "40px",
+            height: "40px",
+            borderRadius: "50%",
+            backgroundColor: color.bg,
+            color: "white",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            fontSize: "12px",
+            fontWeight: "700",
+            overflow: "hidden",
+            flexShrink: 0
+          }}>
+            {photo ? (
+              <img 
+                src={photo.startsWith('data:') || photo.startsWith('http') ? photo : `data:image/jpeg;base64,${photo}`} 
+                alt={name} 
+                style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                onError={(e) => {
+                  e.target.style.display = "none";
+                  e.target.parentElement.textContent = initials || "UN";
+                }}
+              />
+            ) : initials || "UN"}
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontWeight: "600", fontSize: "14px", color: "#0f172a" }}>{name}</div>
+            <div style={{ fontSize: "12px", color: color.bg, fontWeight: "500" }}>{role}</div>
+          </div>
+          <span style={{ 
+            fontSize: "10px", 
+            fontWeight: "700", 
+            color: color.bg,
+            backgroundColor: `${color.bg}22`,
+            padding: "2px 10px",
+            borderRadius: "12px"
+          }}>
+            {label}
+          </span>
+        </div>
+      );
+    };
+
+    const getStatusColor = (status) => {
+      if (status === "COMPLETED") return "#16a34a";
+      if (status === "OVERDUE") return "#ef4444";
+      if (status === "UNDER_REVIEW") return "#8b5cf6";
+      return "#3b82f6";
+    };
+
+    const getStatusBgColor = (status) => {
+      if (status === "COMPLETED") return "#dcfce7";
+      if (status === "OVERDUE") return "#fee2e2";
+      if (status === "UNDER_REVIEW") return "#f3e8ff";
+      if (status === "IN_PROGRESS") return "#dbeafe";
+      return "#f1f5f9";
+    };
+
+    // Render action buttons based on dynamic state
+    const renderActionButtons = () => {
+      if (isCompleted) {
+        return null;
+      }
+
+      // REVIEWER ACTIONS
+      if (isReviewer && (currentProcess === "PENDING_REVIEWER" || currentProcess === "UNDER_REVIEW")) {
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+            <button 
+              className="cc-btn danger" 
+              onClick={() => {
+                setShowDenyForm(true);
+                setIsRaiseRequest(false);
+                setDenyData({ type: "", reason: "", milestone: "", deliverable: "", impact: "Medium" });
+              }} 
+              style={{ borderRadius: "6px", backgroundColor: "#ef4444", color: "white", border: "none", width: "100%" }}
+            >
+              Denied
+            </button>
+            <button 
+              className="cc-btn primary" 
+              onClick={async () => {
+                await handleReviewerApprove(task);
+                onBack();
+              }} 
+              style={{ borderRadius: "6px", backgroundColor: "#10b981", border: "none", color: "white", width: "100%" }}
+            >
+              Approve
+            </button>
+          </div>
+        );
+      }
+
+      // APPROVER ACTIONS
+      if (isApprover && currentProcess === "PENDING_APPROVER") {
+        return (
+          <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+            <button 
+              className="cc-btn danger" 
+              onClick={() => {
+                setShowDenyForm(true);
+                setIsRaiseRequest(false);
+                setDenyData({ type: "", reason: "", milestone: "", deliverable: "", impact: "Medium" });
+              }} 
+              style={{ borderRadius: "6px", backgroundColor: "#ef4444", color: "white", border: "none", width: "100%" }}
+            >
+              Denied
+            </button>
+            <button 
+              className="cc-btn primary" 
+              onClick={async () => {
+                await handleApproverApprove(task);
+                onBack();
+              }} 
+              style={{ borderRadius: "6px", backgroundColor: "#10b981", border: "none", color: "white", width: "100%" }}
+            >
+              Approve
+            </button>
+          </div>
+        );
+      }
+
+      // EXECUTOR ACTIONS - DYNAMIC BASED ON PROGRESS & PROCESS
+      if (isDoer) {
+        // OPEN / DRAFT -> Start
+        if (currentProgress === "OPEN" || currentProgress === "DRAFT") {
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+              <button 
+                className="cc-btn primary" 
+                onClick={async () => {
+                  await handleStartTask(task);
+                }} 
+                style={{ borderRadius: "6px", backgroundColor: "#3b82f6", border: "none", color: "white", width: "100%" }}
+              >
+                Start
+              </button>
             </div>
-            <div className={`myt-metric-card in-progress ${selectedStatus === "In Progress" ? "active" : ""}`} onClick={() => handleStatusFilterChange("In Progress")}>
-              <div className="myt-metric-icon-box play-blue"><Play size={20} fill="currentColor" /></div>
-              <div className="myt-metric-info">
-                <span className="myt-metric-label">Open</span>
-                <span className="myt-metric-value">{countInProgress} <small className="myt-small-label">Tasks</small></span>
-              </div>
+          );
+        }
+
+        // WORK_IN_PROGRESS with NONE or REWORK or REASSIGN -> Update / Submit Review / Mark as Complete
+        if ((currentProgress === "WIP" || currentProgress === "IN_PROGRESS") && 
+            (currentProcess === "NONE" || currentProcess === "REWORK" || currentProcess === "REASSIGN" || !currentProcess)) {
+          const allChecked = updateChecklist.length > 0 && updateChecklist.every(c => c.completed);
+          const hasWorkflow = rawTask?.prcsFlg === true || rawTask?.prcsFlg === 'YES' || rawTask?.prcsFlg === 1 || rawTask?.prcsFlg === 'true';
+          
+          let label = "Save Progress";
+          if (allChecked || updateChecklist.length === 0) {
+            label = hasWorkflow ? "Submit Review" : "Mark as Complete";
+          }
+          
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+              <button 
+                className="cc-btn primary" 
+                onClick={async () => {
+                  if (label === "Mark as Complete") {
+                    await handleCompleteTask(task);
+                  } else if (label === "Submit Review") {
+                    await handleUpdateProgress();
+                    await handleSubmitReview(task);
+                  } else {
+                    await handleSaveProgress();
+                  }
+                }} 
+                style={{ 
+                  borderRadius: "6px", 
+                  backgroundColor: label === "Mark as Complete" ? "#16a34a" : label === "Submit Review" ? "#8B5CF6" : "#0F172A", 
+                  border: "none", 
+                  color: "white", 
+                  width: "100%",
+                  fontWeight: "600"
+                }}
+              >
+                {label}
+              </button>
             </div>
-            <div className={`myt-metric-card review ${selectedStatus === "Under Review" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Under Review")}>
-              <div className="myt-metric-icon-box eye-purple"><Eye size={20} /></div>
-              <div className="myt-metric-info">
-                <span className="myt-metric-label">Under Review</span>
-                <span className="myt-metric-value">{countUnderReview} <small className="myt-small-label">Tasks</small></span>
-              </div>
+          );
+        }
+
+        // WORK_IN_PROGRESS with UNDER_REVIEW -> Send Reminder
+        if ((currentProgress === "WIP" || currentProgress === "IN_PROGRESS" || currentProgress === "UNDER_REVIEW") && 
+            (currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER")) {
+          const targetId = rawTask.reviewerId || rawTask.approverId;
+          const role = rawTask.reviewerId ? "Reviewer" : "Approver";
+          
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+              <button 
+                className="cc-btn primary" 
+                onClick={() => handleSendReminder(targetId, role)} 
+                style={{ borderRadius: "6px", backgroundColor: "#0F172A", border: "none", color: "white", width: "100%" }}
+              >
+                Send Reminder
+              </button>
             </div>
-            <div className={`myt-metric-card completed ${selectedStatus === "Completed" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Completed")}>
-              <div className="myt-metric-icon-box green"><CheckCircle2 size={20} /></div>
-              <div className="myt-metric-info">
-                <span className="myt-metric-label">Completed</span>
-                <span className="myt-metric-value">{countCompleted} <small className="myt-small-label">Tasks</small></span>
-              </div>
+          );
+        }
+
+        // HOLD -> Resume
+        if (currentProgress === "HOLD") {
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+              <button 
+                className="cc-btn primary" 
+                onClick={async () => {
+                  await handleResumeTask(task);
+                }} 
+                style={{ borderRadius: "6px", backgroundColor: "#3b82f6", border: "none", color: "white", width: "100%" }}
+              >
+                Resume
+              </button>
             </div>
-            <div className={`myt-metric-card overdue ${selectedStatus === "Overdue" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Overdue")}>
-              <div className="myt-metric-icon-box red"><AlertCircle size={20} /></div>
-              <div className="myt-metric-info">
-                <span className="myt-metric-label">Overdue</span>
-                <span className="myt-metric-value">{countOverdue} <small className="myt-small-label">Tasks</small></span>
-              </div>
+          );
+        }
+      }
+
+      return null;
+    };
+
+    return (
+      <div style={{ 
+        width: "100%",
+        background: "#f8fafc",
+        borderRadius: "12px",
+        padding: "0",
+        marginTop: "0",
+        maxHeight: "calc(100vh - 180px)",
+        overflowY: "auto"
+      }}>
+        {/* Header */}
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          padding: "16px 24px",
+          background: "white",
+          borderBottom: "1px solid #e2e8f0",
+          borderRadius: "12px 12px 0 0",
+          marginBottom: "24px",
+          flexWrap: "wrap",
+          gap: "12px",
+          position: "sticky",
+          top: 0,
+          zIndex: 10
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <button
+              onClick={onBack}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "8px",
+                background: "none",
+                border: "1px solid #e2e8f0",
+                borderRadius: "8px",
+                padding: "8px 16px",
+                cursor: "pointer",
+                color: "#475569",
+                fontWeight: 500,
+                fontSize: "14px"
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f8fafc"}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "transparent"}
+            >
+              <ArrowLeft size={18} />
+              Back
+            </button>
+            <div>
+              <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>{task.id}</div>
+              <div style={{ fontSize: "18px", fontWeight: "600", color: "#0f172a" }}>{task.title}</div>
             </div>
           </div>
-
-          <div className="myt-tabs-container" style={{ marginBottom: "20px", borderBottom: "none" }}>
-            <div className="myt-tabs-left"></div>
-            <div className="myt-tabs-right">
-              <div className="myt-search-box">
-                <Search size={15} className="myt-search-icon" />
-                <input
-                  type="text"
-                  placeholder="Search tasks..."
-                  value={searchInput}
-                  onChange={(e) => {
-                    setSearchInput(e.target.value);
-                    setSearchQuery(e.target.value);
-                  }}
-                  style={{ paddingRight: "30px" }}
-                />
-                <RotateCw size={12} className="myt-search-reset-icon" onClick={() => { setSearchInput(""); setSearchQuery(""); }} style={{ position: "absolute", right: "10px", color: "#94a3b8", cursor: "pointer" }} />
-              </div>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+            <span className="cc-status-badge" style={{
+              backgroundColor: progressBadge.bg,
+              color: progressBadge.color,
+              padding: "4px 14px",
+              borderRadius: "20px",
+              fontSize: "12px",
+              fontWeight: "600"
+            }}>
+              {progressBadge.label}
+            </span>
+            {action && action.action !== "view" && !isCompleted && (
+              <button
+                onClick={async () => {
+                  if (action.action === "start") {
+                    await handleStartTask(task);
+                  } else if (action.action === "update") {
+                    // Already in detail view
+                  } else if (action.action === "review") {
+                    // Already in detail view
+                  } else if (action.action === "approve") {
+                    // Already in detail view
+                  }
+                }}
+                style={{
+                  backgroundColor: action.variant === "primary" ? "#3B82F6" :
+                                action.variant === "warning" ? "#F59E0B" :
+                                action.variant === "success" ? "#10B981" :
+                                action.variant === "review" ? "#8B5CF6" : "#64748B",
+                  color: "white",
+                  border: "none",
+                  padding: "8px 20px",
+                  borderRadius: "8px",
+                  cursor: "pointer",
+                  fontSize: "14px",
+                  fontWeight: "600",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "8px"
+                }}
+              >
+                {action.action === "start" && <Play size={16} />}
+                {action.action === "update" && <RotateCw size={16} />}
+                {action.action === "review" && <Eye size={16} />}
+                {action.action === "approve" && <Check size={16} />}
+                {action.label}
+              </button>
+            )}
           </div>
+        </div>
 
-          {/* Table Panel */}
-          <div className="cc-table-panel" style={{ border: "none", boxShadow: "none", padding: 0 }}>
-            <div className="cc-table-container">
-              <table className="cc-list-table myt-table">
-                <thead>
-                  <tr>
-                    <th>Task Code</th>
-                    <th>Task Name</th>
-                    <th>Team</th>
-                    <th>Priority</th>
-                    <th>Due Date</th>
-                    <th>Status</th>
-                    <th>Progress</th>
-                    <th style={{ textAlign: "center" }}>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {isLoading ? (
-                    <tr>
-                      <td colSpan="8" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
-                        Loading tasks...
-                      </td>
-                    </tr>
-                  ) : paginatedTasks.length > 0 ? (
-                    paginatedTasks.map((task) => (
-                      <tr key={task.id} onClick={() => openDetails(task)} style={{ cursor: "pointer" }}>
-                        <td style={{ fontWeight: "600", color: "#0f172a" }}>{task.id}</td>
-                        <td style={{ fontWeight: "500", color: "#1e293b" }}>{task.title}</td>
-                        <td>
-                          <div style={{ display: "flex", alignItems: "center" }}>
-                            {[task.rawTask?.empId, task.rawTask?.reviewerId, task.rawTask?.approverId].filter(Boolean).map((eId, index) => {
-                              const emp = employeesList.find(e => String(e.empId) === String(eId));
-                              if (!emp) return null;
-                              const name = emp.employeeName || `${emp.fstNm || emp.firstName || ""} ${emp.lstNm || emp.lastName || ""}`.trim() || "Unknown";
-                              const initials = name === "Unknown" ? "UN" : name.substring(0, 2).toUpperCase();
-                              const img = emp.photoUrl || emp.profileImageBase64 || emp.profileImage;
-                              return (
-                                <div key={index} title={`${name} (${index===0?'Executor':index===1?'Reviewer':'Approver'})`}
-                                     style={{ 
-                                       width: "28px", height: "28px", borderRadius: "50%", 
-                                       backgroundColor: "#e2e8f0", color: "#475569", 
-                                       display: "flex", alignItems: "center", justifyContent: "center",
-                                       fontSize: "10px", fontWeight: "600", border: "2px solid #fff",
-                                       marginLeft: index > 0 ? "-8px" : "0",
-                                       overflow: "hidden"
-                                     }}>
-                                  {img ? <img src={img.startsWith('data:') || img.startsWith('http') ? img : `data:image/jpeg;base64,${img}`} alt={name} style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </td>
-                        <td>
-                          <span className="cc-status-badge" style={{
-                              backgroundColor: task.priority === "HIGH" ? "#fef2f2" : task.priority === "LOW" ? "#f0fdf4" : task.priority === "ATMOST CRITICAL" ? "#fef2f2" : "#fff7ed",
-                              color: task.priority === "HIGH" ? "#ef4444" : task.priority === "LOW" ? "#16a34a" : task.priority === "ATMOST CRITICAL" ? "#dc2626" : "#ea580c"
-                          }}>
-                            {task.priority}
-                          </span>
-                        </td>
-                        <td style={{ fontWeight: "600", color: "#0f172a" }}>{formatDate(task.dueDate || task.completedDate || task.submittedDate) || "—"}</td>
-                        <td>
-                          {task.status === "Reassigned" || task.status === "Rework" ? (
-                            <span className="cc-status-badge" style={{ backgroundColor: "#fee2e2", color: "#ef4444", display: "inline-flex", alignItems: "center", gap: "4px" }}>
-                              <Undo2 size={14} /> {task.status}
-                            </span>
-                          ) : (
-                            <span className="cc-status-badge" style={{
-                              backgroundColor: task.status === "Completed" ? "#dcfce7" : task.status === "Under Review" ? "#f3e8ff" : task.status === "In Progress" ? "#dbeafe" : task.status === "Overdue" ? "#fee2e2" : "#f1f5f9",
-                              color: task.status === "Completed" ? "#166534" : task.status === "Under Review" ? "#6b21a8" : task.status === "In Progress" ? "#1d4ed8" : task.status === "Overdue" ? "#991b1b" : "#475569"
-                            }}>
-                              {task.status}
-                            </span>
-                          )}
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()}>
-                          <div className="myt-table-progress-wrap">
-                            <span className="myt-progress-percentage">{task.progress}%</span>
-                            <div className="myt-table-progress-track">
-                              <div className="myt-table-progress-fill" style={{
-                                width: `${task.progress}%`,
-                                backgroundColor: task.status === "Completed" ? "#16a34a"
-                                  : task.status === "Overdue" ? "#ef4444"
-                                    : task.status === "In Progress" ? "#3b82f6"
-                                      : task.status === "Under Review" ? "#8b5cf6"
-                                        : "#e2e8f0"
-                              }} />
-                            </div>
-                          </div>
-                        </td>
-                        <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
-                          {(() => {
-                            const raw = task.rawTask;
-                            const sts = task.rawStatus;
-                            const isDoer = String(raw?.empId) === String(currentUserEmpId);
-                            const isChecker = String(raw?.reviewerId) === String(currentUserEmpId);
-                            const isApprover = String(raw?.approverId) === String(currentUserEmpId);
-                            const isReviewerActionRequired = isChecker && sts === "SUBMIT_REVIEW";
-                            const isApproverActionRequired = isApprover && sts === "UNDER_REVIEW";
-
-                            if (isReviewerActionRequired || isApproverActionRequired) {
-                              return (
-                                <button className="myt-btn-update" style={{ backgroundColor: "#10b981" }} onClick={() => openUpdateModal(task)}>
-                                  Approve
-                                </button>
-                              );
-                            }
-
-                            if (isDoer) {
-                              if (task.status === "To-Do" || sts === "OPEN" || sts === "REASSIGN" || task.status === "Reassigned" || sts === "REWORK" || task.status === "Rework") {
-                                return (
-                                  <button className="myt-btn-update" style={{ backgroundColor: "#3b82f6", color: "white" }} onClick={() => openUpdateModal(task)}>
-                                    Open
-                                  </button>
-                                );
-                              } else if (task.status === "In Progress" || sts === "WIP") {
-                                return (
-                                  <button className="myt-btn-update" onClick={() => openUpdateModal(task)}>
-                                    Update
-                                  </button>
-                                );
-                              }
-                            }
-
-                            return (
-                              <button className="myt-btn-update" onClick={() => openUpdateModal(task)}>
-                                View
-                              </button>
-                            );
-                          })()}
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan="8" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>
-                        No matching tasks found.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-
-              {/* Pagination */}
-              {filteredTasks.length > 0 && (
-                <div className="myt-pagination-container">
-                  <div className="myt-pagination-info">
-                    Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, filteredTasks.length)} of {filteredTasks.length} tasks
+        {/* Main Content */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 340px",
+          gap: "24px",
+          padding: "0 24px 24px 24px"
+        }}>
+          {/* Left Column */}
+          <div>
+            {/* Task Details Card - Shows Progress, Process, Priority, Time */}
+            <div style={{
+              backgroundColor: "white",
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+              padding: "24px",
+              marginBottom: "24px"
+            }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px" }}>
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                    <Flag size={14} style={{ display: "inline", marginRight: "4px" }} /> Priority
                   </div>
-                  <div className="myt-pagination-controls">
-                    <button className="myt-page-btn" disabled={currentPage === 1} onClick={() => handlePageChange(currentPage - 1)}>
-                      <ChevronLeft size={16} />
-                    </button>
-                    {Array.from({ length: totalPages }).map((_, i) => (
-                      <button
-                        key={i}
-                        className={`myt-page-btn ${currentPage === i + 1 ? 'active' : ''}`}
-                        onClick={() => handlePageChange(i + 1)}
-                      >
-                        {i + 1}
-                      </button>
-                    ))}
-                    <button className="myt-page-btn" disabled={currentPage === totalPages} onClick={() => handlePageChange(currentPage + 1)}>
-                      <ChevronRight size={16} />
-                    </button>
+                  <span className="cc-status-badge" style={{
+                    backgroundColor: priorityBadge.bg,
+                    color: priorityBadge.color,
+                    padding: "2px 10px",
+                    borderRadius: "12px",
+                    fontSize: "13px",
+                    fontWeight: "600"
+                  }}>
+                    {task.priority || "Normal"}
+                  </span>
+                </div>
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                    <Calendar size={14} style={{ display: "inline", marginRight: "4px" }} /> Due Date
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: isOverdue ? "#EF4444" : "#0f172a" }}>
+                    {formatDate(task.dueDate) || "—"}
+                    {isOverdue && <span style={{ fontSize: "12px", color: "#EF4444", marginLeft: "8px" }}>⚠️ Overdue</span>}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                    <ClockIcon size={14} style={{ display: "inline", marginRight: "4px" }} /> Time Status
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: timeStatus.color }}>
+                    {timeStatus.title}
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                    <CheckSquare size={14} style={{ display: "inline", marginRight: "4px" }} /> Progress
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                    <div style={{ flex: 1, height: "6px", backgroundColor: "#e2e8f0", borderRadius: "3px", overflow: "hidden" }}>
+                      <div style={{
+                        width: `${updateProgressVal || 0}%`,
+                        height: "100%",
+                        backgroundColor: getStatusColor(getCurrentStatusDisplay()),
+                        borderRadius: "3px",
+                        transition: "width 0.3s ease"
+                      }} />
+                    </div>
+                    <span style={{ fontSize: "14px", fontWeight: "600", color: "#0f172a" }}>{updateProgressVal || 0}%</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Project / Milestone or Individual Task Badge */}
+              <div style={{ marginTop: "20px", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
+                {projectInfo.isIndividual ? (
+                  <span style={{
+                    backgroundColor: "#dbeafe",
+                    color: "#2563eb",
+                    padding: "6px 14px",
+                    borderRadius: "8px",
+                    fontSize: "13px",
+                    fontWeight: "600",
+                    display: "inline-block"
+                  }}>
+                    Individual Task
+                  </span>
+                ) : (
+                  <div>
+                    <div style={{ fontSize: "13px", color: "#64748b" }}>
+                      <span style={{ fontWeight: "600", color: "#0f172a" }}>Project:</span> {projectInfo.projectName}
+                    </div>
+                    <div style={{ fontSize: "13px", color: "#64748b", marginTop: "4px" }}>
+                      <span style={{ fontWeight: "600", color: "#0f172a" }}>Milestone:</span> {projectInfo.milestoneName}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Process Status Details */}
+              {rawTask?.prcsYesActn && rawTask?.prcsYesActn !== "NONE" && (
+                <div style={{ marginTop: "16px", paddingTop: "16px", borderTop: "1px solid #f1f5f9" }}>
+                  <div style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
+                    <RefreshCw size={14} style={{ display: "inline", marginRight: "4px" }} /> Process Status
+                  </div>
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: "#0f172a" }}>
+                    {rawTask.prcsYesActn === "PENDING_REVIEWER" && "⏳ Under Review (Reviewer)"}
+                    {rawTask.prcsYesActn === "PENDING_APPROVER" && "⏳ Under Review (Approver)"}
+                    {rawTask.prcsYesActn === "REWORK" && <><RefreshCw size={16} color="#F97316" style={{ display: "inline", marginRight: "6px" }} /><span style={{ color: "#F97316" }}>Rework Required</span></>}
+                    {rawTask.prcsYesActn === "REASSIGN" && <><ReassignIcon size={16} color="#4F46E5" style={{ display: "inline", marginRight: "6px" }} /><span style={{ color: "#4F46E5" }}>Reassigned</span></>}
                   </div>
                 </div>
               )}
             </div>
-          </div>
-          </>)}
 
-          {/* ====== DETAIL INLINE VIEW ====== */}
-          {showDetailModal && selectedTask && (
-              <div style={{
-                maxWidth: "900px",
-                margin: "0 auto",
-                background: "#fff",
-                borderRadius: "12px",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-                display: "flex",
-                flexDirection: "column",
-                maxHeight: "calc(100vh - 120px)",
-                overflow: "hidden"
-              }}>
-                <div className="cc-modal-header" style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "16px",
-                  borderBottom: "1px solid #e2e8f0",
-                  padding: "20px 24px",
-                  flexWrap: "wrap"
-                }}>
-                  <button onClick={() => setShowDetailModal(false)} style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    background: "none",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "8px",
-                    padding: "7px 14px",
-                    cursor: "pointer",
-                    color: "#475569",
-                    fontWeight: 500,
-                    fontSize: "14px"
-                  }}>
-                    ← Back to My Tasks
-                  </button>
-                  <h3 style={{ margin: 0 }}>Task Details: {selectedTask.id}</h3>
+            {/* Checklist Section */}
+            <div style={{
+              backgroundColor: "white",
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+              padding: "24px",
+              marginBottom: "24px"
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" }}>
+                <div style={{ fontSize: "16px", fontWeight: "600", color: "#0f172a" }}>
+                  <ListChecks size={18} style={{ display: "inline", marginRight: "8px" }} />
+                  Checklist
                 </div>
-                <div className="cc-modal-body" style={{ padding: "24px" }}>
-                  <div className="myt-detail-row"><span className="myt-detail-label">Task ID</span><span className="myt-detail-value">{selectedTask.id}</span></div>
-                  <div className="myt-detail-row"><span className="myt-detail-label">Title</span><span className="myt-detail-value">{selectedTask.title}</span></div>
-                  <div className="myt-detail-row"><span className="myt-detail-label">Project</span><span className="myt-detail-value">{selectedTask.project}</span></div>
-                  <div className="myt-detail-row"><span className="myt-detail-label">Milestone</span><span className="myt-detail-value">{selectedTask.milestone}</span></div>
-                  <div className="myt-detail-row"><span className="myt-detail-label">Assigned By</span><span className="myt-detail-value">{selectedTask.assignedBy}</span></div>
-                  {selectedTask.submittedTo && <div className="myt-detail-row"><span className="myt-detail-label">Submitted To</span><span className="myt-detail-value">{selectedTask.submittedTo}</span></div>}
-                  <div className="myt-detail-row"><span className="myt-detail-label">Priority</span><span className={`myt-priority-badge ${selectedTask.priority.toLowerCase().replace(/\s+/g, '-')}`}>{selectedTask.priority}</span></div>
-                  {selectedTask.dueDate && <div className="myt-detail-row"><span className="myt-detail-label">Due Date</span><span className="myt-detail-value">{formatDate(selectedTask.dueDate)}</span></div>}
-                  {selectedTask.submittedDate && <div className="myt-detail-row"><span className="myt-detail-label">Submitted Date</span><span className="myt-detail-value">{formatDate(selectedTask.submittedDate)}</span></div>}
-                  {selectedTask.completedDate && <div className="myt-detail-row"><span className="myt-detail-label">Completed Date</span><span className="myt-detail-value">{formatDate(selectedTask.completedDate)}</span></div>}
-                  <div className="myt-detail-row"><span className="myt-detail-label">Status</span><span className={`cc-status-badge`} style={{ backgroundColor: selectedTask.status === "Completed" ? "#dcfce7" : "#eff6ff", color: selectedTask.status === "Completed" ? "#166534" : "#1d4ed8" }}>{selectedTask.status}</span></div>
-                  <div className="myt-detail-row"><span className="myt-detail-label">Progress</span><span className="myt-detail-value">{selectedTask.progress}%</span></div>
-                  <div className="myt-detail-row"><span className="myt-detail-label">Description</span><span className="myt-detail-value myt-desc-val">{selectedTask.description}</span></div>
-                </div>
-                <div className="cc-modal-footer" style={{
-                  display: "flex",
-                  justifyContent: "flex-end",
-                  padding: "16px 24px",
-                  borderTop: "1px solid #e2e8f0"
-                }}>
-                  <button className="cc-btn primary" onClick={() => setShowDetailModal(false)}>Close</button>
+                <div style={{ fontSize: "14px", fontWeight: "600", color: "#64748b" }}>
+                  {updateChecklist.filter(c => c.completed).length}/{updateChecklist.length}
                 </div>
               </div>
-      )}
-
-      {/* ====== UPDATE PROGRESS INLINE VIEW ====== */}
-      {showUpdateModal && updatingTask && (
-              <div style={{
-                maxWidth: "900px",
-                margin: "0 auto",
-                background: "#fff",
-                borderRadius: "12px",
-                boxShadow: "0 1px 4px rgba(0,0,0,0.08)",
-                display: "flex",
-                flexDirection: "column",
-                maxHeight: "calc(100vh - 120px)",
-                overflow: "hidden"
-              }}>
-                <div className="cc-modal-header" style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: "16px",
-                  borderBottom: "1px solid #e2e8f0",
-                  padding: "20px 24px",
-                  flexWrap: "wrap"
-                }}>
-                  <button onClick={() => setShowUpdateModal(false)} style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "6px",
-                    background: "none",
-                    border: "1px solid #cbd5e1",
-                    borderRadius: "8px",
-                    padding: "7px 14px",
-                    cursor: "pointer",
-                    color: "#475569",
-                    fontWeight: 500,
-                    fontSize: "14px"
-                  }}>
-                    ← Back to My Tasks
-                  </button>
-                  <h3 style={{ margin: 0 }}>
-                    {(() => {
-                      const sts = updatingTask?.rawStatus;
-                      const isChecker = String(updatingTask?.rawTask?.reviewerId) === String(currentUserEmpId);
-                      const isApprover = String(updatingTask?.rawTask?.approverId) === String(currentUserEmpId);
-                      if ((isChecker && sts === "SUBMIT_REVIEW") || (isApprover && sts === "UNDER_REVIEW")) {
-                        return "Approve Task";
-                      }
-                      return "Update Task Progress";
-                    })()}
-                  </h3>
+              {updateChecklist.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
+                  No checklist items defined for this task.
                 </div>
-                <div className="cc-modal-body" style={{ padding: "0 24px 24px 24px" }}>
-                  {showDenyForm ? (
-                    <div className="myt-deny-form-container" style={{ padding: "20px 0" }}>
-                      <h4 style={{ fontSize: "16px", fontWeight: "600", marginBottom: "20px", color: "#0f172a", borderBottom: "1px solid #e2e8f0", paddingBottom: "12px" }}>Raise Reassignment Request</h4>
-
-                      <div className="myt-form-group" style={{ marginBottom: "24px" }}>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Raise Reassignment Request</label>
-                        <div style={{ display: "flex", gap: "16px" }}>
-                          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", cursor: "pointer" }}>
-                            <input type="radio" name="denyType" value="REASSIGN" checked={denyData.type === "REASSIGN"} onChange={() => setDenyData({...denyData, type: "REASSIGN"})} />
-                            Task to Task (Reassign)
-                          </label>
-                          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "14px", cursor: "pointer" }}>
-                            <input type="radio" name="denyType" value="REWORK" checked={denyData.type === "REWORK"} onChange={() => setDenyData({...denyData, type: "REWORK"})} />
-                            Milestone to Milestone (Rework)
-                          </label>
-                        </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                  {updateChecklist.map(item => (
+                    <div 
+                      key={item.id} 
+                      onClick={() => handleToggleChecklist(item.id)} 
+                      style={{ 
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "12px",
+                        padding: "10px 12px",
+                        backgroundColor: item.completed ? "#f0fdf4" : "#f8fafc",
+                        borderRadius: "8px",
+                        border: `1px solid ${item.completed ? "#bbf7d0" : "#e2e8f0"}`,
+                        cursor: isCompleted || isUnderReview ? "not-allowed" : "pointer",
+                        opacity: isCompleted || isUnderReview ? 0.7 : 1
+                      }}
+                    >
+                      <div style={{
+                        width: "20px",
+                        height: "20px",
+                        borderRadius: "4px",
+                        backgroundColor: item.completed ? "#22c55e" : "white",
+                        border: `2px solid ${item.completed ? "#22c55e" : "#cbd5e1"}`,
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        flexShrink: 0
+                      }}>
+                        {item.completed && <Check size={12} color="white" strokeWidth={3} />}
                       </div>
-                      
-                      {denyData.type === "REWORK" && (
-                        <div className="myt-form-group" style={{ marginBottom: "16px" }}>
-                          <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>Select source Milestone</label>
-                          <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
-                            value={denyData.milestone} onChange={e => setDenyData({...denyData, milestone: e.target.value})}>
-                            <option value="">Select Milestone</option>
-                            {milestonesList.filter(m => m !== "All Milestones").map(m => <option key={m} value={m}>{m}</option>)}
-                          </select>
-                        </div>
-                      )}
-
-                      <div className="myt-form-group" style={{ marginBottom: "16px" }}>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>{denyData.type === "REWORK" ? "Select Deliverable" : "Task dropdown"}</label>
-                        <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
-                          value={denyData.deliverable} onChange={e => setDenyData({...denyData, deliverable: e.target.value})}>
-                          <option value="">{denyData.type === "REWORK" ? "Select Deliverable" : "Select Task"}</option>
-                          <option value={updatingTask.title}>{updatingTask.title}</option>
-                        </select>
-                      </div>
-
-                      <div className="myt-form-group" style={{ marginBottom: "16px" }}>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>Reason</label>
-                        <textarea className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e1", minHeight: "80px" }}
-                          placeholder="Enter reason for denial..."
-                          value={denyData.reason} onChange={e => setDenyData({...denyData, reason: e.target.value})}></textarea>
-                      </div>
-
-                      <div className="myt-form-group" style={{ marginBottom: "16px" }}>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>Attachments (optional)</label>
-                        <input type="file" style={{ width: "100%", padding: "8px", borderRadius: "6px", border: "1px dashed #cbd5e1", backgroundColor: "#f8fafc" }} />
-                      </div>
-
-                      <div className="myt-form-group" style={{ marginBottom: "20px" }}>
-                        <label style={{ display: "block", fontSize: "13px", fontWeight: "600", color: "#475569", marginBottom: "6px" }}>Impact</label>
-                        <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "6px", border: "1px solid #cbd5e1" }}
-                          value={denyData.impact} onChange={e => setDenyData({...denyData, impact: e.target.value})}>
-                          <option value="Low">Low</option>
-                          <option value="Medium">Medium</option>
-                          <option value="High">High</option>
-                        </select>
-                      </div>
-
-                      <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", borderTop: "1px solid #e2e8f0", paddingTop: "16px" }}>
-                        <button className="cc-btn secondary" onClick={() => setShowDenyForm(false)} style={{ borderRadius: "6px" }}>Cancel</button>
-                        <button className="cc-btn primary" onClick={handleSubmitDeny} disabled={!denyData.reason} style={{ borderRadius: "6px", backgroundColor: "#ef4444", border: "none" }}>Submit Rework Request</button>
-                      </div>
+                      <span style={{
+                        fontSize: "14px",
+                        color: item.completed ? "#166534" : "#0f172a",
+                        textDecoration: item.completed ? "line-through" : "none",
+                        flex: 1
+                      }}>
+                        {item.text}
+                      </span>
+                      <span className={`myt-chk-status ${item.completed ? 'completed' : 'pending'}`}>
+                        {item.completed ? 'Completed' : 'Pending'}
+                      </span>
                     </div>
-                  ) : (
-                  <>
-                  <div className="myt-modal-section">
-                    <h4 style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px", color: "#0f172a" }}>Task Details</h4>
-                    <div className="myt-task-details-grid">
-                      <div className="myt-detail-col">
-                        <div className="myt-detail-item"><span className="label">Task Code</span><span className="value">: {updatingTask.id}</span></div>
-                        <div className="myt-detail-item"><span className="label">Task Name</span><span className="value">: {updatingTask.title}</span></div>
-                        <div className="myt-detail-item"><span className="label">Project</span><span className="value">: {updatingTask.project}</span></div>
-                        <div className="myt-detail-item"><span className="label">Milestone</span><span className="value">: {updatingTask.milestone}</span></div>
-                        <div className="myt-detail-item"><span className="label">Due Date</span><span className="value">: {formatDate(updatingTask.dueDate)}</span></div>
-                      </div>
-                      <div className="myt-detail-col">
-                        <div className="myt-detail-item"><span className="label">Assigned To</span><span className="value">: {sessionStorage.getItem("userName") || "Assigned Employee"}</span></div>
-                        <div className="myt-detail-item"><span className="label">Priority</span>
-                          <span className="value">: <span className={`myt-priority-badge ${updatingTask.priority.toLowerCase().replace(/\s+/g, '-')}`}>{updatingTask.priority}</span></span>
-                        </div>
-                        <div className="myt-detail-item">
-                          <span className="label">Status</span>
-                          <span className="value">:
-                            <span className={`cc-status-badge`} style={{
-                              marginLeft: "4px",
-                              backgroundColor: getCurrentStatusDisplay() === "Completed" ? "#dcfce7" :
-                                getCurrentStatusDisplay() === "Under Review" ? "#f3e8ff" :
-                                getCurrentStatusDisplay() === "In Progress" ? "#dbeafe" : "#f1f5f9",
-                              color: getCurrentStatusDisplay() === "Completed" ? "#166534" :
-                                getCurrentStatusDisplay() === "Under Review" ? "#6b21a8" :
-                                getCurrentStatusDisplay() === "In Progress" ? "#1d4ed8" : "#475569",
-                              padding: "2px 8px",
-                              borderRadius: "4px",
-                              fontSize: "13px",
-                              fontWeight: "500"
-                            }}>
-                              {getCurrentStatusDisplay()}
-                            </span>
-                          </span>
-                        </div>
-                        <div className="myt-detail-item"><span className="label">Current Progress</span><span className="value">: {updateProgressVal}%</span></div>
-                      </div>
-                    </div>
-                  </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
-                  {(updatingTask?.rawStatus === "REASSIGN" || updatingTask?.rawStatus === "REWORK") && updatingTask?.rawTask?.addlRem && (
-                    <div className="myt-modal-section" style={{ backgroundColor: "#fee2e2", padding: "12px", borderRadius: "8px", border: "1px solid #fca5a5" }}>
-                      <h4 style={{ fontSize: "14px", fontWeight: "600", marginBottom: "4px", color: "#b91c1c" }}>Reviewer Remarks</h4>
-                      <p style={{ margin: 0, fontSize: "13px", color: "#7f1d1d", whiteSpace: "pre-wrap" }}>{updatingTask.rawTask.addlRem}</p>
-                    </div>
-                  )}
+            {/* Description */}
+            {task.description && (
+              <div style={{
+                backgroundColor: "white",
+                borderRadius: "12px",
+                border: "1px solid #e2e8f0",
+                padding: "24px",
+                marginBottom: "24px"
+              }}>
+                <div style={{ fontSize: "14px", fontWeight: "600", color: "#0f172a", marginBottom: "8px" }}>
+                  <FileText size={18} style={{ display: "inline", marginRight: "8px" }} />
+                  Description
+                </div>
+                <div style={{ fontSize: "14px", color: "#475569", lineHeight: "1.6" }}>
+                  {task.description}
+                </div>
+              </div>
+            )}
 
-                  <div className="myt-modal-section">
-                    <h4 style={{ fontSize: "14px", fontWeight: "600", marginBottom: "12px", color: "#0f172a" }}>Checklist</h4>
-                    <div className="myt-checklist-table">
-                      <div className="myt-checklist-header">
-                        <span>Checklist Item</span>
-                        <span>Status</span>
-                      </div>
-                      {updateChecklist.length === 0 ? (
-                        <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
-                          No checklist items defined for this task.
-                        </div>
-                      ) : (
-                        updateChecklist.map(item => (
-                          <div className="myt-checklist-row" key={item.id} onClick={() => handleToggleChecklist(item.id)} style={{ 
-                            cursor: updatingTask?.status === "Under Review" || updatingTask?.status === "Completed" ? "not-allowed" : "pointer", 
-                            opacity: updatingTask?.status === "Under Review" || updatingTask?.status === "Completed" ? 0.7 : 1 
-                          }}>
-                            <div className="myt-checklist-text">
-                              {item.completed ? (
-                                <div className="myt-checkbox-custom checked">
-                                  <Check size={11} color="white" strokeWidth={4} />
-                                </div>
-                              ) : (
-                                <div className="myt-checkbox-custom unchecked"></div>
-                              )}
-                              <span style={{ color: item.completed ? "#0f172a" : "#475569" }}>{item.text}</span>
-                            </div>
-                            <div className="myt-checklist-status">
-                              <span className={`myt-chk-status ${item.completed ? 'completed' : 'pending'}`}>
-                                {item.completed ? 'Completed' : 'Pending'}
-                              </span>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  </div>
+            {/* Task Attachments Card */}
+            <div style={{
+              backgroundColor: "white",
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+              padding: "24px",
+              marginBottom: "24px"
+            }}>
+              <div style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                <Paperclip size={18} color="#0f172a" />
+                Task Attachments {taskAttachments.length > 0 ? `(${taskAttachments.length})` : ''}
+              </div>
 
-                  <div className="myt-modal-section">
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px" }}>
-                      <h4 style={{ fontSize: "14px", fontWeight: "600", margin: 0, color: "#0f172a" }}>Overall Progress</h4>
-                      <span style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a" }}>{updateProgressVal}%</span>
-                    </div>
-                    <div className="myt-overall-progress-track">
-                      <div className="myt-overall-progress-fill" style={{ 
-                          width: `${updateProgressVal}%`,
-                          backgroundColor: getCurrentStatusDisplay() === "Completed" ? "#16a34a"
-                            : getCurrentStatusDisplay() === "Overdue" ? "#ef4444"
-                            : getCurrentStatusDisplay() === "Under Review" ? "#8b5cf6"
-                            : "#3b82f6"
-                      }}></div>
-                    </div>
-                    {(() => {
-                       if (updatingTask?.rawTask?.prcsFlg) {
-                           if (updatingTask?.rawStatus === 'SUBMIT_REVIEW') {
-                               return <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px', fontStyle: 'italic' }}>Note: Remaining 10% is pending with Checker and Approver.</div>;
-                           } else if (updatingTask?.rawStatus === 'UNDER_REVIEW') {
-                               return <div style={{ fontSize: '12px', color: '#64748b', marginTop: '6px', fontStyle: 'italic' }}>Note: Remaining 5% is pending with Approver.</div>;
-                           }
-                       }
-                       return null;
-                    })()}
-                  </div>
-
-                  <div className="myt-modal-section">
-                    <h4 style={{ fontSize: "14px", fontWeight: "600", marginBottom: "8px", color: "#0f172a" }}>Remarks <span style={{ fontWeight: "400", color: "#64748b" }}>(Optional)</span></h4>
-                    <textarea
-                      className="myt-remarks-input"
-                      placeholder="Enter remarks..."
-                      value={updateRemarks}
-                      onChange={(e) => setUpdateRemarks(e.target.value)}
-                      disabled={updatingTask?.status === "Completed"}
-                    />
-                  </div>
-
-                  <div className="myt-modal-section">
-                    <h4 style={{ fontSize: "14px", fontWeight: "600", marginBottom: "8px", color: "#0f172a" }}>Upload Evidence <span style={{ fontWeight: "400", color: "#64748b" }}>(Optional)</span></h4>
-                    <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
-                      <label className="myt-file-upload-btn" style={{ opacity: updatingTask?.status === "Completed" ? 0.6 : 1, cursor: updatingTask?.status === "Completed" ? "not-allowed" : "pointer" }}>
-                        Choose Files
-                        <input type="file" style={{ display: "none" }} disabled={updatingTask?.status === "Completed"} />
-                      </label>
-                      <span style={{ fontSize: "13px", color: "#64748b" }}>No file chosen</span>
-                    </div>
-                  </div>
-
-                  <div className="myt-modal-actions" style={{ borderTop: "none", marginTop: "16px", paddingTop: "0", display: "flex", gap: "10px", justifyContent: "flex-end" }}>
-                    {(() => {
-                      const sts = updatingTask?.rawStatus;
-                      const isCompleted = sts === "COMPLETED";
-                      const isDoer = String(updatingTask?.rawTask?.empId) === String(currentUserEmpId);
-                      const isChecker = String(updatingTask?.rawTask?.reviewerId) === String(currentUserEmpId);
-                      const isApprover = String(updatingTask?.rawTask?.approverId) === String(currentUserEmpId);
-                      const isOther = !isDoer && !isChecker && !isApprover;
-
-                      if (isCompleted) {
-                          return <button className="cc-btn secondary" onClick={() => setShowUpdateModal(false)} style={{ borderRadius: "6px" }}>Close</button>;
+              {loadingAttachments ? (
+                <div style={{ padding: "16px", textAlign: "center", color: "#64748b", fontSize: "14px" }}>
+                  <Loader2 size={16} className="spinning" style={{ display: "inline", marginRight: "8px" }} /> Loading attachments...
+                </div>
+              ) : taskAttachments.length === 0 ? (
+                <div style={{ padding: "16px", backgroundColor: "#f8fafc", borderRadius: "8px", border: "1px solid #e2e8f0", fontSize: "13px", color: "#64748b" }}>
+                  No attachments uploaded for this task.
+                </div>
+              ) : (
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px" }}>
+                    {taskAttachments.map((att, idx) => {
+                      const fileName = att.fileNm || att.fileName || `Attachment ${idx + 1}`;
+                      let rawUrl = att.atPath || att.url || att.filePath || "#";
+                      if (typeof rawUrl === "string" && rawUrl.trim().startsWith("{")) {
+                        try {
+                          const parsed = JSON.parse(rawUrl);
+                          if (parsed && parsed.url) rawUrl = parsed.url;
+                        } catch (e) {}
                       }
-
-                      if (sts === "SUBMIT_REVIEW") {
-                          if (isDoer) {
-                              return (
-                                  <>
-                                      <button className="cc-btn secondary" onClick={() => setShowUpdateModal(false)} style={{ borderRadius: "6px" }}>Close</button>
-                                      <button className="cc-btn primary" onClick={() => { triggerAlert("success", "Sent", "Reminder sent!"); setShowUpdateModal(false); }} style={{ borderRadius: "6px", backgroundColor: "#0f172a" }}>Send Reminder</button>
-                                  </>
-                              );
-                          } else if (isChecker || isOther) {
-                              return (
-                                  <>
-                                      <button className="cc-btn secondary" onClick={() => setShowUpdateModal(false)} style={{ borderRadius: "6px" }}>Close</button>
-                                      <button className="cc-btn danger" onClick={() => setShowDenyForm(true)} style={{ borderRadius: "6px", backgroundColor: "#ef4444", color: "white", border: "none" }}>Denied</button>
-                                      <button className="cc-btn primary" onClick={() => handleAction("UNDER_REVIEW")} style={{ borderRadius: "6px", backgroundColor: "#10b981", border: "none" }}>Approve</button>
-                                  </>
-                              );
-                          }
+                      let url = rawUrl;
+                      if (typeof rawUrl === "string" && rawUrl.startsWith("http") && (rawUrl.includes("supabase.co") || rawUrl.includes("/storage/v1/object/"))) {
+                        url = `${apiBaseUrl}/api/storage/view?url=${encodeURIComponent(rawUrl)}`;
                       }
+                      const isImage = /\.(png|jpe?g|gif|webp|svg)($|\?)/i.test(fileName) || /\.(png|jpe?g|gif|webp|svg)($|\?)/i.test(url) || (url && url.startsWith('data:image'));
+                      const isPdf = /\.pdf($|\?)/i.test(fileName) || /\.pdf($|\?)/i.test(url);
 
-                      if (sts === "UNDER_REVIEW") {
-                          if (isDoer || isChecker) {
-                              return (
-                                  <>
-                                      <button className="cc-btn secondary" onClick={() => setShowUpdateModal(false)} style={{ borderRadius: "6px" }}>Close</button>
-                                      <button className="cc-btn primary" onClick={() => { triggerAlert("success", "Sent", "Reminder sent!"); setShowUpdateModal(false); }} style={{ borderRadius: "6px", backgroundColor: "#0f172a" }}>Send Reminder</button>
-                                  </>
-                              );
-                          } else if (isApprover || isOther) {
-                              return (
-                                  <>
-                                      <button className="cc-btn secondary" onClick={() => setShowUpdateModal(false)} style={{ borderRadius: "6px" }}>Close</button>
-                                      <button className="cc-btn danger" onClick={() => setShowDenyForm(true)} style={{ borderRadius: "6px", backgroundColor: "#ef4444", color: "white", border: "none" }}>Denied</button>
-                                      <button className="cc-btn primary" onClick={() => handleAction("COMPLETED")} style={{ borderRadius: "6px", backgroundColor: "#10b981", border: "none" }}>Approve</button>
-                                  </>
-                              );
-                          }
-                      }
-
-                      if (sts === "OPEN" || sts === "REASSIGN" || sts === "REWORK" || updatingTask?.status === "To-Do" || updatingTask?.status === "Reassigned" || updatingTask?.status === "Rework") {
-                          return (
-                              <>
-                                <button className="cc-btn secondary" onClick={() => setShowUpdateModal(false)} style={{ borderRadius: "6px" }}>Close</button>
-                                <button className="cc-btn primary" onClick={() => { setShowUpdateModal(false); handleStartTask(updatingTask); }} style={{ borderRadius: "6px", backgroundColor: "#3b82f6", border: "none" }}>Start Task</button>
-                              </>
-                          );
-                      }
+                      const downloadUrl = `${apiBaseUrl}/api/storage/download?url=${encodeURIComponent(rawUrl)}&name=${encodeURIComponent(fileName)}`;
 
                       return (
-                          <>
-                            <button className="cc-btn secondary" onClick={() => setShowUpdateModal(false)} style={{ borderRadius: "6px" }}>Close</button>
-                            <button className="cc-btn primary" onClick={handleSaveProgress} style={{ borderRadius: "6px", backgroundColor: "#0f172a" }}>
-                              {updateProgressVal === 100 || updateChecklist.length === 0 
-                                ? (updatingTask?.rawTask?.prcsFlg ? "Submit for Review" : "Mark as Completed") 
-                                : "Update"}
+                        <div key={att.fileId || idx} style={{
+                          border: "1px solid #e2e8f0",
+                          borderRadius: "10px",
+                          overflow: "hidden",
+                          backgroundColor: "#f8fafc",
+                          display: "flex",
+                          flexDirection: "column",
+                          transition: "all 0.2s ease"
+                        }}>
+                          {/* Preview Thumbnail for Image or File Header */}
+                          {isImage ? (
+                            <div style={{ height: "130px", backgroundColor: "#0f172a", position: "relative", overflow: "hidden" }}>
+                              <img 
+                                src={url.startsWith('http') || url.startsWith('data:') ? url : `data:image/jpeg;base64,${url}`} 
+                                alt={fileName} 
+                                style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                              />
+                            </div>
+                          ) : (
+                            <div style={{ height: "90px", backgroundColor: isPdf ? "#fee2e2" : "#e0f2fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                              <FileText size={36} color={isPdf ? "#ef4444" : "#0284c7"} />
+                            </div>
+                          )}
+
+                          {/* File details & view/download button */}
+                          <div style={{ padding: "12px", flex: 1, display: "flex", flexDirection: "column", justifyContent: "space-between", gap: "8px" }}>
+                            <div style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={fileName}>
+                              {fileName}
+                            </div>
+                            <button 
+                              type="button"
+                              onClick={() => setPreviewModalFile({ name: fileName, url: url, downloadUrl: downloadUrl, isImage: isImage, isPdf: isPdf })}
+                              style={{
+                                fontSize: "12px",
+                                fontWeight: "600",
+                                color: "#2563eb",
+                                border: "none",
+                                cursor: "pointer",
+                                display: "inline-flex",
+                                alignItems: "center",
+                                gap: "4px",
+                                backgroundColor: "#dbeafe",
+                                padding: "6px 12px",
+                                borderRadius: "6px",
+                                width: "fit-content"
+                              }}
+                            >
+                              <Eye size={13} /> View / Open File
                             </button>
-                          </>
+                          </div>
+                        </div>
                       );
-                    })()}
+                    })}
                   </div>
-                  </>
+                )}
+              </div>
+
+            {/* Attachment Preview Modal */}
+            {previewModalFile && (
+              <div style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.8)",
+                backdropFilter: "blur(4px)",
+                zIndex: 99999,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                padding: "20px"
+              }}>
+                <div style={{
+                  backgroundColor: "white",
+                  borderRadius: "16px",
+                  width: "90%",
+                  maxWidth: "900px",
+                  maxHeight: "90vh",
+                  display: "flex",
+                  flexDirection: "column",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.3)",
+                  overflow: "hidden"
+                }}>
+                  {/* Modal Header */}
+                  <div style={{
+                    padding: "16px 24px",
+                    borderBottom: "1px solid #e2e8f0",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "space-between",
+                    backgroundColor: "#fafbfc"
+                  }}>
+                    <div style={{ fontWeight: "700", fontSize: "16px", color: "#0f172a", display: "flex", alignItems: "center", gap: "8px" }}>
+                      <FileText size={18} color="#2563eb" />
+                      {previewModalFile.name}
+                    </div>
+                    <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+                      <a
+                        href={previewModalFile.downloadUrl}
+                        download={previewModalFile.name}
+                        style={{
+                          padding: "6px 14px",
+                          backgroundColor: "#16a34a",
+                          color: "white",
+                          borderRadius: "6px",
+                          fontSize: "13px",
+                          fontWeight: "600",
+                          textDecoration: "none",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px"
+                        }}
+                      >
+                        📥 Download File
+                      </a>
+                      <a
+                        href={previewModalFile.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          padding: "6px 14px",
+                          backgroundColor: "#2563eb",
+                          color: "white",
+                          borderRadius: "6px",
+                          fontSize: "13px",
+                          fontWeight: "600",
+                          textDecoration: "none",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "6px"
+                        }}
+                      >
+                        🔗 Open View
+                      </a>
+                      <button
+                        onClick={() => setPreviewModalFile(null)}
+                        style={{
+                          background: "#f1f5f9",
+                          border: "none",
+                          borderRadius: "50%",
+                          width: "32px",
+                          height: "32px",
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "center",
+                          cursor: "pointer",
+                          color: "#64748b"
+                        }}
+                      >
+                        <X size={18} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Modal Body */}
+                  <div style={{
+                    padding: "24px",
+                    overflowY: "auto",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    backgroundColor: "#0f172a",
+                    minHeight: "350px"
+                  }}>
+                    {previewModalFile.isImage ? (
+                      <img
+                        src={previewModalFile.url}
+                        alt={previewModalFile.name}
+                        style={{ maxWidth: "100%", maxHeight: "70vh", objectFit: "contain", borderRadius: "8px" }}
+                      />
+                    ) : previewModalFile.isPdf ? (
+                      <iframe
+                        src={previewModalFile.url}
+                        title={previewModalFile.name}
+                        style={{ width: "100%", height: "70vh", border: "none", borderRadius: "8px", backgroundColor: "white" }}
+                      />
+                    ) : (
+                      <div style={{ textAlign: "center", color: "white", padding: "40px" }}>
+                        <FileText size={64} color="#94a3b8" style={{ marginBottom: "16px" }} />
+                        <div style={{ fontSize: "16px", fontWeight: "600" }}>{previewModalFile.name}</div>
+                        <a
+                          href={previewModalFile.url}
+                          download={previewModalFile.name}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          style={{
+                            marginTop: "16px",
+                            display: "inline-block",
+                            padding: "10px 20px",
+                            backgroundColor: "#2563eb",
+                            color: "white",
+                            borderRadius: "6px",
+                            textDecoration: "none",
+                            fontWeight: "600"
+                          }}
+                        >
+                          Download File
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Remarks History */}
+            {(rawTask?.addlRem || rawTask?.remarks) && (
+              <div style={{
+                backgroundColor: "white",
+                borderRadius: "12px",
+                border: "1px solid #e2e8f0",
+                padding: "24px",
+                marginBottom: "24px"
+              }}>
+                <div style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", marginBottom: "16px", display: "flex", alignItems: "center", gap: "8px" }}>
+                  <MessageSquare size={18} color="#0f172a" />
+                  Remarks History
+                </div>
+                
+                <div style={{
+                  backgroundColor: "#f8fafc",
+                  borderRadius: "10px",
+                  border: "1px solid #e2e8f0",
+                  padding: "16px",
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: "12px"
+                }}>
+                  {parseRemarksHistory(rawTask.addlRem || rawTask.remarks, task, employeesList).map((rem) => (
+                    <div key={rem.id} style={{
+                      backgroundColor: "white",
+                      borderRadius: "8px",
+                      border: "1px solid #e2e8f0",
+                      padding: "16px 20px",
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: "16px"
+                    }}>
+                      {/* Avatar Circle */}
+                      <div style={{
+                        width: "40px",
+                        height: "40px",
+                        borderRadius: "50%",
+                        backgroundColor: "#3b82f6",
+                        color: "white",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        fontWeight: "700",
+                        fontSize: "13px",
+                        flexShrink: 0
+                      }}>
+                        {rem.initials}
+                      </div>
+                      
+                      {/* Main Info */}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: "10px", flexWrap: "wrap", marginBottom: "6px" }}>
+                          <span style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a" }}>{rem.name}</span>
+                          <span style={{
+                            backgroundColor: "#fef3c7",
+                            color: "#d97706",
+                            fontSize: "11px",
+                            fontWeight: "700",
+                            padding: "2px 8px",
+                            borderRadius: "4px",
+                            letterSpacing: "0.5px"
+                          }}>
+                            {rem.role}
+                          </span>
+                          <span style={{
+                            backgroundColor: rem.action?.toLowerCase().includes("rework") ? "#FFF7ED" : (rem.action?.toLowerCase().includes("reassign") ? "#EEF2FF" : "#FEF3C7"),
+                            color: rem.action?.toLowerCase().includes("rework") ? "#F97316" : (rem.action?.toLowerCase().includes("reassign") ? "#4F46E5" : "#D97706"),
+                            fontSize: "12px",
+                            fontWeight: "600",
+                            padding: "2px 10px",
+                            borderRadius: "12px",
+                            display: "inline-flex",
+                            alignItems: "center",
+                            gap: "4px"
+                          }}>
+                            {rem.action?.toLowerCase().includes("rework") && <RefreshCw size={13} color="#F97316" />}
+                            {rem.action?.toLowerCase().includes("reassign") && <ReassignIcon size={13} color="#4F46E5" />}
+                            {rem.action}
+                          </span>
+                        </div>
+                        <div style={{ fontSize: "14px", color: "#475569", lineHeight: "1.5" }}>
+                          {rem.text}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Add Remarks & Evidence */}
+            {!isCompleted && isDoer && !isUnderReview && (
+              <div style={{
+                backgroundColor: "white",
+                borderRadius: "12px",
+                border: "1px solid #e2e8f0",
+                padding: "24px"
+              }}>
+                <div style={{ fontSize: "14px", fontWeight: "600", color: "#0f172a", marginBottom: "12px" }}>
+                  <MessageSquare size={18} style={{ display: "inline", marginRight: "8px" }} />
+                  Add Remarks <span style={{ fontWeight: "400", color: "#64748b" }}>(Optional)</span>
+                </div>
+                <textarea
+                  className="myt-remarks-input"
+                  placeholder="Enter remarks..."
+                  value={updateRemarks}
+                  onChange={(e) => setUpdateRemarks(e.target.value)}
+                  style={{
+                    width: "100%",
+                    minHeight: "80px",
+                    padding: "10px 12px",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "6px",
+                    fontSize: "13.5px",
+                    fontFamily: "inherit",
+                    resize: "vertical",
+                    outline: "none",
+                    background: "#fff",
+                    color: "#0f172a",
+                    marginBottom: "12px"
+                  }}
+                  disabled={isCompleted}
+                />
+                <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                  <label className="myt-file-upload-btn" style={{ 
+                    padding: "8px 16px",
+                    backgroundColor: "#f8fafc",
+                    border: "1px solid #cbd5e1",
+                    borderRadius: "6px",
+                    fontSize: "13px",
+                    fontWeight: "500",
+                    color: "#334155",
+                    cursor: isCompleted ? "not-allowed" : "pointer",
+                    opacity: isCompleted ? 0.6 : 1
+                  }}>
+                    Choose Files
+                    <input type="file" style={{ display: "none" }} disabled={isCompleted} />
+                  </label>
+                  <span style={{ fontSize: "13px", color: "#64748b" }}>No file chosen</span>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right Column - Sidebar */}
+          <div>
+            {/* Team Members */}
+            <div style={{
+              backgroundColor: "white",
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+              padding: "20px",
+              marginBottom: "20px"
+            }}>
+              <div style={{ fontSize: "15px", fontWeight: "600", color: "#0f172a", marginBottom: "14px" }}>
+                <Users size={18} style={{ display: "inline", marginRight: "8px" }} />
+                Team
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {renderTeamMember(rawTask?.empId || rawTask?.assignedTo, "Executor", "EX")}
+                {renderTeamMember(rawTask?.reviewerId || rawTask?.reviewer, "Reviewer", "RV")}
+                {renderTeamMember(rawTask?.approverId || rawTask?.approver, "Approver", "AP")}
+              </div>
+            </div>
+
+            {/* Status Details - Dynamic */}
+            <div style={{
+              backgroundColor: "white",
+              borderRadius: "12px",
+              border: "1px solid #e2e8f0",
+              padding: "20px",
+              marginBottom: "20px"
+            }}>
+              <div style={{ fontSize: "15px", fontWeight: "600", color: "#0f172a", marginBottom: "12px" }}>
+                <AlertCircle size={18} style={{ display: "inline", marginRight: "8px" }} />
+                Status Details
+              </div>
+              <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9" }}>
+                  <span style={{ fontSize: "13px", color: "#64748b" }}>Progress Status</span>
+                  <span className="cc-status-badge" style={{
+                    backgroundColor: getStatusBgColor(getCurrentStatusDisplay()),
+                    color: getStatusColor(getCurrentStatusDisplay()),
+                    padding: "2px 10px",
+                    borderRadius: "12px",
+                    fontSize: "12px",
+                    fontWeight: "600"
+                  }}>
+                    {getCurrentStatusDisplay()}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9" }}>
+                  <span style={{ fontSize: "13px", color: "#64748b" }}>Process</span>
+                  <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a" }}>
+                    {currentProcess === "NONE" ? "None" : currentProcess}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: "1px solid #f1f5f9" }}>
+                  <span style={{ fontSize: "13px", color: "#64748b" }}>Priority</span>
+                  <span style={{ fontSize: "13px", fontWeight: "600", color: "#0f172a" }}>
+                    {task.priority || "Normal"}
+                  </span>
+                </div>
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0" }}>
+                  <span style={{ fontSize: "13px", color: "#64748b" }}>Assigned To</span>
+                  <span style={{ fontSize: "13px", fontWeight: "500", color: "#0f172a" }}>
+                    {getEmployeeName(rawTask?.empId || rawTask?.assignedTo, employeesList) || "Unassigned"}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Action Buttons - Dynamic */}
+            {!isCompleted && renderActionButtons() && (
+              <div style={{
+                backgroundColor: "white",
+                borderRadius: "12px",
+                border: "1px solid #e2e8f0",
+                padding: "20px"
+              }}>
+                <div style={{ fontSize: "15px", fontWeight: "600", color: "#0f172a", marginBottom: "14px" }}>
+                  <Play size={18} style={{ display: "inline", marginRight: "8px" }} />
+                  Actions
+                </div>
+                {renderActionButtons()}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Deny / Raise Request Form - Full Width at Bottom */}
+        {showDenyForm && (
+          <div style={{
+            backgroundColor: "white",
+            borderRadius: "12px",
+            border: "1px solid #e2e8f0",
+            padding: "32px",
+            marginTop: "24px",
+            boxShadow: "0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)",
+            animation: "fadeInUp 0.3s ease-out"
+          }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "24px", paddingBottom: "16px", borderBottom: "1px solid #f1f5f9" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+                <span style={{ fontSize: "18px", fontWeight: "700", color: "#0f172a" }}>Raise Request</span>
+                {/* Toggle Switch */}
+                <div 
+                  onClick={() => {
+                    const newToggleState = !isRaiseRequest;
+                    setIsRaiseRequest(newToggleState);
+                    const isStartTask = task?.rawTask?.seq === 1 || task?.rawTask?.isStartTask || task?.taskId === 1 || task?.taskCode?.endsWith('001') || false;
+                    setDenyData({...denyData, type: newToggleState ? (isStartTask ? "REWORK" : "REASSIGN") : ""});
+                  }}
+                  style={{
+                    width: "48px", height: "26px", borderRadius: "13px",
+                    backgroundColor: isRaiseRequest ? "#3b82f6" : "#cbd5e1",
+                    position: "relative", cursor: "pointer", transition: "all 0.3s ease"
+                  }}
+                >
+                  <div style={{
+                    width: "20px", height: "20px", borderRadius: "50%",
+                    backgroundColor: "white", position: "absolute", top: "3px",
+                    left: isRaiseRequest ? "25px" : "3px", transition: "all 0.3s ease",
+                    boxShadow: "0 1px 3px rgba(0,0,0,0.2)"
+                  }} />
+                </div>
+              </div>
+              <button onClick={() => setShowDenyForm(false)} style={{ background: "#f1f5f9", borderRadius: "50%", padding: "8px", border: "none", cursor: "pointer", color: "#64748b", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <X size={20} />
+              </button>
+            </div>
+
+            {isRaiseRequest ? (
+              <div style={{ paddingTop: "8px" }}>
+                {(() => {
+                  const isStartTask = task?.rawTask?.seq === 1 || task?.rawTask?.isStartTask || task?.taskId === 1 || task?.taskCode?.endsWith('001') || false;
+                  
+                  if (isStartTask) {
+                    return (
+                      <>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "20px" }}>
+                          <div className="myt-form-group">
+                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Select Source Milestone</label>
+                            <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                              value={denyData.milestone || ""} onChange={e => setDenyData({...denyData, milestone: e.target.value})}>
+                              <option value="">Select Milestone</option>
+                              <option value={task.milestone || "Current Milestone"}>{task.milestone || "Current Milestone"}</option>
+                            </select>
+                          </div>
+                          <div className="myt-form-group">
+                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Select Deliverable</label>
+                            <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                              value={denyData.deliverable || ""} onChange={e => setDenyData({...denyData, deliverable: e.target.value})}>
+                              <option value="">Select Deliverable (Task)</option>
+                              <option value={task.title || "Current Task"}>{task.title || "Current Task"}</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div className="myt-form-group" style={{ marginBottom: "20px" }}>
+                          <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Reason</label>
+                          <textarea className="myt-input" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", minHeight: "100px", fontSize: "14px" }}
+                            placeholder="Enter detailed reason..." value={denyData.reason || ""} onChange={e => setDenyData({...denyData, reason: e.target.value})} />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
+                          <div className="myt-form-group">
+                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
+                            <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
+                              <input type="file" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+                              <Paperclip size={18} style={{ verticalAlign: "middle", marginRight: "8px" }} /> <span style={{ fontSize: "14px" }}>Click or drag files to upload</span>
+                            </div>
+                          </div>
+                          <div className="myt-form-group">
+                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Impact</label>
+                            <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                              value={denyData.impact || "Medium"} onChange={e => setDenyData({...denyData, impact: e.target.value})}>
+                              <option value="High">High</option>
+                              <option value="Medium">Medium</option>
+                              <option value="Low">Low</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "20px", borderTop: "1px solid #e2e8f0" }}>
+                          <button className="cc-btn secondary" onClick={() => setShowDenyForm(false)} style={{ borderRadius: "8px", padding: "10px 20px" }}>Cancel</button>
+                          <button className="cc-btn primary" onClick={() => { setDenyData(prev => ({...prev, type: "REWORK"})); handleSubmitDeny("REWORK"); }} disabled={!denyData.reason} 
+                            style={{ borderRadius: "8px", backgroundColor: "#3b82f6", border: "none", color: "white", padding: "10px 24px", fontSize: "15px", fontWeight: "600" }}>
+                            Rework
+                          </button>
+                        </div>
+                      </>
+                    );
+                  } else {
+                    return (
+                      <>
+                        <div className="myt-form-group" style={{ marginBottom: "20px" }}>
+                          <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Task Dropdown</label>
+                          <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                            value={denyData.deliverable || ""} onChange={e => setDenyData({...denyData, deliverable: e.target.value})}>
+                            <option value="">Select Task</option>
+                            <option value={task.title || "Current Task"}>{task.title || "Current Task"}</option>
+                          </select>
+                        </div>
+                        <div className="myt-form-group" style={{ marginBottom: "20px" }}>
+                          <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Reason</label>
+                          <textarea className="myt-input" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", minHeight: "100px", fontSize: "14px" }}
+                            placeholder="Enter detailed reason..." value={denyData.reason || ""} onChange={e => setDenyData({...denyData, reason: e.target.value})} />
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
+                          <div className="myt-form-group">
+                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
+                            <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
+                              <input type="file" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+                              <Paperclip size={18} style={{ verticalAlign: "middle", marginRight: "8px" }} /> <span style={{ fontSize: "14px" }}>Click or drag files to upload</span>
+                            </div>
+                          </div>
+                          <div className="myt-form-group">
+                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Impact</label>
+                            <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                              value={denyData.impact || "Medium"} onChange={e => setDenyData({...denyData, impact: e.target.value})}>
+                              <option value="High">High</option>
+                              <option value="Low">Low</option>
+                            </select>
+                          </div>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "20px", borderTop: "1px solid #e2e8f0" }}>
+                          <button className="cc-btn secondary" onClick={() => setShowDenyForm(false)} style={{ borderRadius: "8px", padding: "10px 20px" }}>Cancel</button>
+                          <button className="cc-btn primary" onClick={() => { setDenyData(prev => ({...prev, type: "REASSIGN"})); handleSubmitDeny("REASSIGN"); }} disabled={!denyData.reason} 
+                            style={{ borderRadius: "8px", backgroundColor: "#3b82f6", border: "none", color: "white", padding: "10px 24px", fontSize: "15px", fontWeight: "600" }}>
+                            Reassign
+                          </button>
+                        </div>
+                      </>
+                    );
+                  }
+                })()}
+              </div>
+            ) : (
+              <div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
+                <p style={{ fontSize: "15px" }}>Please toggle <b>Raise Request</b> to proceed with rejection.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ============================================
+  // RENDER TEAM MEMBERS - For List View
+  // ============================================
+  const renderTeamMembers = (task) => {
+    const rawTask = task.rawTask || task;
+    
+    const executorId = rawTask.empId || rawTask.assignedTo || rawTask.executorId;
+    const reviewerId = rawTask.reviewerId || rawTask.reviewer;
+    const approverId = rawTask.approverId || rawTask.approver;
+    
+    let teamMembers = [
+      { 
+        empId: executorId, 
+        role: "Executor", 
+        label: "EX",
+        fallbackName: rawTask.executorName || rawTask.empNm || rawTask.empName || rawTask.assignedToName || rawTask.executorNm,
+        fallbackPhoto: rawTask.executorPhoto || rawTask.empPhoto
+      },
+      { 
+        empId: reviewerId, 
+        role: "Reviewer", 
+        label: "RV",
+        fallbackName: rawTask.reviewerName || rawTask.reviewerNm || rawTask.revNm || rawTask.revName,
+        fallbackPhoto: rawTask.reviewerPhoto || rawTask.revPhoto
+      },
+      { 
+        empId: approverId, 
+        role: "Approver", 
+        label: "AP",
+        fallbackName: rawTask.approverName || rawTask.approverNm || rawTask.appNm || rawTask.appName,
+        fallbackPhoto: rawTask.approverPhoto || rawTask.appPhoto
+      }
+    ].filter(m => m.empId);
+
+    // Fallback for dashboard upcoming tasks which might use an employees array
+    if (teamMembers.length === 0 && Array.isArray(rawTask.employees) && rawTask.employees.length > 0) {
+      teamMembers = rawTask.employees.map((e, idx) => {
+        let rawRole = e.participantType || e.stepType || e.taskRole || e.type || e.role || e.designation || "Executor";
+        let label = "EX";
+        if (rawRole.toUpperCase().includes("REVIEWER")) label = "RV";
+        if (rawRole.toUpperCase().includes("APPROVER")) label = "AP";
+        return {
+          empId: e.empId || e.employeeId || e.id || `emp-fallback-${idx}`,
+          role: rawRole,
+          label: label,
+          fallbackName: e.fullName || e.empName || e.name || e.employeeName,
+          fallbackPhoto: e.photoUrl || e.photo || e.profileImage || null
+        };
+      }).filter(m => m.fallbackName || m.empId !== `emp-fallback-undefined`);
+    }
+
+    if (teamMembers.length === 0) {
+      return <span style={{ color: "#94a3b8", fontSize: "12px" }}>—</span>;
+    }
+
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+        <style>
+          {`
+            .team-member-hover {
+              position: relative;
+            }
+            .team-member-hover .member-tooltip {
+              opacity: 0;
+              visibility: hidden;
+              transition: all 0.2s ease-in-out;
+              position: absolute;
+              bottom: calc(100% + 8px);
+              left: 50%;
+              transform: translateX(-50%) translateY(4px);
+              background-color: #1e293b;
+              color: white;
+              padding: 6px 12px;
+              border-radius: 6px;
+              font-size: 12px;
+              font-weight: 500;
+              white-space: nowrap;
+              z-index: 50;
+              box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+              pointer-events: none;
+            }
+            .team-member-hover:hover .member-tooltip {
+              opacity: 1;
+              visibility: visible;
+              transform: translateX(-50%) translateY(0);
+            }
+            .member-tooltip::after {
+              content: '';
+              position: absolute;
+              bottom: -4px;
+              left: 50%;
+              transform: translateX(-50%);
+              width: 0;
+              height: 0;
+              border-left: 5px solid transparent;
+              border-right: 5px solid transparent;
+              border-top: 5px solid #1e293b;
+            }
+          `}
+        </style>
+        {teamMembers.map((member, idx) => {
+          let empName = getEmployeeName(member.empId, employeesList);
+          let photo = getEmployeePhoto(member.empId, employeesList);
+          
+          // Fallback to embedded names if API list is empty or failed
+          if (!empName || empName === "Unknown" || empName.startsWith("User ")) {
+            // Try to find from rawTask.employees array if it exists (like in UserDashboard)
+            if (rawTask.employees && Array.isArray(rawTask.employees)) {
+              const embeddedEmp = rawTask.employees.find(e => 
+                String(e.empId || e.id || e.employeeId) === String(member.empId) || 
+                (e.taskRole && String(e.taskRole).toUpperCase().includes(member.label))
+              );
+              if (embeddedEmp) {
+                empName = embeddedEmp.fullName || embeddedEmp.name || embeddedEmp.employeeName || empName;
+                photo = embeddedEmp.photoUrl || embeddedEmp.profileImage || photo;
+              }
+            }
+            // If still unknown, use direct fallback fields
+            if ((!empName || empName === "Unknown" || empName.startsWith("User ")) && member.fallbackName) {
+              empName = member.fallbackName;
+            }
+            if (!photo && member.fallbackPhoto) {
+              photo = member.fallbackPhoto;
+            }
+          }
+          
+          let initials = "";
+          if (empName && empName !== "Unknown" && !empName.startsWith("User ")) {
+            const parts = empName.trim().split(" ");
+            initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].substring(0, 2).toUpperCase();
+          } else {
+            initials = String(member.empId).substring(0, 2).toUpperCase();
+          }
+          
+          const roleColors = {
+            "Executor": { bg: "#3B82F6", light: "#DBEAFE" },
+            "Reviewer": { bg: "#8B5CF6", light: "#EDE9FE" },
+            "Approver": { bg: "#F59E0B", light: "#FEF3C7" }
+          };
+          const color = roleColors[member.role] || { bg: "#64748B", light: "#F1F5F9" };
+
+          return (
+            <div 
+              key={idx} 
+              className="team-member-hover"
+              style={{ 
+                display: "flex",
+                alignItems: "center",
+                gap: "4px",
+                padding: "2px 6px 2px 2px",
+                borderRadius: "16px",
+                backgroundColor: color.light,
+                border: `1px solid ${color.bg}33`,
+                cursor: "pointer",
+                transition: "all 0.2s"
+              }}
+            >
+              {/* Tooltip */}
+              <div className="member-tooltip">
+                <span style={{ fontWeight: "600" }}>{empName || 'Unknown'}</span> 
+                <span style={{ color: color.bg, opacity: 0.9, marginLeft: "4px" }}>• {member.role}</span>
+              </div>
+
+              <div style={{
+                width: "24px",
+                height: "24px",
+                borderRadius: "50%",
+                backgroundColor: color.bg,
+                color: "white",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                fontSize: "8px",
+                fontWeight: "700",
+                overflow: "hidden",
+                flexShrink: 0
+              }}>
+                {photo ? (
+                  <img 
+                    src={photo.startsWith('data:') || photo.startsWith('http') ? photo : `data:image/jpeg;base64,${photo}`} 
+                    alt={empName || 'User'} 
+                    style={{ width: "100%", height: "100%", objectFit: "cover" }} 
+                    onError={(e) => {
+                      e.target.style.display = "none";
+                      e.target.parentElement.textContent = initials || "UN";
+                    }}
+                  />
+                ) : initials || "UN"}
+              </div>
+              
+              <span style={{ 
+                fontSize: "7px", 
+                fontWeight: "700", 
+                color: color.bg,
+                backgroundColor: `${color.bg}22`,
+                padding: "1px 5px",
+                borderRadius: "8px",
+                letterSpacing: "0.3px"
+              }}>
+                {member.label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
+  // ============================================
+  // RENDER ACTION BUTTON - List View
+  // ============================================
+  const renderActionButton = (task) => {
+    if (!task) return null;
+    
+    const rawTask = task.rawTask || task;
+    const action = getActionButton(rawTask, currentUserEmpId);
+    const isDisabled = loadingAction === (task.id || task.taskId);
+    
+    if (!action) return null;
+    
+    const getButtonStyle = (variant) => {
+      switch(variant) {
+        case "primary": return { bg: "#3B82F6", hover: "#2563EB", color: "white" };
+        case "warning": return { bg: "#F59E0B", hover: "#D97706", color: "white" };
+        case "success": return { bg: "#10B981", hover: "#059669", color: "white" };
+        case "review": return { bg: "#8B5CF6", hover: "#7C3AED", color: "white" };
+        default: return { bg: "#F1F5F9", hover: "#E2E8F0", color: "#475569" };
+      }
+    };
+    
+    const style = getButtonStyle(action.variant);
+    
+    const handleClick = async (e) => {
+      e.stopPropagation();
+      if (isDisabled) return;
+      
+      // ALL actions open the same detail screen
+      if (action.action === "view") {
+        await openTaskDetail(task);
+        return;
+      }
+      
+      // For actions other than 'view', execute then open detail
+      switch(action.action) {
+        case "start": 
+          const startedTask = await handleStartTask(task);
+          await openTaskDetail(startedTask || task);
+          break;
+        case "update": 
+          await openTaskDetail(task);
+          break;
+        case "review": 
+          await openTaskDetail(task);
+          break;
+        case "approve": 
+          await openTaskDetail(task);
+          break;
+        default: 
+          break;
+      }
+    };
+    
+    return (
+      <button
+        style={{
+          backgroundColor: style.bg,
+          color: style.color,
+          border: action.variant === "secondary" ? "1px solid #E2E8F0" : "none",
+          padding: "6px 16px",
+          borderRadius: "6px",
+          cursor: isDisabled ? "not-allowed" : "pointer",
+          fontSize: "12px",
+          fontWeight: "600",
+          opacity: isDisabled ? 0.6 : 1,
+          transition: "all 0.2s",
+          minWidth: "60px",
+          display: "inline-flex",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "6px"
+        }}
+        onClick={handleClick}
+        disabled={isDisabled}
+        onMouseEnter={(e) => { if (!isDisabled) e.currentTarget.style.backgroundColor = style.hover; }}
+        onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = style.bg; }}
+      >
+        {isDisabled ? (
+          <Loader2 size={12} className="spinning" />
+        ) : (
+          <>
+            {action.action === "start" && <Play size={12} />}
+            {action.action === "update" && <RotateCw size={12} />}
+            {action.action === "view" && <Eye size={12} />}
+            {action.action === "review" && <CheckCircle2 size={12} />}
+            {action.action === "approve" && <Check size={12} />}
+            {action.label}
+          </>
+        )}
+      </button>
+    );
+  };
+
+  // ============================================
+  // MAIN RENDER
+  // ============================================
+
+  const countTodo = tasks.filter(isToDo).length;
+  const countUpcoming = tasks.filter(isUpcomingTab).length;
+  const countCompleted = tasks.filter(isCompletedTab).length;
+  const countAllTasks = tasks.length;
+  
+  // Custom check for overdue
+  const countOverdue = tasks.filter(isTaskOverdue).length;
+
+  const showTaskFilters = selectedStatus === "To Do" || selectedStatus === "All Statuses" || selectedStatus === "All Tasks";
+
+  return (
+    <div className={`cc-shell-container ${isSidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+      <Sidebar onLogout={onLogout} />
+      <div className="cc-shell">
+        <Header 
+          title="My Tasks" 
+          subtitle={showDetailView && selectedTask ? selectedTask.title : "View and manage all tasks assigned to you."} 
+          onLogout={onLogout} 
+          userRole={userRole} 
+        />
+
+        <main className="cc-main" style={{ overflow: "visible" }}>
+          {apiError && (
+            <div style={{ backgroundColor: "#fee2e2", color: "#b91c1c", padding: "16px", borderRadius: "8px", marginBottom: "20px", border: "1px solid #fca5a5", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div><strong>⚠️ Error:</strong> {apiError}</div>
+              <button onClick={() => fetchTasks()} style={{ padding: "6px 16px", backgroundColor: "#b91c1c", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontWeight: "500" }}>Retry</button>
+            </div>
+          )}
+
+          {showDetailView && selectedTask ? (
+            renderTaskDetailScreen(
+              selectedTask, 
+              () => {
+                setShowDetailView(false);
+                setSelectedTask(null);
+                setShowDenyForm(false);
+                setUpdateRemarks("");
+              }
+            )
+          ) : (
+            /* Tasks List View */
+            <>
+              {/* Metrics Cards */}
+              <div className="myt-metrics-grid" style={{ marginBottom: "24px", display: "flex", gap: "16px", flexWrap: "nowrap", overflowX: "auto" }}>
+                <div className={`myt-metric-card sketch-layout todo ${selectedStatus === "To Do" ? "active" : ""}`} onClick={() => handleStatusFilterChange("To Do")} style={{ flex: "1", minWidth: "120px" }}>
+                  <div className="myt-metric-left"><div className="myt-metric-icon-box yellow-circle"><ClipboardList size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">To-Do</div><div className="myt-metric-subtitle">Active Tasks</div></div></div>
+                  <div className="myt-metric-right"><div className="myt-metric-value">{countTodo}</div></div>
+                </div>
+                
+                <div className={`myt-metric-card sketch-layout upcoming ${selectedStatus === "Upcoming" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Upcoming")} style={{ flex: "1", minWidth: "120px" }}>
+                  <div className="myt-metric-left"><div className="myt-metric-icon-box" style={{ backgroundColor: "#e0e7ff", color: "#4f46e5" }}><Calendar size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Upcoming</div><div className="myt-metric-subtitle">Planned</div></div></div>
+                  <div className="myt-metric-right"><div className="myt-metric-value">{countUpcoming}</div></div>
+                </div>
+
+                <div className={`myt-metric-card sketch-layout completed ${selectedStatus === "Completed" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Completed")} style={{ flex: "1", minWidth: "120px" }}>
+                  <div className="myt-metric-left"><div className="myt-metric-icon-box green-circle"><CheckCircle2 size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Closed</div><div className="myt-metric-subtitle">Done</div></div></div>
+                  <div className="myt-metric-right"><div className="myt-metric-value">{countCompleted}</div></div>
+                </div>
+                
+                <div className={`myt-metric-card sketch-layout all ${selectedStatus === "All Tasks" ? "active" : ""}`} onClick={() => handleStatusFilterChange("All Tasks")} style={{ flex: "1", minWidth: "120px" }}>
+                  <div className="myt-metric-left"><div className="myt-metric-icon-box orange-circle"><Layers size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">All Tasks</div><div className="myt-metric-subtitle">Total Work</div></div></div>
+                  <div className="myt-metric-right"><div className="myt-metric-value">{countAllTasks}</div></div>
+                </div>
+              </div>
+
+              {/* Search and Filters */}
+              {showTaskFilters && (
+                <div className="myt-tabs-container" style={{ marginBottom: "20px", borderBottom: "none", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                  <div className="myt-tabs-left" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                    <button 
+                      className={`myt-filter-btn ${taskFilter === "All" ? "active" : ""}`}
+                      onClick={() => { setTaskFilter("All"); setCurrentPage(1); }}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: "1px solid #e2e8f0",
+                        backgroundColor: taskFilter === "All" ? "#3B82F6" : "white",
+                        color: taskFilter === "All" ? "white" : "#475569",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "500",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      All
+                    </button>
+                    <button 
+                      className={`myt-filter-btn ${taskFilter === "OPEN" ? "active" : ""}`}
+                      onClick={() => { setTaskFilter("OPEN"); setCurrentPage(1); }}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: "1px solid #e2e8f0",
+                        backgroundColor: taskFilter === "OPEN" ? "#3B82F6" : "white",
+                        color: taskFilter === "OPEN" ? "white" : "#475569",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "500",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      Open
+                    </button>
+                    <button 
+                      className={`myt-filter-btn ${taskFilter === "IN_PROGRESS" ? "active" : ""}`}
+                      onClick={() => { setTaskFilter("IN_PROGRESS"); setCurrentPage(1); }}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: "1px solid #e2e8f0",
+                        backgroundColor: taskFilter === "IN_PROGRESS" ? "#3B82F6" : "white",
+                        color: taskFilter === "IN_PROGRESS" ? "white" : "#475569",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "500",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      Work In Progress
+                    </button>
+                    <button 
+                      className={`myt-filter-btn ${taskFilter === "UNDER_REVIEW" ? "active" : ""}`}
+                      onClick={() => { setTaskFilter("UNDER_REVIEW"); setCurrentPage(1); }}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: "1px solid #e2e8f0",
+                        backgroundColor: taskFilter === "UNDER_REVIEW" ? "#3B82F6" : "white",
+                        color: taskFilter === "UNDER_REVIEW" ? "white" : "#475569",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "500",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      Under Review
+                    </button>
+                    <button 
+                      className={`myt-filter-btn ${taskFilter === "REASSIGNED" ? "active" : ""}`}
+                      onClick={() => { setTaskFilter("REASSIGNED"); setCurrentPage(1); }}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: "1px solid #e2e8f0",
+                        backgroundColor: taskFilter === "REASSIGNED" ? "#3B82F6" : "white",
+                        color: taskFilter === "REASSIGNED" ? "white" : "#475569",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "500",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      Re-Assigned
+                    </button>
+                    <button 
+                      className={`myt-filter-btn ${taskFilter === "OVERDUE" ? "active" : ""}`}
+                      onClick={() => { setTaskFilter("OVERDUE"); setCurrentPage(1); }}
+                      style={{
+                        padding: "6px 14px",
+                        borderRadius: "20px",
+                        border: "1px solid #e2e8f0",
+                        backgroundColor: taskFilter === "OVERDUE" ? "#EF4444" : "white",
+                        color: taskFilter === "OVERDUE" ? "white" : "#475569",
+                        cursor: "pointer",
+                        fontSize: "12px",
+                        fontWeight: "500",
+                        transition: "all 0.2s"
+                      }}
+                    >
+                      Overdue
+                    </button>
+                  </div>
+                  <div className="myt-tabs-right" style={{ display: "flex", gap: "8px", alignItems: "center" }}>
+                    <div className="myt-search-box" style={{ position: "relative" }}>
+                      <Search size={15} className="myt-search-icon" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                      <input 
+                        type="text" 
+                        placeholder="Search task..." 
+                        value={searchInput} 
+                        onChange={(e) => { setSearchInput(e.target.value); setSearchQuery(e.target.value); }} 
+                        style={{ padding: "8px 12px 8px 32px", border: "1px solid #e2e8f0", borderRadius: "6px", outline: "none", fontSize: "13px", width: "220px" }}
+                        onKeyDown={handleSearchKeyDown}
+                      />
+                    </div>
+                    <button onClick={handleResetFilters} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: "white", cursor: "pointer", fontSize: "12px", color: "#64748b" }}>
+                      Clear
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Table */}
+              <div className="cc-table-panel" style={{ border: "none", boxShadow: "none", padding: 0 }}>
+                <div className="cc-table-container">
+                  <table className="cc-list-table myt-table">
+                    <thead>
+                      <tr>
+                        <th>
+                          <div style={{ display: "flex", flexDirection: "column" }}>
+                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>TASK</span>
+                            <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>Task Code / Name<br/>Milestone</span>
+                          </div>
+                        </th>
+                        <th>
+                          <div style={{ display: "flex", flexDirection: "column" }}>
+                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>TEAM</span>
+                            <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>Members</span>
+                          </div>
+                        </th>
+                        <th>
+                          <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase" }}>PRIORITY</span>
+                        </th>
+                        <th style={{ textAlign: "center" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>DUE DATE</span>
+                            <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>(Date Only)</span>
+                          </div>
+                        </th>
+                        <th style={{ textAlign: "center" }}>
+                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>PROGRESS</span>
+                            <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>(Status &bull; Process &bull; Time)</span>
+                          </div>
+                        </th>
+                        <th style={{ textAlign: "center" }}>
+                          <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase" }}>ACTION</span>
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {isLoading ? (
+                        <tr><td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}><Loader2 size={24} className="spinning" /> Loading tasks...</td></tr>
+                      ) : paginatedTasks.length > 0 ? (
+                        paginatedTasks.map((task) => {
+                          const progressBadge = getProgressBadge(task.status);
+                          const processIcon = getProcessIcon(task.rawTask?.prcsYesActn);
+                          const timeStatus = calculateTimeStatus(task.rawTask || task);
+                          const priorityBadge = getPriorityBadge(task.priority);
+                          const isCompleted = task.rawStatus === "COMPLETED" || task.rawStatus === "CLOSED";
+                          const isOverdue = isTaskOverdue(task);
+                          
+                          return (
+                            <tr key={task.id || task.taskId} onClick={() => { openTaskDetail(task); }} style={{ cursor: "pointer", backgroundColor: isOverdue ? "#FEF2F2" : "transparent" }}>
+                              <td style={{ maxWidth: "250px" }}>
+                                <div style={{ fontWeight: "600", color: "#0f172a", marginBottom: "4px" }}>{task.taskCode || task.id}</div>
+                                <div style={{ fontWeight: "500", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={task.title}>{task.title}</div>
+                                {!task.isIndividual && task.project !== "Individual Task" && task.milestone && task.milestone !== "—" && (
+                                  <div style={{ fontSize: "12px", color: "#94a3b8" }}>{task.milestone}</div>
+                                )}
+                              </td>
+                              <td>
+                                {renderTeamMembers(task)}
+                              </td>
+                              <td>
+                                {!isCompleted && (
+                                  <span className="cc-status-badge" style={{ backgroundColor: priorityBadge.bg, color: priorityBadge.color, padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "600" }}>
+                                    {task.priority === "ATMOST CRITICAL" ? "Atmost Critical" : task.priority}
+                                  </span>
+                                )}
+                              </td>
+                              <td style={{ fontWeight: "600", color: isOverdue ? "#EF4444" : "#0f172a", textAlign: "center" }}>
+                                {formatDate(task.dueDate) || "—"}
+                                {isOverdue && <span style={{ display: "block", fontSize: "10px", color: "#EF4444" }}>⚠️ Overdue</span>}
+                              </td>
+                              <td>
+                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                                  <span className="cc-status-badge" style={{ backgroundColor: progressBadge.bg, color: progressBadge.color, minWidth: "90px", textAlign: "center", display: "inline-block", textTransform: "uppercase", fontWeight: "700", padding: "4px 12px", borderRadius: "12px", fontSize: "11px" }}>{progressBadge.label}</span>
+                                  {processIcon && <div className="myt-custom-tooltip-wrap" title={processIcon.title} style={{ color: processIcon.color, display: "flex", alignItems: "center", cursor: "help" }}><processIcon.icon size={18} strokeWidth={2.5} /></div>}
+                                  <div className="myt-custom-tooltip-wrap" title={timeStatus.title} style={{ color: timeStatus.color, display: "flex", alignItems: "center", cursor: "help" }}><timeStatus.icon size={18} strokeWidth={2.5} /></div>
+                                </div>
+                              </td>
+                              <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
+                                {renderActionButton(task)}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      ) : (
+                        <tr><td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>No tasks found.</td></tr>
+                      )}
+                    </tbody>
+                  </table>
+
+                  {sortedTasks.length > 0 && (
+                    <div className="myt-pagination-container">
+                      <div className="myt-pagination-info">Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, sortedTasks.length)} of {sortedTasks.length} tasks</div>
+                      <div className="myt-pagination-controls">
+                        <button className="myt-page-btn" disabled={currentPage === 1} onClick={() => handlePageChange(currentPage - 1)}><ChevronLeft size={16} /></button>
+                        {Array.from({ length: Math.min(totalPages, 5) }).map((_, i) => {
+                          const pageNum = i + 1;
+                          return <button key={i} className={`myt-page-btn ${currentPage === pageNum ? 'active' : ''}`} onClick={() => handlePageChange(pageNum)}>{pageNum}</button>;
+                        })}
+                        {totalPages > 5 && <span style={{ padding: "0 4px", color: "#94a3b8" }}>...</span>}
+                        {totalPages > 5 && <button className="myt-page-btn" onClick={() => handlePageChange(totalPages)}>{totalPages}</button>}
+                        <button className="myt-page-btn" disabled={currentPage === totalPages} onClick={() => handlePageChange(currentPage + 1)}><ChevronRight size={16} /></button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </div>
-      )}
+            </>
+          )}
         </main>
       </div>
 

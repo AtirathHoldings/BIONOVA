@@ -232,38 +232,105 @@ public class AssignmentController {
         return tasks;
     }
 
+    @GetMapping("/next-code")
+    public ResponseEntity<Map<String, String>> getNextTaskCode() {
+        List<String> codes = repository.findAllTaskCodes();
+        int maxNum = 0;
+        for (String cd : codes) {
+            if (cd != null) {
+                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("INDTSK-?(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(cd);
+                if (matcher.find()) {
+                    try {
+                        int num = Integer.parseInt(matcher.group(1));
+                        if (num > maxNum) {
+                            maxNum = num;
+                        }
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+        }
+        
+        Long maxId = repository.findMaxEmpTaskId();
+        if (maxId != null && maxId > maxNum) {
+            maxNum = maxId.intValue();
+        }
+
+        int nextNum = maxNum + 1;
+        String nextCode = String.format("INDTSK-%03d", nextNum);
+        return ResponseEntity.ok(Map.of("nextTaskCode", nextCode, "sequence", String.valueOf(nextNum)));
+    }
+
     @PostMapping("/assign-with-calendar")
     public ResponseEntity<?> assignTaskWithCalendar(@RequestBody AssignmentRequest request) {
         Assignment task = request.getTask();
 
-        if (repository.existsByTaskCdAndEmpId(task.getTaskCd(), task.getEmpId())) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("message", "Task Code already exists for this employee"));
+        if (task == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Task object is required"));
         }
 
-        if (!employeeRepository.existsById(task.getEmpId())) {
+        Long taskId = task.getEmpTaskId();
+        if (taskId != null) {
+            if (repository.existsByTaskCdAndEmpIdAndEmpTaskIdNot(task.getTaskCd(), task.getEmpId(), taskId)) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "Task Code already exists for this employee"));
+            }
+        } else {
+            if (repository.existsByTaskCdAndEmpId(task.getTaskCd(), task.getEmpId())) {
+                return ResponseEntity.badRequest()
+                        .body(Map.of("message", "Task Code already exists for this employee"));
+            }
+        }
+
+        if (task.getEmpId() != null && !employeeRepository.existsById(task.getEmpId())) {
             return ResponseEntity.badRequest()
                     .body(Map.of("message", "Assigned Employee not found"));
         }
 
-        if (!employeeRepository.existsById(task.getAssignedBy())) {
+        if (task.getAssignedBy() != null && !employeeRepository.existsById(task.getAssignedBy())) {
             return ResponseEntity.badRequest()
                     .body(Map.of("message", "Assigned By Employee not found"));
         }
 
-        if (task.getTaskSts() == null) {
-            task.setTaskSts(TaskStatusMaster.OPEN);
-        }
-
+        java.time.LocalDate endDt = null;
         if (task.getStDt() != null && request.getNoOfDays() != null) {
-            java.time.LocalDate endDt = calendarService.calculateEndDate(
+            endDt = calendarService.calculateEndDate(
                     task.getStDt(), request.getNoOfDays(),
                     request.isExcludeSat(), request.isExcludeSun(), request.isIncludeMandatory(),
                     request.getCoyId(), request.getPltId(), request.isExtHolidays());
             task.setEndDt(endDt);
         }
 
-        Assignment saved = repository.save(task);
+        Assignment saved;
+        if (taskId != null) {
+            Assignment existing = repository.findById(taskId).orElse(null);
+            if (existing != null) {
+                existing.setTaskCd(task.getTaskCd());
+                existing.setTaskNm(task.getTaskNm());
+                existing.setTaskDesc(task.getTaskDesc());
+                if (task.getEmpId() != null) existing.setEmpId(task.getEmpId());
+                if (task.getAssignedBy() != null) existing.setAssignedBy(task.getAssignedBy());
+                if (task.getTaskAsgnTo() != null) existing.setTaskAsgnTo(task.getTaskAsgnTo());
+                if (task.getStDt() != null) existing.setStDt(task.getStDt());
+                if (endDt != null) existing.setEndDt(endDt);
+                else if (task.getEndDt() != null) existing.setEndDt(task.getEndDt());
+                if (task.getPriority() != null) existing.setPriority(task.getPriority());
+                if (task.getChkFlg() != null) existing.setChkFlg(task.getChkFlg());
+                if (task.getAttaFlg() != null) existing.setAttaFlg(task.getAttaFlg());
+                if (task.getPrcsFlg() != null) existing.setPrcsFlg(task.getPrcsFlg());
+                if (task.getPrcsYesActn() != null) existing.setPrcsYesActn(task.getPrcsYesActn());
+                if (task.getTaskSts() != null) existing.setTaskSts(task.getTaskSts());
+                if (task.getRemarks() != null) existing.setRemarks(task.getRemarks());
+                if (task.getSts() != null) existing.setSts(task.getSts());
+                saved = repository.save(existing);
+            } else {
+                if (task.getTaskSts() == null) task.setTaskSts(TaskStatusMaster.OPEN);
+                saved = repository.save(task);
+            }
+        } else {
+            if (task.getTaskSts() == null) task.setTaskSts(TaskStatusMaster.OPEN);
+            saved = repository.save(task);
+        }
+
         populateReviewerAndApprover(saved);
         return ResponseEntity.ok(saved);
     }
@@ -328,7 +395,9 @@ public class AssignmentController {
         task.setAttaFlg(details.getAttaFlg());
         task.setPrcsFlg(details.getPrcsFlg());
         task.setPrcsYesActn(details.getPrcsYesActn());
-        task.setTaskSts(details.getTaskSts());
+        if (details.getTaskSts() != null) {
+            task.setTaskSts(details.getTaskSts());
+        }
         task.setRemarks(details.getRemarks());
         task.setSts(details.getSts());
 

@@ -138,6 +138,107 @@ public class StorageController {
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
+    @org.springframework.beans.factory.annotation.Value("${supabase.url}")
+    private String supabaseUrl;
+
+    @org.springframework.beans.factory.annotation.Value("${supabase.service-key}")
+    private String serviceKey;
+
+    private final org.springframework.web.client.RestTemplate restTemplate = new org.springframework.web.client.RestTemplate();
+
+    /**
+     * Proxy endpoint to view/stream files from Supabase Storage securely using serviceKey.
+     * Prevents 404 Bucket Not Found / Private Bucket errors when viewing files.
+     */
+    @GetMapping("/view")
+    public ResponseEntity<byte[]> viewFile(@RequestParam("url") String fileUrl) {
+        try {
+            if (fileUrl == null || fileUrl.isBlank()) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            String targetUrl = fileUrl.trim();
+            if (targetUrl.contains("/storage/v1/object/public/")) {
+                targetUrl = targetUrl.replace("/storage/v1/object/public/", "/storage/v1/object/authenticated/");
+            } else if (!targetUrl.startsWith("http")) {
+                targetUrl = supabaseUrl + "/storage/v1/object/authenticated/" + targetUrl;
+            }
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.set("Authorization", "Bearer " + serviceKey);
+            org.springframework.http.HttpEntity<Void> requestEntity = new org.springframework.http.HttpEntity<>(headers);
+
+            ResponseEntity<byte[]> response = restTemplate.exchange(
+                    targetUrl, org.springframework.http.HttpMethod.GET, requestEntity, byte[].class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                org.springframework.http.HttpHeaders respHeaders = new org.springframework.http.HttpHeaders();
+                if (response.getHeaders().getContentType() != null) {
+                    respHeaders.setContentType(response.getHeaders().getContentType());
+                } else if (fileUrl.toLowerCase().contains(".jpg") || fileUrl.toLowerCase().contains(".jpeg")) {
+                    respHeaders.setContentType(org.springframework.http.MediaType.IMAGE_JPEG);
+                } else if (fileUrl.toLowerCase().contains(".png")) {
+                    respHeaders.setContentType(org.springframework.http.MediaType.IMAGE_PNG);
+                } else if (fileUrl.toLowerCase().contains(".pdf")) {
+                    respHeaders.setContentType(org.springframework.http.MediaType.APPLICATION_PDF);
+                }
+                respHeaders.setCacheControl("max-age=3600");
+                return new ResponseEntity<>(response.getBody(), respHeaders, org.springframework.http.HttpStatus.OK);
+            }
+        } catch (Exception e) {
+            System.err.println("[StorageController] Proxy view file failed: " + e.getMessage());
+        }
+        return ResponseEntity.notFound().build();
+    }
+
+    /**
+     * Download endpoint — forces browser to save file directly to disk with proper filename.
+     */
+    @GetMapping("/download")
+    public ResponseEntity<byte[]> downloadFile(
+            @RequestParam("url") String fileUrl,
+            @RequestParam(value = "name", required = false) String fileName) {
+        try {
+            if (fileUrl == null || fileUrl.isBlank()) {
+                return ResponseEntity.badRequest().build();
+            }
+
+            String targetUrl = fileUrl.trim();
+            if (targetUrl.contains("/storage/v1/object/public/")) {
+                targetUrl = targetUrl.replace("/storage/v1/object/public/", "/storage/v1/object/authenticated/");
+            } else if (!targetUrl.startsWith("http")) {
+                targetUrl = supabaseUrl + "/storage/v1/object/authenticated/" + targetUrl;
+            }
+
+            org.springframework.http.HttpHeaders headers = new org.springframework.http.HttpHeaders();
+            headers.set("Authorization", "Bearer " + serviceKey);
+            org.springframework.http.HttpEntity<Void> requestEntity = new org.springframework.http.HttpEntity<>(headers);
+
+            ResponseEntity<byte[]> response = restTemplate.exchange(
+                    targetUrl, org.springframework.http.HttpMethod.GET, requestEntity, byte[].class);
+
+            if (response.getStatusCode().is2xxSuccessful() && response.getBody() != null) {
+                org.springframework.http.HttpHeaders respHeaders = new org.springframework.http.HttpHeaders();
+                
+                String downloadName = (fileName != null && !fileName.isBlank()) 
+                        ? fileName 
+                        : targetUrl.substring(targetUrl.lastIndexOf('/') + 1);
+
+                respHeaders.setContentType(org.springframework.http.MediaType.APPLICATION_OCTET_STREAM);
+                respHeaders.setContentDisposition(
+                        org.springframework.http.ContentDisposition.attachment()
+                                .filename(downloadName)
+                                .build()
+                );
+
+                return new ResponseEntity<>(response.getBody(), respHeaders, org.springframework.http.HttpStatus.OK);
+            }
+        } catch (Exception e) {
+            System.err.println("[StorageController] Proxy download file failed: " + e.getMessage());
+        }
+        return ResponseEntity.notFound().build();
+    }
+
     private ResponseEntity<?> uploadImage(String folder, MultipartFile file) {
         return upload(SupabaseStorageService.BUCKET_IMAGES, folder, file);
     }

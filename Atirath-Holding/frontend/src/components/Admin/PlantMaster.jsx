@@ -22,7 +22,11 @@ import {
   Map,
   Upload,
   Image as ImageIcon,
-  Info
+  Info,
+  Users,
+  Briefcase,
+  FileText,
+  Building2
 } from "lucide-react";
 import '../../styles/PlantMaster.css';
 import AlertModal from "../AlertModal.jsx";
@@ -119,7 +123,22 @@ const PlantCreation = ({ userRole, onLogout }) => {
   const [plants, setPlants] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [states, setStates] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+
+  const generatePlantCode = (pList = plants) => {
+    let maxNum = 0;
+    if (Array.isArray(pList)) {
+      pList.forEach(p => {
+        const code = p.pltCd || p.plantCode || "";
+        const match = code.match(/^PLT-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+    }
+    return `PLT-${String(maxNum + 1).padStart(3, '0')}`;
+  };
 
   const fetchPlants = async () => {
     setLoading(true);
@@ -128,6 +147,12 @@ const PlantCreation = ({ userRole, onLogout }) => {
       if (response.ok) {
         const data = await response.json();
         setPlants(data);
+        setForm(prev => {
+          if (!prev.plantCode || /^PLT-\d+$/i.test(prev.plantCode)) {
+            return { ...prev, plantCode: generatePlantCode(data) };
+          }
+          return prev;
+        });
       }
     } catch (err) {
       console.error("Error fetching plants:", err);
@@ -160,10 +185,79 @@ const PlantCreation = ({ userRole, onLogout }) => {
     }
   };
 
+  const [lands, setLands] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [departments, setDepartments] = useState([]);
+  const [projects, setProjects] = useState([]);
+  const [deptMaps, setDeptMaps] = useState([]);
+  const [activeOverviewTab, setActiveOverviewTab] = useState(null);
+
+  const getPlantLands = (plantId) => {
+    if (!plantId) return [];
+    const targetPlantObj = plants.find(p => Number(p.pltId || p.id) === Number(plantId));
+    const targetPlantName = targetPlantObj ? (targetPlantObj.pltNm || targetPlantObj.plantName || '').trim().toLowerCase() : '';
+
+    return lands.filter(l => {
+      const lPltId = l.pltId || l.plant || l.plantId;
+      if (lPltId && Number(lPltId) === Number(plantId)) return true;
+      
+      // Also check plant name string matching
+      if (targetPlantName && typeof l.plant === 'string' && l.plant.trim().toLowerCase() === targetPlantName) return true;
+      if (targetPlantName && typeof l.pltNm === 'string' && l.pltNm.trim().toLowerCase() === targetPlantName) return true;
+
+      return false;
+    });
+  };
+
+  const getPlantDepartments = (plantId) => {
+    if (!plantId) return [];
+
+    const mappedDeptIds = new Set();
+    // 1. Collect deptIds mapped to this plant in dept_company_plt_map
+    deptMaps.forEach(m => {
+      if (Number(m.pltId) === Number(plantId)) {
+        mappedDeptIds.add(Number(m.deptId));
+      }
+    });
+
+    // 2. Collect deptIds of employees working at this plant
+    employees.forEach(e => {
+      if (Number(e.pltId || e.plant) === Number(plantId) && (e.deptId || e.department)) {
+        mappedDeptIds.add(Number(e.deptId || e.department));
+      }
+    });
+
+    if (mappedDeptIds.size === 0) {
+      return [];
+    }
+
+    return departments.filter(d => mappedDeptIds.has(Number(d.deptId || d.id)));
+  };
+
+  const fetchAuxData = async () => {
+    try {
+      const [lRes, eRes, dRes, pRes, mRes] = await Promise.all([
+        fetch(`${apiBaseUrl}/api/lands`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/employees`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/project-live`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/dept-coy-plt-maps`, { headers: getAuthHeaders() })
+      ]);
+      if (lRes.ok) setLands(await lRes.json());
+      if (eRes.ok) setEmployees(await eRes.json());
+      if (dRes.ok) setDepartments(await dRes.json());
+      if (pRes.ok) setProjects(await pRes.json());
+      if (mRes.ok) setDeptMaps(await mRes.json());
+    } catch (err) {
+      console.error("Error fetching aux data:", err);
+    }
+  };
+
   useEffect(() => {
     fetchPlants();
     fetchCompanies();
     fetchStates();
+    fetchAuxData();
   }, []);
 
   const [view, setView] = useState("list");
@@ -256,7 +350,9 @@ const PlantCreation = ({ userRole, onLogout }) => {
         }
       }
     } else if (name === "pincode") {
-      if (value && value.trim() !== "") {
+      if (!value || value.trim() === "") {
+        error = "Pincode is required.";
+      } else {
         // First digit 1-9, remaining 5 digits can be 0-9
         const pincodeRegex = /^[1-9][0-9]{5}$/;
         if (!pincodeRegex.test(value.trim())) {
@@ -321,9 +417,9 @@ const PlantCreation = ({ userRole, onLogout }) => {
     setForm((prev) => ({ ...prev, logo: URL.createObjectURL(file) }));
   };
 
-  const handleResetForm = () => {
+  const handleResetForm = (pList = plants) => {
     setForm({
-      plantCode: '',
+      plantCode: generatePlantCode(pList),
       plantName: '',
       company: '',
       email: '',
@@ -357,6 +453,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
       !form.addressLine1.trim() ||
       !form.state ||
       !form.district.trim() ||
+      !form.pincode.trim() ||
       !form.latitude ||
       !form.longitude ||
       !form.workingDays ||
@@ -780,6 +877,260 @@ const PlantCreation = ({ userRole, onLogout }) => {
                   <div style={{ padding: '24px' }}>
                     {isViewing ? (
                       <div className="pc-view-unified" style={{ padding: '12px 0' }}>
+                        {/* Plant Overview Section */}
+                        <div style={{ 
+                          marginBottom: '32px', 
+                          backgroundColor: '#ffffff', 
+                          border: '1px solid #e2e8f0', 
+                          borderRadius: '12px', 
+                          padding: '24px',
+                          boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
+                        }}>
+                          <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '4px', marginTop: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <Factory size={18} style={{ color: '#2563eb' }} />
+                            Plant Overview
+                          </h3>
+                          <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px', marginTop: 0 }}>
+                            Click on any card below to view its corresponding list details.
+                          </p>
+                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+                            {/* Card 1: Lands */}
+                            <div 
+                              onClick={() => setActiveOverviewTab(activeOverviewTab === 'lands' ? null : 'lands')}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', 
+                                border: activeOverviewTab === 'lands' ? '2px solid #16a34a' : '1px solid #bbf7d0', 
+                                borderRadius: '12px', 
+                                padding: '20px', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                position: 'relative', 
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                transform: activeOverviewTab === 'lands' ? 'scale(1.02)' : 'none',
+                                boxShadow: activeOverviewTab === 'lands' ? '0 4px 12px rgba(22,163,74,0.15)' : 'none'
+                              }}
+                            >
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#166534', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Total Lands</span>
+                              <strong style={{ fontSize: '28px', color: '#14532d', marginTop: '8px', zIndex: 1 }}>
+                                {getPlantLands(editingId).length}
+                              </strong>
+                              <div style={{ position: 'absolute', right: '10px', bottom: '-15px', opacity: 0.1, color: '#14532d', fontSize: '70px', fontWeight: 'bold', lineHeight: 1, pointerEvents: 'none', fontFamily: 'sans-serif' }}>
+                                L
+                              </div>
+                            </div>
+                            {/* Card 2: Employees */}
+                            <div 
+                              onClick={() => setActiveOverviewTab(activeOverviewTab === 'employees' ? null : 'employees')}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%)', 
+                                border: activeOverviewTab === 'employees' ? '2px solid #7c3aed' : '1px solid #e9d5ff', 
+                                borderRadius: '12px', 
+                                padding: '20px', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                position: 'relative', 
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                transform: activeOverviewTab === 'employees' ? 'scale(1.02)' : 'none',
+                                boxShadow: activeOverviewTab === 'employees' ? '0 4px 12px rgba(124,58,237,0.15)' : 'none'
+                              }}
+                            >
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#6b21a8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employees</span>
+                              <strong style={{ fontSize: '28px', color: '#581c87', marginTop: '8px', zIndex: 1 }}>
+                                {employees.filter(e => Number(e.pltId || e.plant) === Number(editingId)).length}
+                              </strong>
+                              <div style={{ position: 'absolute', right: '10px', bottom: '-15px', opacity: 0.1, color: '#581c87', fontSize: '70px', fontWeight: 'bold', lineHeight: 1, pointerEvents: 'none', fontFamily: 'sans-serif' }}>
+                                E
+                              </div>
+                            </div>
+                            {/* Card 3: Departments */}
+                            <div 
+                              onClick={() => setActiveOverviewTab(activeOverviewTab === 'departments' ? null : 'departments')}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', 
+                                border: activeOverviewTab === 'departments' ? '2px solid #ea580c' : '1px solid #fed7aa', 
+                                borderRadius: '12px', 
+                                padding: '20px', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                position: 'relative', 
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                transform: activeOverviewTab === 'departments' ? 'scale(1.02)' : 'none',
+                                boxShadow: activeOverviewTab === 'departments' ? '0 4px 12px rgba(234,88,12,0.15)' : 'none'
+                              }}
+                            >
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#9a3412', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Departments</span>
+                              <strong style={{ fontSize: '28px', color: '#7c2d12', marginTop: '8px', zIndex: 1 }}>
+                                {getPlantDepartments(editingId).length}
+                              </strong>
+                              <div style={{ position: 'absolute', right: '10px', bottom: '-15px', opacity: 0.1, color: '#7c2d12', fontSize: '70px', fontWeight: 'bold', lineHeight: 1, pointerEvents: 'none', fontFamily: 'sans-serif' }}>
+                                D
+                              </div>
+                            </div>
+                            {/* Card 4: Projects */}
+                            <div 
+                              onClick={() => setActiveOverviewTab(activeOverviewTab === 'projects' ? null : 'projects')}
+                              style={{ 
+                                background: 'linear-gradient(135deg, #fdf2f8 0%, #fce7f3 100%)', 
+                                border: activeOverviewTab === 'projects' ? '2px solid #db2777' : '1px solid #fbcfe8', 
+                                borderRadius: '12px', 
+                                padding: '20px', 
+                                display: 'flex', 
+                                flexDirection: 'column', 
+                                position: 'relative', 
+                                overflow: 'hidden',
+                                cursor: 'pointer',
+                                transform: activeOverviewTab === 'projects' ? 'scale(1.02)' : 'none',
+                                boxShadow: activeOverviewTab === 'projects' ? '0 4px 12px rgba(219,39,119,0.15)' : 'none'
+                              }}
+                            >
+                              <span style={{ fontSize: '12px', fontWeight: '600', color: '#9d174d', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Projects</span>
+                              <strong style={{ fontSize: '28px', color: '#831843', marginTop: '8px', zIndex: 1 }}>
+                                {projects.filter(p => Number(p.pltId || p.plantId) === Number(editingId)).length}
+                              </strong>
+                              <div style={{ position: 'absolute', right: '10px', bottom: '-15px', opacity: 0.1, color: '#831843', fontSize: '70px', fontWeight: 'bold', lineHeight: 1, pointerEvents: 'none', fontFamily: 'sans-serif' }}>
+                                P
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Interactive Overview Detail List Container */}
+                        {activeOverviewTab && (
+                          <div style={{ 
+                            marginBottom: '32px', 
+                            backgroundColor: '#f8fafc', 
+                            border: '1px solid #e2e8f0', 
+                            borderRadius: '12px', 
+                            padding: '20px',
+                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                              <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0, textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                {activeOverviewTab === 'lands' && <MapPin size={16} style={{ color: '#16a34a' }} />}
+                                {activeOverviewTab === 'employees' && <Users size={16} style={{ color: '#7c3aed' }} />}
+                                {activeOverviewTab === 'departments' && <Briefcase size={16} style={{ color: '#ea580c' }} />}
+                                {activeOverviewTab === 'projects' && <FileText size={16} style={{ color: '#db2777' }} />}
+                                Associated {activeOverviewTab} List
+                              </h4>
+                              <button 
+                                type="button" 
+                                onClick={() => setActiveOverviewTab(null)} 
+                                style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '13px', fontWeight: '600' }}
+                              >
+                                Close Table
+                              </button>
+                            </div>
+                            
+                            <div style={{ overflowX: 'auto', backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', textAlign: 'left' }}>
+                                <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                                  {activeOverviewTab === 'lands' && (
+                                    <tr>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>S.NO</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Land Code</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Owner Name(s)</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Area (Acres)</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Mobile No</th>
+                                    </tr>
+                                  )}
+                                  {activeOverviewTab === 'employees' && (
+                                    <tr>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>S.NO</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Employee Code</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Employee Name</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Designation</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Email</th>
+                                    </tr>
+                                  )}
+                                  {activeOverviewTab === 'departments' && (
+                                    <tr>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>S.NO</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Department Code</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Department Name</th>
+                                    </tr>
+                                  )}
+                                  {activeOverviewTab === 'projects' && (
+                                    <tr>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>S.NO</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Project Code</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Project Name</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Priority</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Status</th>
+                                    </tr>
+                                  )}
+                                </thead>
+                                <tbody>
+                                  {activeOverviewTab === 'lands' && (
+                                    getPlantLands(editingId).length > 0 ? (
+                                      getPlantLands(editingId).map((l, idx) => (
+                                        <tr key={l.lndId || l.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{idx + 1}</td>
+                                          <td style={{ padding: '10px 12px', fontWeight: '600', color: '#16a34a' }}>{l.landCd || l.lndCd || l.landCode || 'N/A'}</td>
+                                          <td style={{ padding: '10px 12px', color: '#0f172a' }}>{Array.isArray(l.landOwners || l.lndOwnrNm || l.landOwnerName) ? (l.landOwners || l.lndOwnrNm || l.landOwnerName).join(', ') : (l.landOwners || l.lndOwnrNm || l.landOwnerName || 'N/A')}</td>
+                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{l.landSize || l.lndAr || l.landArea ? `${l.landSize || l.lndAr || l.landArea} Acres` : 'N/A'}</td>
+                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{l.mobNum || l.mobNo || l.mobileNo || 'N/A'}</td>
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No lands found for this plant.</td></tr>
+                                    )
+                                  )}
+                                  {activeOverviewTab === 'employees' && (
+                                    employees.filter(e => Number(e.pltId || e.plant) === Number(editingId)).length > 0 ? (
+                                      employees.filter(e => Number(e.pltId || e.plant) === Number(editingId)).map((e, idx) => (
+                                        <tr key={e.empId || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{idx + 1}</td>
+                                          <td style={{ padding: '10px 12px', fontWeight: '600', color: '#7c3aed' }}>{e.empCode || e.employeeCode || 'N/A'}</td>
+                                          <td style={{ padding: '10px 12px', fontWeight: '500', color: '#0f172a' }}>{e.fstNm || e.firstName} {e.lstNm || e.lastName}</td>
+                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{e.designation || e.role || 'N/A'}</td>
+                                          <td style={{ padding: '10px 12px', color: '#2563eb' }}>{e.email || 'N/A'}</td>
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No employees found for this plant.</td></tr>
+                                    )
+                                  )}
+                                  {activeOverviewTab === 'departments' && (
+                                    getPlantDepartments(editingId).length > 0 ? (
+                                      getPlantDepartments(editingId).map((d, idx) => (
+                                        <tr key={d.deptId || d.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{idx + 1}</td>
+                                          <td style={{ padding: '10px 12px', fontWeight: '600', color: '#ea580c' }}>{d.deptCd || d.code || d.deptCode || 'N/A'}</td>
+                                          <td style={{ padding: '10px 12px', fontWeight: '500', color: '#0f172a' }}>{d.deptNm || d.name || d.deptName || 'N/A'}</td>
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr><td colSpan={3} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No departments mapped to this plant.</td></tr>
+                                    )
+                                  )}
+                                  {activeOverviewTab === 'projects' && (
+                                    projects.filter(p => Number(p.pltId || p.plantId) === Number(editingId)).length > 0 ? (
+                                      projects.filter(p => Number(p.pltId || p.plantId) === Number(editingId)).map((p, idx) => (
+                                        <tr key={p.prjId || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{idx + 1}</td>
+                                          <td style={{ padding: '10px 12px', fontWeight: '600', color: '#db2777' }}>{p.prjCd || p.projectCode || 'N/A'}</td>
+                                          <td style={{ padding: '10px 12px', fontWeight: '500', color: '#0f172a' }}>{p.prjNm || p.projectName || 'N/A'}</td>
+                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{p.priority || p.prjPrty || 'N/A'}</td>
+                                          <td style={{ padding: '10px 12px', color: '#15803d', fontWeight: '600' }}>{p.status || p.prjSts || 'LIVE'}</td>
+                                        </tr>
+                                      ))
+                                    ) : (
+                                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No projects found for this plant.</td></tr>
+                                    )
+                                  )}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        )}
+
+                        <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b', marginBottom: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '24px' }}>
+                          Plant Profile Details
+                        </h3>
+
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' }}>
                           
                           {/* Left Column Fields */}
@@ -996,7 +1347,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           )}
                         </label>
                         <label className="pc-field-item">
-                          <span>Pincode</span>
+                          <span>Pincode <b style={{ color: '#ef4444' }}>*</b></span>
                           <input type="text" name="pincode" value={form.pincode} onChange={handleChange} disabled={isViewing} placeholder="Enter pincode" maxLength="6" />
                           {formErrors.pincode && (
                             <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.pincode}</span>
@@ -1044,7 +1395,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
 
                     {/* 4. Information */}
                     <section className="pc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
-                      <h3 className="pc-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Information</h3>
+                      <h3 className="pc-section-title" style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', marginBottom: '20px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>Additional Information</h3>
                       <div className="pc-form-layout-row columns-4">
                         <label className="pc-field-item" style={{ gridColumn: 'span 4' }}>
                           <span>Remarks</span>
@@ -1138,32 +1489,14 @@ const PlantCreation = ({ userRole, onLogout }) => {
                       <tr>
                         <th style={{ ...thStyle, width: "50px" }}>S.NO</th>
                         <th style={thStyle}>LOGO</th>
-                        <th
-                          className="sortable"
-                          onClick={() => handleSort("plantCode")}
-                          style={{ ...thStyle, cursor: 'pointer' }}
-                        >
-                          PLANT CODE{" "}
-                          {sortConfig.key === "plantCode" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                        <th style={thStyle}>
+                          PLANT CODE
                         </th>
-                        <th
-                          className="sortable"
-                          onClick={() => handleSort("plantName")}
-                          style={{ ...thStyle, cursor: 'pointer' }}
-                        >
-                          PLANT NAME{" "}
-                          {sortConfig.key === "plantName" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                        <th style={thStyle}>
+                          PLANT NAME
                         </th>
-                        <th
-                          className="sortable"
-                          onClick={() => handleSort("company")}
-                          style={{ ...thStyle, cursor: 'pointer' }}
-                        >
-                          COMPANY{" "}
-                          {sortConfig.key === "company" &&
-                            (sortConfig.direction === "asc" ? "▲" : "▼")}
+                        <th style={thStyle}>
+                          COMPANY
                         </th>
                         <th style={thStyle}>EMAIL</th>
                         <th style={thStyle}>CAPACITY (TPD)</th>
@@ -1183,7 +1516,16 @@ const PlantCreation = ({ userRole, onLogout }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {currentItems.length > 0 ? (
+                      {loading ? (
+                        <tr>
+                          <td colSpan="8" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                              <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
+                              Loading plants...
+                            </div>
+                          </td>
+                        </tr>
+                      ) : currentItems.length > 0 ? (
                         currentItems.map((plant, index) => (
                           <tr key={plant.pltId} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td data-label="#" style={tdStyle}>{index + 1}</td>

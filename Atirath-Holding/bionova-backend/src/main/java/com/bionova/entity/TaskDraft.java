@@ -91,15 +91,10 @@ public class TaskDraft {
     private Boolean sts = true;
 
     public TaskPriorityMaster getPriority() {
+        TaskPriorityMaster baseP = (this.priority != null) ? this.priority : TaskPriorityMaster.LOW;
         if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
-            return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(tentStDt, tentEndDt, noOfDays, taskSts, null);
+            return TaskPriorityMaster.calculatePriority(tentStDt, tentEndDt, noOfDays, taskSts, null, baseP);
         }
-        return TaskPriorityMaster.calculatePriority(tentStDt, tentEndDt, noOfDays, taskSts, null);
-    }
-
-    @PrePersist
-    @PreUpdate
-    public void preSave() {
-        this.priority = getPriority();
+        return TaskPriorityMaster.calculatePriority(tentStDt, tentEndDt, noOfDays, taskSts, null, baseP);
     }
 }

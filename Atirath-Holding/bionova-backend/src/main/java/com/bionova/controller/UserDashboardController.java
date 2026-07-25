@@ -182,7 +182,7 @@ public class UserDashboardController {
         }
 
         // 4. Task Status Counts (Donut Chart) Mapping
-        int completedVal = counts.path("Closed").asInt();
+        int completedVal = counts.hasNonNull("Completed") ? counts.path("Completed").asInt() : counts.path("Closed").asInt();
         int inProgressVal = counts.path("In Progress").asInt();
         int underReviewVal = counts.path("Under Review").asInt();
         int overdueVal = counts.path("Overdue").asInt();
@@ -263,9 +263,10 @@ public class UserDashboardController {
         dto.setCompletedTasksCount(completedTasksCount);
 
         JsonNode trendsNode = root.path("metricsTrends");
-        int totalActiveAssigned = (openVal + draftVal) + inProgressVal + overdueTasksCount + completedTasksCount;
+        int totalActiveAssigned = summary.hasNonNull("totalTasks") ? summary.path("totalTasks").asInt() 
+                : (summary.hasNonNull("myTasksCount") ? summary.path("myTasksCount").asInt() + completedTasksCount + overdueTasksCount : (openVal + inProgressVal + completedTasksCount));
         dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), totalActiveAssigned));
-        dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), openVal + draftVal));
+        dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), openVal));
         dto.setInProgressCard(mapMetricCard(trendsNode.path("inProgress"), inProgressVal));
         dto.setOverdueTasksCard(mapMetricCard(trendsNode.path("overdueTasks"), overdueTasksCount));
         dto.setCompletedTasksCard(mapMetricCard(trendsNode.path("completedTasks"), completedTasksCount));

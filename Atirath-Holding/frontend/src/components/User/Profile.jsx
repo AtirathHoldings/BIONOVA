@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
-import Sidebar from "../Sidebar";
-import Header from "../Header";
+import Sidebar from "../Sidebar.jsx";
+import Header from "../Header.jsx";
 import { 
   User, 
   Camera, 
@@ -50,6 +50,7 @@ const Profile = ({ userRole, onLogout }) => {
 
   // Login Activity State (fetched from backend)
   const [loginActivity, setLoginActivity] = useState([]);
+  const [showAllLoginActivity, setShowAllLoginActivity] = useState(false);
 
   const getDeviceType = (deviceInfo = "") => {
     const info = deviceInfo.toLowerCase();
@@ -261,23 +262,20 @@ const Profile = ({ userRole, onLogout }) => {
     } catch (err) { console.error("Error fetching departments:", err); }
 
     try {
+      const res = await fetch(`${API_BASE}/profile`, { headers });
+      if (res.ok) {
+        const matchedProfile = await res.json();
+        setProfile(matchedProfile);
+        if (matchedProfile.photoUrl) {
+          setProfilePhoto(matchedProfile.photoUrl);
+        }
+      }
+    } catch (err) { console.error("Error fetching profile:", err); }
+
+    try {
       const res = await fetch(`${API_BASE}/employees`, { headers });
       if (res.ok) {
-        const empData = await res.json();
-        setEmployees(empData);
-        const loggedInEmail = sessionStorage.getItem("userEmail") || localStorage.getItem("userEmail");
-        if (loggedInEmail) {
-          const matchedProfile = empData.find(
-            (emp) => emp.email && emp.email.toLowerCase().trim() === loggedInEmail.toLowerCase().trim()
-          );
-          if (matchedProfile) {
-            setProfile(matchedProfile);
-            // Load existing photo from DB
-            if (matchedProfile.photoUrl) {
-              setProfilePhoto(matchedProfile.photoUrl);
-            }
-          }
-        }
+        setEmployees(await res.json());
       }
     } catch (err) { console.error("Error fetching employees:", err); }
 
@@ -330,6 +328,13 @@ const Profile = ({ userRole, onLogout }) => {
       ? getPlantName(profile.pltId) 
       : (profile.coyId ? getCompanyName(profile.coyId) : "N/A"),
     department: profile.deptId ? getDeptName(profile.deptId) : "N/A",
+    employeeType: (function() {
+      const et = profile.empTyp || profile.empType || profile.employeeType || "";
+      if (et === "FTE") return "Full Time Employee (FTE)";
+      if (et === "CON") return "Contract Employee";
+      if (et === "RET") return "Retainer";
+      return et || "N/A";
+    })(),
     role: profile.role || "N/A",
     bloodGroup: profile.bldGrp || profile.bloodGroup || "N/A",
     reportingManager: profile.repManId ? getManagerName(profile.repManId) : "None",
@@ -343,6 +348,7 @@ const Profile = ({ userRole, onLogout }) => {
     mobileNumber: "Loading...",
     companyName: "Loading...",
     department: "Loading...",
+    employeeType: "Loading...",
     role: "Loading...",
     bloodGroup: "Loading...",
     reportingManager: "Loading...",
@@ -353,6 +359,9 @@ const Profile = ({ userRole, onLogout }) => {
 
   // Determine organization label based on profile
   const orgLabel = profile?.pltId ? "Plant" : "Company";
+
+  // Determine which login activities to display
+  const displayedActivities = showAllLoginActivity ? loginActivity : loginActivity.slice(0, 3);
 
   return (
     <div className="pf-shell-container">
@@ -456,6 +465,12 @@ const Profile = ({ userRole, onLogout }) => {
                     <div className="pf-detail-label"><Briefcase size={16} />Department</div>
                     <span className="pf-detail-separator">:</span>
                     <div className="pf-detail-value">{profileDetails.department}</div>
+                  </div>
+
+                  <div className="pf-detail-row">
+                    <div className="pf-detail-label"><Briefcase size={16} />Employee Type</div>
+                    <span className="pf-detail-separator">:</span>
+                    <div className="pf-detail-value">{profileDetails.employeeType}</div>
                   </div>
 
                   <div className="pf-detail-row">
@@ -653,7 +668,7 @@ const Profile = ({ userRole, onLogout }) => {
                   </tr>
                 </thead>
                 <tbody>
-                   {loginActivity.map((log, index) => {
+                   {displayedActivities.map((log, index) => {
                      const devType = getDeviceType(log.deviceInfo);
                      return (
                        <tr key={log.activityId || index}>
@@ -678,9 +693,15 @@ const Profile = ({ userRole, onLogout }) => {
                 </tbody>
               </table>
               
-              <button className="pf-link" style={{ marginTop: "16px" }}>
-                View full login activity <ArrowRight size={14} />
-              </button>
+              {loginActivity.length > 3 && (
+                <button 
+                  className="pf-link" 
+                  style={{ marginTop: "16px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "6px", color: "#1d4ed8", fontWeight: "500" }}
+                  onClick={() => setShowAllLoginActivity(!showAllLoginActivity)}
+                >
+                  {showAllLoginActivity ? "Show Less" : "View All"} <ArrowRight size={14} />
+                </button>
+              )}
             </div>
 
             {/* Support Items */}

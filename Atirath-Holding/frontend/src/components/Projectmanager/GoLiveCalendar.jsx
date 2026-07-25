@@ -279,21 +279,6 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
         }
       }
 
-      // If no milestones found, inject a mock visual structure to demonstrate layout
-      if (hierarchy.length === 0 && !project.isIndividualTask) {
-        const mockMStart = projStart || new Date().toISOString().split('T')[0];
-        const mockMEnd = calcEndDate(mockMStart, 30, skipSat, skipSun, publicHolidayDates);
-        const mockTStart = mockMStart;
-        const mockTEnd = calcEndDate(mockTStart, 15, skipSat, skipSun, publicHolidayDates);
-        
-        hierarchy.push({
-          type: 'M', id: 'mock-m-1', code: 'MS-001', name: 'Design Phase (Demo Data)',
-          start: mockMStart, end: mockMEnd, adjEnd: mockMEnd, adjDays: 30,
-          tasks: [
-            { type: 'T', id: 'mock-t-1', code: 'TSK-001', name: 'UI Mockups (Demo Data)', start: mockTStart, end: mockTEnd, adjEnd: mockTEnd, adjDays: 15 }
-          ]
-        });
-      }
 
       const pType = project.isIndividualTask ? 'T' : 'P';
       const pCode = project.isIndividualTask ? (project.taskCd || `TSK-${project.id || 'NEW'}`) : (project.prjCd || project.projectCode || '');

@@ -141,6 +141,37 @@ public class AttachmentController {
         return ResponseEntity.ok(attachmentRepo.save(attachment));
     }
 
+    // ── INDIVIDUAL TASK / ASSIGNMENT ─────────────────────────────────────────
+
+    /** List all attachments for an Individual Task / Assignment */
+    @GetMapping("/assignment/{empTaskId}")
+    public List<AttachmentMaster> getAssignmentAttachments(@PathVariable Long empTaskId) {
+        List<AttachmentMaster> newStyle = attachmentRepo.findByRefIdAndRefType(empTaskId, "ASSIGNMENT");
+        if (!newStyle.isEmpty()) return newStyle;
+        List<AttachmentMaster> indStyle = attachmentRepo.findByRefIdAndRefType(empTaskId, "TASK_INDIVIDUAL");
+        if (!indStyle.isEmpty()) return indStyle;
+        List<AttachmentMaster> liveStyle = attachmentRepo.findByLiveTaskId(empTaskId);
+        if (!liveStyle.isEmpty()) return liveStyle;
+        return attachmentRepo.findByTIdAndIsLive(empTaskId, false);
+    }
+
+    /** Add an attachment to an Individual Task / Assignment */
+    @PostMapping("/assignment/{empTaskId}")
+    public ResponseEntity<?> addToAssignment(
+            @PathVariable Long empTaskId,
+            @RequestBody AttachmentMaster attachment) {
+
+        ResponseEntity<?> validation = validate(attachment);
+        if (validation != null) return validation;
+
+        attachment.setRefId(empTaskId);
+        attachment.setRefType("ASSIGNMENT");
+        attachment.setTId(empTaskId);
+        attachment.setIsLive(true);
+        attachment.setCreatedBy(getCurrentUserName());
+        return ResponseEntity.ok(attachmentRepo.save(attachment));
+    }
+
     // ── MILESTONE ───────────────────────────────────────────────────────────
 
     /** List all attachments for a Milestone */
