@@ -123,7 +123,7 @@ public class ChecklistController {
 
     // ── INDIVIDUAL TASK Checklist ───────────────────────────────────────────
 
-    @PostMapping("/assignments/{empTaskId}/bulk")
+    @PostMapping({"/assignments/{empTaskId}/bulk", "/assignments/{empTaskId}"})
     public ResponseEntity<?> bulkCreateForIndividualTask(
             @PathVariable Long empTaskId,
             @RequestBody List<ChecklistMaster> items) {
@@ -184,12 +184,12 @@ public class ChecklistController {
     }
 
     /**
-     * Bulk-create checklist items for a Live Task.
+     * Bulk-create/replace checklist items for a Live Task.
      *
-     * POST /api/checklists/live-task/{taskId}/bulk
+     * POST/PUT /api/checklists/live-task/{taskId}/bulk
      * Body: [{"chkNm": "Step 1"}, {"chkNm": "Step 2,Step 3"}]
      */
-    @PostMapping("/live-task/{taskId}/bulk")
+    @RequestMapping(value = {"/live-task/{taskId}/bulk", "/live-task/{taskId}"}, method = {RequestMethod.POST, RequestMethod.PUT})
     public ResponseEntity<?> bulkCreateForLiveTask(
             @PathVariable Long taskId,
             @RequestBody List<ChecklistMaster> items) {
