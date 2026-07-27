@@ -173,20 +173,20 @@ public class MilestoneDraftController {
         MilestoneDraft saved = milestoneDraftRepository.save(milestone);
 
         // Validate limits
-        String warning = null;
         if (saved.getTentStDt() != null && saved.getTentEndDt() != null) {
-            if (saved.getTentStDt().isBefore(project.getTentStDt()) ||
-                saved.getTentEndDt().isAfter(project.getTentEndDt()) ||
-                (saved.getMlstnDays() != null && project.getNoOfDays() != null && saved.getMlstnDays() > project.getNoOfDays())) {
-                warning = "Warning: Milestone dates/days exceed project limits. You must also update the Project dates/days accordingly.";
+            if (project.getTentStDt() != null && saved.getTentStDt().isBefore(project.getTentStDt())) {
+                milestoneDraftRepository.delete(saved);
+                return ResponseEntity.badRequest().body(Map.of("message", "Milestone start date cannot be before project start date."));
+            }
+            if (project.getTentEndDt() != null && saved.getTentEndDt().isAfter(project.getTentEndDt())) {
+                milestoneDraftRepository.delete(saved);
+                long diff = java.time.temporal.ChronoUnit.DAYS.between(project.getTentEndDt(), saved.getTentEndDt());
+                return ResponseEntity.badRequest().body(Map.of("message", "Cumulative milestone end date (" + saved.getTentEndDt() + ") exceeds project end date (" + project.getTentEndDt() + ") by " + diff + " day(s). Please reduce milestone days or update project duration."));
             }
         }
 
         Map<String, Object> response = new HashMap<>();
         response.put("data", saved);
-        if (warning != null) {
-            response.put("warning", warning);
-        }
         return ResponseEntity.ok(response);
     }
 

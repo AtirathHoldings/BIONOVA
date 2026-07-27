@@ -938,6 +938,8 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       rawTask: {
         ...t,
         empId: t.empId || t.assignedTo || t.executorId,
+        assignedBy: t.assignedBy || t.assigned_by || t.createdBy || t.creBy,
+        assignedByName: t.assignedByNm || t.assignedByName || t.createdByName,
         reviewerId: t.reviewerId || t.reviewer,
         approverId: t.approverId || t.approver,
       },
@@ -1008,6 +1010,8 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       rawTask: {
         ...t,
         empId: t.empId || t.assignedTo || t.executorId,
+        assignedBy: t.assignedBy || t.assigned_by || t.createdBy || t.creBy,
+        assignedByName: t.assignedByNm || t.assignedByName || t.createdByName,
         reviewerId: t.reviewerId || t.reviewer,
         approverId: t.approverId || t.approver,
       },
@@ -2225,13 +2229,21 @@ const formatTaskCode = (code, taskId, isIndividual) => {
     // Determine if task is in review
     const isUnderReview = currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER" || currentProcess === "UNDER_REVIEW";
 
-    const renderTeamMember = (empId, role, label) => {
-      if (!empId) return null;
-      const name = getEmployeeName(empId, employeesList);
-      const initials = getEmployeeInitials(empId, employeesList);
+    const renderTeamMember = (empId, role, label, fallbackName = null) => {
+      if (!empId && !fallbackName) return null;
+      let name = getEmployeeName(empId, employeesList);
+      if ((!name || name === "Unknown" || name.startsWith("User ")) && fallbackName) {
+        name = fallbackName;
+      }
+      let initials = getEmployeeInitials(empId, employeesList);
+      if ((!initials || initials === "UN") && name && name !== "Unknown") {
+        const parts = name.trim().split(" ");
+        initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].substring(0, 2).toUpperCase();
+      }
       const photo = getEmployeePhoto(empId, employeesList);
       
       const roleColors = {
+        "Assigned By": { bg: "#6366F1", light: "#EEF2FF" },
         "Executor": { bg: "#3B82F6", light: "#DBEAFE" },
         "Reviewer": { bg: "#8B5CF6", light: "#EDE9FE" },
         "Approver": { bg: "#F59E0B", light: "#FEF3C7" }
@@ -2826,6 +2838,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                       }
                       const isImage = /\.(png|jpe?g|gif|webp|svg)($|\?)/i.test(fileName) || /\.(png|jpe?g|gif|webp|svg)($|\?)/i.test(url) || (url && url.startsWith('data:image'));
                       const isPdf = /\.pdf($|\?)/i.test(fileName) || /\.pdf($|\?)/i.test(url);
+                      const isZip = /\.(zip|rar|7z|tar|gz)($|\?)/i.test(fileName) || /\.(zip|rar|7z|tar|gz)($|\?)/i.test(url);
 
                       const downloadUrl = `${apiBaseUrl}/api/storage/download?url=${encodeURIComponent(rawUrl)}&name=${encodeURIComponent(fileName)}`;
 
@@ -2849,8 +2862,9 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                               />
                             </div>
                           ) : (
-                            <div style={{ height: "90px", backgroundColor: isPdf ? "#fee2e2" : "#e0f2fe", display: "flex", alignItems: "center", justifyContent: "center" }}>
-                              <FileText size={36} color={isPdf ? "#ef4444" : "#0284c7"} />
+                            <div style={{ height: "90px", backgroundColor: isPdf ? "#fee2e2" : isZip ? "#f3e8ff" : "#e0f2fe", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: "4px" }}>
+                              <FileText size={32} color={isPdf ? "#ef4444" : isZip ? "#9333ea" : "#0284c7"} />
+                              {isZip && <span style={{ fontSize: "10px", fontWeight: "700", color: "#9333ea", backgroundColor: "#e9d5ff", padding: "1px 6px", borderRadius: "4px" }}>ZIP ARCHIVE</span>}
                             </div>
                           )}
 
@@ -3196,6 +3210,14 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                 Team
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                {(task.isIndividual || projectInfo.isIndividual || rawTask?.assignedBy || rawTask?.assigned_by) && (
+                  renderTeamMember(
+                    rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy,
+                    "Assigned By",
+                    "AB",
+                    rawTask?.assignedByNm || rawTask?.assignedByName
+                  )
+                )}
                 {renderTeamMember(rawTask?.empId || rawTask?.assignedTo, "Executor", "EX")}
                 {renderTeamMember(rawTask?.reviewerId || rawTask?.reviewer, "Reviewer", "RV")}
                 {renderTeamMember(rawTask?.approverId || rawTask?.approver, "Approver", "AP")}
@@ -3343,7 +3365,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                           <div className="myt-form-group">
                             <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
                             <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
-                              <input type="file" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+                              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.webp" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
                               <Paperclip size={18} style={{ verticalAlign: "middle", marginRight: "8px" }} /> <span style={{ fontSize: "14px" }}>Click or drag files to upload</span>
                             </div>
                           </div>
@@ -3386,7 +3408,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                           <div className="myt-form-group">
                             <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
                             <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
-                              <input type="file" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+                              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.webp" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
                               <Paperclip size={18} style={{ verticalAlign: "middle", marginRight: "8px" }} /> <span style={{ fontSize: "14px" }}>Click or drag files to upload</span>
                             </div>
                           </div>
@@ -3431,8 +3453,16 @@ const formatTaskCode = (code, taskId, isIndividual) => {
     const executorId = rawTask.empId || rawTask.assignedTo || rawTask.executorId;
     const reviewerId = rawTask.reviewerId || rawTask.reviewer;
     const approverId = rawTask.approverId || rawTask.approver;
+    const assignedById = rawTask.assignedBy || rawTask.assigned_by || rawTask.createdBy;
     
     let teamMembers = [
+      ...((task.isIndividual || rawTask.taskSource === "INDIVIDUAL" || assignedById) && (assignedById || rawTask.assignedByNm) ? [{
+        empId: assignedById,
+        role: "Assigned By",
+        label: "AB",
+        fallbackName: rawTask.assignedByNm || rawTask.assignedByName,
+        fallbackPhoto: null
+      }] : []),
       { 
         empId: executorId, 
         role: "Executor", 
@@ -3454,7 +3484,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
         fallbackName: rawTask.approverName || rawTask.approverNm || rawTask.appNm || rawTask.appName,
         fallbackPhoto: rawTask.approverPhoto || rawTask.appPhoto
       }
-    ].filter(m => m.empId);
+    ].filter(m => m.empId || m.fallbackName);
 
     // Fallback for dashboard upcoming tasks which might use an employees array
     if (teamMembers.length === 0 && Array.isArray(rawTask.employees) && rawTask.employees.length > 0) {
@@ -3557,6 +3587,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
           }
           
           const roleColors = {
+            "Assigned By": { bg: "#6366F1", light: "#EEF2FF" },
             "Executor": { bg: "#3B82F6", light: "#DBEAFE" },
             "Reviewer": { bg: "#8B5CF6", light: "#EDE9FE" },
             "Approver": { bg: "#F59E0B", light: "#FEF3C7" }

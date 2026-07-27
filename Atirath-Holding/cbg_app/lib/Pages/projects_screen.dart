@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
-import '../widgets/header.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../models/project_model.dart';
+import '../models/task_item.dart';
+import '../services/api_service.dart';
 
 class ProjectsScreen extends StatefulWidget {
   const ProjectsScreen({super.key});
@@ -14,84 +17,258 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   String _selectedFilter = 'All Projects';
   String _searchQuery = '';
 
-  final List<ProjectModel> _projects = [
-    ProjectModel(
-      projectName: '50 TPD CBG Plant Construction',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 8,
-      openTasks: 3,
-      progress: 65,
-      status: 'In Progress',
-      priority: 'Atmost Critical',
-    ),
-    ProjectModel(
-      projectName: 'Bio Fertilizer Unit',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 4,
-      openTasks: 2,
-      progress: 40,
-      status: 'Open',
-      priority: 'Critical',
-    ),
-    ProjectModel(
-      projectName: 'CBG Expansion Phase-II',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 5,
-      openTasks: 1,
-      progress: 25,
-      status: 'Open',
-      priority: 'High',
-    ),
-    ProjectModel(
-      projectName: 'Gas Pipeline Installation',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 12,
-      openTasks: 5,
-      progress: 55,
-      status: 'In Progress',
-      priority: 'Medium',
-    ),
-    ProjectModel(
-      projectName: 'Water Treatment Plant',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 10,
-      openTasks: 0,
-      progress: 100,
-      status: 'Closed',
-      priority: 'Normal',
-    ),
-    ProjectModel(
-      projectName: 'Solar Power Integration',
-      companyName: 'Atirath Bio Energy Pvt. Ltd.',
-      location: 'Nalgonda Plant',
-      taskAssigned: 3,
-      openTasks: 1,
-      progress: 15,
-      status: 'Open',
-      priority: 'Low',
-    ),
-  ];
+  List<ProjectModel> _projects = [];
+  bool _isLoading = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    fetchProjects();
+  }
+
+  Future<void> fetchProjects() async {
+    try {
+      // ── Step 1: Get current employee ID ─────────────────────────
+      final currentEmpId = await ApiService.getCurrentEmployeeId();
+
+      // ── Step 2: Parallel fetch ───────────────────────────────────────────
+      final fetchResults = await Future.wait([
+        ApiService.getUserDashboardData(),             // [0] dashboard data
+        ApiService.getCompanies(),                    // [1] companies
+        ApiService.getPlants(),                       // [2] plants
+        ApiService.getLiveTasks(),                    // [3] live tasks
+        ApiService.getIndividualTasks(),              // [4] individual tasks
+        ApiService.getLiveProjects(),                 // [5] live projects (full details) for merging
+      ]);
+
+      final dashboardData = fetchResults[0] as Map<String, dynamic>?;
+      final List<dynamic> myProjectsData = dashboardData?['myProjects'] as List<dynamic>? ?? [];
+      final List<ProjectModel> fullDetailProjects = fetchResults[5] as List<ProjectModel>;
+
+      final List<ProjectModel> liveProjects;
+      if (myProjectsData.isNotEmpty) {
+        liveProjects = myProjectsData.map((json) {
+          final dbProj = ProjectModel.fromJson(Map<String, dynamic>.from(json));
+          final matchedFull = fullDetailProjects.firstWhere(
+            (p) => p.prjId == dbProj.prjId,
+            orElse: () => dbProj,
+          );
+          
+          return ProjectModel(
+            prjId: dbProj.prjId,
+            prjCd: dbProj.prjCd.isNotEmpty ? dbProj.prjCd : matchedFull.prjCd,
+            prjNm: dbProj.prjNm.isNotEmpty ? dbProj.prjNm : matchedFull.prjNm,
+            prjDesc: dbProj.prjDesc.isNotEmpty ? dbProj.prjDesc : matchedFull.prjDesc,
+            prjPrty: matchedFull.prjPrty.isNotEmpty ? matchedFull.prjPrty : dbProj.prjPrty,
+            prjSts: dbProj.prjSts.isNotEmpty ? dbProj.prjSts : matchedFull.prjSts,
+            stDt: matchedFull.stDt.isNotEmpty ? matchedFull.stDt : dbProj.stDt,
+            endDt: matchedFull.endDt.isNotEmpty ? matchedFull.endDt : dbProj.endDt,
+            noOfDays: matchedFull.noOfDays > 0 ? matchedFull.noOfDays : dbProj.noOfDays,
+            logo: matchedFull.logo ?? dbProj.logo,
+            addlRem: matchedFull.addlRem ?? dbProj.addlRem,
+            leadLagStatus: matchedFull.leadLagStatus ?? dbProj.leadLagStatus,
+            pltId: matchedFull.pltId != 0 ? matchedFull.pltId : dbProj.pltId,
+            coyId: matchedFull.coyId != 0 ? matchedFull.coyId : dbProj.coyId,
+            name: dbProj.name.isNotEmpty ? dbProj.name : matchedFull.name,
+            details: dbProj.details.isNotEmpty ? dbProj.details : matchedFull.details,
+            role: dbProj.role.isNotEmpty ? dbProj.role : matchedFull.role,
+            assigned: dbProj.rawAssigned ?? matchedFull.rawAssigned,
+            open: dbProj.rawOpen ?? matchedFull.rawOpen,
+            inProgress: dbProj.rawInProgress ?? matchedFull.rawInProgress,
+            progressValue: dbProj.rawProgressValue, // Do NOT fall back to matchedFull.rawProgressValue which has wrong static values!
+            progressText: dbProj.progressText != '0%' ? dbProj.progressText : (dbProj.rawProgressValue != null ? dbProj.progressText : null),
+            barColor: dbProj.progressText != '0%' ? dbProj.barColor : (dbProj.rawProgressValue != null ? dbProj.barColor : null),
+            companyName: matchedFull.companyName ?? dbProj.companyName,
+            plantName: matchedFull.plantName ?? dbProj.plantName,
+            location: matchedFull.location ?? dbProj.location,
+            leadLagStatusStr: matchedFull.leadLagStatusStr != 'Lag' ? matchedFull.leadLagStatusStr : dbProj.leadLagStatusStr,
+          );
+        }).toList();
+      } else {
+        liveProjects = fullDetailProjects;
+      }
+      final companies     = fetchResults[1] as List<dynamic>;
+      final plants        = fetchResults[2] as List<dynamic>;
+      final liveTasks     = fetchResults[3] as List<TaskItem>;
+      List<dynamic> rawIndividualTasks = fetchResults[4] as List<dynamic>;
+
+      // Filter individual tasks by currentEmpId (same logic as dashboard_screen.dart)
+      if (currentEmpId != null) {
+        final empStr = currentEmpId.toString();
+        rawIndividualTasks = rawIndividualTasks.where((t) {
+          if (t is! Map) return false;
+          final doer = t['empId']?.toString() ?? t['empid']?.toString();
+          final assigner = t['assignedBy']?.toString() ?? t['assigned_by']?.toString();
+          final reviewer = t['reviewer']?.toString();
+          final approver = t['approver']?.toString();
+          return doer == empStr || assigner == empStr || reviewer == empStr || approver == empStr;
+        }).toList();
+      }
+
+      // Parse individual tasks safely
+      final individualTasks = rawIndividualTasks
+          .whereType<Map>()
+          .map((json) => TaskItem.fromIndividualTask(Map<String, dynamic>.from(json), currentEmpId?.toString()))
+          .toList();
+
+      final combinedTasks = [...liveTasks, ...individualTasks];
+
+      final leadLagFutures = liveProjects.map((p) => ApiService.getProjectLeadLagStatus(p.prjId)).toList();
+      final leadLagResults = await Future.wait(leadLagFutures);
+      final Map<int, String> leadLagMap = {};
+      for (int i = 0; i < liveProjects.length; i++) {
+        leadLagMap[liveProjects[i].prjId] = leadLagResults[i];
+      }
+
+      final List<ProjectModel> mappedProjects = [];
+      for (final p in liveProjects) {
+        final projectTasks = combinedTasks.where((t) => 
+          t.projectId == p.prjId || 
+          (t.projectCode != null && t.projectCode == p.prjCd) ||
+          (t.projectName != null && t.projectName == p.prjNm)
+        ).toList();
+
+        final int totalAssigned = projectTasks.length;
+        final int completed = projectTasks.where((t) => t.isCompleted).length;
+        final int inProgress = projectTasks.where((t) => t.isInProgress || t.isUnderReview).length;
+        final int open = totalAssigned - completed;
+
+        // Use backend progress if available, otherwise fallback to task counts
+        final double progressVal = p.rawProgressValue ?? (totalAssigned > 0 ? (completed / totalAssigned) : 0.0);
+        final String progressTxt = p.rawProgressValue != null 
+            ? p.progressText 
+            : '${(progressVal * 100).round()}%';
+            
+        Color barColor;
+        if (progressVal < 0.5) {
+          barColor = const Color(0xffF97316);
+        } else if (progressVal < 1.0) {
+          barColor = const Color(0xff3B82F6);
+        } else {
+          barColor = const Color(0xff22C55E);
+        }
+
+        final int assigned = p.rawAssigned ?? totalAssigned;
+        final int openCount = p.rawOpen ?? open;
+
+        // Company / plant details
+        String? companyName = p.companyName;
+        if (companyName == null || companyName.isEmpty) {
+          if (p.coyId != null && p.coyId! > 0) {
+            final matched = companies.firstWhere(
+              (c) => (c['coyId'] ?? c['coy_id']) == p.coyId,
+              orElse: () => null,
+            );
+            if (matched != null) companyName = matched['coyNm'];
+          }
+        }
+
+        String? plantName = p.plantName;
+        String? location  = p.location;
+        if ((plantName == null || plantName.isEmpty) ||
+            (location == null || location.isEmpty)) {
+          if (p.pltId != null && p.pltId! > 0) {
+            final matched = plants.firstWhere(
+              (pl) => (pl['pltId'] ?? pl['plt_id']) == p.pltId,
+              orElse: () => null,
+            );
+            if (matched != null) {
+              plantName ??= matched['pltNm'] ?? matched['plt_nm'];
+              if (location == null || location.isEmpty) {
+                final addr = matched['addr']?.toString() ?? '';
+                final dist = matched['dist']?.toString() ?? '';
+                location = addr.isNotEmpty ? addr : (dist.isNotEmpty ? dist : null);
+              }
+            }
+          }
+        }
+
+        mappedProjects.add(ProjectModel(
+          prjId: p.prjId,
+          prjCd: p.prjCd,
+          prjNm: p.prjNm,
+          prjDesc: p.prjDesc,
+          prjPrty: p.prjPrty,
+          prjSts: p.prjSts,
+          stDt: p.stDt,
+          endDt: p.endDt,
+          noOfDays: p.noOfDays,
+          logo: p.logo,
+          addlRem: p.addlRem,
+          leadLagStatus: p.leadLagStatus,
+          pltId: p.pltId,
+          coyId: p.coyId,
+          name: p.name,
+          details: p.details,
+          role: p.role,
+          assigned: assigned,
+          open: openCount,
+          inProgress: inProgress,
+          progressValue: progressVal,
+          progressText: progressTxt,
+          barColor: barColor,
+          companyName: companyName,
+          plantName: plantName,
+          location: location,
+          leadLagStatusStr: leadLagMap[p.prjId] ?? p.leadLagStatusStr,
+        ));
+      }
+
+      if (mounted) {
+        setState(() {
+          _projects = mappedProjects;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _isLoading = false;
+        });
+      }
+      debugPrint('[Projects] ERROR: $e');
+    }
+  }
+
 
   List<ProjectModel> get _filteredProjects {
     return _projects.where((project) {
-      final matchesSearch = project.projectName
+      final matchesSearch = project.prjNm
           .toLowerCase()
           .contains(_searchQuery.toLowerCase());
 
-      final matchesFilter = _selectedFilter == 'All Projects'
-          ? true
-          : project.status == _selectedFilter;
+      bool matchesFilter = false;
+      final status = project.prjSts.trim().toUpperCase();
+
+      if (_selectedFilter == 'All Projects') {
+        matchesFilter = true;
+      } else if (_selectedFilter == 'Live') {
+        matchesFilter = status == 'LIVE' || 
+                        status == 'OPEN' || 
+                        status == 'ACTIVE' || 
+                        status == 'IN PROGRESS' || 
+                        status == 'WIP' || 
+                        status == 'IN_PROGRESS' || 
+                        status.isEmpty;
+      } else if (_selectedFilter == 'On Hold') {
+        matchesFilter = status == 'ON HOLD' || 
+                        status == 'ON_HOLD' || 
+                        status == 'HOLD';
+      } else if (_selectedFilter == 'Closed') {
+        matchesFilter = status == 'CLOSED' || 
+                        status == 'COMPLETED' || 
+                        status == 'DONE';
+      }
 
       return matchesSearch && matchesFilter;
     }).toList();
   }
 
-  Color getPriorityColor(String priority) {
+  Color getPriorityColor(String? priority) {
+    if (priority == null) return const Color(0xFF10B981);
+    
     switch (priority.toLowerCase()) {
       case 'low':
         return const Color(0xFF2563EB);
@@ -110,45 +287,66 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     }
   }
 
+  String _formatDbDate(String rawDate) {
+    if (rawDate.isEmpty) return 'No Date';
+    try {
+      final parsed = DateTime.parse(rawDate);
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+      return "${parsed.day.toString().padLeft(2, '0')} ${months[parsed.month - 1]} ${parsed.year}";
+    } catch (_) {
+      return rawDate;
+    }
+  }
+
+  bool _isValidString(String? str) {
+    if (str == null) return false;
+    final s = str.trim();
+    if (s.isEmpty) return false;
+    final lower = s.toLowerCase();
+    return lower != 'null' && lower != 'n/a';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xffFAFBFC),
-      appBar: CustomHeader(
-        title: 'Projects',
-        onNotificationTap: () {
-          Navigator.pushNamed(context, '/notifications');
-        },
-      ),
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-            child: Row(
-              children: [
-                Expanded(child: _buildSearchField()),
-                const SizedBox(width: 10),
-                _buildProjectDropdown(),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
-          Expanded(
-            child: ListView.builder(
-              padding: const EdgeInsets.symmetric(horizontal: 16),
-              itemCount: _filteredProjects.length,
-              itemBuilder: (context, index) {
-                return _buildProjectCard(
-                  _filteredProjects[index],
-                  themeColor,
-                );
-              },
-            ),
-          ),
-          _buildPagination(),
-        ],
-      ),
+      body: _isLoading
+          ? const Center(
+              child: CircularProgressIndicator(),
+            )
+          : _error != null
+              ? Center(
+                  child: Text(_error!),
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+                      child: Row(
+                        children: [
+                          Expanded(child: _buildSearchField()),
+                          const SizedBox(width: 10),
+                          _buildProjectDropdown(),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    Expanded(
+                      child: ListView.builder(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        itemCount: _filteredProjects.length,
+                        itemBuilder: (context, index) {
+                          return _buildProjectCard(
+                            _filteredProjects[index],
+                            themeColor,
+                          );
+                        },
+                      ),
+                    ),
+                    _buildPagination(),
+                  ],
+                ),
     );
   }
 
@@ -207,12 +405,12 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               child: Text('All Projects'),
             ),
             DropdownMenuItem(
-              value: 'Open',
-              child: Text('Open'),
+              value: 'Live',
+              child: Text('Live'),
             ),
             DropdownMenuItem(
-              value: 'In Progress',
-              child: Text('In Progress'),
+              value: 'On Hold',
+              child: Text('On Hold'),
             ),
             DropdownMenuItem(
               value: 'Closed',
@@ -229,12 +427,88 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
+  Widget _buildProjectImage(String? logoPath, String projectNm, double size) {
+    if (logoPath == null || logoPath.isEmpty) {
+      return _buildPlaceholderImage(projectNm, size);
+    }
+
+    final String fullImageUrl = (logoPath.startsWith('http://') || logoPath.startsWith('https://'))
+        ? logoPath
+        : '${dotenv.env['BASE_URL'] ?? 'https://bionova-rjii.onrender.com'}/${logoPath.startsWith('/') ? logoPath.substring(1) : logoPath}';
+
+    return Image.network(
+      fullImageUrl,
+      width: size,
+      height: size,
+      fit: BoxFit.cover,
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return Container(
+          width: size,
+          height: size,
+          color: const Color(0xffF8FAFC),
+          child: const Center(
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(themeColor),
+              ),
+            ),
+          ),
+        );
+      },
+      errorBuilder: (context, error, stackTrace) {
+        return _buildPlaceholderImage(projectNm, size);
+      },
+    );
+  }
+
+  Widget _buildPlaceholderImage(String name, double size) {
+    final String char = name.isNotEmpty ? name[0].toUpperCase() : 'P';
+    final List<Color> colors = [
+      const Color(0xff3B82F6),
+      const Color(0xff1D4ED8),
+    ];
+    if (char.codeUnitAt(0) % 2 == 0) {
+      colors[0] = const Color(0xff10B981);
+      colors[1] = const Color(0xff047857);
+    } else if (char.codeUnitAt(0) % 3 == 0) {
+      colors[0] = const Color(0xff8B5CF6);
+      colors[1] = const Color(0xff6D28D9);
+    }
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Text(
+          char,
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: size * 0.4,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildProjectCard(ProjectModel project, Color themeColor) {
-    final priorityColor = getPriorityColor(project.priority);
-    
+    final String status = project.prjSts.trim().toUpperCase();
+    final bool isCompleted = status == 'CLOSED' || status == 'COMPLETED' || status == 'DONE' || project.progressValue >= 1.0;
+
     return GestureDetector(
       onTap: () {
-        Navigator.pushNamed(context, '/project-details');
+        Navigator.pushNamed(context, '/project-details', arguments: project);
       },
       child: Container(
         margin: const EdgeInsets.only(bottom: 14),
@@ -263,24 +537,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                 children: [
                   ClipRRect(
                     borderRadius: BorderRadius.circular(8),
-                    child: Image.asset(
-                      'assets/company.png',
-                      width: 90,
-                      height: 90,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
-                        return Container(
-                          width: 90,
-                          height: 90,
-                          color: const Color(0xffF1F5F9),
-                          child: const Icon(
-                            Icons.business,
-                            color: Color(0xff94A3B8),
-                            size: 32,
-                          ),
-                        );
-                      },
-                    ),
+                    child: _buildProjectImage(project.logo, project.prjNm, 90),
                   ),
                   const SizedBox(width: 14),
                   Expanded(
@@ -288,7 +545,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          project.projectName,
+                          project.prjNm,
                           style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 13.5,
@@ -298,41 +555,53 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           maxLines: 2,
                         ),
                         const SizedBox(height: 4),
-                        LayoutBuilder(
-                          builder: (context, constraints) {
-                            final label = '${project.companyName}   |   ${project.location}';
-                            
-                            final textPainter = TextPainter(
-                              text: TextSpan(text: label, style: const TextStyle(fontSize: 10)),
-                              maxLines: 1,
-                              textDirection: TextDirection.ltr,
-                            )..layout(maxWidth: constraints.maxWidth);
-
-                            if (textPainter.didExceedMaxLines) {
-                              return Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    project.companyName,
+                        if (_isValidString(project.companyName))
+                          Text(
+                            project.companyName!,
+                            style: const TextStyle(fontSize: 11, color: Color(0xff64748B), fontWeight: FontWeight.w600),
+                          ),
+                        if (_isValidString(project.plantName))
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Text(
+                              project.plantName!,
+                              style: const TextStyle(fontSize: 10, color: Color(0xff64748B), fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                        if (_isValidString(project.location))
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.location_on_outlined, size: 12, color: Color(0xff64748B)),
+                                const SizedBox(width: 2),
+                                Expanded(
+                                  child: Text(
+                                    project.location!,
                                     style: const TextStyle(fontSize: 10, color: Color(0xff64748B), fontWeight: FontWeight.w500),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
                                   ),
-                                  const SizedBox(height: 1),
-                                  Text(
-                                    project.location,
-                                    style: const TextStyle(fontSize: 10, color: Color(0xff64748B), fontWeight: FontWeight.w500),
-                                  ),
-                                ],
-                              );
-                            } else {
-                              return Text(
-                                label,
-                                style: const TextStyle(fontSize: 10, color: Color(0xff64748B), fontWeight: FontWeight.w500),
-                              );
-                            }
-                          },
-                        ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        if (project.stDt.isNotEmpty || project.endDt.isNotEmpty)
+                          Padding(
+                            padding: const EdgeInsets.only(top: 2),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.calendar_today_outlined, size: 11, color: Color(0xff64748B)),
+                                const SizedBox(width: 4),
+                                Text(
+                                  '${_formatDbDate(project.stDt)} - ${_formatDbDate(project.endDt)}',
+                                  style: const TextStyle(fontSize: 10, color: Color(0xff64748B), fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                          ),
                         const SizedBox(height: 8),
-                        _buildPriorityBadge(project.priority, priorityColor),
+                        // Priority badge REMOVED from here
                       ],
                     ),
                   ),
@@ -346,24 +615,22 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                           alignment: Alignment.center,
                           children: [
                             CircularProgressIndicator(
-                              value: project.progress / 100,
+                              value: project.progressValue,
                               strokeWidth: 3,
                               backgroundColor: const Color(0xffF1F5F9),
-                              color: priorityColor,
+                              color: project.barColor,
                             ),
                             Text(
-                              '${project.progress}%',
+                              project.progressText,
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
-                                color: priorityColor,
+                                color: project.barColor,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(height: 4),
-                      _buildLeadLagBadge(project.progress >= 50),
                     ],
                   ),
                 ],
@@ -386,19 +653,30 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
+                  // Left side: Tasks Assigned and Open Tasks
                   Row(
                     children: [
-                      _buildMetricBlock('Tasks Assigned', project.taskAssigned, themeColor),
+                      _buildMetricBlock('Task Assigned', project.assigned, themeColor),
                       Container(
                         height: 20,
                         width: 1,
                         color: themeColor.withValues(alpha: 0.20),
-                        margin: const EdgeInsets.symmetric(horizontal: 16),
+                        margin: const EdgeInsets.symmetric(horizontal: 14),
                       ),
-                      _buildMetricBlock('Open Tasks', project.openTasks, themeColor),
+                      _buildMetricBlock('Open Tasks', project.open, themeColor),
+                      Container(
+                        height: 20,
+                        width: 1,
+                        color: themeColor.withValues(alpha: 0.20),
+                        margin: const EdgeInsets.symmetric(horizontal: 14),
+                      ),
+                      _buildMetricBlock('Closed', project.closed, themeColor),
                     ],
                   ),
-                  _buildStatusPill(project.status, themeColor),
+                  if (isCompleted)
+                    _buildLeadLagBadge(project.leadLagStatusStr)
+                  else
+                    _buildPriorityPill(project.prjPrty, getPriorityColor(project.prjPrty)),
                 ],
               ),
             ),
@@ -433,76 +711,108 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
-  Widget _buildPriorityBadge(String priority, Color priorityColor) {
+  // Priority pill shown in footer
+  Widget _buildPriorityPill(String? priority, Color priorityColor) {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: 8,
-        vertical: 4,
+        horizontal: 12,
+        vertical: 6,
       ),
       decoration: BoxDecoration(
         color: priorityColor.withValues(alpha: 0.12),
-        borderRadius: BorderRadius.circular(4),
-        border: Border.all(
-          color: priorityColor.withValues(alpha: 0.35),
-        ),
-      ),
-      child: Text(
-        priority,
-        style: TextStyle(
-          color: priorityColor,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-    );
-  }
-
-  Widget _buildStatusPill(String status, Color themeColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 4,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: themeColor.withValues(alpha: 0.30),
-          width: 1,
+          color: priorityColor.withValues(alpha: 0.35),
+          width: 1.2,
         ),
       ),
-      child: Text(
-        status,
-        style: TextStyle(
-          color: themeColor,
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: priorityColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            priority?.toUpperCase() ?? 'NORMAL',
+            style: TextStyle(
+              color: priorityColor,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildLeadLagBadge(bool isLead) {
+  Widget _buildLeadLagBadge(String statusStr) {
+    final String s = statusStr.trim().toLowerCase();
+    bool isLead = s == 'lead';
+    bool isLag = s == 'lag';
+    bool isOnTime = s == 'on time' || s == 'ontime' || s == 'on-time';
+
+    String displayText = isLead
+        ? 'Lead'
+        : isLag
+            ? 'Lag'
+            : isOnTime
+                ? 'On Time'
+                : (statusStr.isEmpty ? 'Lag' : statusStr);
+
+    Color bgColor = const Color(0xffF1F5F9);
+    Color textColor = const Color(0xff475569);
+
+    if (isLead) {
+      bgColor = const Color(0xffDCFCE7);
+      textColor = const Color(0xff16A34A);
+    } else if (isLag) {
+      bgColor = const Color(0xffFEE2E2);
+      textColor = const Color(0xffDC2626);
+    } else if (isOnTime) {
+      bgColor = const Color(0xffDBEAFE);
+      textColor = const Color(0xff2563EB);
+    }
+
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: 6,
-        vertical: 2,
+        horizontal: 12,
+        vertical: 6,
       ),
       decoration: BoxDecoration(
-        color: isLead
-            ? const Color(0xffDCFCE7)
-            : const Color(0xffFEE2E2),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Text(
-        isLead ? 'Lead' : 'Lag',
-        style: TextStyle(
-          color: isLead
-              ? const Color(0xff10B981)
-              : const Color(0xffEF4444),
-          fontSize: 8,
-          fontWeight: FontWeight.w700,
+        color: bgColor,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: textColor.withValues(alpha: 0.3),
+          width: 1.2,
         ),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: textColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 6),
+          Text(
+            displayText.toUpperCase(),
+            style: TextStyle(
+              color: textColor,
+              fontSize: 10.5,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -561,26 +871,4 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       ),
     );
   }
-}
-
-class ProjectModel {
-  final String projectName;
-  final String companyName;
-  final String location;
-  final int taskAssigned;
-  final int openTasks;
-  final int progress;
-  final String status;
-  final String priority;
-
-  ProjectModel({
-    required this.projectName,
-    required this.companyName,
-    required this.location,
-    required this.taskAssigned,
-    required this.openTasks,
-    required this.progress,
-    required this.status,
-    required this.priority,
-  });
 }

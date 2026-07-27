@@ -398,12 +398,49 @@ const ProjectCreation = ({ userRole, onLogout }) => {
           createdBy: getLoggedInUser()
         };
       });
-      setProjects([...mappedDrafts, ...mappedLive]);
+      const allProjects = [...mappedDrafts, ...mappedLive];
+      setProjects(allProjects);
+      setForm(prev => {
+        if (!isEditing) {
+          return { ...prev, projectCode: generateNextProjectCode(allProjects) };
+        }
+        return prev;
+      });
     } catch (err) {
       console.error("Error fetching projects:", err);
     } finally {
       setLoading(false);
     }
+  };
+
+  const generateNextProjectCode = (projectList = projects) => {
+    let maxNum = 0;
+    (projectList || []).forEach(p => {
+      const code = p.projectCode || p.prjCd || "";
+      const match = code.match(/^PRJ-(\d+)/i);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (num < 2000 && num > maxNum) {
+          maxNum = num;
+        }
+      }
+    });
+
+    if (maxNum === 0) {
+      (projectList || []).forEach(p => {
+        const code = p.projectCode || p.prjCd || "";
+        const match = code.match(/^PRJ[-_]?(\d+)/i);
+        if (match && match[1]) {
+          const num = parseInt(match[1], 10);
+          if (num < 2000 && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      });
+    }
+
+    const nextNum = maxNum + 1;
+    return `PRJ-${String(nextNum).padStart(3, '0')}`;
   };
 
   useEffect(() => { fetchAllData(); }, []);
@@ -603,9 +640,9 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     }
   };
 
-  const handleResetForm = () => {
+  const handleResetForm = (projectList = projects) => {
     setForm({
-      projectCode: "",
+      projectCode: generateNextProjectCode(projectList),
       projectName: "",
       priority: "MEDIUM",
       status: "Draft",
@@ -642,8 +679,9 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     setLoading(true);
     try {
       const isLive = form.status === "Live" || form.status === "LIVE";
+      const projectCodeVal = (form.projectCode || generateNextProjectCode(projects)).trim();
       const payload = {
-        prjCd: form.projectCode || `PRJ-${String(projects.length + 1).padStart(4, '0')}`,
+        prjCd: projectCodeVal,
         prjNm: (form.projectName || "").trim(),
         prjDesc: (form.projectDescription || "").trim(),
         prjObjtv: (form.projectObjective || "").trim() || "N/A",
@@ -699,14 +737,21 @@ const ProjectCreation = ({ userRole, onLogout }) => {
             console.error("Error parsing response:", e);
           }
         }
-        triggerAlert("success", "Success", isEditing ? "Project updated successfully!" : "Project saved successfully!");
         handleResetForm();
         setIsEditing(false);
         setEditingId(null);
-        setView("list");
         if (newId) {
-          navigate("/milestone-creation", { state: { projectId: newId, projectType: pType, showSuccessAlert: true } });
+          navigate("/milestone-creation", {
+            state: {
+              projectId: newId,
+              projectType: pType,
+              showSuccessAlert: true,
+              message: isEditing ? "Project updated successfully!" : "Project created successfully!"
+            }
+          });
         } else {
+          triggerAlert("success", "Success", isEditing ? "Project updated successfully!" : "Project saved successfully!");
+          setView("list");
           fetchAllData();
         }
       } else {
@@ -759,6 +804,9 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     setEditingId(project.id);
     setActiveDropdown(null);
     setView("form");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    const mainEl = document.querySelector(".main-content") || document.querySelector(".layout-content") || document.documentElement;
+    if (mainEl) mainEl.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const toggleDropdown = (id) => {
@@ -1387,7 +1435,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       type="button"
                       className="proj-btn-add-new"
                       onClick={() => {
-                        handleResetForm();
+                        handleResetForm(projects);
                         setIsEditing(false);
                         setView("form");
                       }}

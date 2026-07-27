@@ -247,9 +247,22 @@ public class StorageController {
         return upload(SupabaseStorageService.BUCKET_DOCUMENTS, folder, file);
     }
 
+    private static final java.util.Set<String> DISALLOWED_EXTENSIONS = java.util.Set.of(
+        "zip", "rar", "7z", "tar", "gz", "iso",
+        "mp3", "wav", "aac", "m4a", "ogg", "flac", "wma",
+        "mp4", "avi", "mov", "mkv", "webm", "flv", "wmv", "3gp", "m4v"
+    );
+
     private ResponseEntity<?> upload(String bucket, String folder, MultipartFile file) {
         if (file == null || file.isEmpty()) {
             return ResponseEntity.badRequest().body(Map.of("message", "File is required and must not be empty."));
+        }
+        String originalFilename = file.getOriginalFilename();
+        if (originalFilename != null && originalFilename.contains(".")) {
+            String ext = originalFilename.substring(originalFilename.lastIndexOf(".") + 1).toLowerCase();
+            if (DISALLOWED_EXTENSIONS.contains(ext)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "ZIP, Audio, and Video files are not allowed. Please upload Documents or Images only."));
+            }
         }
         try {
             String url = storageService.uploadFile(bucket, folder, file);

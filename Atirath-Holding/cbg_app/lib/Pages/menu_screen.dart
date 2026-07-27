@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../widgets/header.dart';
 import 'settings_screen.dart';
 import 'main_screen.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../services/api_service.dart';
 
 class MenuScreen extends StatefulWidget {
   const MenuScreen({super.key});
@@ -13,8 +15,18 @@ class MenuScreen extends StatefulWidget {
 class _MenuScreenState extends State<MenuScreen> {
 
   final List<Map<String, dynamic>> menuItems = [
-    {'title': 'My Projects', 'icon': Icons.folder_shared_outlined, 'color': Colors.blueAccent, 'target': 'projects'},
+    {'title': 'My Projects', 'icon': Icons.folder_open_outlined, 'color': Colors.blueAccent, 'target': 'projects'},
     {'title': 'My Tasks', 'icon': Icons.check_box_outlined, 'color': Colors.deepPurpleAccent, 'target': 'tasks'},
+    {
+      'title': 'Assign Tasks', 
+      'icon': Icons.person_add_alt_1_outlined, 
+      'color': const Color(0xFF0D9488), 
+      'target': 'individual_tasks_list',
+      'subItems': [
+        {'title': 'My Assignments', 'tabIndex': 0},
+        {'title': 'Assigned by Me', 'tabIndex': 1},
+      ]
+    },
     {'title': 'Calendar', 'icon': Icons.calendar_today_outlined, 'color': const Color(0xFFF59E0B), 'target': 'calendar'},
     {'title': 'Settings', 'icon': Icons.settings_outlined, 'color': Colors.grey.shade700, 'target': 'settings'},
     {'title': 'Logout', 'icon': Icons.logout_outlined, 'color': Colors.red, 'target': 'logout'},
@@ -42,6 +54,9 @@ class _MenuScreenState extends State<MenuScreen> {
         if (MainScreen.navigatorKey.currentState != null) {
           MainScreen.navigatorKey.currentState!.changeTab(2);
         }
+        break;
+      case 'individual_tasks_list':
+        Navigator.pushNamed(context, '/individual-tasks-list');
         break;
       case 'calendar':
         if (MainScreen.navigatorKey.currentState != null) {
@@ -104,30 +119,29 @@ class _MenuScreenState extends State<MenuScreen> {
     );
   }
 
-  void _handleLogout() {
-    Navigator.pushNamedAndRemoveUntil(
-      context, 
-      '/signin', 
-      (route) => false
-    );
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Logged out successfully'),
-        duration: Duration(seconds: 1),
-      ),
-    );
+  void _handleLogout() async {
+    await ApiService.clearCache();
+
+    if (mounted) {
+      Navigator.pushNamedAndRemoveUntil(
+        context, 
+        '/signin', 
+        (route) => false
+      );
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Logged out successfully'),
+          duration: Duration(seconds: 1),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFFAFAFA),
-      appBar: CustomHeader(
-        title: 'Menu',
-        automaticallyImplyLeading: false,
-        onNotificationTap: _handleNotification,
-      ),
       body: ListView.separated(
         physics: const BouncingScrollPhysics(),
         padding: EdgeInsets.zero,
@@ -136,7 +150,68 @@ class _MenuScreenState extends State<MenuScreen> {
         itemBuilder: (context, index) {
           final item = menuItems[index];
           final isLogout = item['target'] == 'logout';
+          final hasSubItems = item['subItems'] != null;
           
+          if (hasSubItems) {
+            return ExpansionTile(
+              tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+              leading: Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: (item['color'] as Color).withValues(alpha: 0.1),
+                  shape: BoxShape.circle
+                ),
+                child: Icon(
+                  item['icon'] as IconData, 
+                  color: item['color'] as Color, 
+                  size: 18
+                ),
+              ),
+              title: Text(
+                item['title'] as String,
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w500,
+                  color: Color(0xFF1E293B),
+                ),
+              ),
+              trailing: const Icon(
+                Icons.keyboard_arrow_down, 
+                size: 16, 
+                color: Colors.grey
+              ),
+              shape: const Border(),
+              collapsedShape: const Border(),
+              children: (item['subItems'] as List<dynamic>).map((subItem) {
+                final subMap = subItem as Map<String, dynamic>;
+                return ListTile(
+                  contentPadding: const EdgeInsets.only(left: 68, right: 20),
+                  dense: true,
+                  title: Text(
+                    subMap['title'] as String,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w400,
+                      color: Color(0xFF475569),
+                    ),
+                  ),
+                  trailing: const Icon(
+                    Icons.chevron_right,
+                    size: 14,
+                    color: Colors.grey,
+                  ),
+                  onTap: () {
+                    Navigator.pushNamed(
+                      context,
+                      '/individual-tasks-list',
+                      arguments: subMap['tabIndex'] as int,
+                    );
+                  },
+                );
+              }).toList(),
+            );
+          }
+
           return ListTile(
             contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
             leading: Container(

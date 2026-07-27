@@ -1,7 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../widgets/header.dart';      
 import '../widgets/footer.dart';      
+import '../services/api_service.dart';
+import '../models/task_item.dart';
+import 'main_screen.dart';
 
 // ============================================
 // NOTIFICATION MODEL
@@ -10,8 +14,8 @@ class NotificationModel {
   final String id;
   final String title;
   final String message;
-  final String category; // task, comment, progress, system, document
-  final String priority; // critical, high, medium, low, info
+  final String category;
+  final String priority;
   final String icon;
   final Color color;
   final String? taskId;
@@ -41,6 +45,179 @@ class NotificationModel {
     this.quickActions = const [],
   });
 
+  factory NotificationModel.fromJson(Map<String, dynamic> json, {VoidCallback? onMarkRead, Map<String, String>? taskNamesMap}) {
+    String title = json['title'] ?? '';
+    String message = json['message'] ?? '';
+    
+    String category = 'system';
+    final lowerTitle = title.toLowerCase();
+    final lowerMsg = message.toLowerCase();
+    
+    if (lowerTitle.contains('overdue') || lowerTitle.contains('escalat') || 
+        lowerMsg.contains('overdue') || lowerMsg.contains('escalat')) {
+      category = 'critical';
+    } else if (lowerTitle.contains('task') || lowerTitle.contains('assign') || 
+               lowerMsg.contains('task') || lowerMsg.contains('assign')) {
+      category = 'tasks';
+    } else if (lowerTitle.contains('comment') || lowerMsg.contains('comment')) {
+      category = 'comments';
+    } else if (lowerTitle.contains('progress') || lowerTitle.contains('milestone') || 
+               lowerMsg.contains('progress') || lowerMsg.contains('milestone')) {
+      category = 'progress';
+    } else if (lowerTitle.contains('document') || lowerTitle.contains('file') || 
+               lowerMsg.contains('document') || lowerMsg.contains('file') || 
+               lowerMsg.contains('upload')) {
+      category = 'document';
+    }
+
+    String priority = 'info';
+    if (category == 'critical') {
+      priority = 'critical';
+    } else if (lowerTitle.contains('high') || lowerMsg.contains('high') || 
+               lowerTitle.contains('urgent') || lowerMsg.contains('urgent')) {
+      priority = 'high';
+    } else if (lowerTitle.contains('medium') || lowerMsg.contains('medium') || 
+               lowerTitle.contains('normal') || lowerMsg.contains('normal')) {
+      priority = 'medium';
+    } else if (lowerTitle.contains('low') || lowerMsg.contains('low')) {
+      priority = 'low';
+    }
+
+    String icon = 'bell';
+    if (priority == 'critical') {
+      icon = 'exclamation-triangle';
+    } else if (category == 'tasks') {
+      if (lowerMsg.contains('complet')) {
+        icon = 'check-circle';
+      } else {
+        icon = 'tasks';
+      }
+    } else if (category == 'comments') {
+      icon = 'comment';
+    } else if (category == 'progress') {
+      if (lowerMsg.contains('milestone')) {
+        icon = 'flag-checkered';
+      } else {
+        icon = 'chart-line';
+      }
+    } else if (category == 'document') {
+      icon = 'file-upload';
+    }
+
+    Color color = const Color(0xFF0EA5E9); 
+    if (priority == 'critical') {
+      color = const Color(0xFFEF4444); 
+    } else if (priority == 'high') {
+      color = const Color(0xFFF59E0B); 
+    } else if (priority == 'medium') {
+      color = category == 'comments' ? const Color(0xFF8B5CF6) : const Color(0xFF2563EB); 
+    } else if (priority == 'low') {
+      color = const Color(0xFF10B981); 
+    }
+
+    String? tId =
+        json['taskId']?.toString() ??
+        json['entityId']?.toString();
+
+    // Fallback: extract TSK code from title/message if no explicit ID
+    if (tId == null) {
+      final tskExtractRegex = RegExp(r'TSK-?(\d+)');
+      final match = tskExtractRegex.firstMatch('$title $message');
+      if (match != null) {
+        tId = match.group(1);
+      }
+    }
+
+    // ── Stage 1: Resolve task name ──────────────────────────────────────────
+    String? taskName;
+
+    // From taskNamesMap (fetched via entityId → getLiveTask)
+    if (tId != null && taskNamesMap != null && taskNamesMap.containsKey(tId)) {
+      taskName = taskNamesMap[tId];
+    }
+
+    // Fallback: extract task name already embedded in the message
+    // Pattern: The task 'Name' (TSK...) or task 'Name'
+    if (taskName == null || taskName.isEmpty) {
+      final nameInMsg = RegExp(r"task '([^']+)'").firstMatch(message)?.group(1);
+      if (nameInMsg != null && nameInMsg.isNotEmpty) {
+        taskName = nameInMsg;
+      }
+    }
+
+    // ── Stage 2: Apply replacements ─────────────────────────────────────────
+    debugPrint('[NOTIF-DEBUG] raw title="${json['title']}" raw message="${json['message']}" entityId=${json['entityId']} tId=$tId taskName=$taskName');
+
+    if (taskName != null && taskName.isNotEmpty) {
+      if (tId != null) category = 'tasks';
+
+      final tskRegex = RegExp(r'TSK[-\s]?\d+');
+
+      // Title: handle known patterns cleanly
+      if (title.contains('Overdue Reminder')) {
+        title = '🚨 Overdue Reminder: $taskName';
+      } else if (title.contains('Task Update') || title.contains('task update')) {
+        title = '📋 Task Update: $taskName';
+      } else if (title.contains('Task Assigned') || title.contains('assigned')) {
+        title = '📌 Task Assigned: $taskName';
+      } else {
+        title = title.replaceAll(tskRegex, taskName);
+      }
+
+      // Message: replace all TSK codes with task name
+      message = message.replaceAll(tskRegex, taskName);
+      // Clean up "(taskName)" that appears after already-replaced name
+      message = message.replaceAll(RegExp("'$taskName'\\s*\\($taskName\\)"), "'$taskName'");
+    }
+
+    debugPrint('[NOTIF-DEBUG] final title="$title" final message="$message"');
+
+
+
+    String projectTag = 'General';
+    final regExp = RegExp(r'PRJ-\d+');
+    final match = regExp.firstMatch('$title $message');
+    if (match != null) {
+      projectTag = match.group(0)!;
+    } else if (category == 'tasks') {
+      projectTag = 'Task';
+    }
+
+    DateTime timestamp = DateTime.now();
+    if (json['createdAt'] != null) {
+      timestamp = DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now();
+    }
+
+    final List<QuickAction> quickActions = [];
+    if (!(json['isRead'] ?? false) && onMarkRead != null) {
+      quickActions.add(
+        QuickAction(
+          label: 'Mark Read',
+          icon: Icons.check,
+          color: const Color(0xFF10B981),
+          onTap: onMarkRead,
+        ),
+      );
+    }
+
+    return NotificationModel(
+      id: json['id']?.toString() ?? '',
+      title: title,
+      message: message,
+      category: category,
+      priority: priority,
+      icon: icon,
+      color: color,
+      taskId: tId,
+      projectId: json['projectId']?.toString(),
+      projectTag: projectTag,
+      timestamp: timestamp,
+      isRead: json['isRead'] ?? false,
+      isArchived: false,
+      quickActions: quickActions,
+    );
+  }
+
   String get timeAgo {
     final now = DateTime.now();
     final difference = now.difference(timestamp);
@@ -58,7 +235,6 @@ class NotificationModel {
     }
   }
 }
-
 // ============================================
 // QUICK ACTION MODEL
 // ============================================
@@ -88,10 +264,9 @@ class NotificationScreen extends StatefulWidget {
 
 class _NotificationScreenState extends State<NotificationScreen>
     with SingleTickerProviderStateMixin {
-  String _selectedFilter = 'All';
-  bool _isCompactView = false;
+  bool _isGridView = false;
   late TabController _tabController;
-  int _currentIdx = -1; // 👇 ఫుటర్ ఇండెక్స్ ట్రాక్ చేయడానికి
+  final int _currentIdx = -1; // future index track cheyyadaniki
 
   // Sample Notifications Data
   List<NotificationModel> _notifications = [];
@@ -100,7 +275,7 @@ class _NotificationScreenState extends State<NotificationScreen>
   void initState() {
     super.initState();
     _tabController = TabController(length: 4, vsync: this);
-    _loadSampleNotifications();
+    _fetchNotifications();
   }
 
   @override
@@ -109,378 +284,122 @@ class _NotificationScreenState extends State<NotificationScreen>
     super.dispose();
   }
 
-  void _loadSampleNotifications() {
-    _notifications = [
-      // Critical - Overdue
-      NotificationModel(
-        id: '1',
-        title: 'Equipment Inspection Overdue',
-        message: 'Task is 3 days overdue. Please take immediate action.',
-        category: 'critical',
-        priority: 'critical',
-        icon: 'exclamation-triangle',
-        color: const Color(0xFFEF4444),
-        taskId: 'TASK-005',
-        projectId: 'PRJ-005',
-        projectTag: 'PRJ-005 • Maintenance',
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-        isRead: false,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Equipment Inspection'),
-          ),
-          QuickAction(
-            label: 'Dismiss',
-            icon: Icons.check,
-            color: const Color(0xFF64748B),
-            onTap: () => _handleDismiss('1'),
-          ),
-        ],
-      ),
+  bool _isLoading = false;
+  String? _error;
 
-      // Completed
-      NotificationModel(
-        id: '2',
-        title: 'PCC Work Completed',
-        message: 'Ravi Kumar marked "PCC Work" as completed.',
-        category: 'tasks',
-        priority: 'low',
-        icon: 'check-circle',
-        color: const Color(0xFF10B981),
-        taskId: 'TASK-002',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • PCC Work',
-        timestamp: DateTime.now().subtract(const Duration(hours: 5)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('PCC Work'),
-          ),
-          QuickAction(
-            label: 'Approve',
-            icon: Icons.check_circle,
-            color: const Color(0xFF10B981),
-            onTap: () => _handleApprove('2'),
-          ),
-        ],
-      ),
+  Future<void> _fetchNotifications() async {
+    if (!mounted) return;
+    setState(() {
+      _error = null;
+    });
+    try {
+      // Step 1: Fetch raw notifications
+      final List<dynamic> rawNotifications = await ApiService.getNotifications();
 
-      // New Task Assigned
-      NotificationModel(
-        id: '3',
-        title: 'New Task Assigned',
-        message: '"Reinforcement Fixing" task assigned to you by Suresh Babu.',
-        category: 'tasks',
-        priority: 'high',
-        icon: 'tasks',
-        color: const Color(0xFFF59E0B),
-        taskId: 'TASK-003',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Civil Construction',
-        timestamp: DateTime.now().subtract(const Duration(hours: 6)),
-        isRead: false,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Reinforcement Fixing'),
-          ),
-          QuickAction(
-            label: 'Accept',
-            icon: Icons.check,
-            color: const Color(0xFF10B981),
-            onTap: () => _handleAccept('3'),
-          ),
-          QuickAction(
-            label: 'Decline',
-            icon: Icons.close,
-            color: const Color(0xFFEF4444),
-            onTap: () => _handleDecline('3'),
-          ),
-        ],
-      ),
+      // Step 2: Collect unique task entityIds from ALL notifications that have entityId
+      final tskCodeRegex = RegExp(r'TSK-?(\d+)');
+      final taskEntityIds = <String>{};
+      for (final n in rawNotifications) {
+        // Debug: print raw notification keys
+        debugPrint('[NOTIF] keys=${n.keys.toList()} entityId=${n['entityId']} entityTyp=${n['entityTyp']} entityType=${n['entityType']}');
 
-      // Comment
-      NotificationModel(
-        id: '4',
-        title: 'New Comment on Task',
-        message: 'Suresh Babu: "Please check the rebar spacing measurements."',
-        category: 'comments',
-        priority: 'medium',
-        icon: 'comment',
-        color: const Color(0xFF8B5CF6),
-        taskId: 'TASK-003',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Reinforcement',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Reinforcement Fixing'),
-          ),
-          QuickAction(
-            label: 'Reply',
-            icon: Icons.reply,
-            color: const Color(0xFF8B5CF6),
-            onTap: () => _handleReply('4'),
-          ),
-        ],
-      ),
+        // Prefer explicit entityId (regardless of entityTyp, to avoid missing tasks)
+        final eid = n['entityId']?.toString();
+        if (eid != null && eid.isNotEmpty && eid != 'null') {
+          taskEntityIds.add(eid);
+        } else {
+          // Fallback: extract TSK code from title/message
+          final combined = '${n['title'] ?? ''} ${n['message'] ?? ''}';
+          final m = tskCodeRegex.firstMatch(combined);
+          if (m != null) taskEntityIds.add(m.group(1)!);
+        }
+      }
+      debugPrint('[NOTIF] Collected taskEntityIds: $taskEntityIds');
 
-      // Progress Update
-      NotificationModel(
-        id: '5',
-        title: 'Project Progress Updated',
-        message: '50 TPD CBG Plant is now 65% complete. 🎉',
-        category: 'progress',
-        priority: 'info',
-        icon: 'chart-line',
-        color: const Color(0xFF0EA5E9),
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • CBG Plant',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Project',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewProject('50 TPD CBG Plant'),
-          ),
-        ],
-      ),
 
-      // Document Upload
-      NotificationModel(
-        id: '6',
-        title: 'Document Uploaded',
-        message: '"Inspection_Report.pdf" uploaded by Ravi Kumar.',
-        category: 'document',
-        priority: 'medium',
-        icon: 'file-upload',
-        color: const Color(0xFF2563EB),
-        taskId: 'TASK-002',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Documents',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Document',
-            icon: Icons.picture_as_pdf,
-            color: const Color(0xFFEF4444),
-            onTap: () => _handleViewDocument('Inspection_Report.pdf'),
-          ),
-        ],
-      ),
+      // Step 3: Fetch task names in parallel for each unique entityId
+      final Map<String, String> taskNamesMap = {};
+      if (taskEntityIds.isNotEmpty) {
+        final futures = taskEntityIds.map((eid) async {
+          final taskIdInt = int.tryParse(eid);
+          if (taskIdInt == null) return;
+          try {
+            // Try project-live task first
+            final liveTask = await ApiService.getLiveTask(taskIdInt);
+            if (liveTask != null) {
+              final name = liveTask['taskNm']?.toString() ?? liveTask['taskName']?.toString() ?? '';
+              if (name.isNotEmpty) {
+                taskNamesMap[eid] = name;
+                return;
+              }
+            }
+          } catch (_) {}
+          try {
+            // Fallback: individual task (assignments endpoint)
+            final indTask = await ApiService.getIndividualTaskById(taskIdInt);
+            if (indTask != null) {
+              final name = indTask['taskNm']?.toString() ?? indTask['taskName']?.toString() ?? '';
+              if (name.isNotEmpty) {
+                taskNamesMap[eid] = name;
+              }
+            }
+          } catch (_) {}
+        });
+        await Future.wait(futures);
+      }
 
-      // Task Reassigned
-      NotificationModel(
-        id: '7',
-        title: 'Task Reassigned',
-        message: '"Excavation Work" reassigned from Ravi to Suresh. Reason: Leave.',
-        category: 'tasks',
-        priority: 'medium',
-        icon: 'exchange-alt',
-        color: const Color(0xFFF59E0B),
-        taskId: 'TASK-001',
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Excavation',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Excavation Work'),
-          ),
-        ],
-      ),
-
-      // Milestone
-      NotificationModel(
-        id: '8',
-        title: 'Milestone Achieved',
-        message: '"PCC Work Completion" milestone achieved on 02-Jun-2025.',
-        category: 'progress',
-        priority: 'info',
-        icon: 'flag-checkered',
-        color: const Color(0xFF10B981),
-        projectId: 'PRJ-001',
-        projectTag: 'PRJ-001 • Milestones',
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-        isRead: true,
-        quickActions: [
-          QuickAction(
-            label: 'View Project',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewProject('50 TPD CBG Plant'),
-          ),
-        ],
-      ),
-
-      // Deadline Reminder
-      NotificationModel(
-        id: '9',
-        title: 'Deadline Reminder',
-        message: '"Pipeline Installation" due in 2 days (25-Jul-2025).',
-        category: 'tasks',
-        priority: 'high',
-        icon: 'clock',
-        color: const Color(0xFFF59E0B),
-        taskId: 'TASK-008',
-        projectId: 'PRJ-002',
-        projectTag: 'PRJ-002 • Infrastructure',
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-        isRead: false,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Pipeline Installation'),
-          ),
-          QuickAction(
-            label: 'Dismiss',
-            icon: Icons.check,
-            color: const Color(0xFF64748B),
-            onTap: () => _handleDismiss('9'),
-          ),
-        ],
-      ),
-
-      // Escalation
-      NotificationModel(
-        id: '10',
-        title: 'Issue Escalated',
-        message: '"Grouting Work" blocked - Inspection pending. Escalated to Manager.',
-        category: 'critical',
-        priority: 'critical',
-        icon: 'arrow-up',
-        color: const Color(0xFFEF4444),
-        taskId: 'TASK-006',
-        projectId: 'PRJ-002',
-        projectTag: 'PRJ-002 • Grouting',
-        timestamp: DateTime.now().subtract(const Duration(days: 4)),
-        isRead: false,
-        quickActions: [
-          QuickAction(
-            label: 'View Task',
-            icon: Icons.visibility,
-            color: const Color(0xFF2563EB),
-            onTap: () => _handleViewTask('Grouting Work'),
-          ),
-          QuickAction(
-            label: 'Resolve',
-            icon: Icons.check_circle,
-            color: const Color(0xFF10B981),
-            onTap: () => _handleResolve('10'),
-          ),
-        ],
-      ),
-    ];
+      if (!mounted) return;
+      setState(() {
+        _notifications = rawNotifications.map((json) {
+          return NotificationModel.fromJson(json, taskNamesMap: taskNamesMap);
+        }).toList();
+        _isLoading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _isLoading = false;
+      });
+    }
   }
+
+
+
+  Future<void> _markAllAsRead() async {
+    final unread = _notifications.where((n) => !n.isRead).toList();
+    if (unread.isEmpty) {
+      _showSnackBar('No unread notifications');
+      return;
+    }
+    
+    setState(() { _isLoading = true; });
+    for (var n in unread) {
+      final idInt = int.tryParse(n.id);
+      if (idInt != null) {
+        await ApiService.markNotificationAsRead(idInt);
+      }
+    }
+    _showSnackBar('âœ“ All notifications marked as read');
+    _fetchNotifications();
+  }
+
 
   // ============================================
   // HANDLER METHODS
   // ============================================
 
-  void _handleViewTask(String taskName) {
-    _showSnackBar('📋 Opening task: $taskName');
-  }
 
-  void _handleViewProject(String projectName) {
-    _showSnackBar('🏗️ Opening project: $projectName');
-  }
 
-  void _handleViewDocument(String docName) {
-    _showSnackBar('📄 Opening document: $docName');
-  }
-
-  void _handleAccept(String id) {
-    setState(() {
-      final index = _notifications.indexWhere((n) => n.id == id);
-      if (index != -1) {
-        _notifications[index] = NotificationModel(
-          id: _notifications[index].id,
-          title: _notifications[index].title,
-          message: _notifications[index].message,
-          category: _notifications[index].category,
-          priority: _notifications[index].priority,
-          icon: _notifications[index].icon,
-          color: _notifications[index].color,
-          taskId: _notifications[index].taskId,
-          projectId: _notifications[index].projectId,
-          userId: _notifications[index].userId,
-          projectTag: _notifications[index].projectTag,
-          timestamp: _notifications[index].timestamp,
-          isRead: true,
-          isArchived: _notifications[index].isArchived,
-          quickActions: _notifications[index].quickActions,
-        );
-      }
-    });
-    _showSnackBar('✅ Task accepted!');
-  }
-
-  void _handleDecline(String id) {
+  void _handleDismiss(String id) async {
+    final idInt = int.tryParse(id);
+    if (idInt != null) {
+      await ApiService.markNotificationAsRead(idInt);
+    }
     setState(() {
       _notifications.removeWhere((n) => n.id == id);
     });
-    _showSnackBar('❌ Task declined');
-  }
-
-  void _handleApprove(String id) {
-    _showSnackBar('✅ Task approved!');
-  }
-
-  void _handleReply(String id) {
-    _showSnackBar('💬 Replying to comment...');
-  }
-
-  void _handleResolve(String id) {
-    setState(() {
-      final index = _notifications.indexWhere((n) => n.id == id);
-      if (index != -1) {
-        _notifications[index] = NotificationModel(
-          id: _notifications[index].id,
-          title: _notifications[index].title,
-          message: _notifications[index].message,
-          category: _notifications[index].category,
-          priority: _notifications[index].priority,
-          icon: _notifications[index].icon,
-          color: _notifications[index].color,
-          taskId: _notifications[index].taskId,
-          projectId: _notifications[index].projectId,
-          userId: _notifications[index].userId,
-          projectTag: _notifications[index].projectTag,
-          timestamp: _notifications[index].timestamp,
-          isRead: true,
-          isArchived: _notifications[index].isArchived,
-          quickActions: _notifications[index].quickActions,
-        );
-      }
-    });
-    _showSnackBar('✅ Escalation resolved!');
-  }
-
-  void _handleDismiss(String id) {
-    setState(() {
-      _notifications.removeWhere((n) => n.id == id);
-    });
-    _showSnackBar('🗑️ Notification dismissed');
+    _showSnackBar('ðŸ—‘ï¸ Notification dismissed');
   }
 
   void _showSnackBar(String message) {
@@ -498,34 +417,11 @@ class _NotificationScreenState extends State<NotificationScreen>
   // GETTERS
   // ============================================
 
-  int get _unreadCount {
-    return _notifications.where((n) => !n.isRead).length;
-  }
-
-  List<NotificationModel> get _filteredNotifications {
-    if (_selectedFilter == 'All') {
-      return _notifications;
-    } else if (_selectedFilter == 'Unread') {
-      return _notifications.where((n) => !n.isRead).toList();
-    } else if (_selectedFilter == 'Critical') {
-      return _notifications
-          .where((n) => n.priority == 'critical' || n.category == 'critical')
-          .toList();
-    } else if (_selectedFilter == 'Tasks') {
-      return _notifications.where((n) => n.category == 'tasks').toList();
-    } else if (_selectedFilter == 'Comments') {
-      return _notifications.where((n) => n.category == 'comments').toList();
-    } else if (_selectedFilter == 'Progress') {
-      return _notifications.where((n) => n.category == 'progress').toList();
-    }
-    return _notifications;
-  }
-
   Map<String, List<NotificationModel>> get _groupedNotifications {
     final grouped = <String, List<NotificationModel>>{};
     final now = DateTime.now();
 
-    for (var notification in _filteredNotifications) {
+    for (var notification in _notifications) {
       String key;
       final diff = now.difference(notification.timestamp);
 
@@ -631,7 +527,7 @@ class _NotificationScreenState extends State<NotificationScreen>
       // CUSTOM APP BAR / HEADER SECTION
       // ============================================
       appBar: CustomHeader(
-        title: "Notifications", // బ్యాక్ బటన్ ఆటోమేటిక్‌గా వస్తుంది
+        title: "Notifications", // à°¬à±à°¯à°¾à°•à± à°¬à°Ÿà°¨à± à°†à°Ÿà±‹à°®à±‡à°Ÿà°¿à°•à±â€Œà°—à°¾ à°µà°¸à±à°¤à±à°‚à°¦à°¿
       ),
       
       body: Column(
@@ -640,9 +536,13 @@ class _NotificationScreenState extends State<NotificationScreen>
           _buildFilterBar(),
           // Notification List
           Expanded(
-            child: keys.isEmpty
-                ? _buildEmptyState()
-                : _buildNotificationList(keys, groupedNotifications),
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                    ? Center(child: Text('Error: $_error'))
+                    : keys.isEmpty
+                        ? _buildEmptyState()
+                        : _buildNotificationList(keys, groupedNotifications),
           ),
         ],
       ),
@@ -656,12 +556,10 @@ class _NotificationScreenState extends State<NotificationScreen>
         child: CustomFooter(
           currentIndex: _currentIdx,
           onTabSelected: (index) {
-            setState(() {
-              _currentIdx = index;
-            });
-            // డ్యాష్‌బోర్డ్ లేదా టాస్క్ రూట్స్‌కి వెళ్ళడానికి కండిషన్స్
-            if (index == 0) Navigator.pushReplacementNamed(context, '/dashboard');
-            if (index == 1) Navigator.pushReplacementNamed(context, '/tasks');
+            if (MainScreen.navigatorKey.currentState != null) {
+              MainScreen.navigatorKey.currentState!.changeTab(index);
+              Navigator.popUntil(context, (route) => route.isFirst);
+            }
           },
         ),
       ),
@@ -673,121 +571,58 @@ class _NotificationScreenState extends State<NotificationScreen>
   // ============================================
 
   Widget _buildFilterBar() {
-    final filters = ['All', 'Unread', 'Critical', 'Tasks', 'Comments', 'Progress'];
-
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Column(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: filters.map((filter) {
-                final isSelected = _selectedFilter == filter;
-                return GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _selectedFilter = filter;
-                    });
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    margin: const EdgeInsets.only(right: 6),
-                    decoration: BoxDecoration(
-                      color: isSelected
-                          ? const Color(0xFF2563EB)
-                          : const Color(0xFFF1F5F9),
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Row(
-                      children: [
-                        if (filter == 'Critical')
-                          const Icon(Icons.warning_amber_rounded,
-                              size: 12, color: Colors.white),
-                        if (filter == 'Unread')
-                          const Icon(Icons.circle,
-                              size: 10, color: Colors.white),
-                        const SizedBox(width: 4),
-                        Text(
-                          filter,
-                          style: GoogleFonts.inter(
-                            fontSize: 11,
-                            fontWeight: isSelected
-                                ? FontWeight.w600
-                                : FontWeight.w500,
-                            color: isSelected
-                                ? Colors.white
-                                : const Color(0xFF64748B),
-                          ),
-                        ),
-                        if (filter == 'Unread' && _unreadCount > 0) ...[
-                          const SizedBox(width: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? Colors.white.withOpacity(0.3)
-                                  : const Color(0xFFEF4444),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              '$_unreadCount',
-                              style: GoogleFonts.inter(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.white,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
+          ElevatedButton.icon(
+            onPressed: _isLoading ? null : _markAllAsRead,
+            icon: const Icon(Icons.done_all, size: 18),
+            label: Text(
+              'Mark All Read',
+              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF10B981),
+              foregroundColor: Colors.white,
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
           ),
-          const SizedBox(height: 6),
-          // View Toggle
-          Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isCompactView = !_isCompactView;
-                  });
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF1F5F9),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _isCompactView
-                            ? Icons.view_list
-                            : Icons.view_agenda,
-                        size: 16,
-                        color: const Color(0xFF64748B),
-                      ),
-                      const SizedBox(width: 4),
-                      Text(
-                        _isCompactView ? 'Compact' : 'Normal',
-                        style: GoogleFonts.inter(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w500,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _isGridView = !_isGridView;
+              });
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF1F5F9),
+                borderRadius: BorderRadius.circular(8),
               ),
-            ],
+              child: Row(
+                children: [
+                  Icon(
+                    _isGridView ? Icons.view_list : Icons.grid_view_outlined,
+                    size: 16,
+                    color: const Color(0xFF64748B),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(
+                    _isGridView ? 'List' : 'Grid',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
@@ -814,37 +649,42 @@ class _NotificationScreenState extends State<NotificationScreen>
             // Date Header
             Row(
               children: [
+                const Icon(
+                  Icons.calendar_month_outlined,
+                  size: 16,
+                  color: Color(0xFF64748B),
+                ),
+                const SizedBox(width: 6),
                 Text(
-                  '📅 $key',
+                  key,
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
                     color: const Color(0xFF64748B),
                   ),
                 ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFE2E8F0),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    '${notifications.length}',
-                    style: GoogleFonts.inter(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF475569),
-                    ),
-                  ),
-                ),
               ],
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 12),
             // Notifications
-            ...notifications.map((notification) {
-              return _buildNotificationCard(notification);
-            }),
+            if (_isGridView)
+              Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: notifications.map((notification) {
+                  return SizedBox(
+                    width: (MediaQuery.of(context).size.width - 44) / 2, // 32 for screen padding, 12 for spacing
+                    child: _buildNotificationCard(notification, isGrid: true),
+                  );
+                }).toList(),
+              )
+            else
+              ...notifications.map((notification) {
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
+                  child: _buildNotificationCard(notification, isGrid: false),
+                );
+              }),
             const SizedBox(height: 16),
           ],
         );
@@ -856,7 +696,7 @@ class _NotificationScreenState extends State<NotificationScreen>
   // NOTIFICATION CARD
   // ============================================
 
-  Widget _buildNotificationCard(NotificationModel notification) {
+  Widget _buildNotificationCard(NotificationModel notification, {bool isGrid = false}) {
     final isUnread = !notification.isRead;
 
     return Dismissible(
@@ -873,34 +713,79 @@ class _NotificationScreenState extends State<NotificationScreen>
         child: const Icon(Icons.delete, color: Colors.white),
       ),
       child: GestureDetector(
-        onTap: () {
+        onTap: () async {
           if (isUnread) {
-            setState(() {
-              final index = _notifications.indexWhere((n) => n.id == notification.id);
-              if (index != -1) {
-                _notifications[index] = NotificationModel(
-                  id: _notifications[index].id,
-                  title: _notifications[index].title,
-                  message: _notifications[index].message,
-                  category: _notifications[index].category,
-                  priority: _notifications[index].priority,
-                  icon: _notifications[index].icon,
-                  color: _notifications[index].color,
-                  taskId: _notifications[index].taskId,
-                  projectId: _notifications[index].projectId,
-                  userId: _notifications[index].userId,
-                  projectTag: _notifications[index].projectTag,
-                  timestamp: _notifications[index].timestamp,
-                  isRead: true,
-                  isArchived: _notifications[index].isArchived,
-                  quickActions: _notifications[index].quickActions,
+            final idInt = int.tryParse(notification.id);
+            if (idInt != null) {
+              await ApiService.markNotificationAsRead(idInt);
+              _fetchNotifications();
+            }
+          }
+
+          if (notification.taskId != null) {
+            try {
+              if (mounted) {
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (BuildContext context) {
+                    return const Center(child: CircularProgressIndicator());
+                  },
                 );
               }
-            });
+
+              final prefs = await SharedPreferences.getInstance();
+              final currentEmpId = prefs.getString('empId');
+
+              // Fetch all tasks identical to task_screen.dart
+              final responses = await Future.wait([
+                ApiService.getLiveTasks(),
+                ApiService.getIndividualTasks(),
+              ]);
+
+              final liveTasks = responses[0] as List<TaskItem>;
+              final rawIndividualTasks = responses[1];
+
+              final individualTasks = rawIndividualTasks
+                  .whereType<Map<String, dynamic>>()
+                  .map((json) => TaskItem.fromIndividualTask(json, currentEmpId))
+                  .toList();
+
+              final combinedTasks = [...liveTasks, ...individualTasks];
+
+              if (mounted) {
+                Navigator.pop(context); // Dismiss loading dialog
+              }
+
+              TaskItem? foundTask;
+              for (final t in combinedTasks) {
+                if (t.id == notification.taskId ||
+                    t.rawData?['taskId']?.toString() == notification.taskId ||
+                    t.rawData?['empTaskId']?.toString() == notification.taskId) {
+                  foundTask = t;
+                  break;
+                }
+              }
+
+              if (foundTask != null && mounted) {
+                Navigator.pushNamed(
+                  context, 
+                  '/task-details', 
+                  arguments: foundTask
+                );
+                return;
+              } else if (mounted) {
+                _showSnackBar('Task details not found locally.');
+              }
+            } catch (e) {
+              if (mounted) {
+                Navigator.pop(context); // Dismiss loading dialog if error
+                _showSnackBar('Error loading task details: $e');
+              }
+            }
           }
         },
         child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             color: isUnread ? const Color(0xFFEFF6FF) : Colors.white,
@@ -910,178 +795,258 @@ class _NotificationScreenState extends State<NotificationScreen>
               width: isUnread ? 1.5 : 1,
             ),
           ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Icon Container
-              Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: _getIconBackgroundColor(notification.priority),
-                  borderRadius: BorderRadius.circular(10),
-                ),
-                child: Icon(
-                  _getIconForNotification(notification.icon),
-                  color: notification.color,
-                  size: 20,
-                ),
-              ),
-              const SizedBox(width: 12),
-              // Content
-              Expanded(
-                child: Column(
+          child: isGrid
+              ? Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title Row
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: Text(
-                            notification.title,
-                            style: GoogleFonts.inter(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: const Color(0xFF0F172A),
-                              height: 1.3,
-                            ),
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: _getIconBackgroundColor(notification.priority),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            _getIconForNotification(notification.icon),
+                            color: notification.color,
+                            size: 18,
                           ),
                         ),
-                        const SizedBox(width: 6),
-                        // Priority Badge
+                        if (isUnread)
+                          Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF3B82F6),
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      notification.title,
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF0F172A),
+                        height: 1.2,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      notification.message,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        color: const Color(0xFF475569),
+                        height: 1.3,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          notification.timeAgo,
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: const Color(0xFF94A3B8),
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _getPriorityColor(notification.priority)
-                                .withOpacity(0.1),
+                            color: _getPriorityColor(notification.priority).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             _getPriorityLabel(notification.priority),
                             style: GoogleFonts.inter(
                               fontSize: 9,
-                              fontWeight: FontWeight.bold,
+                              fontWeight: FontWeight.w700,
                               color: _getPriorityColor(notification.priority),
                             ),
                           ),
                         ),
                       ],
                     ),
-                    // Message
-                    if (!_isCompactView) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        notification.message,
-                        style: GoogleFonts.inter(
-                          fontSize: 12,
-                          color: const Color(0xFF475569),
-                          height: 1.4,
-                        ),
+                  ],
+                )
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Icon Container
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: BoxDecoration(
+                        color: _getIconBackgroundColor(notification.priority),
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                    ],
-                    // Meta Info
-                    const SizedBox(height: 6),
-                    Wrap(
-                      spacing: 12,
-                      runSpacing: 4,
-                      children: [
-                        // Project Tag
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFF1F5F9),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            notification.projectTag,
-                            style: GoogleFonts.inter(
-                              fontSize: 10,
-                              color: const Color(0xFF64748B),
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
-                        // Time
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.access_time,
-                                size: 12, color: Color(0xFF94A3B8)),
-                            const SizedBox(width: 4),
-                            Text(
-                              notification.timeAgo,
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                color: const Color(0xFF94A3B8),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                      child: Icon(
+                        _getIconForNotification(notification.icon),
+                        color: notification.color,
+                        size: 20,
+                      ),
                     ),
-                    // Quick Actions
-                    if (notification.quickActions.isNotEmpty &&
-                        !_isCompactView) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 4,
-                        children: notification.quickActions.map((action) {
-                          return GestureDetector(
-                            onTap: action.onTap,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: action.color.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: action.color.withOpacity(0.2),
+                    const SizedBox(width: 12),
+                    // Content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Title Row
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  notification.title,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w600,
+                                    color: const Color(0xFF0F172A),
+                                    height: 1.3,
+                                  ),
                                 ),
                               ),
-                              child: Row(
+                              const SizedBox(width: 6),
+                              // Priority Badge
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: _getPriorityColor(notification.priority).withValues(alpha: 0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  _getPriorityLabel(notification.priority),
+                                  style: GoogleFonts.inter(
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.bold,
+                                    color: _getPriorityColor(notification.priority),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          // Message
+                          const SizedBox(height: 4),
+                          Text(
+                            notification.message,
+                            style: GoogleFonts.inter(
+                              fontSize: 12,
+                              color: const Color(0xFF475569),
+                              height: 1.4,
+                            ),
+                          ),
+                          // Meta Info
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 4,
+                            children: [
+                              // Project Tag
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFF1F5F9),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Text(
+                                  notification.projectTag,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 10,
+                                    color: const Color(0xFF64748B),
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                              // Time
+                              Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    action.icon,
-                                    size: 12,
-                                    color: action.color,
-                                  ),
+                                  const Icon(Icons.access_time, size: 12, color: Color(0xFF94A3B8)),
                                   const SizedBox(width: 4),
                                   Text(
-                                    action.label,
+                                    notification.timeAgo,
                                     style: GoogleFonts.inter(
                                       fontSize: 10,
-                                      fontWeight: FontWeight.w500,
-                                      color: action.color,
+                                      color: const Color(0xFF94A3B8),
                                     ),
                                   ),
                                 ],
                               ),
+                            ],
+                          ),
+                          // Quick Actions
+                          if (notification.quickActions.isNotEmpty) ...[
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 8,
+                              runSpacing: 4,
+                              children: notification.quickActions.map((action) {
+                                return GestureDetector(
+                                  onTap: action.onTap,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: action.color.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(
+                                        color: action.color.withValues(alpha: 0.2),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          action.icon,
+                                          size: 12,
+                                          color: action.color,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          action.label,
+                                          style: GoogleFonts.inter(
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w500,
+                                            color: action.color,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }).toList(),
                             ),
-                          );
-                        }).toList(),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // Unread Dot
+                    if (isUnread) ...[
+                      const SizedBox(width: 8),
+                      Container(
+                        width: 8,
+                        height: 8,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF2563EB),
+                          shape: BoxShape.circle,
+                        ),
                       ),
                     ],
                   ],
                 ),
-              ),
-              // Unread Dot
-              if (isUnread) ...[
-                const SizedBox(width: 8),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF2563EB),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-            ],
-          ),
         ),
       ),
     );
@@ -1119,7 +1084,7 @@ class _NotificationScreenState extends State<NotificationScreen>
           ),
           const SizedBox(height: 8),
           Text(
-            'You\'re all caught up! 🎉',
+            'You\'re all caught up! ðŸŽ‰',
             style: GoogleFonts.inter(
               fontSize: 14,
               color: const Color(0xFF64748B),

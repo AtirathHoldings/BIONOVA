@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
+import { useLocation } from "react-router-dom";
 import {
   Bell, Search, X, Menu, ChevronRight, RefreshCcw, Save, Edit, Trash2, Eye,
   Plus, MoreVertical, ChevronLeft, Settings, Users, Link, CalendarDays, Clock,
@@ -333,28 +334,43 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   };
 
   const getMilestoneFirstDay = () => milestone.tent_st_dt || getTodayDate();
-  const generateMilestoneCode = () => {
-    let code;
-    let count = 0;
-    do {
-      const rand = Math.floor(1000 + Math.random() * 9000);
-      code = `MS${rand}`;
-      count++;
-      if (count > 100) {
-        code = `MS${Math.floor(10000 + Math.random() * 90000)}`;
-        break;
+  const generateMilestoneCode = (prjId = milestone.drft_prj_id, list = milestoneList) => {
+    let maxNum = 0;
+    const projectMilestonesOnly = prjId
+      ? (list || []).filter(m => String(m.projectId || m.drftPrjId || m.drft_prj_id) === String(prjId))
+      : (list || []);
+
+    projectMilestonesOnly.forEach(m => {
+      const code = m.code || m.mlstnCd || m.mlstm_cd || "";
+      const match = code.match(/(?:MLS|MS)[-_]?(\d+)/i);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
       }
-    } while (milestoneList.some(m => (m.code || m.mlstnCd || m.mlstm_cd) === code));
-    return code;
+    });
+    const nextNum = maxNum + 1;
+    return `MLS-${String(nextNum).padStart(3, '0')}`;
   };
-  const generateTaskCode = () => {
-    let nextNum = tasks.length + 1;
-    let code = `TSK-${nextNum}`;
-    while (tasks.some(t => t.task_cd === code) || existingTaskCodes.has(code)) {
-      nextNum++;
-      code = `TSK-${nextNum}`;
-    }
-    return code;
+
+  const generateTaskCode = (currentTasks = tasks) => {
+    let maxNum = 0;
+    (currentTasks || []).forEach(t => {
+      const code = t.task_cd || t.taskCd || "";
+      const match = code.match(/TSK[-_]?(\d+)/i);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    (existingTaskCodes || new Set()).forEach(code => {
+      const match = (code || "").match(/TSK[-_]?(\d+)/i);
+      if (match && match[1]) {
+        const num = parseInt(match[1], 10);
+        if (num > maxNum) maxNum = num;
+      }
+    });
+    const nextNum = maxNum + 1;
+    return `TSK-${String(nextNum).padStart(3, '0')}`;
   };
   const generateExternalEmployeeCode = () => {
     const count = externalEmployees.length + 1;
@@ -501,6 +517,28 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
 
 
 
+  const location = useLocation();
+
+  useEffect(() => {
+    if (location.state?.projectId) {
+      const pId = String(location.state.projectId);
+      setMilestone(prev => ({
+        ...prev,
+        drft_prj_id: pId,
+        mlstm_cd: generateMilestoneCode(milestoneList)
+      }));
+      setView("form");
+      if (location.state?.showSuccessAlert) {
+        triggerAlert(
+          "success",
+          "Success",
+          location.state.message || "Project created successfully! Please configure milestones and tasks."
+        );
+      }
+      window.history.replaceState({}, document.title);
+    }
+  }, [location.state, milestoneList]);
+
   // ── Alert ────────────────────────────────────────────────────
   const triggerAlert = (type, title, message) => {
     setAlertConfig({ isOpen: true, type, title, message });
@@ -510,13 +548,27 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      // 1. Fetch draft projects
-      let projectsData = [];
-      try {
-        projectsData = await projectApi.getAll();
-      } catch (_) {
-        triggerAlert("error", "API Error", "Failed to load projects.");
-      }
+      const [
+        projectsData,
+        draftMilestones,
+        allTasks,
+        allLiveTasks,
+        liveProjects,
+        liveMilestonesData,
+        emps,
+        extEmps
+      ] = await Promise.all([
+        projectApi.getAll().catch(() => []),
+        milestoneApi.getAll().catch(() => []),
+        taskApi.getAll().catch(() => []),
+        liveTaskApi.getAll().catch(() => []),
+        liveProjectApi.getAll().catch(() => []),
+        fetch(`${API_BASE}/milestone-live`, { headers: authHeaders() }).then(res => res.ok ? res.json() : []).catch(() => []),
+        employeeApi.getAll().catch(() => []),
+        externalEmployeeApi.getAll().catch(() => [])
+      ]);
+
+      // 1. Map projects
       const mappedProjects = (projectsData || []).map(p => ({
         ...p,
         prj_id: p.drftPrjId,
@@ -525,20 +577,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       }));
       setProjects(mappedProjects);
 
-      // 2. Fetch draft milestones and tasks for count
-      let draftMilestones = [];
-      try {
-        draftMilestones = await milestoneApi.getAll();
-      } catch (_) {
-        triggerAlert("error", "API Error", "Failed to load draft milestones.");
-      }
-
-      let allTasks = [];
-      try {
-        allTasks = await taskApi.getAll();
-      } catch (e) {
-        console.error("Failed to fetch all tasks for count:", e);
-      }
+      // 2. Draft milestones & task count
       setExistingTaskCodes(new Set((allTasks || []).map(t => t.taskCd || t.task_cd).filter(Boolean)));
 
       const taskCountMap = {};
@@ -566,13 +605,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         };
       });
 
-      // 3. Fetch live tasks for count
-      let allLiveTasks = [];
-      try {
-        allLiveTasks = await liveTaskApi.getAll();
-      } catch (e) {
-        console.error("Failed to fetch all live tasks for count:", e);
-      }
+      // 3. Live tasks count
       const liveTaskCountMap = {};
       (allLiveTasks || []).forEach(t => {
         const mId = t.mid || t.mId || t.m_id;
@@ -581,30 +614,23 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         }
       });
 
-      // 4. Fetch live projects and their milestones
-      let liveMilestones = [];
-      try {
-        const liveProjects = await liveProjectApi.getAll();
-        const livePromises = (liveProjects || []).map(p =>
-          liveMilestoneApi.getByProject(p.prjId)
-            .then(ms => (ms || []).map(m => ({ ...m, project: p })))
-            .catch(() => [])
-        );
-        const results = await Promise.all(livePromises);
-        liveMilestones = results.flat();
-      } catch (_) {
-        triggerAlert("error", "API Error", "Failed to load live milestones.");
-      }
-      const liveList = (liveMilestones || []).map(m => {
+      // 4. Live milestones & project mapping
+      const liveProjectMap = {};
+      (liveProjects || []).forEach(p => {
+        liveProjectMap[p.prjId] = p;
+      });
+
+      const liveList = (liveMilestonesData || []).map(m => {
         const id = m.mid || m.mId || m.id;
+        const project = liveProjectMap[m.prjId] || {};
         return {
           type: 'live',
           id: id,
           code: m.mlstnCd || m.code,
           title: m.mlstnTtl || m.mlstnNm || m.title,
-          projectId: m.prjId || m.project?.prjId,
-          projectCd: m.project?.prjCd || '',
-          projectName: m.project?.prjNm || '',
+          projectId: m.prjId || project?.prjId,
+          projectCd: project?.prjCd || '',
+          projectName: project?.prjNm || '',
           duration: m.mlstnDays || m.noOfDays || m.duration,
           startDate: m.stDt || m.tentStDt || m.startDate,
           endDate: m.endDt || m.tentEndDt || m.endDate,
@@ -614,37 +640,24 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         };
       });
 
-      // 5. Combine
+      // Combine
       setMilestoneList([...draftList, ...liveList]);
 
-      // 5. Load employees, reviewers, approvers (real APIs)
-      let emps = [];
-      try {
-        emps = await employeeApi.getAll();
-        const mappedEmps = (emps || []).map(emp => ({
-          ...emp,
-          emp_id: emp.empId,
-          emp_nm: `${emp.fstNm || ""} ${emp.lstNm || ""}`.trim()
-        }));
-        setEmployees(mappedEmps);
-      } catch (_) { setEmployees([]); }
+      // 5. Employees & External Employees
+      const mappedEmps = (emps || []).map(emp => ({
+        ...emp,
+        emp_id: emp.empId,
+        emp_nm: `${emp.fstNm || ""} ${emp.lstNm || ""}`.trim()
+      }));
+      setEmployees(mappedEmps);
+      setExternalEmployees(extEmps || []);
 
-      try {
-        const extEmps = await externalEmployeeApi.getAll();
-        setExternalEmployees(extEmps || []);
-      } catch (_) { setExternalEmployees([]); }
-
-      try {
-        const empsMapped = (emps || []).map(emp => ({
-          r_id: emp.empId,
-          r_nm: `${emp.fstNm || ""} ${emp.lstNm || ""}`.trim()
-        }));
-        setReviewersList(empsMapped);
-        setApproversList(empsMapped);
-      } catch (_) {
-        setReviewersList([]);
-        setApproversList([]);
-      }
+      const empsMapped = (emps || []).map(emp => ({
+        r_id: emp.empId,
+        r_nm: `${emp.fstNm || ""} ${emp.lstNm || ""}`.trim()
+      }));
+      setReviewersList(empsMapped);
+      setApproversList(empsMapped);
 
     } catch (err) {
       console.error("Load error:", err);
@@ -693,13 +706,29 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         isValid = false;
       } else if (milestone.drft_prj_id) {
         const selectedProject = projects.find(p => String(p.prj_id) === String(milestone.drft_prj_id));
-        if (selectedProject && selectedProject.noOfDays) {
-          const projectDays = parseInt(selectedProject.noOfDays);
-          const inputDays = parseInt(milestone.mlstm_days);
-          if (inputDays > projectDays) {
-            const diff = inputDays - projectDays;
-            errors.mlstm_days = `You are exceeding ${diff} days more than the project days (${projectDays} days).`;
-            isValid = false;
+        if (selectedProject) {
+          const projectDays = parseInt(selectedProject.noOfDays || selectedProject.totalProjectDays || 0);
+          const inputDays = parseInt(milestone.mlstm_days || 0);
+          if (projectDays > 0) {
+            if (inputDays > projectDays) {
+              const diff = inputDays - projectDays;
+              errors.mlstm_days = `Single milestone duration (${inputDays} days) exceeds project days (${projectDays} days) by ${diff} day(s).`;
+              isValid = false;
+            } else {
+              const calcMs = autoCalculateMilestoneDates(milestone);
+              const pStDt = selectedProject.startDate || selectedProject.stDt || selectedProject.tentStDt || milestone.tent_st_dt;
+              if (pStDt && calcMs.tent_end_dt) {
+                const pEndDt = selectedProject.endDate || selectedProject.endDt || selectedProject.tentEndDt || calculateEndDate(pStDt, projectDays);
+                if (pEndDt && calcMs.tent_end_dt > pEndDt) {
+                  const msEnd = new Date(calcMs.tent_end_dt);
+                  const prjEnd = new Date(pEndDt);
+                  const diffTime = msEnd.getTime() - prjEnd.getTime();
+                  const diffDays = Math.max(1, Math.ceil(diffTime / (1000 * 3600 * 24)));
+                  errors.mlstm_days = `Cumulative milestone end date (${calcMs.tent_end_dt}) exceeds project end date (${pEndDt}) by ${diffDays} day(s).`;
+                  isValid = false;
+                }
+              }
+            }
           }
         }
       }
@@ -753,6 +782,10 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   // ── Milestone CRUD ───────────────────────────────────────────
   const updateMilestone = (field, value) => {
     if (field === "mlstm_cd" && value.length > 10) value = value.slice(0, 10);
+    if (field === "drft_prj_id" && !isEditing) {
+      const newCode = generateMilestoneCode(value, milestoneList);
+      setMilestone(prev => ({ ...prev, drft_prj_id: value, mlstm_cd: newCode }));
+    }
     setMilestone(prev => {
 
       const updated = {
@@ -838,12 +871,28 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     setEditingTaskIndex(tasks.length);
     setActiveTaskTab("details");
     setStepValidation(prev => ({ ...prev, 2: { ...prev[2], tasks: "" } }));
+    setTimeout(scrollToTaskForm, 50);
+  };
+
+  const scrollToTaskForm = () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
+    const targetEl = document.querySelector(".mc-task-form") || document.querySelector(".mc-form-section") || document.querySelector(".mc-card") || document.querySelector(".main-content");
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+    const scrollContainers = document.querySelectorAll('.main-content, .mc-container, .mc-form-container, .app-container, body, html');
+    scrollContainers.forEach(el => {
+      if (el && el.scrollTop !== undefined && el.scrollTop > 0) {
+        el.scrollTo({ top: 0, behavior: "smooth" });
+      }
+    });
   };
 
   const editTask = (index) => {
     setSelectedTask({ ...tasks[index] });
     setEditingTaskIndex(index);
     setActiveTaskTab("details");
+    setTimeout(scrollToTaskForm, 50);
   };
 
   const updateTask = (field, value) => {

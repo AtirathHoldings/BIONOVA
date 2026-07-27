@@ -481,8 +481,61 @@ const Assignment = ({ userRole, onLogout }) => {
     }
   };
 
+  const fetchTasksSilent = async () => {
+    try {
+      const currentSessionEmpId = sessionStorage.getItem("empId");
+      const [tasksRes, assignedByRes] = await Promise.all([
+        fetch(`${apiBaseUrl}/api/assignments`, { headers: getAuthHeaders() }),
+        currentSessionEmpId ? fetch(`${apiBaseUrl}/api/assignments/assigned-by/${currentSessionEmpId}`, { headers: getAuthHeaders() }) : Promise.resolve(null)
+      ]);
+
+      if (tasksRes.ok) {
+        let rawTasks = await tasksRes.json();
+        if (assignedByRes && assignedByRes.ok) {
+          const assignedByTasks = await assignedByRes.json();
+          const existingIds = new Set(rawTasks.map(t => t.empTaskId || t.id));
+          assignedByTasks.forEach(t => {
+            if (!existingIds.has(t.empTaskId || t.id)) {
+              rawTasks.push(t);
+            }
+          });
+        }
+        const enrichedTasks = await Promise.all(rawTasks.map(async (task) => {
+          let reviewerName = task.reviewerNm || "N/A";
+          let approverName = task.approverNm || "N/A";
+          let checklistCount = 0;
+          try {
+            const chkRes = await fetch(`${apiBaseUrl}/api/checklists/assignments/${task.empTaskId || task.id}?t=${new Date().getTime()}`, { headers: getAuthHeaders() });
+            if (chkRes.ok) {
+              const chks = await chkRes.json();
+              checklistCount = chks.length;
+            }
+          } catch(err) {}
+          return { ...task, reviewerName, approverName, checklistCount };
+        }));
+        setTasks(enrichedTasks);
+      }
+    } catch (err) {
+      console.error("Error silently updating tasks", err);
+    }
+  };
+
   React.useEffect(() => {
     fetchAllData();
+
+    const interval = setInterval(() => {
+      fetchTasksSilent();
+    }, 8000);
+
+    const handleFocus = () => {
+      fetchTasksSilent();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener("focus", handleFocus);
+    };
   }, []);
 
   // --- QuickAddBox ---
@@ -773,16 +826,40 @@ const Assignment = ({ userRole, onLogout }) => {
   };
 
   // --- Attachments handlers ---
+  const isDisallowedFile = (file) => {
+    if (!file || !file.name) return false;
+    return /\.(zip|rar|7z|tar|gz|iso|mp3|wav|aac|m4a|ogg|flac|wma|mp4|avi|mov|mkv|webm|flv|wmv|3gp|m4v)$/i.test(file.name);
+  };
+
+  const filterAllowedFiles = (fileList) => {
+    const allowed = [];
+    let hasDisallowed = false;
+    for (let file of fileList) {
+      if (isDisallowedFile(file)) {
+        hasDisallowed = true;
+      } else {
+        allowed.push(file);
+      }
+    }
+    if (hasDisallowed) {
+      triggerAlert("warning", "Restricted File Type", "ZIP, Audio, and Video files are not allowed. Please upload Documents or Images only.");
+    }
+    return allowed;
+  };
+
   const handleFileDrop = (e) => {
     e.preventDefault();
     if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      setAttachments([...attachments, ...Array.from(e.dataTransfer.files)]);
+      const validFiles = filterAllowedFiles(Array.from(e.dataTransfer.files));
+      setAttachments(prev => [...prev, ...validFiles]);
     }
   };
 
   const handleFileInput = (e) => {
     if (e.target.files && e.target.files.length > 0) {
-      setAttachments([...attachments, ...Array.from(e.target.files)]);
+      const validFiles = filterAllowedFiles(Array.from(e.target.files));
+      setAttachments(prev => [...prev, ...validFiles]);
+      e.target.value = "";
     }
   };
 
@@ -1602,11 +1679,12 @@ const Assignment = ({ userRole, onLogout }) => {
                                 type="file"
                                 ref={fileInputRef}
                                 onChange={handleFileInput}
+                                accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.webp"
                                 style={{ display: "none" }}
                                 multiple
                               />
                               <button className="cit-upload-btn" onClick={() => fileInputRef.current.click()}>Browse Files</button>
-                              <div className="cit-upload-info">Max file size: 10 MB (PDF, DOC, DOCX, XLS, XLSX, JPG, PNG)</div>
+                              <div className="cit-upload-info">Max file size: 10 MB (Documents & Images only. ZIP, Audio & Video files are NOT allowed.)</div>
                             </div>
                             {(existingAttachments.length > 0 || attachments.length > 0) && (
                               <div className="cit-file-list" style={{ marginTop: '16px' }}>

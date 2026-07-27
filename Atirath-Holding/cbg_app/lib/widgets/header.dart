@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:convert';
 
 class CustomHeader extends StatelessWidget implements PreferredSizeWidget {
   final String title;
@@ -27,7 +29,7 @@ class CustomHeader extends StatelessWidget implements PreferredSizeWidget {
         children: [
           // Logo
           Image.asset(
-            'assets/Logo.png',
+            'assets/BioNova.webp',
             height: 32,
             width: 32,
             errorBuilder: (context, error, stackTrace) {
@@ -104,23 +106,33 @@ class CustomHeader extends StatelessWidget implements PreferredSizeWidget {
           ),
         
         // Profile Icon with Image Support
-        GestureDetector(
-          onTap: () {
-            Navigator.pushNamed(context, '/profile');
+        FutureBuilder<String?>(
+          future: SharedPreferences.getInstance().then((prefs) => prefs.getString('profilePhotoUrl')),
+          builder: (context, snapshot) {
+            final path = snapshot.data ?? profileImagePath;
+            return GestureDetector(
+              onTap: () {
+                Navigator.pushNamed(context, '/profile');
+              },
+              child: Padding(
+                padding: const EdgeInsets.only(right: 16.0, left: 8.0),
+                child: CircleAvatar(
+                  radius: 16,
+                  backgroundColor: const Color(0xFF6C4EFF),
+                  backgroundImage: path != null && path.isNotEmpty
+                      ? (path.startsWith('http')
+                          ? NetworkImage(path)
+                          : path.startsWith('data:image')
+                              ? MemoryImage(base64Decode(path.split(',').last))
+                              : FileImage(File(path))) as ImageProvider
+                      : null,
+                  child: path == null || path.isEmpty
+                      ? const Icon(Icons.person, size: 18, color: Colors.white)
+                      : null,
+                ),
+              ),
+            );
           },
-          child: Padding(
-            padding: const EdgeInsets.only(right: 16.0, left: 8.0),
-            child: CircleAvatar(
-              radius: 16,
-              backgroundColor: const Color(0xFF6C4EFF),
-              backgroundImage: profileImagePath != null && profileImagePath!.isNotEmpty
-                  ? FileImage(File(profileImagePath!)) as ImageProvider
-                  : null,
-              child: profileImagePath == null || profileImagePath!.isEmpty
-                  ? const Icon(Icons.person, size: 18, color: Colors.white)
-                  : null,
-            ),
-          ),
         ),
       ],
       bottom: PreferredSize(
