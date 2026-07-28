@@ -195,21 +195,29 @@ const ProjectDetails = ({ userRole, onLogout }) => {
     return <div className="proj-shell-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Project Not Found.</div>;
   }
 
-  // Dynamic progress calculation using actual tasks from the backend
+  const getTaskStatusStr = (t) => {
+    if (!t) return '';
+    let sts = t.taskSts ?? t.task_sts ?? t.status ?? t.tasksts;
+    if (!sts) return '';
+    if (typeof sts === 'object') {
+      sts = sts.statusNm || sts.status_nm || sts.name || sts.status || '';
+    }
+    return String(sts).trim().toUpperCase();
+  };
+
+  // Progress = completed tasks / total tasks × 100 (only COMPLETED/CLOSED count)
   const calculateProgress = (p, taskList) => {
     if (!p) return { overall: 0, completed: 0, inProgress: 0, notStarted: 0, overdue: 0, total: 0 };
 
-    const isDraft = p.status === 'DRAFT';
     const total = taskList.length;
 
-    // Count status breakdown based on actual task statuses
     const completed = taskList.filter(t => {
-      const s = (t.taskSts || t.task_sts || '').toUpperCase();
-      return s === 'COMPLETED';
+      const s = getTaskStatusStr(t);
+      return s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE' || s === 'COMPLETE';
     }).length;
 
     const inProgress = taskList.filter(t => {
-      const s = (t.taskSts || t.task_sts || '').toUpperCase();
+      const s = getTaskStatusStr(t);
       return s === 'WIP' || s === 'IN PROGRESS' || s === 'IN_PROGRESS';
     }).length;
 
@@ -217,8 +225,8 @@ const ProjectDetails = ({ userRole, onLogout }) => {
     todayObj.setHours(0, 0, 0, 0);
 
     const overdue = taskList.filter(t => {
-      const s = (t.taskSts || t.task_sts || '').toUpperCase();
-      if (s === 'COMPLETED') return false;
+      const s = getTaskStatusStr(t);
+      if (s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE' || s === 'COMPLETE') return false;
       const endDtStr = t.tentEndDt || t.tent_end_dt || t.endDt || t.end_dt;
       if (!endDtStr) return false;
       const endDt = new Date(endDtStr);
@@ -227,54 +235,10 @@ const ProjectDetails = ({ userRole, onLogout }) => {
 
     const notStarted = Math.max(0, total - completed - inProgress - overdue);
 
-    // Calculate weighted overall progress percentage matching backend logic
-    let overall = 0;
-    if (total > 0) {
-      let totalWeight = 0;
-      let completedWeight = 0;
-      taskList.forEach(t => {
-        const wrkDaysVal = t.wrkDays || t.wrk_days;
-        const noOfDaysVal = t.noOfDays || t.no_of_days;
-        const weight = (wrkDaysVal && wrkDaysVal > 0) ? wrkDaysVal : ((noOfDaysVal && noOfDaysVal > 0) ? noOfDaysVal : 1.0);
+    // Overall % = completed tasks / total tasks only
+    const overall = total > 0 ? Math.round((completed / total) * 100) : 0;
 
-        const sts = t.taskSts || t.task_sts || 'Open';
-        const stsName = typeof sts === 'object' ? (sts.statusNm || sts.status_nm || '') : String(sts);
-        const subSts = t.subStatus || t.sub_status || '';
-        const stsUpper = stsName.toUpperCase().trim();
-        const subUpper = subSts.toUpperCase().trim();
-
-        let taskPct = 0.0;
-        if (stsUpper === 'COMPLETED') {
-          taskPct = 100.0;
-        } else if (stsUpper === 'WIP' || stsUpper === 'IN PROGRESS' || stsUpper === 'IN_PROGRESS') {
-          if (subUpper === 'UNDER REVIEW' || subUpper === 'UNDER_REVIEW') {
-            taskPct = 80.0;
-          } else if (subUpper === 'REWORK') {
-            taskPct = 20.0;
-          } else {
-            taskPct = 50.0;
-          }
-        }
-        totalWeight += weight;
-        completedWeight += (taskPct / 100.0) * weight;
-      });
-      overall = totalWeight > 0 ? Math.round((completedWeight / totalWeight) * 100) : 0;
-    } else {
-      overall = p.progress || 0;
-    }
-
-    if (isDraft) {
-      overall = total > 0 ? overall : 0; // if it's a draft, calculate it or default to 0
-    }
-
-    return {
-      overall,
-      completed,
-      inProgress,
-      notStarted,
-      overdue,
-      total
-    };
+    return { overall, completed, inProgress, notStarted, overdue, total };
   };
 
   const progressData = calculateProgress(project, tasks);

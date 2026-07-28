@@ -198,42 +198,22 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
     return { name: 'Unknown', role: '' };
   };
 
+  const getTaskStatusStr = (t) => {
+    if (!t) return '';
+    let sts = t.taskSts ?? t.task_sts ?? t.status ?? t.tasksts;
+    if (!sts) return '';
+    if (typeof sts === 'object') {
+      sts = sts.statusNm || sts.status_nm || sts.name || sts.status || '';
+    }
+    return String(sts).trim().toUpperCase();
+  };
+
+  // Task progress: 100% only when COMPLETED/CLOSED, 0% otherwise
   const calculateTaskProgress = (t) => {
     if (!t) return 0;
-    
-    const knownKeys = ['progress', 'taskProg', 'taskProgress', 'completionPercentage', 'completion', 'percentage', 'progressPercent', 'percentComplete', 'pctComplete'];
-    for (const key of knownKeys) {
-      if (t[key] !== undefined && t[key] !== null) {
-        let val = t[key];
-        if (typeof val === 'string') val = parseFloat(val.replace('%', ''));
-        if (!isNaN(val) && val >= 0 && val <= 100) return Math.round(Number(val));
-      }
-    }
-
-    const s = (t.taskSts || t.task_sts || '').toUpperCase();
-    if (s === 'COMPLETED' || s === 'CLOSED') return 100;
-    
-    if (s === 'WIP' || s === 'IN PROGRESS') {
-      const stDtStr = t.tentStDt || t.tent_st_dt || t.stDt || t.st_dt;
-      const endDtStr = t.tentEndDt || t.tent_end_dt || t.endDt || t.end_dt;
-      
-      if (stDtStr && endDtStr) {
-        const start = new Date(stDtStr).getTime();
-        const end = new Date(endDtStr).getTime();
-        const now = new Date().getTime();
-        
-        if (now >= end) return 99;
-        if (now <= start) return 5;
-        
-        const totalDuration = end - start;
-        const elapsed = now - start;
-        const pct = Math.round((elapsed / totalDuration) * 100);
-        
-        return Math.min(Math.max(pct, 5), 95);
-      }
-      return 50;
-    }
-    
+    const s = getTaskStatusStr(t);
+    if (s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE' || s === 'COMPLETE') return 100;
+    if (s === 'WIP' || s === 'IN PROGRESS' || s === 'IN_PROGRESS') return 50;
     return 0;
   };
 
@@ -249,27 +229,27 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
   const totalTasks = relevantTasks.length;
 
   const completedTasks = relevantTasks.filter(t => {
-    const s = (t.taskSts || '').toUpperCase();
-    return s === 'COMPLETED' || s === 'CLOSED';
+    const s = getTaskStatusStr(t);
+    return s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE' || s === 'COMPLETE';
   }).length;
   const inProgressTasks = relevantTasks.filter(t => {
-    const s = (t.taskSts || '').toUpperCase();
-    return s === 'WIP' || s === 'IN PROGRESS';
+    const s = getTaskStatusStr(t);
+    return s === 'WIP' || s === 'IN PROGRESS' || s === 'IN_PROGRESS';
   }).length;
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
 
   const overdueTasks = relevantTasks.filter(t => {
-    const s = (t.taskSts || '').toUpperCase();
-    if (s === 'COMPLETED' || s === 'CLOSED') return false;
+    const s = getTaskStatusStr(t);
+    if (s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE' || s === 'COMPLETE') return false;
     const endDtStr = t.tentEndDt || t.tent_end_dt || t.endDt || t.end_dt;
     if (!endDtStr) return false;
     const endDt = new Date(endDtStr);
     return endDt < today;
   }).length;
 
-  const notStartedTasks = totalTasks - completedTasks - inProgressTasks - overdueTasks;
+  const notStartedTasks = Math.max(0, totalTasks - completedTasks - inProgressTasks - overdueTasks);
 
   const getPercentage = (count, total) => {
     if (total === 0) return 0;

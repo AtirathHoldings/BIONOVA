@@ -162,7 +162,7 @@ const UserMyTask = ({ selectedProject, userTasks = [] }) => {
                     <td><strong>{t.code}</strong></td>
                     <td>{t.name}</td>
                     <td>{t.milestone}</td>
-                    <td><span className={`ut-badge ${getStatusClass(t.priority)}`}>{t.priority}</span></td>
+                    <td>{t.status !== 'Closed' && <span className={`ut-badge ${getStatusClass(t.priority)}`}>{t.priority}</span>}</td>
                     <td>{t.due}</td>
                     <td><span className={`ut-badge ${getStatusClass(t.status)}`}>{t.status}</span></td>
                     <td>

@@ -44,7 +44,8 @@ const UserOverview = ({ selectedProject }) => {
   const openCount = selectedProject.taskSummary?.openTasks || 0;
   const reviewCount = Math.max(0, total - completedCount - wipCount - openCount);
 
-  const completedPct = selectedProject.progress || 0;
+  // Progress = completed tasks / total tasks × 100 (only COMPLETED tasks count)
+  const completedPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
   const remainingPct = 100 - completedPct;
 
   let inProgressPct = 0;

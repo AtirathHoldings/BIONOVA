@@ -922,6 +922,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
 
   const validateTask = (task) => {
     const errors = {};
+    if (!task.task_cd?.trim()) errors.task_cd = "Task code is required";
     if (!task.task_nm?.trim()) errors.task_nm = "Task name is required";
     if (task.task_typ === "INTERNAL" && !task.emp_id) errors.assignee = "Executor is required";
     if (task.task_typ === "EXTERNAL" && !task.ext_emp_id) errors.ext_assignee = "External executor is required";
@@ -2067,7 +2068,23 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     return (
       <div className="mc-task-form">
         <div className="mc-form-grid two">
-          <label className="mc-field"><span>Task Code <b>*</b></span><input value={selectedTask.task_cd} readOnly className="mc-code-input" /></label>
+          <label className="mc-field">
+            <span>Task Code <b>*</b></span>
+            <input
+              value={selectedTask.task_cd || ""}
+              onChange={(e) => {
+                const v = e.target.value;
+                updateTask("task_cd", v);
+                const updated = { ...selectedTask, task_cd: v };
+                const ut = [...tasks];
+                ut[editingTaskIndex] = updated;
+                setTasks(ut);
+              }}
+              placeholder="Enter task code"
+              className={`mc-code-input ${getTaskError(editingTaskIndex, "task_cd") ? "mc-error" : ""}`}
+            />
+            {getTaskError(editingTaskIndex, "task_cd") && <small className="mc-error-text">{getTaskError(editingTaskIndex, "task_cd")}</small>}
+          </label>
           <label className="mc-field"><span>Task Name <b>*</b></span>
             <input value={selectedTask.task_nm || ""} onChange={(e) => { const v = e.target.value; updateTask("task_nm", v); const updated = { ...selectedTask, task_nm: v }; const ut = [...tasks]; ut[editingTaskIndex] = updated; setTasks(ut); }} placeholder="Enter task name" className={getTaskError(editingTaskIndex, "task_nm") ? "mc-error" : ""} />
             {getTaskError(editingTaskIndex, "task_nm") && <small className="mc-error-text">{getTaskError(editingTaskIndex, "task_nm")}</small>}

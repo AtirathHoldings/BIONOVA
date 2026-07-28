@@ -124,12 +124,16 @@ const calculateTimeStatus = (task) => {
   if (!dueDate) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
   
   dueDate.setHours(0, 0, 0, 0);
-  
-  if (task.taskSts === "COMPLETED" && completedDate) {
-    completedDate.setHours(0, 0, 0, 0);
-    if (completedDate < dueDate) return { status: "Lead", color: "#22C55E", icon: Clock, title: "Lead" };
-    if (completedDate.getTime() === dueDate.getTime()) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
-    if (completedDate > dueDate) return { status: "Lag", color: "#DC2626", icon: Clock, title: "Lag" };
+
+  // For closed/completed tasks — only show Lead / Lag / On Time
+  const rawSts = (task.taskSts || task.status || "").toString().toUpperCase();
+  const isClosed = rawSts === "COMPLETED" || rawSts === "CLOSED" || rawSts === "DONE";
+  if (isClosed) {
+    const refDate = completedDate ? new Date(completedDate) : today;
+    refDate.setHours(0, 0, 0, 0);
+    if (refDate < dueDate) return { status: "Lead", color: "#22C55E", icon: Clock, title: "Lead" };
+    if (refDate.getTime() === dueDate.getTime()) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+    return { status: "Lag", color: "#DC2626", icon: Clock, title: "Lag" };
   }
   
   if (today < dueDate) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
@@ -638,19 +642,19 @@ const MyTasks = ({ userRole, onLogout }) => {
         const userEmpId = String(empId);
         console.log(`🔍 Filtering tasks for user ID: ${userEmpId}`);
         
-        filteredLiveTasks = (tasksData || []).filter(task => {
+        const isUserInTask = (task) => {
           const taskEmpId = String(task.empId || task.assignedTo || task.executorId || '');
           const taskReviewerId = String(task.reviewerId || task.reviewer || '');
           const taskApproverId = String(task.approverId || task.approver || '');
-          return taskEmpId === userEmpId || taskReviewerId === userEmpId || taskApproverId === userEmpId;
-        });
+          if (taskEmpId === userEmpId || taskReviewerId === userEmpId || taskApproverId === userEmpId) return true;
+          if (Array.isArray(task.employees)) {
+            return task.employees.some(e => String(e.empId || e.id || '') === userEmpId);
+          }
+          return false;
+        };
 
-        filteredIndTasks = (indTasksData || []).filter(task => {
-          const taskEmpId = String(task.empId || task.assignedTo || task.executorId || '');
-          const taskReviewerId = String(task.reviewerId || task.reviewer || '');
-          const taskApproverId = String(task.approverId || task.approver || '');
-          return taskEmpId === userEmpId || taskReviewerId === userEmpId || taskApproverId === userEmpId;
-        });
+        filteredLiveTasks = (tasksData || []).filter(isUserInTask);
+        filteredIndTasks = (indTasksData || []).filter(isUserInTask);
 
         console.log(`✅ User tasks (Live): ${filteredLiveTasks.length} (out of ${(tasksData || []).length})`);
         console.log(`✅ User tasks (Individual): ${filteredIndTasks.length} (out of ${(indTasksData || []).length})`);
@@ -660,55 +664,13 @@ const MyTasks = ({ userRole, onLogout }) => {
       let mappedInd = filteredIndTasks.map(t => mapIndividualTask(t, employeesData || []));
       mapped = [...mapped, ...mappedInd];
 
-      // Build comprehensive set of existing task identifiers (IDs, taskIds, taskCodes)
-      const existingKeySet = new Set();
-      mapped.forEach(t => {
-        if (t.id) existingKeySet.add(String(t.id).toUpperCase());
-        if (t.taskId) existingKeySet.add(String(t.taskId).toUpperCase());
-        if (t.taskCode) existingKeySet.add(String(t.taskCode).toUpperCase());
-      });
-
-      // Add missing todo tasks from dashRes without duplicating
-      if (dashRes.status === 'fulfilled' && dashRes.value?.todoList) {
-        dashRes.value.todoList.forEach(dashTask => {
-          const dashId = String(dashTask.taskId || dashTask.id || '').toUpperCase();
-          const dashCode = String(dashTask.taskCode || dashTask.taskCd || dashTask.code || '').toUpperCase();
-          const isInd = dashTask.taskSource === "INDIVIDUAL";
-          
-          const alreadyExists = mapped.some(m => {
-            const mId = String(m.taskId || m.id || '').toUpperCase();
-            const mCode = String(m.taskCode || m.code || '').toUpperCase();
-            return (dashId && mId === dashId) || (dashCode && mCode === dashCode);
-          });
-          
-          if (!alreadyExists) {
-            const mappedTask = isInd 
-              ? mapIndividualTask(dashTask, employeesData || []) 
-              : mapBackendTask(dashTask, projectsData || [], milestonesData || [], employeesData || []);
-            mapped.push(mappedTask);
-          }
-        });
-      }
-
-      // Add missing upcoming tasks from dashRes without duplicating
-      if (dashRes.status === 'fulfilled' && dashRes.value?.upcomingTasks) {
-        const uIds = dashRes.value.upcomingTasks.map(t => String(t.taskId || t.id || t.taskCode || ''));
-        setUpcomingTaskIds(uIds);
-        const missingUpcoming = dashRes.value.upcomingTasks.filter(t => {
-          const idStr = String(t.taskId || t.id || '').toUpperCase();
-          const cdStr = String(t.taskCode || t.code || t.taskCd || '').toUpperCase();
-          return idStr && !existingKeySet.has(idStr) && (!cdStr || !existingKeySet.has(cdStr));
-        });
-        const mappedMissing = missingUpcoming.map(t => mapBackendTask(t, projectsData || [], milestonesData || [], employeesData || []));
-        mapped = [...mapped, ...mappedMissing];
-      }
-
-      // Final strict deduplication by unique key
+      // Final strict deduplication by unique database primary ID
       const uniqueMapped = [];
       const seenKeys = new Set();
       mapped.forEach(t => {
-        const idKey = `${t.isIndividual ? 'IND' : 'LIVE'}_${t.taskId || t.id || t.empTaskId}`;
-        if (!seenKeys.has(idKey)) {
+        const idVal = t.taskId || t.id || t.empTaskId;
+        const idKey = `${t.isIndividual ? 'IND' : 'LIVE'}_${idVal}`;
+        if (idVal && !seenKeys.has(idKey)) {
           seenKeys.add(idKey);
           uniqueMapped.push(t);
         }
@@ -926,7 +888,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
     return {
       id: taskCodeFormatted,
       taskCode: taskCodeFormatted,
-      taskId: t.taskId || t.id,
+      taskId: t.taskId || t.task_id || t.id,
       title: t.taskNm || t.taskName || t.name || "Untitled Task",
       project: projectName,
       milestone: milestoneName,
@@ -997,7 +959,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
     return {
       id: taskCodeFormatted,
       taskCode: taskCodeFormatted,
-      taskId: t.empTaskId || t.id,
+      taskId: t.empTaskId || t.emp_task_id || t.taskId || t.task_id || t.id,
       isIndividual: true,
       title: t.taskNm || t.taskName || t.name || "Untitled Task",
       project: "Individual Task",
@@ -4026,7 +3988,8 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                               <td>
                                 <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
                                   <span className="cc-status-badge" style={{ backgroundColor: progressBadge.bg, color: progressBadge.color, minWidth: "90px", textAlign: "center", display: "inline-block", textTransform: "uppercase", fontWeight: "700", padding: "4px 12px", borderRadius: "12px", fontSize: "11px" }}>{progressBadge.label}</span>
-                                  {processIcon && <div className="myt-custom-tooltip-wrap" title={processIcon.title} style={{ color: processIcon.color, display: "flex", alignItems: "center", cursor: "help" }}><processIcon.icon size={18} strokeWidth={2.5} /></div>}
+                                  {/* Hide process icon for closed tasks — only show Lead/Lag/On Time clock */}
+                                  {!isCompleted && processIcon && <div className="myt-custom-tooltip-wrap" title={processIcon.title} style={{ color: processIcon.color, display: "flex", alignItems: "center", cursor: "help" }}><processIcon.icon size={18} strokeWidth={2.5} /></div>}
                                   <div className="myt-custom-tooltip-wrap" title={timeStatus.title} style={{ color: timeStatus.color, display: "flex", alignItems: "center", cursor: "help" }}><timeStatus.icon size={18} strokeWidth={2.5} /></div>
                                 </div>
                               </td>
