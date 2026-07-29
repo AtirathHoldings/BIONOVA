@@ -3,6 +3,7 @@ package com.bionova.dto;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,14 +23,29 @@ public class UserDashboardResponseDto {
     private int myTasksCount;
     private int dueTodayCount;
     private int overdueTasksCount;
-    private int completedTasksCount;
+    private int closedTasksCount;
+
+    @JsonProperty("closedCount")
+    public int getClosedCount() {
+        return closedTasksCount;
+    }
+
+    @JsonProperty("closed")
+    public int getClosed() {
+        return closedTasksCount;
+    }
 
     // Metric Cards with Weekly Trends & Changes
     private MetricCardDto assignedTasksCard;
     private MetricCardDto openTasksCard;
     private MetricCardDto inProgressCard;
     private MetricCardDto overdueTasksCard;
-    private MetricCardDto completedTasksCard;
+    private MetricCardDto closedTasksCard;
+
+    @JsonProperty("closedCard")
+    public MetricCardDto getClosedCard() {
+        return closedTasksCard;
+    }
     private MetricCardDto myProjectsCard;
 
     // Left Panel: To-Do List

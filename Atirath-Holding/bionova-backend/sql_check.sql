@@ -67,8 +67,8 @@ BEGIN
     LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts 
     LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority 
     WHERE (t.emp_id = p_emp_id OR t.task_id IN ( 
-      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true 
-    )) AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' AND (t.st_dt IS NULL OR t.st_dt <= v_today)
+      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id 
+    )) AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' AND (t.st_dt IS NULL OR t.st_dt <= v_today OR UPPER(tsm.status_nm) IN ('CLOSED', 'COMPLETED'))
  
     UNION ALL 
  
@@ -77,7 +77,7 @@ BEGIN
       t.task_nm, 
       t.st_dt, 
       t.end_dt, 
-      CASE WHEN UPPER(tsm.status_nm) = 'COMPLETED' THEN t.end_dt ELSE NULL END AS act_cmp_dt, 
+      CASE WHEN UPPER(tsm.status_nm) = 'COMPLETED' OR UPPER(tsm.status_nm) = 'CLOSED' THEN t.end_dt ELSE NULL END AS act_cmp_dt, 
       (t.end_dt - t.st_dt) AS no_of_days, 
       t.task_sts, 
       tsm.status_nm, 
@@ -97,7 +97,7 @@ BEGIN
     LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority 
     WHERE (t.emp_id = p_emp_id OR t.emp_task_id IN ( 
       SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL 
-    )) AND COALESCE(t.sts, true) = true AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' AND (t.st_dt IS NULL OR t.st_dt <= v_today)
+    )) AND COALESCE(t.sts, true) = true AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' AND (t.st_dt IS NULL OR t.st_dt <= v_today OR UPPER(tsm.status_nm) IN ('CLOSED', 'COMPLETED'))
   ; 
  
   SELECT 
@@ -121,7 +121,7 @@ BEGIN
   JOIN milestone_live_master m ON m.m_id = t.m_id 
   JOIN project_live_master p ON p.prj_id = m.prj_id 
   WHERE (t.emp_id = p_emp_id OR t.task_id IN ( 
-    SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true 
+    SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id 
   )) AND p.prj_sts = 'LIVE'; 
 
   /* 4. To-Do List (Limit 5, ordered by end_dt) */ 
@@ -362,7 +362,7 @@ BEGIN
         LEFT JOIN task_status_master tsm_all ON tsm_all.status_id = t_all.task_sts
         WHERE ml_all.prj_id = p.prj_id
           AND (t_all.emp_id = p_emp_id OR t_all.task_id IN (
-            SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true
+            SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id
           ))
       ), 0)
     ) AS sub 
@@ -374,7 +374,7 @@ BEGIN
     LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts 
     LEFT JOIN project_access pa ON pa.prj_id = p.prj_id AND pa.emp_id = p_emp_id AND pa.sts = true 
     WHERE (t.emp_id = p_emp_id OR t.task_id IN ( 
-      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true 
+      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id 
     )) AND p.prj_sts IN ('LIVE', 'CLOSED', 'HOLD') 
     GROUP BY p.prj_id, p.prj_nm, p.prj_cd, p.logo, cm.coy_nm, pm.plt_nm, cm.ct_vlg, p.prj_sts, pa.access_type, p.end_dt 
     ORDER BY p.prj_nm 
@@ -436,6 +436,12 @@ BEGIN
         (SELECT jsonb_agg(overdue_count) FROM trend_data) AS trend_array, 
         (SELECT overdue_count FROM trend_data WHERE d = v_today) AS current_val, 
         COALESCE((SELECT overdue_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val 
+      UNION ALL 
+      SELECT 
+        'closedTasks' AS metric, 
+        (SELECT jsonb_agg(completed_count) FROM trend_data) AS trend_array, 
+        (SELECT completed_count FROM trend_data WHERE d = v_today) AS current_val, 
+        COALESCE((SELECT completed_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val 
       UNION ALL 
       SELECT 
         'completedTasks' AS metric, 
@@ -552,14 +558,15 @@ BEGIN
     'summary', jsonb_build_object( 
       'totalTasks', v_total_tasks,
       'myTasksCount', (v_total_tasks - v_completed - v_overdue), 
-      'completedTasksCount', v_completed, 
+      'closedTasksCount', v_completed,
+      'closedCount', v_completed,
       'overdueTasksCount', v_overdue, 
       'dueTodayCount', v_due_today, 
       'myProjectsCount', v_my_prj_count, 
       'overallCompletion', CASE WHEN v_total_tasks > 0 
         THEN ROUND((v_completed::NUMERIC/v_total_tasks)*100,2) ELSE 0 END), 
     'taskStatusCounts', jsonb_build_object( 
-      'Completed', v_completed, 'In Progress', v_wip, 
+      'Closed', v_completed, 'In Progress', v_wip, 
       'Under Review', v_under_review, 'Overdue', v_overdue, 
       'Open', v_open, 'Reassigned', v_reassigned, 
       'Rework', v_rework, 'Draft', v_draft), 

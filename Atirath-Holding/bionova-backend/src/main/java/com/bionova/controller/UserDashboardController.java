@@ -254,22 +254,29 @@ public class UserDashboardController {
         int myTasksCount = summary.path("myTasksCount").asInt();
         int dueTodayCount = summary.path("dueTodayCount").asInt();
         int overdueTasksCount = summary.path("overdueTasksCount").asInt();
-        int completedTasksCount = summary.path("completedTasksCount").asInt();
+        int closedTasksCount = summary.hasNonNull("closedTasksCount") ? summary.path("closedTasksCount").asInt()
+                : (summary.hasNonNull("closedCount") ? summary.path("closedCount").asInt()
+                : summary.path("completedTasksCount").asInt(0));
 
         dto.setMyProjectsCount(myProjectsCount);
         dto.setMyTasksCount(myTasksCount);
         dto.setDueTodayCount(dueTodayCount);
         dto.setOverdueTasksCount(overdueTasksCount);
-        dto.setCompletedTasksCount(completedTasksCount);
+        dto.setClosedTasksCount(closedTasksCount);
 
         JsonNode trendsNode = root.path("metricsTrends");
         int totalActiveAssigned = summary.hasNonNull("totalTasks") ? summary.path("totalTasks").asInt() 
-                : (summary.hasNonNull("myTasksCount") ? summary.path("myTasksCount").asInt() + completedTasksCount + overdueTasksCount : (openVal + inProgressVal + completedTasksCount));
+                : (summary.hasNonNull("myTasksCount") ? summary.path("myTasksCount").asInt() + closedTasksCount + overdueTasksCount : (openVal + inProgressVal + closedTasksCount));
         dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), totalActiveAssigned));
         dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), openVal));
         dto.setInProgressCard(mapMetricCard(trendsNode.path("inProgress"), inProgressVal));
         dto.setOverdueTasksCard(mapMetricCard(trendsNode.path("overdueTasks"), overdueTasksCount));
-        dto.setCompletedTasksCard(mapMetricCard(trendsNode.path("completedTasks"), completedTasksCount));
+
+        JsonNode closedCardNode = trendsNode.hasNonNull("closedTasks") ? trendsNode.path("closedTasks")
+                : (trendsNode.hasNonNull("closedCount") ? trendsNode.path("closedCount")
+                : trendsNode.path("completedTasks"));
+        MetricCardDto closedCard = mapMetricCard(closedCardNode, closedTasksCount);
+        dto.setClosedTasksCard(closedCard);
         dto.setMyProjectsCard(mapMetricCard(trendsNode.path("myProjects"), myProjectsCount));
 
         dto.setTodoList(todoList);

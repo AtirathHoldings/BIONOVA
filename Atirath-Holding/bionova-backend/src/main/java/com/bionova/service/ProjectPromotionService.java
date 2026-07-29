@@ -102,8 +102,8 @@ public class ProjectPromotionService {
         } else {
             live.setNoOfDays(draft.getNoOfDays());
         }
-        live.setCoyId(draft.getCoyId());
-        live.setPltId(draft.getPltId());
+        live.setCoyId(draft.getCoyId() != null ? draft.getCoyId() : 0);
+        live.setPltId(draft.getPltId() != null ? draft.getPltId() : 0);
         live.setPrjObjtv(draft.getPrjObjtv());
         live.setExpDlvbls(draft.getExpDlvbls());
         live.setLogo(draft.getLogo());

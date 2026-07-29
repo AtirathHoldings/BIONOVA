@@ -99,9 +99,7 @@ com\bionova\controller\ProjectDashboardController.class
 com\bionova\controller\TaskDraftController.class
 com\bionova\repository\ProcessConfigRepository.class
 com\bionova\entity\ProcessConfig.class
-com\bionova\config\DatabaseMigrator$JpaDependencySetup.class
 com\bionova\dto\UpdateEmployeePermissionsRequest.class
-com\bionova\config\DatabaseMigrator.class
 com\bionova\controller\ProjectAccessController.class
 com\bionova\service\EmployeeSettingsService.class
 com\bionova\dto\AdminDashboardResponse$ProjectProgressDto$ProjectProgressDtoBuilder.class
