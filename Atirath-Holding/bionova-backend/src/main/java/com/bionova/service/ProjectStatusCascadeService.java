@@ -153,8 +153,8 @@ public class ProjectStatusCascadeService {
 
         TaskLive targetTask = null;
 
-        // 1. If targetMId is provided, find the last task in that specified milestone
-        if (targetMId != null) {
+        // 1. If targetMId is explicitly provided and DIFFERENT from current milestone, find the last task in that specified milestone
+        if (targetMId != null && !targetMId.equals(currentTask.getMId())) {
             List<TaskLive> targetMTasks = taskLiveRepository.findByMilestoneId(targetMId);
             if (!targetMTasks.isEmpty()) {
                 targetTask = targetMTasks.stream()
@@ -169,12 +169,32 @@ public class ProjectStatusCascadeService {
             }
         }
 
-        // 2. If targetTask is still null, check depTaskId
+        // 2. If targetTask is still null, check depTaskId (if depTaskId points to a task other than currentTaskId)
         if (targetTask == null && currentTask.getDepTaskId() != null) {
-            targetTask = taskLiveRepository.findById(currentTask.getDepTaskId()).orElse(null);
+            TaskLive depTask = taskLiveRepository.findById(currentTask.getDepTaskId()).orElse(null);
+            if (depTask != null && !depTask.getTaskId().equals(currentTaskId)) {
+                targetTask = depTask;
+            }
         }
 
-        // 3. If targetTask is still null, find previous milestone in the project
+        // 3. If targetTask is still null, check if there is a preceding task in the same milestone
+        if (targetTask == null && currentTask.getMId() != null) {
+            List<TaskLive> sameMTasks = taskLiveRepository.findByMilestoneId(currentTask.getMId());
+            if (sameMTasks.size() > 1) {
+                targetTask = sameMTasks.stream()
+                        .filter(t -> !t.getTaskId().equals(currentTaskId) && t.getTaskId() < currentTaskId)
+                        .max((t1, t2) -> {
+                            if (t1.getEndDt() != null && t2.getEndDt() != null) {
+                                int cmp = t1.getEndDt().compareTo(t2.getEndDt());
+                                if (cmp != 0) return cmp;
+                            }
+                            return Long.compare(t1.getTaskId(), t2.getTaskId());
+                        })
+                        .orElse(null);
+            }
+        }
+
+        // 4. If targetTask is still null (e.g. currentTask is Task 1 of current milestone), find previous milestone in the project
         if (targetTask == null && currentTask.getMId() != null) {
             MilestoneLive currentM = milestoneLiveRepository.findById(currentTask.getMId()).orElse(null);
             if (currentM != null && currentM.getPrjId() != null) {
@@ -215,31 +235,46 @@ public class ProjectStatusCascadeService {
         if (targetTask != null && !targetTask.getTaskId().equals(currentTaskId)) {
             targetTask.setTaskSts(TaskStatusMaster.WIP);
             targetTask.setSubStatus("Rework");
+            targetTask.setPrcsYesActn("REWORK");
             targetTask.setActCmpDt(null);
             taskLiveRepository.save(targetTask);
 
-            // Reopen target milestone to LIVE if it was CLOSED
+            // Reopen target milestone to LIVE if it was CLOSED or COMPLETED
             if (targetTask.getMId() != null) {
                 milestoneLiveRepository.findById(targetTask.getMId()).ifPresent(m -> {
-                    if ("CLOSED".equalsIgnoreCase(m.getMlstnSts())) {
+                    if ("CLOSED".equalsIgnoreCase(m.getMlstnSts()) || "COMPLETED".equalsIgnoreCase(m.getMlstnSts())) {
                         m.setMlstnSts("LIVE");
                         milestoneLiveRepository.save(m);
                     }
                 });
             }
 
-            // Reset current task to OPEN so it waits for previous milestone completion
+            // Reset current task and all tasks in current milestone to OPEN so they wait for previous milestone completion
             currentTask.setTaskSts(TaskStatusMaster.OPEN);
             currentTask.setSubStatus(null);
+            currentTask.setActCmpDt(null);
             taskLiveRepository.save(currentTask);
 
+            if (currentTask.getMId() != null) {
+                List<TaskLive> currentMTasks = taskLiveRepository.findByMilestoneId(currentTask.getMId());
+                for (TaskLive mTask : currentMTasks) {
+                    mTask.setTaskSts(TaskStatusMaster.OPEN);
+                    mTask.setSubStatus(null);
+                    mTask.setActCmpDt(null);
+                    taskLiveRepository.save(mTask);
+                }
+            }
+
             cascadeReworkDownstream(targetTask.getTaskId());
+            cascadeReworkDownstream(currentTaskId);
             cascadeStatusFromTask(targetTask.getTaskId());
+            cascadeStatusFromTask(currentTaskId);
             return targetTask;
         } else {
             // Fallback: apply Rework directly to current task if no previous milestone task exists
             currentTask.setTaskSts(TaskStatusMaster.WIP);
             currentTask.setSubStatus("Rework");
+            currentTask.setPrcsYesActn("REWORK");
             taskLiveRepository.save(currentTask);
             cascadeReworkDownstream(currentTask.getTaskId());
             cascadeStatusFromTask(currentTask.getTaskId());

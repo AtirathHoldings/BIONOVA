@@ -128,7 +128,7 @@ public class TaskLiveController {
 
     private void populateReviewerAndApprover(TaskLive task) {
         if (task == null) return;
-        List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdOrderByOrdrIdAsc(task.getTaskId());
+        List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
         for (com.bionova.entity.ProcessConfig pc : configs) {
             if (pc.getOrdrId() == 1) {
                 task.setReviewer(pc.getEmpId());
@@ -161,7 +161,7 @@ public class TaskLiveController {
 
         java.util.List<com.bionova.entity.ProcessConfig> allConfigs = taskIds.isEmpty()
                 ? java.util.Collections.emptyList()
-                : processConfigRepository.findByTaskIdInOrderByOrdrIdAsc(taskIds);
+                : processConfigRepository.findByTaskIdInAndIsLiveOrderByOrdrIdAsc(taskIds, true);
 
         for (com.bionova.entity.ProcessConfig pc : allConfigs) {
             if (pc.getEmpId() != null) empIds.add(pc.getEmpId());

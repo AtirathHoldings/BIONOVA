@@ -303,6 +303,7 @@ public class ProcessController {
             } else {
                 task.setTaskSts(TaskStatusMaster.WIP);
                 task.setSubStatus(targetSubStatus);
+                task.setPrcsYesActn("PENDING_APPROVER");
                 taskLiveRepo.save(task);
                 projectStatusCascadeService.cascadeStatusFromTask(taskId);
             }
@@ -312,11 +313,15 @@ public class ProcessController {
                     "YES".equals(decision) ? "Reviewer approved — sent to approver" : "Reviewer rejected — task sent back"));
             processRepo.save(event);
 
+            TaskLive currentT = getTask(taskId);
+            String finalSts = currentT.getTaskSts() != null ? currentT.getTaskSts().getStatusNm() : "Open";
+            String finalSubSts = currentT.getSubStatus() != null ? currentT.getSubStatus() : "";
+
             String message = "YES".equals(decision)
                     ? "Reviewer approved. Task moved to Under Review."
-                    : "Reviewer rejected. Task moved to WIP (" + targetSubStatus + ").";
+                    : "Reviewer rejected. Task moved to " + finalSts + (finalSubSts.isEmpty() ? "" : " (" + finalSubSts + ")") + ".";
 
-            return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", targetSubStatus, "message", message));
+            return ResponseEntity.ok(Map.of("taskSts", finalSts, "subStatus", finalSubSts, "message", message));
         } else {
             Assignment task = assignmentRepo.findById(taskId)
                     .orElseThrow(() -> new RuntimeException("Task not found with ID: " + taskId));
@@ -419,6 +424,7 @@ public class ProcessController {
             } else {
                 task.setTaskSts(targetStatus);
                 task.setSubStatus(targetSubStatus);
+                task.setPrcsYesActn("NONE");
                 if (TaskStatusMaster.CLOSED.equals(targetStatus)) {
                     task.setActCmpDt(java.time.LocalDate.now());
                 }
@@ -446,11 +452,15 @@ public class ProcessController {
             applyCountsFromHistory(taskId, event, decision);
             processRepo.save(event);
 
+            TaskLive currentT = getTask(taskId);
+            String finalSts = currentT.getTaskSts() != null ? currentT.getTaskSts().getStatusNm() : "Open";
+            String finalSubSts = currentT.getSubStatus() != null ? currentT.getSubStatus() : "";
+
             String message = "YES".equals(decision)
                     ? "Approver approved. Task CLOSED! 🎉"
-                    : "Approver rejected. Task moved to WIP (" + targetSubStatus + ").";
+                    : "Approver rejected. Task moved to " + finalSts + (finalSubSts.isEmpty() ? "" : " (" + finalSubSts + ")") + ".";
 
-            return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", targetSubStatus, "message", message));
+            return ResponseEntity.ok(Map.of("taskSts", finalSts, "subStatus", finalSubSts, "message", message));
         } else {
             Assignment task = assignmentRepo.findById(taskId)
                     .orElseThrow(() -> new RuntimeException("Task not found with ID: " + taskId));

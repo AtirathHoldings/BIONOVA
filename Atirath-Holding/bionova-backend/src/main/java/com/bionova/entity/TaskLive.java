@@ -194,4 +194,12 @@ public class TaskLive {
         }
         return TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, taskSts, actCmpDt, baseP);
     }
+
+    public void setAddlRem(String addlRem) {
+        if (addlRem != null && addlRem.length() > 250) {
+            this.addlRem = addlRem.substring(0, 250);
+        } else {
+            this.addlRem = addlRem;
+        }
+    }
 }
