@@ -223,15 +223,36 @@ public class ProjectLeadLagService {
         if (actCmpDt != null) {
             // Project fully completed — compare actual vs planned end date
             long diff = actCmpDt.toEpochDay() - endDate.toEpochDay();
-            // diff < 0 means completed before endDate (LEAD)
             daysVariance = (int) -diff;
             if (diff < 0)       status = "LEAD";
             else if (diff == 0) status = "ON_TIME";
             else                status = "LAG";
         } else {
-            // Still in progress
-            status = null;
-            daysVariance = 0;
+            // Check if all tasks are completed or actualProgress >= 100
+            boolean allDone = !allTasks.isEmpty() && allTasks.stream()
+                .allMatch(t -> t.getTaskSts() != null && "CLOSED".equalsIgnoreCase(t.getTaskSts().getStatusNm()));
+            
+            if (allDone || actualProgress >= 100.0) {
+                long diff = today.toEpochDay() - endDate.toEpochDay();
+                daysVariance = (int) -diff;
+                if (diff < 0)       status = "LEAD";
+                else if (diff == 0) status = "ON_TIME";
+                else                status = "LAG";
+            } else if (today.isAfter(endDate)) {
+                // Past due date and not done
+                long diff = today.toEpochDay() - endDate.toEpochDay();
+                daysVariance = (int) -diff;
+                status = "LAG";
+            } else if (variance > TOLERANCE_PERCENT) {
+                status = "LEAD";
+                daysVariance = (int) Math.round(variance);
+            } else if (variance < -TOLERANCE_PERCENT) {
+                status = "LAG";
+                daysVariance = (int) Math.round(variance);
+            } else {
+                status = "ON_TIME";
+                daysVariance = 0;
+            }
         }
 
         // ── Label + color ─────────────────────────────────────────────────
@@ -274,19 +295,41 @@ public class ProjectLeadLagService {
      * Lightweight status computation (no map building) — used by persist path.
      */
     private String computeStatus(ProjectLive project, List<TaskLive> allTasks, LocalDate today) {
+        LocalDate startDate = project.getStDt();
         LocalDate endDate   = project.getEndDt();
         LocalDate actCmpDt  = project.getActCmpDt();
 
-        if (endDate == null) endDate   = today.plusDays(1);
+        if (startDate == null) startDate = today;
+        if (endDate == null)   endDate   = today.plusDays(1);
 
         if (actCmpDt != null) {
             long diff = actCmpDt.toEpochDay() - endDate.toEpochDay();
-            if (diff < 0)      return "LEAD";
+            if (diff < 0)       return "LEAD";
             else if (diff == 0) return "ON_TIME";
             else                return "LAG";
         }
 
-        return null;
+        boolean allDone = allTasks != null && !allTasks.isEmpty() && allTasks.stream()
+                .allMatch(t -> t.getTaskSts() != null && "CLOSED".equalsIgnoreCase(t.getTaskSts().getStatusNm()));
+        double actualProgress = computeActualProgress(allTasks);
+
+        if (allDone || actualProgress >= 100.0) {
+            long diff = today.toEpochDay() - endDate.toEpochDay();
+            if (diff < 0)       return "LEAD";
+            else if (diff == 0) return "ON_TIME";
+            else                return "LAG";
+        } else if (today.isAfter(endDate)) {
+            return "LAG";
+        }
+
+        long totalDays = Math.max(endDate.toEpochDay() - startDate.toEpochDay(), 1);
+        long elapsedDays = Math.min(Math.max(today.toEpochDay() - startDate.toEpochDay(), 0), totalDays);
+        double expectedProgress = (elapsedDays * 100.0) / totalDays;
+        double variance = actualProgress - expectedProgress;
+
+        if (variance > TOLERANCE_PERCENT) return "LEAD";
+        if (variance < -TOLERANCE_PERCENT) return "LAG";
+        return "ON_TIME";
     }
 
     /**

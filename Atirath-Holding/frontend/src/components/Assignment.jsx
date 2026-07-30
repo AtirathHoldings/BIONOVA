@@ -1836,11 +1836,10 @@ const Assignment = ({ userRole, onLogout }) => {
                       type="button"
                       className="cc-nav-view-btn"
                       onClick={() => {
-                        setView("list");
-                        handleResetForm();
+                        setView("form");
                       }}
                     >
-                      <ChevronLeft size={15} /> Back to Task List
+                      <ChevronLeft size={15} /> Back to Form
                     </button>
                   </div>
 
@@ -1928,8 +1927,7 @@ const Assignment = ({ userRole, onLogout }) => {
                     <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
                       <button
                         onClick={() => {
-                          setView("list");
-                          handleResetForm();
+                          setView("form");
                         }}
                         style={{
                           padding: '8px 20px',

@@ -409,9 +409,12 @@ const UserDashboard = ({ userRole, onLogout }) => {
         throw new Error("Authentication token not found. Please login again.");
       }
 
-      const response = await fetch(`${API_BASE}/user-dashboard`, {
-        headers: authHeaders()
-      });
+      const [response, taskRes, msRes, profRes] = await Promise.all([
+        fetch(`${API_BASE}/user-dashboard`, { headers: authHeaders() }),
+        fetch(`${API_BASE}/task-live`, { headers: authHeaders() }).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/milestone-live`, { headers: authHeaders() }).then(r => r.ok ? r.json() : []).catch(() => []),
+        fetch(`${API_BASE}/profile`, { headers: authHeaders() }).then(r => r.ok ? r.json() : null).catch(() => null)
+      ]);
 
       if (!response.ok) {
         const errMsg = await response.text().catch(() => "Failed to fetch dashboard data");
@@ -419,6 +422,9 @@ const UserDashboard = ({ userRole, onLogout }) => {
       }
 
       const data = await response.json();
+      const allTasksList = Array.isArray(taskRes) ? taskRes : (taskRes?.data || []);
+      const allMilestonesList = Array.isArray(msRes) ? msRes : (msRes?.data || []);
+      const currentEmpId = profRes?.empId || data.empId;
 
       const sc = data.taskStatusCounts || {};
       const completedCount = sc["Closed"] || sc["CLOSED"] || sc["Completed"] || sc["COMPLETED"] || 0;
@@ -508,90 +514,27 @@ const UserDashboard = ({ userRole, onLogout }) => {
         return new Date(a.startDate) - new Date(b.startDate);
       });
 
+      // Filter tasks & milestones matching Projects.jsx calculation
+      const userTasks = allTasksList.filter(t => 
+        (t.empId || t.empid) === currentEmpId || 
+        (t.reviewer) === currentEmpId || 
+        (t.approver) === currentEmpId
+      );
+
+      const userMilestones = allMilestonesList.filter(m => {
+        const mId = String(m.mId || m.mid || m.id);
+        return userTasks.some(t => String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id) === mId);
+      });
+
       // ============================================================
-      // MY PROJECTS - ENHANCED PROGRESS EXTRACTION
+      // MY PROJECTS - DIRECT FROM BACKEND STORED PROCEDURE
       // ============================================================
       const myProjects = (data.myProjects || []).map(p => {
-        const extractProgress = (obj) => {
-          if (obj.status && obj.status.toUpperCase() === 'COMPLETED') {
-            return 100;
-          }
-          
-          const knownKeys = [
-            'progress', 'completionPercentage', 'completion', 'percentage',
-            'progressPercent', 'percentComplete', 'completionPercent',
-            'projectProgress', 'progressValue', 'pctComplete',
-            'progressPercentage', 'completePercent', 'progressPct',
-            'completionPct', 'percent', 'pct'
-          ];
-          
-          for (const key of knownKeys) {
-            if (obj[key] !== undefined && obj[key] !== null) {
-              let val = obj[key];
-              if (typeof val === 'string') {
-                val = parseFloat(val.replace('%', ''));
-              }
-              if (!isNaN(val) && val > 0 && val <= 1) {
-                return val * 100;
-              }
-              if (!isNaN(val) && val >= 0 && val <= 100) {
-                return val;
-              }
-            }
-          }
-          
-          const allKeys = Object.keys(obj);
-          for (const key of allKeys) {
-            const lowerKey = key.toLowerCase();
-            if (lowerKey.includes('id') || lowerKey.includes('count') || 
-                lowerKey.includes('number') || lowerKey.includes('total')) continue;
-            
-            if (lowerKey.includes('progress') || lowerKey.includes('completion') || 
-                lowerKey.includes('percent') || lowerKey.includes('pct')) {
-              let val = obj[key];
-              if (typeof val === 'string') {
-                val = parseFloat(val.replace('%', ''));
-              }
-              if (typeof val === 'number' && val >= 0 && val <= 100) {
-                return val;
-              }
-              if (typeof val === 'number' && val > 0 && val <= 1) {
-                return val * 100;
-              }
-            }
-          }
-          
-          for (const key of allKeys) {
-            const val = obj[key];
-            if (typeof val === 'number' && val >= 0 && val <= 100 && 
-                key !== 'id' && key !== 'projectId' && key !== 'employeeId') {
-              return val;
-            }
-            if (typeof val === 'number' && val > 0 && val <= 1 && 
-                key !== 'id' && key !== 'projectId' && key !== 'employeeId') {
-              return val * 100;
-            }
-            if (typeof val === 'string') {
-              const parsed = parseFloat(val.replace('%', ''));
-              if (!isNaN(parsed) && parsed >= 0 && parsed <= 100) {
-                return parsed;
-              }
-              if (!isNaN(parsed) && parsed > 0 && parsed <= 1) {
-                return parsed * 100;
-              }
-            }
-          }
-          
-          return 0;
-        };
-        
-        const progress = extractProgress(p);
-        
         return {
           id: p.projectId || p.id,
           name: p.projectName || p.name || "",
           status: p.status || "Active",
-          progress: progress,
+          progress: typeof p.progress === 'number' ? Math.round(p.progress) : 0,
           quality: p.quality || "",
           employees: p.tasksAssigned || p.employeeCount || 0,
           client: p.clientName || "",
@@ -1333,7 +1276,7 @@ const UserDashboard = ({ userRole, onLogout }) => {
               </div>
               <div className="ud-projects-list">
                 {projects && projects.length > 0 ? (
-                  projects.slice(0, 3).map((project, index) => {
+                  projects.slice(0, 5).map((project, index) => {
                     let progressValue = project.progress || 0;
                     if (progressValue > 0 && progressValue <= 1) {
                       progressValue = progressValue * 100;

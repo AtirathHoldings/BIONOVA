@@ -473,7 +473,7 @@ const MyTasks = ({ userRole, onLogout }) => {
 
       // Always fetch fresh data but use parallel requests for maximum speed
       console.log("📡 Fetching bulk data in parallel (including profile and employees)...");
-      const [profileRes, empRes, projRes, mileRes, mileDraftRes, taskRes, indTaskRes, dashRes] = await Promise.allSettled([
+      const [profileRes, empRes, projRes, mileRes, mileDraftRes, taskRes, indTaskRes, dashRes, myTasksApiRes] = await Promise.allSettled([
         apiGet("/api/profile"),
         apiGet("/api/employees/directory").catch(() => apiGet("/api/employees")),
         apiGet("/api/project-live"),
@@ -481,7 +481,8 @@ const MyTasks = ({ userRole, onLogout }) => {
         apiGet("/api/milestone-drafts"),
         apiGet("/api/task-live"),
         apiGet("/api/assignments"),
-        apiGet("/api/user-dashboard")
+        apiGet("/api/user-dashboard"),
+        apiGet("/api/user-dashboard/my-tasks")
       ]);
 
       // Handle Profile
@@ -631,6 +632,64 @@ const MyTasks = ({ userRole, onLogout }) => {
         }
       }
 
+      // Process config mapping from stored procedure get_my_tasks_data endpoint
+      const liveTaskProcessMap = new Map();
+      const indTaskProcessMap = new Map();
+
+      let myTasksDataFromSp = [];
+      if (myTasksApiRes.status === 'fulfilled' && Array.isArray(myTasksApiRes.value)) {
+        myTasksDataFromSp = myTasksApiRes.value;
+        myTasksDataFromSp.forEach(item => {
+          const raw = item.rawTask || item;
+          const tid = item.taskId || raw.taskId;
+          if (tid) {
+            if (item.isIndividual) {
+              indTaskProcessMap.set(String(tid), {
+                reviewerId: raw.reviewerId,
+                approverId: raw.approverId,
+                reviewerNm: raw.reviewerNm,
+                approverNm: raw.approverNm
+              });
+            } else {
+              liveTaskProcessMap.set(String(tid), {
+                reviewerId: raw.reviewerId,
+                approverId: raw.approverId,
+                reviewerNm: raw.reviewerNm,
+                approverNm: raw.approverNm
+              });
+            }
+          }
+        });
+      }
+
+      tasksData = tasksData.map(t => {
+        const info = liveTaskProcessMap.get(String(t.taskId || t.id));
+        if (info) {
+          return {
+            ...t,
+            reviewerId: t.reviewerId || info.reviewerId,
+            approverId: t.approverId || info.approverId,
+            reviewerName: t.reviewerName || info.reviewerNm,
+            approverName: t.approverName || info.approverNm
+          };
+        }
+        return t;
+      });
+
+      indTasksData = indTasksData.map(t => {
+        const info = indTaskProcessMap.get(String(t.empTaskId || t.taskId || t.id));
+        if (info) {
+          return {
+            ...t,
+            reviewerId: t.reviewerId || info.reviewerId,
+            approverId: t.approverId || info.approverId,
+            reviewerName: t.reviewerName || info.reviewerNm,
+            approverName: t.approverName || info.approverNm
+          };
+        }
+        return t;
+      });
+
       let filteredLiveTasks = [];
       let filteredIndTasks = [];
 
@@ -663,6 +722,29 @@ const MyTasks = ({ userRole, onLogout }) => {
       let mapped = filteredLiveTasks.map(t => mapBackendTask(t, projectsData || [], milestonesData || [], employeesData || []));
       let mappedInd = filteredIndTasks.map(t => mapIndividualTask(t, employeesData || []));
       mapped = [...mapped, ...mappedInd];
+
+      // Also merge any task returned directly from get_my_tasks_data stored procedure
+      if (myTasksDataFromSp.length > 0) {
+        const spMapped = myTasksDataFromSp.map(item => {
+          const raw = item.rawTask || item;
+          const isInd = item.isIndividual || false;
+          return {
+            id: item.id || raw.taskCd || (isInd ? `IND-${raw.taskId}` : `TSK-${raw.taskId}`),
+            code: item.id || raw.taskCd || (isInd ? `IND-${raw.taskId}` : `TSK-${raw.taskId}`),
+            taskId: raw.taskId || item.taskId,
+            title: item.title || raw.taskNm,
+            name: item.title || raw.taskNm,
+            isIndividual: isInd,
+            rawStatus: item.rawStatus || raw.taskSts || item.status,
+            status: item.status || raw.taskSts,
+            progress: item.progress !== undefined ? item.progress : 0,
+            dueDate: item.dueDate || raw.endDt || "",
+            priority: item.priority || "Medium",
+            rawTask: raw
+          };
+        });
+        mapped = [...mapped, ...spMapped];
+      }
 
       // Final strict deduplication by unique database primary ID
       const uniqueMapped = [];
@@ -2015,6 +2097,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       let role = "TEAM";
       let action = "Remark";
       let text = block;
+      let attachments = [];
       
       const bracketMatch = block.match(/^\[([^\]]+)\]:\s*([\s\S]*)/);
       if (bracketMatch) {
@@ -2029,6 +2112,14 @@ const formatTaskCode = (code, taskId, isIndividual) => {
           name = header;
         }
       }
+
+      const attachMatch = text.match(/\|\|ATTACHMENTS:(.*)\|\|/);
+      if (attachMatch) {
+        try {
+          attachments = JSON.parse(attachMatch[1].trim());
+        } catch (_) {}
+        text = text.replace(/\|\|ATTACHMENTS:.*\|\|/, '').trim();
+      }
       
       const rawTask = task?.rawTask || task || {};
       const appName = getEmployeeName(rawTask.approverId || rawTask.approver, employeesList);
@@ -2037,12 +2128,20 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       
       if (name) {
         const lowerName = name.toLowerCase();
-        if (appName && appName.toLowerCase().includes(lowerName)) role = "APPROVER";
-        else if (revName && revName.toLowerCase().includes(lowerName)) role = "REVIEWER";
-        else if (exeName && exeName.toLowerCase().includes(lowerName)) role = "EXECUTOR";
-        else if (lowerName.includes("approver")) role = "APPROVER";
-        else if (lowerName.includes("reviewer")) role = "REVIEWER";
-        else if (lowerName.includes("executor")) role = "EXECUTOR";
+        const foundEmp = employeesList?.find(e => {
+          const fn = (e.fullName || e.empNm || e.name || "").toLowerCase();
+          return fn && (fn.includes(lowerName) || lowerName.includes(fn));
+        });
+        if (foundEmp) {
+          name = foundEmp.fullName || foundEmp.empNm || foundEmp.name || name;
+        }
+
+        if (appName && appName.toLowerCase().includes(lowerName)) { role = "APPROVER"; name = appName; }
+        else if (revName && revName.toLowerCase().includes(lowerName)) { role = "REVIEWER"; name = revName; }
+        else if (exeName && exeName.toLowerCase().includes(lowerName)) { role = "EXECUTOR"; name = exeName; }
+        else if (lowerName.includes("approver")) { role = "APPROVER"; if (appName) name = appName; }
+        else if (lowerName.includes("reviewer")) { role = "REVIEWER"; if (revName) name = revName; }
+        else if (lowerName.includes("executor")) { role = "EXECUTOR"; if (exeName) name = exeName; }
       } else {
         name = "Team Member";
       }
@@ -2055,7 +2154,8 @@ const formatTaskCode = (code, taskId, isIndividual) => {
         initials,
         role: role.toUpperCase(),
         action: action.charAt(0).toUpperCase() + action.slice(1),
-        text
+        text,
+        attachments
       });
     });
     
@@ -3096,6 +3196,33 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                         <div style={{ fontSize: "14px", color: "#475569", lineHeight: "1.5" }}>
                           {rem.text}
                         </div>
+                        {rem.attachments && rem.attachments.length > 0 && (
+                          <div style={{ marginTop: "8px", display: "flex", flexWrap: "wrap", gap: "8px" }}>
+                            {rem.attachments.map((att, attIdx) => (
+                              <a
+                                key={attIdx}
+                                href={att.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                style={{
+                                  display: "inline-flex",
+                                  alignItems: "center",
+                                  gap: "6px",
+                                  padding: "4px 10px",
+                                  backgroundColor: "#f1f5f9",
+                                  color: "#2563eb",
+                                  borderRadius: "6px",
+                                  fontSize: "12px",
+                                  fontWeight: "600",
+                                  textDecoration: "none",
+                                  border: "1px solid #cbd5e1"
+                                }}
+                              >
+                                <Paperclip size={13} /> {att.name || 'Attachment'}
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

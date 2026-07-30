@@ -236,7 +236,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
     const notStarted = Math.max(0, total - completed - inProgress - overdue);
 
     // Overall % = completed tasks / total tasks only
-    const overall = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const overall = total > 0 ? ((completed / total) * 100).toFixed(2) : 0;
 
     return { overall, completed, inProgress, notStarted, overdue, total };
   };

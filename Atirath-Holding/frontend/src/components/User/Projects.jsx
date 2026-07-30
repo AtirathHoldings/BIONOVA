@@ -204,6 +204,7 @@ const MyProjects = ({ userRole, onLogout }) => {
             role: profRes?.firstName ? `${profRes.firstName} ${profRes.lastName || ''}` : "Team Member",
             tasksAssigned: totalTasksCount > 0 ? totalTasksCount : (dashP.tasksAssigned || 0),
             openTasks: openTasksCount > 0 ? openTasksCount : 0,
+            closedTasks: completedTasksCount > 0 ? completedTasksCount : 0,
             status: (proj.prjSts || proj.prjsts || dashP.status || "LIVE").toUpperCase(),
             progress: progressPct,
             image: dashP.logo || proj.logo || null,
@@ -386,6 +387,10 @@ const MyProjects = ({ userRole, onLogout }) => {
                           <div className="mp-card-stat" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
                             <span className="mp-stat-label" style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Open</span>
                             <span className="mp-stat-value" style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{proj.openTasks}</span>
+                          </div>
+                          <div className="mp-card-stat" style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+                            <span className="mp-stat-label" style={{ fontSize: '11px', color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Closed</span>
+                            <span className="mp-stat-value" style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{proj.closedTasks}</span>
                           </div>
                         </div>
                         <span style={{

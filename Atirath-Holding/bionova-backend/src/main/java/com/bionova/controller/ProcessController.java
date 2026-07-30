@@ -280,27 +280,37 @@ public class ProcessController {
                 String rejectionType = getString(body, "rejectionType", "REASSIGN").toUpperCase();
                 targetSubStatus = "REWORK".equals(rejectionType) ? "Rework" : "Reassign";
 
-                if (body.get("targetMId") != null) {
-                    task.setMId(Long.valueOf(body.get("targetMId").toString()));
-                }
-                if (body.get("targetEmpId") != null) {
-                    task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
-                }
-            }
+                Long targetMId = body.get("targetMId") != null ? Long.valueOf(body.get("targetMId").toString()) : null;
 
-            task.setTaskSts(TaskStatusMaster.WIP);
-            task.setSubStatus(targetSubStatus);
-            taskLiveRepo.save(task);
+                if ("REWORK".equals(rejectionType)) {
+                    TaskLive reworkTarget = projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId);
+                    if (reworkTarget != null && !reworkTarget.getTaskId().equals(taskId)) {
+                        targetSubStatus = "Rework";
+                    }
+                } else {
+                    if (targetMId != null) {
+                        task.setMId(targetMId);
+                    }
+                    if (body.get("targetEmpId") != null) {
+                        task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
+                    }
+                    task.setTaskSts(TaskStatusMaster.WIP);
+                    task.setSubStatus(targetSubStatus);
+                    taskLiveRepo.save(task);
+                    projectStatusCascadeService.cascadeReworkDownstream(taskId);
+                    projectStatusCascadeService.cascadeStatusFromTask(taskId);
+                }
+            } else {
+                task.setTaskSts(TaskStatusMaster.WIP);
+                task.setSubStatus(targetSubStatus);
+                taskLiveRepo.save(task);
+                projectStatusCascadeService.cascadeStatusFromTask(taskId);
+            }
 
             ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", decision);
             event.setRemarks(getString(body, "remarks",
                     "YES".equals(decision) ? "Reviewer approved — sent to approver" : "Reviewer rejected — task sent back"));
             processRepo.save(event);
-
-            if ("NO".equals(decision) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
-                projectStatusCascadeService.cascadeReworkDownstream(taskId);
-            }
-            projectStatusCascadeService.cascadeStatusFromTask(taskId);
 
             String message = "YES".equals(decision)
                     ? "Reviewer approved. Task moved to Under Review."
@@ -386,21 +396,35 @@ public class ProcessController {
                 String rejectionType = getString(body, "rejectionType", "REASSIGN").toUpperCase();
                 targetSubStatus = "REWORK".equals(rejectionType) ? "Rework" : "Reassign";
 
-                if (body.get("targetMId") != null) {
-                    task.setMId(Long.valueOf(body.get("targetMId").toString()));
-                }
-                if (body.get("targetEmpId") != null) {
-                    task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
-                }
-            }
+                Long targetMId = body.get("targetMId") != null ? Long.valueOf(body.get("targetMId").toString()) : null;
 
-            task.setTaskSts(targetStatus);
-            task.setSubStatus(targetSubStatus);
-
-            if (TaskStatusMaster.CLOSED.equals(targetStatus)) {
-                task.setActCmpDt(java.time.LocalDate.now());
+                if ("REWORK".equals(rejectionType)) {
+                    TaskLive reworkTarget = projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId);
+                    if (reworkTarget != null && !reworkTarget.getTaskId().equals(taskId)) {
+                        targetSubStatus = "Rework";
+                    }
+                } else {
+                    if (targetMId != null) {
+                        task.setMId(targetMId);
+                    }
+                    if (body.get("targetEmpId") != null) {
+                        task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
+                    }
+                    task.setTaskSts(targetStatus);
+                    task.setSubStatus(targetSubStatus);
+                    taskLiveRepo.save(task);
+                    projectStatusCascadeService.cascadeReworkDownstream(taskId);
+                    projectStatusCascadeService.cascadeStatusFromTask(taskId);
+                }
+            } else {
+                task.setTaskSts(targetStatus);
+                task.setSubStatus(targetSubStatus);
+                if (TaskStatusMaster.CLOSED.equals(targetStatus)) {
+                    task.setActCmpDt(java.time.LocalDate.now());
+                }
+                taskLiveRepo.save(task);
+                projectStatusCascadeService.cascadeStatusFromTask(taskId);
             }
-            taskLiveRepo.save(task);
 
             Integer rId = body.get("rId") != null
                     ? Integer.valueOf(body.get("rId").toString()) : null;
@@ -421,11 +445,6 @@ public class ProcessController {
 
             applyCountsFromHistory(taskId, event, decision);
             processRepo.save(event);
-
-            if (TaskStatusMaster.WIP.equals(targetStatus) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
-                projectStatusCascadeService.cascadeReworkDownstream(taskId);
-            }
-            projectStatusCascadeService.cascadeStatusFromTask(taskId);
 
             String message = "YES".equals(decision)
                     ? "Approver approved. Task CLOSED! 🎉"

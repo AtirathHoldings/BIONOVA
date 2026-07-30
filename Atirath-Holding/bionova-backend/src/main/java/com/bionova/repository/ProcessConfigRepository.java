@@ -10,6 +10,10 @@ import java.util.List;
 public interface ProcessConfigRepository extends JpaRepository<ProcessConfig, Integer> {
 
     /** All process steps for a task in a given context, ordered by step */
+    List<ProcessConfig> findByTaskIdOrderByOrdrIdAsc(Long taskId);
+
+    List<ProcessConfig> findByTaskIdInOrderByOrdrIdAsc(List<Long> taskIds);
+
     List<ProcessConfig> findByTaskIdAndIsLiveOrderByOrdrIdAsc(Long taskId, Boolean isLive);
 
     /** Check if a step order already exists for the same task+context */

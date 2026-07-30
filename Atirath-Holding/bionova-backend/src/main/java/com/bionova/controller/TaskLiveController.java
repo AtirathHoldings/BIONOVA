@@ -128,7 +128,7 @@ public class TaskLiveController {
 
     private void populateReviewerAndApprover(TaskLive task) {
         if (task == null) return;
-        List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
+        List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdOrderByOrdrIdAsc(task.getTaskId());
         for (com.bionova.entity.ProcessConfig pc : configs) {
             if (pc.getOrdrId() == 1) {
                 task.setReviewer(pc.getEmpId());
@@ -161,7 +161,7 @@ public class TaskLiveController {
 
         java.util.List<com.bionova.entity.ProcessConfig> allConfigs = taskIds.isEmpty()
                 ? java.util.Collections.emptyList()
-                : processConfigRepository.findByTaskIdInAndIsLiveOrderByOrdrIdAsc(taskIds, true);
+                : processConfigRepository.findByTaskIdInOrderByOrdrIdAsc(taskIds);
 
         for (com.bionova.entity.ProcessConfig pc : allConfigs) {
             if (pc.getEmpId() != null) empIds.add(pc.getEmpId());
@@ -374,9 +374,18 @@ public class TaskLiveController {
         if (details.getTaskSts() != null) {
             task.setTaskSts(details.getTaskSts());
         }
+        if (details.getSubStatus() != null) {
+            task.setSubStatus(details.getSubStatus());
+        }
 
-        TaskLive saved = taskLiveRepository.save(task);
-        projectStatusCascadeService.cascadeStatusFromTask(id);
+        TaskLive saved;
+        if ("REWORK".equalsIgnoreCase(details.getPrcsYesActn()) || "Rework".equalsIgnoreCase(details.getSubStatus())) {
+            TaskLive reworkTarget = projectStatusCascadeService.routeReworkToPreviousMilestoneTask(id, details.getMId());
+            saved = reworkTarget != null ? reworkTarget : taskLiveRepository.save(task);
+        } else {
+            saved = taskLiveRepository.save(task);
+            projectStatusCascadeService.cascadeStatusFromTask(id);
+        }
 
         MilestoneLive milestone = milestoneLiveRepository.findById(saved.getMId())
                 .orElseThrow(() -> new RuntimeException("Milestone not found with ID: " + saved.getMId()));
