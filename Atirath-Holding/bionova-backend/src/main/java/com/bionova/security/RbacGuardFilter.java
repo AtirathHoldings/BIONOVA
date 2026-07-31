@@ -161,6 +161,15 @@ public class RbacGuardFilter extends OncePerRequestFilter {
             return;
         }
 
+        // Admin Bypass (siva@atirath.com or ADMIN authority) - Admin has full access to all modules
+        String userEmail = SecurityContextHolder.getContext().getAuthentication().getName();
+        if (userEmail != null && ("siva@atirath.com".equalsIgnoreCase(userEmail) ||
+            SecurityContextHolder.getContext().getAuthentication().getAuthorities().stream()
+                .anyMatch(a -> a.getAuthority().equalsIgnoreCase("ROLE_ADMIN")))) {
+            filterChain.doFilter(request, response);
+            return;
+        }
+
         // 2. Resolve the empId from the request attribute set by JwtAuthFilter
         Long empId = (Long) request.getAttribute("empId");
         if (empId == null) {
