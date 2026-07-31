@@ -423,6 +423,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
 
         final int finalAssigned = totalAssigned > 0 ? totalAssigned : (p.rawAssigned ?? 0);
         final int finalOpen = totalAssigned > 0 ? openCount : (p.rawOpen ?? 0);
+        final bool isUserClosed = finalAssigned > 0 && completedCount == finalAssigned;
 
         mappedProjects.add(ProjectModel(
           prjId: p.prjId,
@@ -430,7 +431,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           prjNm: p.prjNm,
           prjDesc: p.prjDesc,
           prjPrty: p.prjPrty,
-          prjSts: p.prjSts,
+          prjSts: isUserClosed ? 'CLOSED' : p.prjSts,
           stDt: p.stDt,
           endDt: p.endDt,
           noOfDays: p.noOfDays,
@@ -441,15 +442,15 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           details: p.details.isNotEmpty ? p.details : (companyName ?? p.name),
           role: p.role,
           assigned: finalAssigned,
-          open: finalOpen,
-          inProgress: inProgressCount,
-          progressValue: progressVal,
-          progressText: progressTxt,
-          barColor: barColor,
+          open: isUserClosed ? 0 : finalOpen,
+          inProgress: isUserClosed ? 0 : inProgressCount,
+          progressValue: isUserClosed ? 1.0 : progressVal,
+          progressText: isUserClosed ? '100%' : progressTxt,
+          barColor: isUserClosed ? const Color(0xff22C55E) : barColor,
           companyName: companyName,
           plantName: plantName,
           location: location,
-          leadLagStatusStr: p.leadLagStatusStr,
+          leadLagStatusStr: leadLagMap[p.prjId] ?? p.leadLagStatusStr,
         ));
       }
 
