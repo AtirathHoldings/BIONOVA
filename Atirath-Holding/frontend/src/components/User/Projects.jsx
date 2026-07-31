@@ -212,67 +212,105 @@ const MyProjects = ({ userRole, onLogout }) => {
             progressPct = extractProgress(dashP);
           }
 
-          const userAllDone = totalTasksCount > 0 && completedTasksCount === totalTasksCount;
+          // User-Specific Project Completion Status
+          let userProjectStatus = "IN PROGRESS";
+          if (proj.prjSts === 'HOLD' || proj.prjsts === 'HOLD' || dashP.status === 'On Hold') {
+            userProjectStatus = "ON HOLD";
+          } else if (
+            (totalTasksCount > 0 && completedTasksCount === totalTasksCount) ||
+            proj.prjSts === 'CLOSED' || proj.prjsts === 'CLOSED' || dashP.status === 'Completed' || dashP.status === 'Closed'
+          ) {
+            userProjectStatus = "COMPLETED";
+          } else {
+            userProjectStatus = "IN PROGRESS";
+          }
+
+          // User-Specific Lead/Lag Status & Label Calculation
+          let userLeadLagStatus = dashP.leadLagStatus || "ON_TIME";
+          let userLeadLagLabel  = dashP.leadLagLabel  || "On Time";
+          let userLeadLagColor  = dashP.leadLagColor  || "#f59e0b";
+          let userDaysVariance  = dashP.daysVariance  || 0;
+
+          if (totalTasksCount > 0) {
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+
+            let lastTargetEnd = null;
+            let lastActualComp = null;
+
+            projTasks.forEach(t => {
+              const endStr = t.endDt || t.enddt || t.endDate || t.end_dt;
+              const actCmpStr = t.actCmpDt || t.act_cmp_dt || t.actcmpdt;
+              if (endStr) {
+                const d = new Date(endStr);
+                if (!isNaN(d.getTime())) {
+                  if (!lastTargetEnd || d > lastTargetEnd) {
+                    lastTargetEnd = d;
+                  }
+                }
+              }
+              if (actCmpStr) {
+                const d = new Date(actCmpStr);
+                if (!isNaN(d.getTime())) {
+                  if (!lastActualComp || d > lastActualComp) {
+                    lastActualComp = d;
+                  }
+                }
+              }
+            });
+
+            if (userProjectStatus === "COMPLETED") {
+              const cmpDate = lastActualComp || today;
+              const targetDate = lastTargetEnd || today;
+
+              const diffDays = Math.round((targetDate.getTime() - cmpDate.getTime()) / (1000 * 3600 * 24));
+              userDaysVariance = diffDays;
+
+              if (diffDays > 0) {
+                userLeadLagStatus = "LEAD";
+                userLeadLagLabel = `Lead by ${diffDays} day${diffDays > 1 ? 's' : ''}`;
+                userLeadLagColor = "#10b981";
+              } else if (diffDays < 0) {
+                const lagDays = Math.abs(diffDays);
+                userLeadLagStatus = "LAG";
+                userLeadLagLabel = `Lag by ${lagDays} day${lagDays > 1 ? 's' : ''}`;
+                userLeadLagColor = "#ef4444";
+              } else {
+                userLeadLagStatus = "ON_TIME";
+                userLeadLagLabel = "On Time";
+                userLeadLagColor = "#3b82f6";
+              }
+            } else {
+              let isAnyOverdue = false;
+              let maxOverdueDays = 0;
+              projTasks.forEach(t => {
+                const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
+                if (s !== 'COMPLETED' && s !== 'CLOSED') {
+                  const endStr = t.endDt || t.enddt || t.endDate || t.end_dt;
+                  if (endStr) {
+                    const d = new Date(endStr);
+                    if (!isNaN(d.getTime()) && today > d) {
+                      isAnyOverdue = true;
+                      const diff = Math.round((today.getTime() - d.getTime()) / (1000 * 3600 * 24));
+                      if (diff > maxOverdueDays) maxOverdueDays = diff;
+                    }
+                  }
+                }
+              });
+
+              if (isAnyOverdue) {
+                userLeadLagStatus = "LAG";
+                userLeadLagLabel = `Lag by ${maxOverdueDays} day${maxOverdueDays > 1 ? 's' : ''}`;
+                userLeadLagColor = "#ef4444";
+                userDaysVariance = -maxOverdueDays;
+              }
+            }
+          }
 
           const actualManager = proj.createdByName || proj.createdBy || getLoggedInUser();
 
           const rawStart = proj.stDt || proj.stdt || proj.startDate || proj.st_dt || dashP.stDt || dashP.startDate || dashP.st_dt;
           const rawEnd = proj.endDt || proj.enddt || proj.endDate || proj.end_dt || proj.targetDate || dashP.endDt || dashP.dueDate || dashP.end_dt;
-
-          let calcLeadLagStatus = null;
-          let calcLeadLagLabel = null;
-          let calcLeadLagColor = null;
-
-          if (userAllDone) {
-            let maxCompDate = null;
-            projTasks.forEach(t => {
-              const dtStr = t.actCmpDt || t.actcmpdt || t.endDt || t.enddt;
-              if (dtStr) {
-                const d = new Date(dtStr);
-                if (!isNaN(d.getTime())) {
-                  if (!maxCompDate || d > maxCompDate) maxCompDate = d;
-                }
-              }
-            });
-
-            const projEnd = rawEnd ? new Date(rawEnd) : null;
-            const compDate = maxCompDate || new Date();
-            
-            if (projEnd && !isNaN(projEnd.getTime())) {
-              const cDate = new Date(compDate.getFullYear(), compDate.getMonth(), compDate.getDate());
-              const pEnd = new Date(projEnd.getFullYear(), projEnd.getMonth(), projEnd.getDate());
-
-              if (cDate < pEnd) {
-                calcLeadLagStatus = "LEAD";
-                calcLeadLagLabel = "Lead";
-                calcLeadLagColor = "#10b981";
-              } else if (cDate.getTime() === pEnd.getTime()) {
-                calcLeadLagStatus = "ON_TIME";
-                calcLeadLagLabel = "On Time";
-                calcLeadLagColor = "#f59e0b";
-              } else {
-                calcLeadLagStatus = "LAG";
-                calcLeadLagLabel = "Lag";
-                calcLeadLagColor = "#ef4444";
-              }
-            } else {
-              calcLeadLagStatus = "ON_TIME";
-              calcLeadLagLabel = "On Time";
-              calcLeadLagColor = "#f59e0b";
-            }
-          } else {
-            const projEnd = rawEnd ? new Date(rawEnd) : null;
-            const today = new Date();
-            const todayClean = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-            if (projEnd && !isNaN(projEnd.getTime())) {
-              const pEnd = new Date(projEnd.getFullYear(), projEnd.getMonth(), projEnd.getDate());
-              if (todayClean > pEnd) {
-                calcLeadLagStatus = "LAG";
-                calcLeadLagLabel = "Lag";
-                calcLeadLagColor = "#ef4444";
-              }
-            }
-          }
 
           return {
             id: dashId,
@@ -285,11 +323,11 @@ const MyProjects = ({ userRole, onLogout }) => {
             tasksAssigned: totalTasksCount > 0 ? totalTasksCount : (dashP.tasksAssigned || 0),
             openTasks: openTasksCount,
             closedTasks: completedTasksCount,
-            status: (proj.prjSts || proj.prjsts || dashP.status || "LIVE").toUpperCase(),
-            leadLagStatus: calcLeadLagStatus,
-            leadLagLabel: calcLeadLagLabel,
-            leadLagColor: calcLeadLagColor,
-            daysVariance: dashP.daysVariance || 0,
+            status: userProjectStatus,
+            leadLagStatus: userLeadLagStatus,
+            leadLagLabel: userLeadLagLabel,
+            leadLagColor: userLeadLagColor,
+            daysVariance: userDaysVariance,
             progress: progressPct,
             image: dashP.logo || proj.logo || null,
             manager: actualManager,
@@ -479,39 +517,19 @@ const MyProjects = ({ userRole, onLogout }) => {
                             <span className="mp-stat-value" style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{proj.closedTasks}</span>
                           </div>
                         </div>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                          <span style={{
-                            backgroundColor: statusColor(proj.status) + '15',
-                            color: statusColor(proj.status),
-                            padding: '6px 12px',
-                            borderRadius: '16px',
-                            fontSize: '11px',
-                            fontWeight: '700',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.3px',
-                            display: 'inline-block'
-                          }}>
-                            {proj.status}
-                          </span>
-                          {proj.leadLagLabel && (
-                            <span style={{
-                              backgroundColor: (proj.leadLagColor || '#3b82f6') + '20',
-                              color: proj.leadLagColor || '#3b82f6',
-                              border: `1px solid ${proj.leadLagColor || '#3b82f6'}40`,
-                              padding: '4px 10px',
-                              borderRadius: '16px',
-                              fontSize: '11px',
-                              fontWeight: '700',
-                              textTransform: 'uppercase',
-                              letterSpacing: '0.3px',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}>
-                              ● {proj.leadLagLabel}
-                            </span>
-                          )}
-                        </div>
+                        <span style={{
+                          backgroundColor: statusColor(proj.status) + '15',
+                          color: statusColor(proj.status),
+                          padding: '6px 12px',
+                          borderRadius: '16px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.3px',
+                          display: 'inline-block'
+                        }}>
+                          {proj.status}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -577,39 +595,19 @@ const MyProjects = ({ userRole, onLogout }) => {
                         {selectedProject.company} &nbsp;|&nbsp; {selectedProject.plant}
                       </div>
                     </div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{
-                        backgroundColor: statusColor(selectedProject.status) + '15',
-                        color: statusColor(selectedProject.status),
-                        padding: '4px 12px',
-                        borderRadius: '12px',
-                        fontSize: '11px',
-                        fontWeight: '700',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.3px',
-                        display: 'inline-block'
-                      }}>
-                        {selectedProject.status}
-                      </span>
-                      {selectedProject.leadLagLabel && (
-                        <span style={{
-                          backgroundColor: (selectedProject.leadLagColor || '#3b82f6') + '20',
-                          color: selectedProject.leadLagColor || '#3b82f6',
-                          border: `1px solid ${selectedProject.leadLagColor || '#3b82f6'}40`,
-                          padding: '4px 10px',
-                          borderRadius: '12px',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.3px',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px'
-                        }}>
-                          ● {selectedProject.leadLagLabel}
-                        </span>
-                      )}
-                    </div>
+                    <span style={{
+                      backgroundColor: statusColor(selectedProject.status) + '15',
+                      color: statusColor(selectedProject.status),
+                      padding: '4px 12px',
+                      borderRadius: '12px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.3px',
+                      display: 'inline-block'
+                    }}>
+                      {selectedProject.status}
+                    </span>
                   </div>
                   <div className="mp-detail-meta">
                     <div className="mp-meta-item">
