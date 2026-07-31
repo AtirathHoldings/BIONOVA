@@ -378,29 +378,42 @@ class TaskItem {
     
     final String normalizedStatus = dbStatus.toUpperCase().replaceAll('_', ' ').trim();
     final String normalizedSubStatus = dbSubStatus.toUpperCase().replaceAll('_', ' ').trim();
-    
-    // Status mapping
-    String status = 'Open';
-    if (normalizedStatus.contains('CLOSED') || 
+    final bool isClosedTask = 
+        normalizedStatus.contains('CLOSED') || 
         normalizedStatus.contains('COMPLETED') || 
         normalizedStatus.contains('DONE') || 
         normalizedStatus.contains('FINISHED') ||
-        (rawSts is Map && (rawSts['statusId'] == 4 || rawSts['status_id'] == 4))) {
+        dbStatus == '4' ||
+        (rawSts is Map && (rawSts['statusId'] == 4 || rawSts['status_id'] == 4));
+
+    final bool isUnderReviewTask = 
+        normalizedStatus.contains('UNDER REVIEW') || 
+        normalizedStatus.contains('SUBMIT REVIEW') || 
+        normalizedStatus.contains('UNDER_REVIEW') || 
+        normalizedStatus.contains('SUBMIT_REVIEW') || 
+        normalizedStatus.contains('UNDERREVIEW') || 
+        normalizedStatus.contains('SUBMITREVIEW') || 
+        normalizedStatus.contains('PENDING REVIEW') || 
+        normalizedSubStatus.contains('UNDER REVIEW') || 
+        normalizedSubStatus.contains('SUBMIT REVIEW') || 
+        normalizedSubStatus.contains('PENDING REVIEW') || 
+        normalizedSubStatus.contains('PENDING REVIEWER') || 
+        normalizedSubStatus.contains('PENDING APPROVER') ||
+        dbStatus == '3' ||
+        (rawSts is Map && (rawSts['statusId'] == 3 || rawSts['status_id'] == 3));
+
+    // Status mapping
+    String status = 'Open';
+    if (isClosedTask) {
       status = 'Closed';
-    } 
-    else if (normalizedSubStatus.contains('UNDER REVIEW') || 
-             normalizedSubStatus.contains('SUBMIT REVIEW') || 
-             normalizedSubStatus.contains('PENDING REVIEWER') || 
-             normalizedSubStatus.contains('PENDING APPROVER')) {
+    } else if (isUnderReviewTask) {
       status = 'Under Review';
-    } else if (normalizedSubStatus.contains('REASSIGN') || normalizedSubStatus.contains('REASSIGNED') || normalizedStatus.contains('REASSIGN')) {
+    } else if (normalizedStatus.contains('REASSIGN') || normalizedSubStatus.contains('REASSIGN')) {
       status = 'Reassigned';
-    } else if (normalizedSubStatus.contains('REWORK') || normalizedStatus.contains('REWORK')) {
+    } else if (normalizedStatus.contains('REWORK') || normalizedSubStatus.contains('REWORK')) {
       status = 'Rework';
     } else if (normalizedStatus == 'WIP' || normalizedStatus == 'IN PROGRESS' || normalizedStatus == 'WORK IN PROGRESS') {
       status = 'In Progress';
-    } else if (normalizedStatus == 'ASSIGNED' || normalizedStatus == 'OPEN' || normalizedStatus == 'PENDING' || normalizedStatus == 'DRAFT') {
-      status = 'Open';
     } else {
       status = 'Open';
     }
@@ -966,6 +979,9 @@ class TaskItem {
   String get progressStatusText {
     final s = status.toUpperCase();
     if (s == 'COMPLETED' || s == 'CLOSED') return 'CLOSED';
+    if (s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || s == 'SUBMIT REVIEW' || s == 'SUBMIT_REVIEW') return 'UNDER REVIEW';
+    if (s == 'REWORK') return 'REWORK';
+    if (s == 'REASSIGNED' || s == 'REASSIGN') return 'REASSIGNED';
     if (s == 'HOLD') return 'HOLD';
     if (s == 'DRAFT') return 'DRAFT';
     if (s == 'OPEN' || s == 'PENDING') return 'OPEN';
@@ -976,6 +992,9 @@ class TaskItem {
     switch (progressStatusText) {
       case 'OPEN': return const Color(0xFF2563EB); // BLUE
       case 'IN PROGRESS': return const Color(0xFFD97706); // AMBER/GOLD #D97706
+      case 'UNDER REVIEW': return const Color(0xFF7C3AED); // PURPLE #7C3AED
+      case 'REWORK': return const Color(0xFFF97316); // ORANGE #F97316
+      case 'REASSIGNED': return const Color(0xFF4F46E5); // INDIGO #4F46E5
       case 'HOLD': return const Color(0xFF7C3AED); // PURPLE
       case 'CLOSED':
       case 'COMPLETED': return const Color(0xFF16A34A); // GREEN
@@ -988,6 +1007,9 @@ class TaskItem {
     switch (progressStatusText) {
       case 'OPEN': return const Color(0xFFEFF6FF); 
       case 'IN PROGRESS': return const Color(0xFFFEF3C7); // Soft Gold tint #FEF3C7
+      case 'UNDER REVIEW': return const Color(0xFFF3E8FF); // Soft Purple #F3E8FF
+      case 'REWORK': return const Color(0xFFFFF7ED); // Soft Orange #FFF7ED
+      case 'REASSIGNED': return const Color(0xFFEEF2FF); // Soft Indigo #EEF2FF
       case 'HOLD': return const Color(0xFFF5F3FF); 
       case 'CLOSED':
       case 'COMPLETED': return const Color(0xFFF0FDF4); 
