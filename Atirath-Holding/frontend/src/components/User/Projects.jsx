@@ -212,105 +212,64 @@ const MyProjects = ({ userRole, onLogout }) => {
             progressPct = extractProgress(dashP);
           }
 
-          // User-Specific Project Completion Status
-          let userProjectStatus = "IN PROGRESS";
-          if (proj.prjSts === 'HOLD' || proj.prjsts === 'HOLD' || dashP.status === 'On Hold') {
-            userProjectStatus = "ON HOLD";
-          } else if (
-            (totalTasksCount > 0 && completedTasksCount === totalTasksCount) ||
-            proj.prjSts === 'CLOSED' || proj.prjsts === 'CLOSED' || dashP.status === 'Completed' || dashP.status === 'Closed'
-          ) {
-            userProjectStatus = "COMPLETED";
-          } else {
-            userProjectStatus = "IN PROGRESS";
-          }
-
-          // User-Specific Lead/Lag Status & Label Calculation
-          let userLeadLagStatus = dashP.leadLagStatus || "ON_TIME";
-          let userLeadLagLabel  = dashP.leadLagLabel  || "On Time";
-          let userLeadLagColor  = dashP.leadLagColor  || "#f59e0b";
-          let userDaysVariance  = dashP.daysVariance  || 0;
-
-          if (totalTasksCount > 0) {
-            const today = new Date();
-            today.setHours(0, 0, 0, 0);
-
-            let lastTargetEnd = null;
-            let lastActualComp = null;
-
-            projTasks.forEach(t => {
-              const endStr = t.endDt || t.enddt || t.endDate || t.end_dt;
-              const actCmpStr = t.actCmpDt || t.act_cmp_dt || t.actcmpdt;
-              if (endStr) {
-                const d = new Date(endStr);
-                if (!isNaN(d.getTime())) {
-                  if (!lastTargetEnd || d > lastTargetEnd) {
-                    lastTargetEnd = d;
-                  }
-                }
-              }
-              if (actCmpStr) {
-                const d = new Date(actCmpStr);
-                if (!isNaN(d.getTime())) {
-                  if (!lastActualComp || d > lastActualComp) {
-                    lastActualComp = d;
-                  }
-                }
-              }
-            });
-
-            if (userProjectStatus === "COMPLETED") {
-              const cmpDate = lastActualComp || today;
-              const targetDate = lastTargetEnd || today;
-
-              const diffDays = Math.round((targetDate.getTime() - cmpDate.getTime()) / (1000 * 3600 * 24));
-              userDaysVariance = diffDays;
-
-              if (diffDays > 0) {
-                userLeadLagStatus = "LEAD";
-                userLeadLagLabel = `Lead by ${diffDays} day${diffDays > 1 ? 's' : ''}`;
-                userLeadLagColor = "#10b981";
-              } else if (diffDays < 0) {
-                const lagDays = Math.abs(diffDays);
-                userLeadLagStatus = "LAG";
-                userLeadLagLabel = `Lag by ${lagDays} day${lagDays > 1 ? 's' : ''}`;
-                userLeadLagColor = "#ef4444";
-              } else {
-                userLeadLagStatus = "ON_TIME";
-                userLeadLagLabel = "On Time";
-                userLeadLagColor = "#3b82f6";
-              }
-            } else {
-              let isAnyOverdue = false;
-              let maxOverdueDays = 0;
-              projTasks.forEach(t => {
-                const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
-                if (s !== 'COMPLETED' && s !== 'CLOSED') {
-                  const endStr = t.endDt || t.enddt || t.endDate || t.end_dt;
-                  if (endStr) {
-                    const d = new Date(endStr);
-                    if (!isNaN(d.getTime()) && today > d) {
-                      isAnyOverdue = true;
-                      const diff = Math.round((today.getTime() - d.getTime()) / (1000 * 3600 * 24));
-                      if (diff > maxOverdueDays) maxOverdueDays = diff;
-                    }
-                  }
-                }
-              });
-
-              if (isAnyOverdue) {
-                userLeadLagStatus = "LAG";
-                userLeadLagLabel = `Lag by ${maxOverdueDays} day${maxOverdueDays > 1 ? 's' : ''}`;
-                userLeadLagColor = "#ef4444";
-                userDaysVariance = -maxOverdueDays;
-              }
-            }
-          }
-
           const actualManager = proj.createdByName || proj.createdBy || getLoggedInUser();
 
           const rawStart = proj.stDt || proj.stdt || proj.startDate || proj.st_dt || dashP.stDt || dashP.startDate || dashP.st_dt;
           const rawEnd = proj.endDt || proj.enddt || proj.endDate || proj.end_dt || proj.targetDate || dashP.endDt || dashP.dueDate || dashP.end_dt;
+
+          // Check if all assigned tasks for this user in this project are closed
+          const isUserClosed = totalTasksCount > 0 && completedTasksCount === totalTasksCount;
+          const userProjectStatus = isUserClosed ? "CLOSED" : (proj.prjSts || proj.prjsts || dashP.status || "LIVE").toUpperCase();
+
+          // Calculate Lead / Lag / On Time schedule status for user's completed tasks
+          let userLeadLagLabel = null;
+          let userLeadLagColor = null;
+
+          if (isUserClosed && projTasks.length > 0) {
+            let maxTargetEnd = null;
+            let maxActualEnd = null;
+
+            for (const t of projTasks) {
+              const endStr = t.endDt || t.enddt || t.endDate || t.end_dt;
+              const actStr = t.actCmpDt || t.actcmpdt || t.act_cmp_dt || endStr;
+              if (endStr) {
+                const d = new Date(endStr);
+                if (!isNaN(d.getTime()) && (!maxTargetEnd || d > maxTargetEnd)) {
+                  maxTargetEnd = d;
+                }
+              }
+              if (actStr) {
+                const d = new Date(actStr);
+                if (!isNaN(d.getTime()) && (!maxActualEnd || d > maxActualEnd)) {
+                  maxActualEnd = d;
+                }
+              }
+            }
+
+            if (!maxTargetEnd && rawEnd) {
+              const d = new Date(rawEnd);
+              if (!isNaN(d.getTime())) maxTargetEnd = d;
+            }
+
+            if (maxTargetEnd && maxActualEnd) {
+              const diffMs = maxTargetEnd.getTime() - maxActualEnd.getTime();
+              const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+
+              if (diffDays > 0) {
+                userLeadLagLabel = `LEAD (-${diffDays} DAYS)`;
+                userLeadLagColor = "#10b981";
+              } else if (diffDays < 0) {
+                userLeadLagLabel = `LAG (+${Math.abs(diffDays)} DAYS)`;
+                userLeadLagColor = "#ef4444";
+              } else {
+                userLeadLagLabel = "ON TIME";
+                userLeadLagColor = "#3b82f6";
+              }
+            } else {
+              userLeadLagLabel = "ON TIME";
+              userLeadLagColor = "#3b82f6";
+            }
+          }
 
           return {
             id: dashId,
@@ -324,11 +283,10 @@ const MyProjects = ({ userRole, onLogout }) => {
             openTasks: openTasksCount,
             closedTasks: completedTasksCount,
             status: userProjectStatus,
-            leadLagStatus: userLeadLagStatus,
-            leadLagLabel: userLeadLagLabel,
-            leadLagColor: userLeadLagColor,
-            daysVariance: userDaysVariance,
-            progress: progressPct,
+            isUserClosed: isUserClosed,
+            userLeadLagLabel: userLeadLagLabel,
+            userLeadLagColor: userLeadLagColor,
+            progress: isUserClosed ? 100 : progressPct,
             image: dashP.logo || proj.logo || null,
             manager: actualManager,
             startDate: formatDisplayDate(rawStart) || "No Start Date",
@@ -484,17 +442,35 @@ const MyProjects = ({ userRole, onLogout }) => {
                           <div className="mp-card-name" style={{ fontSize: '16px', fontWeight: '700', color: '#0f172a', marginBottom: '4px' }}>{proj.name}</div>
                           <div className="mp-card-sub" style={{ fontSize: '12px', color: '#64748b', marginBottom: '12px', lineHeight: '1.4' }}>{proj.company} | {proj.plant}</div>
                           <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Priority:</span>
-                            <span style={{ 
-                              backgroundColor: priorityColor(proj.priority) + '15', 
-                              color: priorityColor(proj.priority),
-                              padding: '2px 8px',
-                              borderRadius: '12px',
-                              fontSize: '10px',
-                              fontWeight: '700',
-                              letterSpacing: '0.3px',
-                              textTransform: 'uppercase'
-                            }}>{proj.priority}</span>
+                            {proj.isUserClosed && proj.userLeadLagLabel ? (
+                              <>
+                                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Schedule:</span>
+                                <span style={{ 
+                                  backgroundColor: proj.userLeadLagColor + '15', 
+                                  color: proj.userLeadLagColor,
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '10px',
+                                  fontWeight: '700',
+                                  letterSpacing: '0.3px',
+                                  textTransform: 'uppercase'
+                                }}>{proj.userLeadLagLabel}</span>
+                              </>
+                            ) : (
+                              <>
+                                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Priority:</span>
+                                <span style={{ 
+                                  backgroundColor: priorityColor(proj.priority) + '15', 
+                                  color: priorityColor(proj.priority),
+                                  padding: '2px 8px',
+                                  borderRadius: '12px',
+                                  fontSize: '10px',
+                                  fontWeight: '700',
+                                  letterSpacing: '0.3px',
+                                  textTransform: 'uppercase'
+                                }}>{proj.priority}</span>
+                              </>
+                            )}
                           </div>
                         </div>
                         <div className="mp-card-circle" style={{ flexShrink: 0, display: 'flex', justifyContent: 'flex-end', width: '100px' }}>
@@ -611,22 +587,45 @@ const MyProjects = ({ userRole, onLogout }) => {
                   </div>
                   <div className="mp-detail-meta">
                     <div className="mp-meta-item">
-                      <AlertCircle size={14} style={{ color: priorityColor(selectedProject.priority) }} />
-                      <div>
-                        <span className="mp-meta-label">Priority</span>
-                        <span className="mp-meta-value bold" style={{ 
-                          color: priorityColor(selectedProject.priority), 
-                          backgroundColor: priorityColor(selectedProject.priority) + '15',
-                          padding: '5px 14px',
-                          borderRadius: '14px',
-                          fontSize: '12px',
-                          textTransform: 'uppercase',
-                          display: 'inline-block',
-                          marginTop: '3px'
-                        }}>
-                          {selectedProject.priority}
-                        </span>
-                      </div>
+                      {selectedProject.isUserClosed && selectedProject.userLeadLagLabel ? (
+                        <>
+                          <Clock size={14} style={{ color: selectedProject.userLeadLagColor }} />
+                          <div>
+                            <span className="mp-meta-label">Schedule Status</span>
+                            <span className="mp-meta-value bold" style={{ 
+                              color: selectedProject.userLeadLagColor, 
+                              backgroundColor: selectedProject.userLeadLagColor + '15',
+                              padding: '5px 14px',
+                              borderRadius: '14px',
+                              fontSize: '12px',
+                              textTransform: 'uppercase',
+                              display: 'inline-block',
+                              marginTop: '3px'
+                            }}>
+                              {selectedProject.userLeadLagLabel}
+                            </span>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <AlertCircle size={14} style={{ color: priorityColor(selectedProject.priority) }} />
+                          <div>
+                            <span className="mp-meta-label">Priority</span>
+                            <span className="mp-meta-value bold" style={{ 
+                              color: priorityColor(selectedProject.priority), 
+                              backgroundColor: priorityColor(selectedProject.priority) + '15',
+                              padding: '5px 14px',
+                              borderRadius: '14px',
+                              fontSize: '12px',
+                              textTransform: 'uppercase',
+                              display: 'inline-block',
+                              marginTop: '3px'
+                            }}>
+                              {selectedProject.priority}
+                            </span>
+                          </div>
+                        </>
+                      )}
                     </div>
                     <div className="mp-meta-item">
                       <Calendar size={14} style={{ color: "#3b82f6" }} />

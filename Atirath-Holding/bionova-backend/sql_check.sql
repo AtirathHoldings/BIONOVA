@@ -335,9 +335,9 @@ BEGIN
       'logo',          p.logo, 
       'role',          COALESCE(pa.access_type, 'Team Member'), 
       'status',        CASE 
+                         WHEN COUNT(t.task_id) > 0 AND COUNT(t.task_id) FILTER (WHERE UPPER(tsm.status_nm) IN ('COMPLETED', 'CLOSED')) = COUNT(t.task_id) THEN 'CLOSED'
                          WHEN p.prj_sts = 'HOLD' THEN 'On Hold' 
                          WHEN p.prj_sts = 'CLOSED' THEN 'Completed' 
-                         WHEN COUNT(t.task_id) > 0 AND COUNT(t.task_id) FILTER (WHERE UPPER(tsm.status_nm) NOT IN ('COMPLETED', 'CLOSED')) = 0 THEN 'Completed'
                          ELSE 'In Progress' 
                        END, 
       'dueDate',       p.end_dt, 
