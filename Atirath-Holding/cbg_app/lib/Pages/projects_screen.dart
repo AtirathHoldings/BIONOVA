@@ -14,6 +14,62 @@ class ProjectsScreen extends StatefulWidget {
 
 class _ProjectsScreenState extends State<ProjectsScreen> {
   static const Color themeColor = Color(0xff10B981);
+
+  String _calculateUserLeadLag(List<dynamic> tasks, String projEndDt) {
+    if (tasks.isEmpty) return 'On Time';
+    DateTime? maxTargetEnd;
+    DateTime? maxActualEnd;
+
+    for (final t in tasks) {
+      String? endStr;
+      String? actStr;
+      if (t is Map) {
+        endStr = (t['endDt'] ?? t['enddt'] ?? t['endDate'] ?? t['end_dt'])?.toString();
+        actStr = (t['actCmpDt'] ?? t['actcmpdt'] ?? t['act_cmp_dt'])?.toString();
+        if (actStr == null || actStr.isEmpty) {
+          final st = (t['taskSts'] ?? t['tasksts'] ?? t['status'] ?? '').toString().toUpperCase();
+          if (st == 'COMPLETED' || st == 'CLOSED' || st == 'DONE') {
+            actStr = endStr;
+          }
+        }
+      } else if (t is TaskItem) {
+        endStr = t.dueDate;
+        actStr = t.actCmpDt ?? (t.isCompleted ? t.dueDate : null);
+      }
+
+      if (endStr != null && endStr.isNotEmpty) {
+        final d = DateTime.tryParse(endStr);
+        if (d != null && (maxTargetEnd == null || d.isAfter(maxTargetEnd))) {
+          maxTargetEnd = d;
+        }
+      }
+      if (actStr != null && actStr.isNotEmpty) {
+        final d = DateTime.tryParse(actStr);
+        if (d != null && (maxActualEnd == null || d.isAfter(maxActualEnd))) {
+          maxActualEnd = d;
+        }
+      }
+    }
+
+    if (maxTargetEnd == null && projEndDt.isNotEmpty) {
+      maxTargetEnd = DateTime.tryParse(projEndDt);
+    }
+
+    if (maxTargetEnd != null && maxActualEnd != null) {
+      final targetDate = DateTime(maxTargetEnd.year, maxTargetEnd.month, maxTargetEnd.day);
+      final actualDate = DateTime(maxActualEnd.year, maxActualEnd.month, maxActualEnd.day);
+      final diffDays = targetDate.difference(actualDate).inDays;
+
+      if (diffDays > 0) {
+        return 'Lead (-$diffDays Days)';
+      } else if (diffDays < 0) {
+        return 'Lag (+${diffDays.abs()} Days)';
+      } else {
+        return 'On Time';
+      }
+    }
+    return 'On Time';
+  }
   
   String _selectedFilter = 'All Projects';
   String _searchQuery = '';
@@ -339,6 +395,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         }
 
         final bool isUserClosed = totalAssigned > 0 && completedCount == totalAssigned;
+        final String userLeadLag = isUserClosed
+            ? _calculateUserLeadLag(filteredMilestoneTasks.isNotEmpty ? filteredMilestoneTasks : projectTasks, p.endDt)
+            : (leadLagMap[p.prjId] ?? p.leadLagStatusStr);
 
         mappedProjects.add(ProjectModel(
           prjId: p.prjId,
@@ -367,7 +426,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           companyName: companyName,
           plantName: plantName,
           location: location,
-          leadLagStatusStr: leadLagMap[p.prjId] ?? p.leadLagStatusStr,
+          leadLagStatusStr: userLeadLag,
         ));
       }
 
@@ -777,8 +836,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                               ],
                             ),
                           ),
-                        const SizedBox(height: 8),
-                        // Priority badge REMOVED from here
+                        const SizedBox(height: 6),
+                        if (isCompleted)
+                          _buildLeadLagBadge(project.leadLagStatusStr)
+                        else
+                          _buildPriorityPill(project.prjPrty, getPriorityColor(project.prjPrty)),
                       ],
                     ),
                   ),
@@ -850,10 +912,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                       _buildMetricBlock('Closed', project.closed, themeColor),
                     ],
                   ),
-                  if (isCompleted)
-                    _buildLeadLagBadge(project.leadLagStatusStr)
-                  else
-                    _buildPriorityPill(project.prjPrty, getPriorityColor(project.prjPrty)),
+                  _buildStatusBadge(project.prjSts),
                 ],
               ),
             ),
@@ -928,23 +987,66 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
     );
   }
 
+  Widget _buildStatusBadge(String statusStr) {
+    final String s = statusStr.trim().toUpperCase();
+    Color bg;
+    Color text;
+    String label;
+
+    if (s == 'CLOSED' || s == 'COMPLETED') {
+      bg = const Color(0xffF1F5F9);
+      text = const Color(0xff64748B);
+      label = 'CLOSED';
+    } else if (s == 'LIVE') {
+      bg = const Color(0xffDCFCE7);
+      text = const Color(0xff16A34A);
+      label = 'LIVE';
+    } else if (s == 'HOLD' || s == 'ON HOLD') {
+      bg = const Color(0xffFEF3C7);
+      text = const Color(0xffD97706);
+      label = 'ON HOLD';
+    } else {
+      bg = const Color(0xffDBEAFE);
+      text = const Color(0xff2563EB);
+      label = s.isNotEmpty ? s : 'IN PROGRESS';
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: text,
+          fontSize: 10.5,
+          fontWeight: FontWeight.w700,
+          letterSpacing: 0.3,
+        ),
+      ),
+    );
+  }
+
   Widget _buildLeadLagBadge(String statusStr) {
     final String s = statusStr.trim().toLowerCase();
     
-    // Ensure null, 'null', 'n/a', or empty values default to 'On Time' instead of rendering 'null'
-    if (s == 'null' || s == 'n/a' || s.isEmpty || s == 'none') {
-      return _buildLeadLagPill('On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
+    if (s == 'null' || s == 'n/a' || s.isEmpty || s == 'none' || s.contains('on time')) {
+      return _buildLeadLagPill('Schedule: On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
     }
 
     bool isLead = s.contains('lead') || s == 'ahead';
     bool isLag = s.contains('lag') || s == 'behind' || s == 'delay';
 
     if (isLead) {
-      return _buildLeadLagPill('Lead', const Color(0xffDCFCE7), const Color(0xff16A34A));
+      final label = statusStr.toLowerCase().startsWith('schedule:') ? statusStr : 'Schedule: $statusStr';
+      return _buildLeadLagPill(label, const Color(0xffDCFCE7), const Color(0xff16A34A));
     } else if (isLag) {
-      return _buildLeadLagPill('Lag', const Color(0xffFEE2E2), const Color(0xffDC2626));
+      final label = statusStr.toLowerCase().startsWith('schedule:') ? statusStr : 'Schedule: $statusStr';
+      return _buildLeadLagPill(label, const Color(0xffFEE2E2), const Color(0xffDC2626));
     } else {
-      return _buildLeadLagPill('On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
+      return _buildLeadLagPill('Schedule: On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
     }
   }
 

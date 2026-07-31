@@ -498,26 +498,28 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
             ? 0
             : ((completedCount / filteredTasks.length) * 100).round();
 
-        milestoneModels.add(MilestoneModel(
-          id: mId.toString(),
-          title: title,
-          desc: desc,
-          startDate: stDtDisplay,
-          targetDate: endDtDisplay,
-          progress: progressPercent,
-          assigned: filteredTasks.length,
-          open: openCount,
-          status: (sts == 'COMPLETED' || sts == 'CLOSED')
-              ? 'Closed'
-              : sts == 'HOLD'
-                  ? 'On Hold'
-                  : 'In Progress',
-          color: (sts == 'COMPLETED' || sts == 'CLOSED')
-              ? const Color(0xff10B981)
-              : sts == 'HOLD'
-                  ? const Color(0xffF59E0B)
-                  : const Color(0xff2563EB),
-        ));
+        if (!filterByEmp || filteredTasks.isNotEmpty) {
+          milestoneModels.add(MilestoneModel(
+            id: mId.toString(),
+            title: title,
+            desc: desc,
+            startDate: stDtDisplay,
+            targetDate: endDtDisplay,
+            progress: progressPercent,
+            assigned: filteredTasks.length,
+            open: openCount,
+            status: (sts == 'COMPLETED' || sts == 'CLOSED')
+                ? 'Closed'
+                : sts == 'HOLD'
+                    ? 'On Hold'
+                    : 'In Progress',
+            color: (sts == 'COMPLETED' || sts == 'CLOSED')
+                ? const Color(0xff10B981)
+                : sts == 'HOLD'
+                    ? const Color(0xffF59E0B)
+                    : const Color(0xff2563EB),
+          ));
+        }
       }
 
       // ── Step 5: Parse Gantt tasks using all tasks ──
@@ -604,7 +606,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
           _tasks     = taskModels;
           _ganttData = ganttModels;
           _ganttProjectStart = pStart; // Store the parsed project start date used in Gantt
-          _leadLagStatus = leadLag;
+          _leadLagStatus = (_project?.leadLagStatusStr != null && _project!.leadLagStatusStr.isNotEmpty) ? _project!.leadLagStatusStr : leadLag;
           _userDepartment = userDept;
           _milestoneNames = [
             'All Milestones',

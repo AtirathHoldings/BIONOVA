@@ -52,6 +52,62 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
     _startAutoRefresh();
   }
 
+  String _calculateUserLeadLag(List<dynamic> tasks, String projEndDt) {
+    if (tasks.isEmpty) return 'On Time';
+    DateTime? maxTargetEnd;
+    DateTime? maxActualEnd;
+
+    for (final t in tasks) {
+      String? endStr;
+      String? actStr;
+      if (t is Map) {
+        endStr = (t['endDt'] ?? t['enddt'] ?? t['endDate'] ?? t['end_dt'])?.toString();
+        actStr = (t['actCmpDt'] ?? t['actcmpdt'] ?? t['act_cmp_dt'])?.toString();
+        if (actStr == null || actStr.isEmpty) {
+          final st = (t['taskSts'] ?? t['tasksts'] ?? t['status'] ?? '').toString().toUpperCase();
+          if (st == 'COMPLETED' || st == 'CLOSED' || st == 'DONE') {
+            actStr = endStr;
+          }
+        }
+      } else if (t is TaskItem) {
+        endStr = t.dueDate;
+        actStr = t.actCmpDt ?? (t.isCompleted ? t.dueDate : null);
+      }
+
+      if (endStr != null && endStr.isNotEmpty) {
+        final d = DateTime.tryParse(endStr);
+        if (d != null && (maxTargetEnd == null || d.isAfter(maxTargetEnd))) {
+          maxTargetEnd = d;
+        }
+      }
+      if (actStr != null && actStr.isNotEmpty) {
+        final d = DateTime.tryParse(actStr);
+        if (d != null && (maxActualEnd == null || d.isAfter(maxActualEnd))) {
+          maxActualEnd = d;
+        }
+      }
+    }
+
+    if (maxTargetEnd == null && projEndDt.isNotEmpty) {
+      maxTargetEnd = DateTime.tryParse(projEndDt);
+    }
+
+    if (maxTargetEnd != null && maxActualEnd != null) {
+      final targetDate = DateTime(maxTargetEnd.year, maxTargetEnd.month, maxTargetEnd.day);
+      final actualDate = DateTime(maxActualEnd.year, maxActualEnd.month, maxActualEnd.day);
+      final diffDays = targetDate.difference(actualDate).inDays;
+
+      if (diffDays > 0) {
+        return 'Lead (-$diffDays Days)';
+      } else if (diffDays < 0) {
+        return 'Lag (+${diffDays.abs()} Days)';
+      } else {
+        return 'On Time';
+      }
+    }
+    return 'On Time';
+  }
+
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
     _autoRefreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
@@ -424,6 +480,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         final int finalAssigned = totalAssigned > 0 ? totalAssigned : (p.rawAssigned ?? 0);
         final int finalOpen = totalAssigned > 0 ? openCount : (p.rawOpen ?? 0);
         final bool isUserClosed = finalAssigned > 0 && completedCount == finalAssigned;
+        final String userLeadLag = isUserClosed
+            ? _calculateUserLeadLag(milestoneTasksRaw.isNotEmpty ? milestoneTasksRaw : projectTasks, p.endDt)
+            : (leadLagMap[p.prjId] ?? p.leadLagStatusStr);
 
         mappedProjects.add(ProjectModel(
           prjId: p.prjId,
@@ -450,7 +509,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           companyName: companyName,
           plantName: plantName,
           location: location,
-          leadLagStatusStr: leadLagMap[p.prjId] ?? p.leadLagStatusStr,
+          leadLagStatusStr: userLeadLag,
         ));
       }
 
