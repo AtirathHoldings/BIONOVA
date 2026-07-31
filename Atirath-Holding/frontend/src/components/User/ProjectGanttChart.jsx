@@ -466,6 +466,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
   /* ── vertical sync ── */
   const scrollContainerRef = useRef(null);
+  const leftBodyRef = useRef(null);
 
   if (loading) {
     return (
@@ -727,7 +728,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
       )}
 
       {/* ═══ BODY ═══ */}
-      <div className="gc-body" style={{ position: 'relative', display: 'flex', flex: 1, overflowX: 'auto', overflowY: 'auto', maxHeight: '550px' }}>
+      <div className="gc-body" style={{ position: 'relative', display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* LEFT: sticky table */}
         <div className="gc-left" style={{ 
           width: tableCollapsed ? 0 : (compact ? 340 : 422), 
@@ -755,7 +756,16 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
               )}
             </tr></thead></table>
           </div>
-          <div className="gc-left-body" style={{ width: compact ? 340 : 422 }}>
+          <div 
+            className="gc-left-body" 
+            ref={leftBodyRef}
+            onWheel={(e) => {
+              if (scrollContainerRef.current) {
+                scrollContainerRef.current.scrollTop += e.deltaY;
+              }
+            }}
+            style={{ width: compact ? 340 : 422, maxHeight: '500px', overflowY: 'hidden' }}
+          >
             <table className="gc-tbl" style={{ tableLayout: 'fixed' }}><tbody>
               {rows.map((row, i) => (
                 <tr
@@ -843,7 +853,16 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           </div>
 
         {/* RIGHT: scrollable timeline */}
-        <div className="gc-right" ref={scrollContainerRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', position: 'relative' }}>
+        <div 
+          className="gc-right" 
+          ref={scrollContainerRef} 
+          onScroll={(e) => {
+            if (leftBodyRef.current) {
+              leftBodyRef.current.scrollTop = e.target.scrollTop;
+            }
+          }}
+          style={{ flex: 1, maxHeight: '500px', overflowX: 'auto', overflowY: 'auto', position: 'relative' }}
+        >
 
           {/* Sticky month/day header */}
           <div className="gc-right-hdr" style={{ width: timelineW }}>
