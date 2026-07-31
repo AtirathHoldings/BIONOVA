@@ -727,7 +727,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
       )}
 
       {/* ═══ BODY ═══ */}
-      <div className="gc-body" style={{ position: 'relative', display: 'flex', flex: 1, overflow: 'hidden' }}>
+      <div className="gc-body" style={{ position: 'relative', display: 'flex', flex: 1, overflowX: 'auto', overflowY: 'auto', maxHeight: '550px' }}>
         {/* LEFT: sticky table */}
         <div className="gc-left" style={{ 
           width: tableCollapsed ? 0 : (compact ? 340 : 422), 

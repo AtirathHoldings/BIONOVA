@@ -112,8 +112,13 @@ const MyProjects = ({ userRole, onLogout }) => {
         setEmployees(empRes || []);
         const empId = profRes?.empId;
 
-        // Keep all tasks and milestones so full project details can be rendered in tabs
-        setTasks(taskRes || []);
+        // Filter tasks to only those assigned to the logged-in user (Executor, Reviewer, or Approver)
+        const userAssignedTasks = (taskRes || []).filter(t => 
+          (t.empId || t.empid) === empId || 
+          (t.reviewer) === empId || 
+          (t.approver) === empId
+        );
+        setTasks(userAssignedTasks);
         setMilestones(msRes || []);
         setAllTasks(taskRes || []);
 
@@ -163,8 +168,8 @@ const MyProjects = ({ userRole, onLogout }) => {
             (t.approver) === empId
           );
 
-          // Effective tasks to display
-          const projTasks = projUserTasks.length > 0 ? projUserTasks : projTasksAll;
+          // Effective tasks to display (Only tasks assigned to user)
+          const projTasks = projUserTasks;
 
           // User-specific / Project counts
           const totalTasksCount = projTasks.length;

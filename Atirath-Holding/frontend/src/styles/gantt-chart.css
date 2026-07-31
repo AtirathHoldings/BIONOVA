@@ -152,7 +152,8 @@
   display: flex;
   flex: 1;
   overflow-x: auto;
-  overflow-y: hidden;
+  overflow-y: auto;
+  max-height: 550px;
   position: relative;
   min-height: 0;
   align-items: flex-start;
