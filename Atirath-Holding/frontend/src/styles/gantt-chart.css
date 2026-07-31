@@ -181,7 +181,13 @@
 }
 
 .gc-left-body {
-  /* Naturally expands to content height */
+  overflow-y: scroll;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.gc-left-body::-webkit-scrollbar {
+  display: none;
 }
 
 /* DIVIDER */

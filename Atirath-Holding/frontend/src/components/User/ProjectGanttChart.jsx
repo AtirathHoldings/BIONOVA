@@ -764,7 +764,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
                 scrollContainerRef.current.scrollTop += e.deltaY;
               }
             }}
-            style={{ width: compact ? 340 : 422, maxHeight: '500px', overflowY: 'hidden' }}
+            style={{ width: compact ? 340 : 422, maxHeight: '500px', overflowY: 'scroll', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
           >
             <table className="gc-tbl" style={{ tableLayout: 'fixed' }}><tbody>
               {rows.map((row, i) => (

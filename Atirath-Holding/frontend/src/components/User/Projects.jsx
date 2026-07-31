@@ -583,7 +583,6 @@ const MyProjects = ({ userRole, onLogout }) => {
                   background: '#fff',
                   width: '100%',
                   boxSizing: 'border-box',
-                  overflow: 'hidden',
                 }}>
                   <ProjectGanttChart project={selectedProject} userRole="user" />
                 </div>
