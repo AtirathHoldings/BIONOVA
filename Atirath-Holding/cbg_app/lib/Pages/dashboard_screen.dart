@@ -70,8 +70,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           }
         }
       } else if (t is TaskItem) {
-        endStr = t.dueDate;
-        actStr = t.actCmpDt ?? (t.isCompleted ? t.dueDate : null);
+        endStr = t.endDate ?? t.rawEndDt ?? t.date;
+        actStr = t.rawData?['actCmpDt']?.toString() ?? t.rawData?['act_cmp_dt']?.toString() ?? (t.isCompleted ? endStr : null);
       }
 
       if (endStr != null && endStr.isNotEmpty) {
