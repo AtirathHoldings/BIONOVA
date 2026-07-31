@@ -228,11 +228,14 @@ public class ProjectLeadLagService {
             else if (diff == 0) status = "ON_TIME";
             else                status = "LAG";
         } else {
-            // Check if all tasks are completed or actualProgress >= 100
+            // Check if project status is CLOSED or all tasks are completed or actualProgress >= 100
+            boolean isProjectClosed = "CLOSED".equalsIgnoreCase(project.getPrjSts());
             boolean allDone = !allTasks.isEmpty() && allTasks.stream()
-                .allMatch(t -> t.getTaskSts() != null && "CLOSED".equalsIgnoreCase(t.getTaskSts().getStatusNm()));
+                .allMatch(t -> t.getTaskSts() != null && 
+                    ("CLOSED".equalsIgnoreCase(t.getTaskSts().getStatusNm()) || 
+                     "COMPLETED".equalsIgnoreCase(t.getTaskSts().getStatusNm())));
             
-            if (allDone || actualProgress >= 100.0) {
+            if (isProjectClosed || allDone || actualProgress >= 100.0) {
                 long diff = today.toEpochDay() - endDate.toEpochDay();
                 daysVariance = (int) -diff;
                 if (diff < 0)       status = "LEAD";
@@ -309,11 +312,14 @@ public class ProjectLeadLagService {
             else                return "LAG";
         }
 
+        boolean isProjectClosed = "CLOSED".equalsIgnoreCase(project.getPrjSts());
         boolean allDone = allTasks != null && !allTasks.isEmpty() && allTasks.stream()
-                .allMatch(t -> t.getTaskSts() != null && "CLOSED".equalsIgnoreCase(t.getTaskSts().getStatusNm()));
+                .allMatch(t -> t.getTaskSts() != null && 
+                    ("CLOSED".equalsIgnoreCase(t.getTaskSts().getStatusNm()) || 
+                     "COMPLETED".equalsIgnoreCase(t.getTaskSts().getStatusNm())));
         double actualProgress = computeActualProgress(allTasks);
 
-        if (allDone || actualProgress >= 100.0) {
+        if (isProjectClosed || allDone || actualProgress >= 100.0) {
             long diff = today.toEpochDay() - endDate.toEpochDay();
             if (diff < 0)       return "LEAD";
             else if (diff == 0) return "ON_TIME";

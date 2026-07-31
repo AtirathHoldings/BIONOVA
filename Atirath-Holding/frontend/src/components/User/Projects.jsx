@@ -229,6 +229,10 @@ const MyProjects = ({ userRole, onLogout }) => {
             openTasks: openTasksCount,
             closedTasks: completedTasksCount,
             status: (proj.prjSts || proj.prjsts || dashP.status || "LIVE").toUpperCase(),
+            leadLagStatus: dashP.leadLagStatus || proj.leadLagSts || (completedTasksCount === totalTasksCount && totalTasksCount > 0 ? "ON_TIME" : null),
+            leadLagLabel: dashP.leadLagLabel || (dashP.leadLagStatus === "LEAD" ? "Lead" : dashP.leadLagStatus === "LAG" ? "Lag" : (dashP.leadLagStatus ? "On Time" : null)),
+            leadLagColor: dashP.leadLagColor || (dashP.leadLagStatus === "LEAD" ? "#10b981" : dashP.leadLagStatus === "LAG" ? "#ef4444" : "#f59e0b"),
+            daysVariance: dashP.daysVariance || 0,
             progress: progressPct,
             image: dashP.logo || proj.logo || null,
             manager: actualManager,
@@ -418,19 +422,39 @@ const MyProjects = ({ userRole, onLogout }) => {
                             <span className="mp-stat-value" style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b' }}>{proj.closedTasks}</span>
                           </div>
                         </div>
-                        <span style={{
-                          backgroundColor: statusColor(proj.status) + '15',
-                          color: statusColor(proj.status),
-                          padding: '6px 12px',
-                          borderRadius: '16px',
-                          fontSize: '11px',
-                          fontWeight: '700',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.3px',
-                          display: 'inline-block'
-                        }}>
-                          {proj.status}
-                        </span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                          <span style={{
+                            backgroundColor: statusColor(proj.status) + '15',
+                            color: statusColor(proj.status),
+                            padding: '6px 12px',
+                            borderRadius: '16px',
+                            fontSize: '11px',
+                            fontWeight: '700',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.3px',
+                            display: 'inline-block'
+                          }}>
+                            {proj.status}
+                          </span>
+                          {proj.leadLagLabel && (
+                            <span style={{
+                              backgroundColor: (proj.leadLagColor || '#3b82f6') + '20',
+                              color: proj.leadLagColor || '#3b82f6',
+                              border: `1px solid ${proj.leadLagColor || '#3b82f6'}40`,
+                              padding: '4px 10px',
+                              borderRadius: '16px',
+                              fontSize: '11px',
+                              fontWeight: '700',
+                              textTransform: 'uppercase',
+                              letterSpacing: '0.3px',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              ● {proj.leadLagLabel}
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -496,19 +520,39 @@ const MyProjects = ({ userRole, onLogout }) => {
                         {selectedProject.company} &nbsp;|&nbsp; {selectedProject.plant}
                       </div>
                     </div>
-                    <span style={{
-                      backgroundColor: statusColor(selectedProject.status) + '15',
-                      color: statusColor(selectedProject.status),
-                      padding: '4px 12px',
-                      borderRadius: '12px',
-                      fontSize: '11px',
-                      fontWeight: '700',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.3px',
-                      display: 'inline-block'
-                    }}>
-                      {selectedProject.status}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <span style={{
+                        backgroundColor: statusColor(selectedProject.status) + '15',
+                        color: statusColor(selectedProject.status),
+                        padding: '4px 12px',
+                        borderRadius: '12px',
+                        fontSize: '11px',
+                        fontWeight: '700',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.3px',
+                        display: 'inline-block'
+                      }}>
+                        {selectedProject.status}
+                      </span>
+                      {selectedProject.leadLagLabel && (
+                        <span style={{
+                          backgroundColor: (selectedProject.leadLagColor || '#3b82f6') + '20',
+                          color: selectedProject.leadLagColor || '#3b82f6',
+                          border: `1px solid ${selectedProject.leadLagColor || '#3b82f6'}40`,
+                          padding: '4px 10px',
+                          borderRadius: '12px',
+                          fontSize: '11px',
+                          fontWeight: '700',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.3px',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px'
+                        }}>
+                          ● {selectedProject.leadLagLabel}
+                        </span>
+                      )}
+                    </div>
                   </div>
                   <div className="mp-detail-meta">
                     <div className="mp-meta-item">
