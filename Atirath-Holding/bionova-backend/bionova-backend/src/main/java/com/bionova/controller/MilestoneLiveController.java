@@ -1,0 +1,288 @@
+package com.bionova.controller;
+
+import com.bionova.entity.Employee;
+import com.bionova.entity.MilestoneLive;
+import com.bionova.entity.ProjectLive;
+import com.bionova.entity.TaskLive;
+import com.bionova.entity.ScreenMaster;
+import com.bionova.repository.EmployeeRepository;
+import com.bionova.repository.MilestoneLiveRepository;
+import com.bionova.repository.ProjectLiveRepository;
+import com.bionova.repository.TaskLiveRepository;
+import com.bionova.repository.RoleBasedEmployeeMappingRepository;
+import com.bionova.repository.RoleBasedAccessControlRepository;
+import com.bionova.repository.ScreenMasterRepository;
+import com.bionova.service.ActivityLogService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.*;
+
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+
+@RestController
+@RequestMapping("/api/milestone-live")
+public class MilestoneLiveController {
+
+    @Autowired
+    private MilestoneLiveRepository milestoneLiveRepository;
+
+    @Autowired
+    private ProjectLiveRepository projectLiveRepository;
+
+    @Autowired
+    private TaskLiveRepository taskLiveRepository;
+
+    @Autowired
+    private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private ActivityLogService activityLogService;
+
+    @Autowired
+    private RoleBasedEmployeeMappingRepository rbacMappingRepository;
+
+    @Autowired
+    private RoleBasedAccessControlRepository rbacRepository;
+
+    @Autowired
+    private ScreenMasterRepository screenMasterRepository;
+
+    /**
+     * Determines if the employee has access to the Project module.
+     * Rules:
+     *  - No RBAC mapping configured yet (full_access mode) -> true
+     *  - Admin, Manager, PM, or full_access role -> true
+     *  - Mapped role has view_flg = true for any screen in the "Project" group -> true
+     */
+    private boolean hasProjectModuleAccess(Employee employee) {
+        if (employee == null) return false;
+        
+        var mappings = rbacMappingRepository.findByEmpId(employee.getEmpId());
+        if (mappings.isEmpty()) {
+            return true;
+        }
+        
+        for (var mapping : mappings) {
+            var rbacs = rbacRepository.findByRoleId(mapping.getRoleId());
+            if (!rbacs.isEmpty()) {
+                String roleNm = rbacs.get(0).getRoleNm();
+                if (roleNm != null) {
+                    String lowerRole = roleNm.toLowerCase();
+                    if (lowerRole.contains("admin") || lowerRole.contains("manager") || lowerRole.contains("pm") || lowerRole.contains("full_access")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        
+        List<ScreenMaster> screens = screenMasterRepository.findAll();
+        Set<Integer> projectScreenIds = new java.util.HashSet<>();
+        for (ScreenMaster sm : screens) {
+            if ("Project".equalsIgnoreCase(sm.getGroupNm())) {
+                projectScreenIds.add(sm.getScreenId());
+            }
+        }
+        
+        for (var mapping : mappings) {
+            var rbacs = rbacRepository.findByRoleId(mapping.getRoleId());
+            for (var rbac : rbacs) {
+                if (projectScreenIds.contains(rbac.getScreenId()) && Boolean.TRUE.equals(rbac.getViewFlg())) {
+                    return true;
+                }
+            }
+        }
+        
+        return false;
+    }
+
+    @GetMapping
+    public List<MilestoneLive> getAll() {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        return employeeRepository.findByEmail(email)
+                .map(employee -> {
+                    if (hasProjectModuleAccess(employee)) {
+                        return milestoneLiveRepository.findAll();
+                    } else {
+                        return milestoneLiveRepository.findMilestonesByEmpId(employee.getEmpId());
+                    }
+                })
+                .orElse(List.of());
+    }
+
+    @GetMapping("/by-employee/{empId}")
+    public ResponseEntity<?> getMilestonesByEmployee(@PathVariable Long empId) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        Employee employee = employeeRepository.findByEmail(email).orElse(null);
+        if (employee == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("message", "Unauthorized"));
+        }
+
+        if (hasProjectModuleAccess(employee) || 
+            employee.getEmpId().equals(empId)) {
+            return ResponseEntity.ok(milestoneLiveRepository.findMilestonesByEmpId(empId));
+        } else {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN).body(Map.of("message", "Access denied"));
+        }
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<MilestoneLive> getById(@PathVariable Long id) {
+        return milestoneLiveRepository.findById(id)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping("/by-project/{prjId}")
+    public List<MilestoneLive> getByProject(@PathVariable Long prjId) {
+        return milestoneLiveRepository.findByPrjId(prjId);
+    }
+
+    @PostMapping
+    public ResponseEntity<?> create(@RequestBody MilestoneLive milestone) {
+        if (milestone.getMlstnCd() != null && !milestone.getMlstnCd().trim().isEmpty()) {
+            if (milestoneLiveRepository.existsByMlstnCdAndPrjId(milestone.getMlstnCd(), milestone.getPrjId())) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists in this project."));
+            }
+        }
+
+        ProjectLive project = projectLiveRepository.findById(milestone.getPrjId())
+                .orElseThrow(() -> new RuntimeException("Project not found with ID: " + milestone.getPrjId()));
+
+        if (milestone.getMlstnSts() == null) {
+            milestone.setMlstnSts("LIVE");
+        }
+        if (milestone.getSts() == null) {
+            milestone.setSts(true);
+        }
+
+        // Auto-compute dates or days (inclusive: start=day1)
+        if (milestone.getStDt() != null && milestone.getMlstnDays() != null) {
+            milestone.setEndDt(milestone.getStDt().plusDays(milestone.getMlstnDays() - 1));
+        } else if (milestone.getStDt() != null && milestone.getEndDt() != null) {
+            long days = java.time.temporal.ChronoUnit.DAYS.between(milestone.getStDt(), milestone.getEndDt()) + 1;
+            milestone.setMlstnDays((int) days);
+        }
+
+        MilestoneLive saved = milestoneLiveRepository.save(milestone);
+
+        // Validate limits
+        // Validate limits
+        if (saved.getStDt() != null && saved.getEndDt() != null) {
+            if (project.getStDt() != null && saved.getStDt().isBefore(project.getStDt())) {
+                milestoneLiveRepository.delete(saved);
+                return ResponseEntity.badRequest().body(Map.of("message", "Milestone start date cannot be before project start date."));
+            }
+            if (project.getEndDt() != null && saved.getEndDt().isAfter(project.getEndDt())) {
+                milestoneLiveRepository.delete(saved);
+                long diff = java.time.temporal.ChronoUnit.DAYS.between(project.getEndDt(), saved.getEndDt());
+                return ResponseEntity.badRequest().body(Map.of("message", "Cumulative milestone end date (" + saved.getEndDt() + ") exceeds project end date (" + project.getEndDt() + ") by " + diff + " day(s). Please reduce milestone days or update project duration."));
+            }
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("data", saved);
+        return ResponseEntity.ok(response);
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> update(@PathVariable Long id, @RequestBody MilestoneLive details) {
+        MilestoneLive milestone = milestoneLiveRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Milestone not found: " + id));
+
+        if (details.getMlstnCd() != null && !details.getMlstnCd().trim().isEmpty()) {
+            Long prjId = details.getPrjId() != null ? details.getPrjId() : milestone.getPrjId();
+            if (milestoneLiveRepository.existsByMlstnCdAndPrjIdAndMIdNot(details.getMlstnCd(), prjId, id)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Milestone code already exists in this project."));
+            }
+            milestone.setMlstnCd(details.getMlstnCd());
+        }
+
+        milestone.setPrjId(details.getPrjId());
+        milestone.setMlstnTtl(details.getMlstnTtl());
+        milestone.setMlstnDesc(details.getMlstnDesc());
+        milestone.setMlstnDepFlg(details.getMlstnDepFlg());
+        milestone.setMlstnDepTyp(details.getMlstnDepTyp());
+        milestone.setMlstnDepMId(details.getMlstnDepMId());
+
+        // Auto-compute dates or days based on changes (inclusive)
+        if (details.getStDt() != null && details.getMlstnDays() != null) {
+            milestone.setStDt(details.getStDt());
+            milestone.setMlstnDays(details.getMlstnDays());
+            milestone.setEndDt(details.getStDt().plusDays(details.getMlstnDays() - 1));
+        } else if (details.getStDt() != null && details.getEndDt() != null) {
+            milestone.setStDt(details.getStDt());
+            milestone.setEndDt(details.getEndDt());
+            long days = java.time.temporal.ChronoUnit.DAYS.between(details.getStDt(), details.getEndDt()) + 1;
+            milestone.setMlstnDays((int) days);
+        } else {
+            milestone.setMlstnDays(details.getMlstnDays());
+            milestone.setStDt(details.getStDt());
+            milestone.setEndDt(details.getEndDt());
+        }
+
+        milestone.setAddlRem(details.getAddlRem());
+        milestone.setSts(details.getSts());
+        if (details.getMlstnSts() != null) {
+            milestone.setMlstnSts(details.getMlstnSts());
+        }
+
+        MilestoneLive saved = milestoneLiveRepository.save(milestone);
+
+        ProjectLive project = projectLiveRepository.findById(saved.getPrjId())
+                .orElseThrow(() -> new RuntimeException("Project not found with ID: " + saved.getPrjId()));
+
+        String warning = null;
+        if (saved.getStDt() != null && saved.getEndDt() != null) {
+            if (saved.getStDt().isBefore(project.getStDt()) ||
+                (project.getEndDt() != null && saved.getEndDt().isAfter(project.getEndDt())) ||
+                (saved.getMlstnDays() != null && project.getNoOfDays() != null && saved.getMlstnDays() > project.getNoOfDays())) {
+                warning = "Warning: Milestone dates/days exceed project limits. You must also update the Project dates/days accordingly.";
+            }
+        }
+
+        // Check if tasks under this milestone exceed updated limits
+        if (warning == null) {
+            List<TaskLive> tasks = taskLiveRepository.findByMilestoneId(id);
+            for (TaskLive task : tasks) {
+                if (task.getStDt().isBefore(saved.getStDt()) ||
+                    (saved.getEndDt() != null && task.getEndDt() != null && task.getEndDt().isAfter(saved.getEndDt())) ||
+                    (task.getNoOfDays() != null && saved.getMlstnDays() != null && task.getNoOfDays() > saved.getMlstnDays())) {
+                    warning = "Warning: Some tasks now exceed the updated milestone limits. Please review and update them accordingly.";
+                    break;
+                }
+            }
+        }
+
+        Map<String, Object> response = new HashMap<>();
+        response.put("data", saved);
+        if (warning != null) {
+            response.put("warning", warning);
+        }
+        return ResponseEntity.ok(response);
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<?> updateStatus(@PathVariable Long id, @RequestBody Map<String, String> body) {
+        MilestoneLive ms = milestoneLiveRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Milestone not found: " + id));
+
+        String newStatus = body.get("mlstnSts");
+        if (!List.of("LIVE", "HOLD", "CLOSED").contains(newStatus)) {
+            return ResponseEntity.badRequest()
+                    .body(Map.of("message", "Invalid status. Allowed: LIVE, HOLD, CLOSED"));
+        }
+        ms.setMlstnSts(newStatus);
+        return ResponseEntity.ok(milestoneLiveRepository.save(ms));
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        milestoneLiveRepository.deleteById(id);
+        return ResponseEntity.ok().build();
+    }
+}
