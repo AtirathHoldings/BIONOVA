@@ -322,6 +322,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         int inProgressCount = 0;
         double totalWeightedProgress = 0.0;
 
+        List<dynamic> effectiveTasks = [];
         if (milestoneTasksRaw.isNotEmpty) {
           final List<dynamic> filteredMilestoneTasks = [];
           for (var t in milestoneTasksRaw) {
@@ -341,6 +342,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
             }
           }
 
+          effectiveTasks = filteredMilestoneTasks;
           totalAssigned = filteredMilestoneTasks.length;
           for (final t in filteredMilestoneTasks) {
             final String tStatus = (t['taskSts']?.toString() ?? 'OPEN').toUpperCase().trim();
@@ -393,6 +395,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
             (p.name.isNotEmpty && t.projectName != null && t.projectName!.trim().toLowerCase() == p.name.trim().toLowerCase())
           ).toList();
 
+          effectiveTasks = projectTasks;
           totalAssigned = projectTasks.length;
           for (final t in projectTasks) {
             final String st = (t.status).toUpperCase().trim();
@@ -481,8 +484,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         final int finalOpen = totalAssigned > 0 ? openCount : (p.rawOpen ?? 0);
         final bool isUserClosed = finalAssigned > 0 && completedCount == finalAssigned;
         final String userLeadLag = isUserClosed
-            ? _calculateUserLeadLag(milestoneTasksRaw.isNotEmpty ? milestoneTasksRaw : projectTasks, p.endDt)
-            : (leadLagMap[p.prjId] ?? p.leadLagStatusStr);
+            ? _calculateUserLeadLag(effectiveTasks, p.endDt)
+            : (p.leadLagStatusStr);
 
         mappedProjects.add(ProjectModel(
           prjId: p.prjId,
