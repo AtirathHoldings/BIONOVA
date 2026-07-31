@@ -86,8 +86,8 @@ BEGIN
       COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, 
       CASE 
         WHEN t.emp_id = p_emp_id THEN 'Executor' 
-        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true AND pc.ordr_id = 1) THEN 'Reviewer' 
-        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true AND pc.ordr_id = 2) THEN 'Approver' 
+        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 1) THEN 'Reviewer' 
+        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 2) THEN 'Approver' 
         ELSE 'Executor' 
       END AS user_badge, 
       pm.priority_nm, 
@@ -96,7 +96,7 @@ BEGIN
     LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts 
     LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority 
     WHERE (t.emp_id = p_emp_id OR t.emp_task_id IN ( 
-      SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true
+      SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL
     )) AND COALESCE(t.sts, true) = true AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' AND (t.st_dt IS NULL OR t.st_dt <= v_today OR UPPER(tsm.status_nm) IN ('CLOSED', 'COMPLETED'))
   ; 
  
