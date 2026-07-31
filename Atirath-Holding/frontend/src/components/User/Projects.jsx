@@ -212,10 +212,67 @@ const MyProjects = ({ userRole, onLogout }) => {
             progressPct = extractProgress(dashP);
           }
 
+          const userAllDone = totalTasksCount > 0 && completedTasksCount === totalTasksCount;
+
           const actualManager = proj.createdByName || proj.createdBy || getLoggedInUser();
 
           const rawStart = proj.stDt || proj.stdt || proj.startDate || proj.st_dt || dashP.stDt || dashP.startDate || dashP.st_dt;
           const rawEnd = proj.endDt || proj.enddt || proj.endDate || proj.end_dt || proj.targetDate || dashP.endDt || dashP.dueDate || dashP.end_dt;
+
+          let calcLeadLagStatus = null;
+          let calcLeadLagLabel = null;
+          let calcLeadLagColor = null;
+
+          if (userAllDone) {
+            let maxCompDate = null;
+            projTasks.forEach(t => {
+              const dtStr = t.actCmpDt || t.actcmpdt || t.endDt || t.enddt;
+              if (dtStr) {
+                const d = new Date(dtStr);
+                if (!isNaN(d.getTime())) {
+                  if (!maxCompDate || d > maxCompDate) maxCompDate = d;
+                }
+              }
+            });
+
+            const projEnd = rawEnd ? new Date(rawEnd) : null;
+            const compDate = maxCompDate || new Date();
+            
+            if (projEnd && !isNaN(projEnd.getTime())) {
+              const cDate = new Date(compDate.getFullYear(), compDate.getMonth(), compDate.getDate());
+              const pEnd = new Date(projEnd.getFullYear(), projEnd.getMonth(), projEnd.getDate());
+
+              if (cDate < pEnd) {
+                calcLeadLagStatus = "LEAD";
+                calcLeadLagLabel = "Lead";
+                calcLeadLagColor = "#10b981";
+              } else if (cDate.getTime() === pEnd.getTime()) {
+                calcLeadLagStatus = "ON_TIME";
+                calcLeadLagLabel = "On Time";
+                calcLeadLagColor = "#f59e0b";
+              } else {
+                calcLeadLagStatus = "LAG";
+                calcLeadLagLabel = "Lag";
+                calcLeadLagColor = "#ef4444";
+              }
+            } else {
+              calcLeadLagStatus = "ON_TIME";
+              calcLeadLagLabel = "On Time";
+              calcLeadLagColor = "#f59e0b";
+            }
+          } else {
+            const projEnd = rawEnd ? new Date(rawEnd) : null;
+            const today = new Date();
+            const todayClean = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+            if (projEnd && !isNaN(projEnd.getTime())) {
+              const pEnd = new Date(projEnd.getFullYear(), projEnd.getMonth(), projEnd.getDate());
+              if (todayClean > pEnd) {
+                calcLeadLagStatus = "LAG";
+                calcLeadLagLabel = "Lag";
+                calcLeadLagColor = "#ef4444";
+              }
+            }
+          }
 
           return {
             id: dashId,
@@ -229,9 +286,9 @@ const MyProjects = ({ userRole, onLogout }) => {
             openTasks: openTasksCount,
             closedTasks: completedTasksCount,
             status: (proj.prjSts || proj.prjsts || dashP.status || "LIVE").toUpperCase(),
-            leadLagStatus: dashP.leadLagStatus || proj.leadLagSts || (completedTasksCount === totalTasksCount && totalTasksCount > 0 ? "ON_TIME" : null),
-            leadLagLabel: dashP.leadLagLabel || (dashP.leadLagStatus === "LEAD" ? "Lead" : dashP.leadLagStatus === "LAG" ? "Lag" : (dashP.leadLagStatus ? "On Time" : null)),
-            leadLagColor: dashP.leadLagColor || (dashP.leadLagStatus === "LEAD" ? "#10b981" : dashP.leadLagStatus === "LAG" ? "#ef4444" : "#f59e0b"),
+            leadLagStatus: calcLeadLagStatus,
+            leadLagLabel: calcLeadLagLabel,
+            leadLagColor: calcLeadLagColor,
             daysVariance: dashP.daysVariance || 0,
             progress: progressPct,
             image: dashP.logo || proj.logo || null,
