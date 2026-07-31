@@ -2317,7 +2317,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
                   Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Text(
-                      'No checklist items added',
+                      'No checklist found',
                       style: GoogleFonts.inter(
                         fontSize: 12,
                         color: Colors.grey,
@@ -2454,7 +2454,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
                   _buildPreviewDetailRow(
                     'Checklist',
                     _checklistItems.isEmpty
-                        ? 'No checklist items added'
+                        ? 'No checklist found'
                         : _checklistItems
                               .map((item) => '• ${item['title']}')
                               .join('\n'),

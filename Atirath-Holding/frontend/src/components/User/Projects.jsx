@@ -112,24 +112,24 @@ const MyProjects = ({ userRole, onLogout }) => {
         setEmployees(empRes || []);
         const empId = profRes?.empId;
 
-        // Filter tasks to only user tasks (personal view filters by employee ID, reviewer, or approver)
-        const userTasks = (taskRes || []).filter(t => 
-          (t.empId || t.empid) === empId || 
-          (t.reviewer) === empId || 
-          (t.approver) === empId
-        );
-        setTasks(userTasks);
+        // Keep all tasks and milestones so full project details can be rendered in tabs
+        setTasks(taskRes || []);
+        setMilestones(msRes || []);
         setAllTasks(taskRes || []);
-
-        // Filter milestones: keep milestones that have at least one task assigned to the user
-        const userMilestones = (msRes || []).filter(m => {
-          const mId = m.mId || m.mid || m.id;
-          return userTasks.some(t => (t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id) === mId);
-        });
-        setMilestones(userMilestones);
 
         // Filter projects: show all the projects that are shown on user dashboard
         const dashboardProjects = dashRes?.myProjects || [];
+
+        const formatDisplayDate = (d) => {
+          if (!d || d === "No Start Date" || d === "No Target Date" || d === "N/A") return null;
+          try {
+            const dt = new Date(d);
+            if (isNaN(dt.getTime())) return String(d);
+            return dt.toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+          } catch (e) {
+            return String(d);
+          }
+        };
 
         // Map projects directly from dashboard projects to match exactly what is on the dashboard
         const mapped = dashboardProjects.map(dashP => {
@@ -145,32 +145,47 @@ const MyProjects = ({ userRole, onLogout }) => {
           const plantName = pltRes?.find(pl => String(pl.pltId || pl.pltid) === String(pltId))?.pltNm || (proj.pltNm || proj.pltnm) || dashP.location || `Plant`;
           const deptName = deptRes?.find(d => String(d.deptId || d.deptid) === String(deptId))?.deptNm || (proj.deptNm || proj.deptnm) || `Dept`;
 
-          const projMilestones = userMilestones.filter(m => String(m.prjId || m.prjid) === dashId);
-          const projTasks = userTasks.filter(t => {
-            const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id);
+          // All milestones for this project
+          const projMilestones = (msRes || []).filter(m => String(m.prjId || m.prjid || m.projectId || m.prj_id) === dashId);
+          
+          // All tasks for this project
+          const projTasksAll = (taskRes || []).filter(t => {
+            const tPrjId = String(t.prjId || t.prjid || t.projectId || t.prj_id || "");
+            if (tPrjId && tPrjId === dashId) return true;
+            const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || "");
             return projMilestones.some(m => String(m.mId || m.mid || m.id) === tMId);
           });
 
-          // User-specific counts
+          // Tasks specifically assigned to user
+          const projUserTasks = projTasksAll.filter(t => 
+            (t.empId || t.empid) === empId || 
+            (t.reviewer) === empId || 
+            (t.approver) === empId
+          );
+
+          // Effective tasks to display
+          const projTasks = projUserTasks.length > 0 ? projUserTasks : projTasksAll;
+
+          // User-specific / Project counts
           const totalTasksCount = projTasks.length;
           const completedTasksCount = projTasks.filter(t => {
-            const s = (t.taskSts || t.tasksts || "").toUpperCase();
-            return s === 'COMPLETED' || s === 'CLOSED';
+            const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
+            return s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE';
           }).length;
           const wipTasksCount = projTasks.filter(t => {
-            const s = (t.taskSts || t.tasksts || "").toUpperCase();
+            const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
             return s === 'WIP' || s === 'IN_PROGRESS';
           }).length;
           const openTasksCount = projTasks.filter(t => {
-            const s = (t.taskSts || t.tasksts || "").toUpperCase();
+            const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
             return s === 'OPEN' || s === 'REWORK' || s === 'OVER_DUE' || s === 'OVERDUE' || s === 'DRAFT' || s === 'REASSIGN';
           }).length;
           const reviewTasksCount = projTasks.filter(t => {
-            const s = (t.taskSts || t.tasksts || "").toUpperCase();
+            const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
             return s === 'SUBMIT_REVIEW' || s === 'UNDER_REVIEW';
           }).length;
 
-          // Calculate progress from user's OWN assigned tasks only
+          // Calculate progress from effective tasks
           let progressPct = 0;
           if (totalTasksCount > 0) {
             progressPct = Math.round(
@@ -194,6 +209,9 @@ const MyProjects = ({ userRole, onLogout }) => {
 
           const actualManager = proj.createdByName || proj.createdBy || getLoggedInUser();
 
+          const rawStart = proj.stDt || proj.stdt || proj.startDate || proj.st_dt || dashP.stDt || dashP.startDate || dashP.st_dt;
+          const rawEnd = proj.endDt || proj.enddt || proj.endDate || proj.end_dt || proj.targetDate || dashP.endDt || dashP.dueDate || dashP.end_dt;
+
           return {
             id: dashId,
             prjId: dashId,
@@ -203,14 +221,14 @@ const MyProjects = ({ userRole, onLogout }) => {
             priority: typeof proj.prjPrty === 'string' ? proj.prjPrty : (proj.prjPrty?.priorityNm || proj.prjprty || "NORMAL"),
             role: profRes?.firstName ? `${profRes.firstName} ${profRes.lastName || ''}` : "Team Member",
             tasksAssigned: totalTasksCount > 0 ? totalTasksCount : (dashP.tasksAssigned || 0),
-            openTasks: openTasksCount > 0 ? openTasksCount : 0,
-            closedTasks: completedTasksCount > 0 ? completedTasksCount : 0,
+            openTasks: openTasksCount,
+            closedTasks: completedTasksCount,
             status: (proj.prjSts || proj.prjsts || dashP.status || "LIVE").toUpperCase(),
             progress: progressPct,
             image: dashP.logo || proj.logo || null,
             manager: actualManager,
-            startDate: proj.stDt || proj.stdt || "No Start Date",
-            targetDate: proj.endDt || proj.enddt || "No Target Date",
+            startDate: formatDisplayDate(rawStart) || "No Start Date",
+            targetDate: formatDisplayDate(rawEnd) || "No Target Date",
             code: proj.prjCd || proj.prjcd || `PRJ-${dashId}`,
             type: "Construction",
             location: dashP.location || proj.location || "Not Specified",
@@ -220,12 +238,14 @@ const MyProjects = ({ userRole, onLogout }) => {
             description: proj.prjDesc || proj.prjdesc || "",
             milestones: projMilestones.map(m => {
               const mId = m.mId || m.mid || m.id;
+              const rawMStart = m.stDt || m.stdt || m.startDate || m.st_dt;
+              const rawMEnd = m.endDt || m.enddt || m.endDate || m.end_dt;
               return {
                 id: mId,
                 mId: mId,
                 name: m.mlstnTtl || m.mlstnttl,
-                date: m.endDt || m.enddt || "No End Date",
-                start: m.stDt || m.stdt || "No Start Date",
+                date: formatDisplayDate(rawMEnd) || "No End Date",
+                start: formatDisplayDate(rawMStart) || "No Start Date",
                 desc: m.mlstnDesc || m.mlstndesc || "",
                 status: m.mlstnSts || m.mlstnsts || "Not Started",
                 days: m.mlstnDays || m.mlstndays || 0,

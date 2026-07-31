@@ -2,10 +2,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/task_item.dart';
 import '../models/employee_option.dart';
 import '../services/api_service.dart';
 import 'task_details_screen.dart';
+import '../widgets/reassign_icon.dart';
 
 class TasksScreen extends StatefulWidget {
   static final ValueNotifier<String> activeTabNotifier = ValueNotifier<String>('To-Do List');
@@ -44,10 +46,10 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
     });
     try {
       final responses = await Future.wait([
-        ApiService.getLiveTasks(),
+        ApiService.getLiveTasks(forceRefresh: true),
         ApiService.getCurrentEmployeeId(),
-        ApiService.getUserDashboardData(),
-        ApiService.getEmployees(),
+        ApiService.getUserDashboardData(forceRefresh: true),
+        ApiService.getEmployees(forceRefresh: true),
       ]);
 
       List<TaskItem> liveTasks = responses[0] as List<TaskItem>;
@@ -95,27 +97,29 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
         }
       }
 
+      final prefs = await SharedPreferences.getInstance();
+      final userRole = prefs.getString('userRole') ?? '';
+      final bool isAdmin = userRole.toLowerCase() == 'admin';
+
       List<dynamic> rawIndividualTasks = await ApiService.getIndividualTasks(forceRefresh: true);
       
-      if (currentEmpId != null) {
+      if (!isAdmin && currentEmpId != null) {
         final empStr = currentEmpId.toString();
 
         liveTasks = liveTasks.where((t) {
           final raw = t.rawData ?? {};
-          final doer = (raw['empId'] ?? raw['empid'] ?? raw['assignedTo'])?.toString();
-          final assigner = (raw['assignedBy'] ?? raw['assigned_by'] ?? raw['assigner'])?.toString();
-          final reviewer = (raw['reviewer'] ?? t.reviewer)?.toString();
-          final approver = (raw['approver'] ?? t.approver)?.toString();
-          return doer == empStr || assigner == empStr || reviewer == empStr || approver == empStr;
+          final doer = (raw['empId'] ?? raw['empid'] ?? raw['assignedTo'] ?? raw['executorId'])?.toString();
+          final reviewer = (raw['reviewerId'] ?? raw['reviewer'] ?? t.reviewer)?.toString();
+          final approver = (raw['approverId'] ?? raw['approver'] ?? t.approver)?.toString();
+          return doer == empStr || reviewer == empStr || approver == empStr || t.isCurrentUserReviewer || t.isCurrentUserApprover;
         }).toList();
 
         rawIndividualTasks = rawIndividualTasks.where((t) {
           if (t is! Map) return false;
-          final doer = (t['empId'] ?? t['empid'] ?? t['assignedTo'])?.toString();
-          final assigner = (t['assignedBy'] ?? t['assigned_by'] ?? t['assigner'])?.toString();
-          final reviewer = t['reviewer']?.toString();
-          final approver = t['approver']?.toString();
-          return doer == empStr || assigner == empStr || reviewer == empStr || approver == empStr;
+          final doer = (t['empId'] ?? t['empid'] ?? t['assignedTo'] ?? t['executorId'])?.toString();
+          final reviewer = (t['reviewerId'] ?? t['reviewer'])?.toString();
+          final approver = (t['approverId'] ?? t['approver'])?.toString();
+          return doer == empStr || reviewer == empStr || approver == empStr;
         }).toList();
       }
 
@@ -124,17 +128,18 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
           .map((json) => TaskItem.fromIndividualTask(Map<String, dynamic>.from(json), currentEmpId?.toString()))
           .toList();
 
-      // Deduplicate tasks by unique ID or Task Code
+      // Deduplicate tasks strictly by unique database primary ID with source prefix
       final Map<String, TaskItem> uniqueTaskMap = {};
       for (final task in [...liveTasks, ...individualTasks]) {
-        final key = (task.isIndividualTask ? 'IND_' : 'LIVE_') +
-            (task.id.isNotEmpty && task.id != '0' ? task.id : (task.taskCode.isNotEmpty ? task.taskCode : task.title));
-        if (!uniqueTaskMap.containsKey(key)) {
-          uniqueTaskMap[key] = task;
+        final prefix = task.isIndividualTask ? 'IND_' : 'LIVE_';
+        final idKey = '$prefix${task.id}';
+
+        if (!uniqueTaskMap.containsKey(idKey)) {
+          uniqueTaskMap[idKey] = task;
         }
       }
 
-      final combinedTasks = uniqueTaskMap.values.toList();
+      final combinedTasks = uniqueTaskMap.values.where((task) => !task.isDraft).toList();
 
       // Sort by date (descending, newest first)
       combinedTasks.sort((a, b) {
@@ -634,40 +639,42 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
                   ),
                   const SizedBox(height: 12),
 
-                  // Bottom row: Priority badge and Avatars next to each other
+                  // Bottom row: Priority badge (hidden for completed) and Avatars
                   Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: getPriorityBg(task.priority),
-                          borderRadius: BorderRadius.circular(6),
-                          border: Border.all(color: getPriorityColor(task.priority).withValues(alpha: 0.15), width: 1),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 6,
-                              height: 6,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: getPriorityColor(task.priority),
+                      if (!task.isCompleted) ...[
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: getPriorityBg(task.priority),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: getPriorityColor(task.priority).withValues(alpha: 0.15), width: 1),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: 6,
+                                height: 6,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: getPriorityColor(task.priority),
+                                ),
                               ),
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              task.priority,
-                              style: GoogleFonts.inter(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: getPriorityColor(task.priority),
+                              const SizedBox(width: 6),
+                              Text(
+                                task.priority,
+                                style: GoogleFonts.inter(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.bold,
+                                  color: getPriorityColor(task.priority),
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 10),
+                        const SizedBox(width: 10),
+                      ],
                       _buildTaskAvatarsRow(task),
                     ],
                   ),
@@ -696,23 +703,26 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 10),
 
-                // Process / Time Icons Row
+                // Process & Time Icons Row (EXACT SAME AS WEBSITE!)
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (task.processIcon != null) ...[
+                    if (!task.isCompleted && task.processIcon != null) ...[
                       Tooltip(
                         message: task.status,
-                        child: Icon(task.processIcon, color: task.processIconColor, size: 18),
+                        child: task.isReassigned
+                            ? ReassignIcon(size: 18, color: task.processIconColor ?? const Color(0xFF4F46E5))
+                            : Icon(task.processIcon, color: task.processIconColor, size: 18),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 6),
                     ],
-                    Tooltip(
-                      message: task.computedTimeStatus,
-                      child: Icon(task.timeIcon, color: task.timeIconColor, size: 18),
-                    ),
+                    if (task.computedTimeStatus.isNotEmpty)
+                      Tooltip(
+                        message: task.computedTimeStatus,
+                        child: Icon(task.timeIcon, color: task.timeIconColor, size: 18),
+                      ),
                   ],
                 ),
                 const SizedBox(height: 12),
@@ -1252,8 +1262,11 @@ class TaskTileRow extends StatelessWidget {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (task.processIcon != null) ...[
-                      Icon(task.processIcon, color: task.processIconColor, size: 16),
+                    // Hide process icon for completed tasks
+                    if (!task.isCompleted && task.processIcon != null) ...[
+                      task.isReassigned
+                          ? ReassignIcon(size: 16, color: task.processIconColor ?? const Color(0xFF4F46E5))
+                          : Icon(task.processIcon, color: task.processIconColor, size: 16),
                       const SizedBox(width: 6),
                     ],
                     Icon(task.timeIcon, color: task.timeIconColor, size: 16),
@@ -1263,24 +1276,25 @@ class TaskTileRow extends StatelessWidget {
                 ),
                 const SizedBox(height: 6),
                 
-                // Tag badge
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), 
-                  decoration: BoxDecoration(
-                    color: task.tagBg, 
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: task.tagColor.withValues(alpha: 0.2), width: 0.5),
-                  ), 
-                  child: Text(
-                    task.tag, 
-                    style: TextStyle(
-                      color: task.tagColor, 
-                      fontSize: 8.5, 
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.2,
+                // Tag badge (priority) — hidden for completed tasks
+                if (!task.isCompleted)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), 
+                    decoration: BoxDecoration(
+                      color: task.tagBg, 
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: task.tagColor.withValues(alpha: 0.2), width: 0.5),
+                    ), 
+                    child: Text(
+                      task.tag, 
+                      style: TextStyle(
+                        color: task.tagColor, 
+                        fontSize: 8.5, 
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.2,
+                      ),
                     ),
                   ),
-                ),
               ],
             ),
           ],
@@ -1400,7 +1414,7 @@ class TaskLegendWidget extends StatelessWidget {
                     const SizedBox(height: 8),
                     _buildLegendIcon(Icons.remove_red_eye_outlined, const Color(0xFF8B5CF6), 'Under Review'),
                     _buildLegendIcon(Icons.sync, const Color(0xFFF97316), 'Rework'),
-                    _buildLegendIcon(Icons.keyboard_return, const Color(0xFF4F46E5), 'Reassign'),
+                    _buildLegendWidget(const ReassignIcon(size: 14, color: Color(0xFF4F46E5)), 'Reassign'),
                   ],
                 ),
               ),
@@ -1470,6 +1484,19 @@ class TaskLegendWidget extends StatelessWidget {
           Icon(icon, size: 14, color: color),
           const SizedBox(width: 6),
           Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: color)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLegendWidget(Widget iconWidget, String label) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        children: [
+          iconWidget,
+          const SizedBox(width: 6),
+          Text(label, style: TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: const Color(0xFF4F46E5))),
         ],
       ),
     );

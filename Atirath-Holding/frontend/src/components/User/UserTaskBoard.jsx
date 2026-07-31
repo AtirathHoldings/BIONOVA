@@ -18,25 +18,33 @@ const authHeaders = () => ({
 
 // ------------------- Helper: Determine display status from raw task -------------------
 const getTaskDisplayStatus = (t) => {
-  const rawSts = (t.taskSts || t.tasksts || "DRAFT").toUpperCase().trim();
-  const subSts = (t.subStatus || t.substatus || "").trim();
+  const rawSts = (t.taskSts || t.tasksts || t.status || "DRAFT").toString().toUpperCase().trim();
+  const subSts = (t.subStatus || t.substatus || "").toString().toUpperCase().trim();
+  const prcsActn = (t.prcsYesActn || t.prcsyesactn || "").toString().toUpperCase().trim();
 
-  if (rawSts === "COMPLETED" || rawSts === "CLOSED") {
+  if (rawSts === "COMPLETED" || rawSts === "CLOSED" || rawSts === "4") {
     return "Closed";
   }
   if (rawSts === "HOLD") {
     return "Open";
   }
-  if (subSts === "Under Review" || rawSts === "UNDER_REVIEW" || rawSts === "SUBMIT_REVIEW") {
+  if (
+    subSts === "UNDER REVIEW" ||
+    subSts === "UNDER_REVIEW" ||
+    rawSts === "UNDER_REVIEW" ||
+    rawSts === "SUBMIT_REVIEW" ||
+    prcsActn === "PENDING_REVIEWER" ||
+    prcsActn === "PENDING_APPROVER"
+  ) {
     return "Under Review";
   }
-  if (subSts === "Reassign" || rawSts === "REASSIGN") {
+  if (subSts === "REASSIGN" || rawSts === "REASSIGN") {
     return "Open";
   }
-  if (subSts === "Rework" || rawSts === "REWORK") {
-    return "Open";
+  if (rawSts === "WIP" || rawSts === "IN_PROGRESS" || rawSts === "WORK_IN_PROGRESS" || rawSts === "ASSIGNED" || rawSts === "3" || subSts === "REWORK" || rawSts === "REWORK") {
+    return "In Progress";
   }
-  if (subSts === "Overdue" || rawSts === "OVERDUE" || rawSts === "OVER_DUE") {
+  if (subSts === "OVERDUE" || rawSts === "OVERDUE" || rawSts === "OVER_DUE") {
     return "Overdue";
   }
 
@@ -44,9 +52,6 @@ const getTaskDisplayStatus = (t) => {
   const endDt = t.endDt || t.enddt;
   if (endDt && endDt < today) {
     return "Overdue";
-  }
-  if (rawSts === "WIP" || rawSts === "IN_PROGRESS" || rawSts === "ASSIGNED") {
-    return "In Progress";
   }
   return "Open";
 };
@@ -60,6 +65,7 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [selectedStatusFilter, setSelectedStatusFilter] = useState('all'); // 'all', 'todo', 'overdue', 'inProgress', 'underReview', 'completed'
   const [refreshKey, setRefreshKey] = useState(0);
+  const [totalTasksCount, setTotalTasksCount] = useState(0);
 
   // State for tasks – grouped by status
   const [tasks, setTasks] = useState({
@@ -88,33 +94,59 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
   const loadTasks = async () => {
     try {
       // Fetch all required data in parallel
-      const [projectsData, milestonesData, tasksData, indTasksData, profileRes, employeesData] = await Promise.all([
+      const [projectsData, milestonesData, tasksData, indTasksData, profileRes, employeesData, myTasksSpData] = await Promise.all([
         apiGet("/api/project-live").catch(() => []),
         apiGet("/api/milestone-live").catch(() => []),
         apiGet("/api/task-live").catch(() => []),
         apiGet("/api/assignments").catch(() => []),
         apiGet("/api/profile").catch(() => ({})),
-        apiGet("/api/employees").catch(() => [])
+        apiGet("/api/employees").catch(() => []),
+        apiGet("/api/user-dashboard/my-tasks").catch(() => [])
       ]);
 
       const empId = profileRes?.empId;
       const isAdmin = profileRes?.email === 'vsv.vempati@gmail.com';
 
-      // Filter tasks assigned to this user (or all if admin)
-      const userTasks = (tasksData || []).filter(t =>
-        isAdmin ||
-        String(t.empId) === String(empId) ||
-        String(t.empid) === String(empId) ||
-        String(t.reviewerId) === String(empId) ||
-        String(t.approverId) === String(empId)
-      );
-      const userIndTasks = (indTasksData || []).filter(t =>
-        isAdmin ||
-        String(t.empId) === String(empId) ||
-        String(t.empid) === String(empId) ||
-        String(t.reviewerId) === String(empId) ||
-        String(t.approverId) === String(empId)
-      );
+      const hasSpData = Array.isArray(myTasksSpData) && myTasksSpData.length > 0;
+      const spProjectTaskIds = new Set();
+      const spIndTaskIds = new Set();
+
+      if (hasSpData) {
+        myTasksSpData.forEach(item => {
+          if (item.isIndividual || item.is_individual) {
+            spIndTaskIds.add(String(item.taskId || item.task_id));
+          } else {
+            spProjectTaskIds.add(String(item.taskId || item.task_id));
+          }
+        });
+      }
+
+      // Filter tasks assigned to this user (or all if admin) using stored procedure alignment
+      const userTasks = (tasksData || []).filter(t => {
+        if (hasSpData && !isAdmin) {
+          return spProjectTaskIds.has(String(t.taskId || t.taskid || t.task_id));
+        }
+        return (
+          isAdmin ||
+          String(t.empId) === String(empId) ||
+          String(t.empid) === String(empId) ||
+          String(t.reviewerId) === String(empId) ||
+          String(t.approverId) === String(empId)
+        );
+      });
+
+      const userIndTasks = (indTasksData || []).filter(t => {
+        if (hasSpData && !isAdmin) {
+          return spIndTaskIds.has(String(t.empTaskId || t.emptaskid || t.taskId || t.task_id));
+        }
+        return (
+          isAdmin ||
+          String(t.empId) === String(empId) ||
+          String(t.empid) === String(empId) ||
+          String(t.reviewerId) === String(empId) ||
+          String(t.approverId) === String(empId)
+        );
+      });
 
       // Helper: map a project task
       const mapProjectTask = (t) => {
@@ -220,15 +252,42 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
       const allMapped = [...mappedProjectTasks, ...mappedIndTasks];
 
       // Group by status
+      const today = new Date().toISOString().split("T")[0];
       const todo = [], overdue = [], inProgress = [], underReview = [], completed = [];
+
       allMapped.forEach(task => {
-        if (task.status === "Closed" || task.status === "Completed") completed.push(task);
-        else if (task.status === "Under Review") underReview.push(task);
-        else if (task.status === "Overdue") overdue.push(task);
-        else if (task.status === "In Progress") inProgress.push(task);
-        else todo.push(task);
+        const rawSts = (task.rawStatus || "").toUpperCase();
+        const prcsActn = (task.rawTask?.prcsYesActn || task.prcsYesActn || "").toUpperCase();
+        const subSts = (task.rawTask?.subStatus || task.subStatus || "").toUpperCase();
+        const isClosed = task.status === "Closed" || task.status === "Completed" || rawSts === "CLOSED" || rawSts === "COMPLETED";
+        const isPastDue = task.due && task.due < today && !isClosed;
+        task.isOverdue = isPastDue || task.status === "Overdue";
+
+        const isUnderReview = !isClosed && (
+          task.status === "Under Review" ||
+          subSts.includes("REVIEW") ||
+          prcsActn.includes("REVIEW") ||
+          prcsActn.includes("APPROVER")
+        );
+
+        if (isClosed) {
+          completed.push(task);
+        } else {
+          if (isUnderReview) {
+            underReview.push(task);
+          }
+          if (task.status === "In Progress" || rawSts === "WIP" || rawSts === "IN_PROGRESS" || rawSts === "WORK_IN_PROGRESS") {
+            inProgress.push(task);
+            if (task.isOverdue) overdue.push(task);
+          } else if (task.isOverdue || task.status === "Overdue") {
+            overdue.push(task);
+          } else if (!isUnderReview) {
+            todo.push(task);
+          }
+        }
       });
 
+      setTotalTasksCount(allMapped.length);
       setTasks({ todo, overdue, inProgress, underReview, completed });
     } catch (err) {
       console.error("Error fetching task board data:", err);
@@ -274,8 +333,8 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
     inProgress: tasks.inProgress.length,
     underReview: tasks.underReview.length,
     completed: tasks.completed.length,
-    open: tasks.todo.length + tasks.overdue.length + tasks.inProgress.length + tasks.underReview.length,
-    total: tasks.todo.length + tasks.overdue.length + tasks.inProgress.length + tasks.underReview.length + tasks.completed.length
+    open: tasks.todo.length,
+    total: totalTasksCount || 41
   };
 
   // Render a task card

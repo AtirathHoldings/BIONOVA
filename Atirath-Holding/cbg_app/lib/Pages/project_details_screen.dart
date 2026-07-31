@@ -338,7 +338,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
               statusColorUnfiltered = const Color(0xff7C3AED); progressUnfiltered = 0.8;
               break;
             case 'REASSIGN':
-              statusColorUnfiltered = const Color(0xffF97316); progressUnfiltered = 0.4;
+              statusColorUnfiltered = const Color(0xFF4F46E5); progressUnfiltered = 0.4;
               break;
             case 'OVERDUE':
               statusColorUnfiltered = const Color(0xffB91C1C); progressUnfiltered = 0.5;
@@ -426,7 +426,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
               friendlyStatus = 'Under Review'; statusColor = const Color(0xff7C3AED); progress = 0.8;
               break;
             case 'REASSIGN':
-              friendlyStatus = 'Reassign'; statusColor = const Color(0xffF97316); progress = 0.4;
+              friendlyStatus = 'Reassign'; statusColor = const Color(0xFF4F46E5); progress = 0.4;
               break;
             case 'OVERDUE':
               friendlyStatus = 'Overdue'; statusColor = const Color(0xffB91C1C); progress = 0.5;
@@ -663,8 +663,11 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
   double get _projectProgressValue {
     if (_tasks.isNotEmpty) {
-      final completedCount = _tasks.where((t) => t.status == 'Closed' || t.status == 'Completed').length;
-      return completedCount / _tasks.length;
+      double totalWeighted = 0.0;
+      for (final t in _tasks) {
+        totalWeighted += t.progress;
+      }
+      return totalWeighted / _tasks.length;
     }
     if (_project != null && _project!.rawProgressValue != null) {
       final double val = _project!.rawProgressValue!;
@@ -1370,32 +1373,25 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
   Widget _buildLeadLagBadge(String statusStr) {
     final String s = statusStr.trim().toLowerCase();
-    bool isLead = s == 'lead';
-    bool isLag = s == 'lag';
-    bool isOnTime = s == 'on time' || s == 'ontime' || s == 'on-time';
-
-    String displayText = isLead
-        ? 'Lead'
-        : isLag
-            ? 'Lag'
-            : isOnTime
-                ? 'On Time'
-                : (statusStr.isEmpty ? 'Lag' : statusStr);
-
-    Color bgColor = const Color(0xffF1F5F9);
-    Color textColor = const Color(0xff475569);
-
-    if (isLead) {
-      bgColor = const Color(0xffDCFCE7);
-      textColor = const Color(0xff16A34A);
-    } else if (isLag) {
-      bgColor = const Color(0xffFEE2E2);
-      textColor = const Color(0xffDC2626);
-    } else if (isOnTime) {
-      bgColor = const Color(0xffDBEAFE);
-      textColor = const Color(0xff2563EB);
+    
+    // Ensure null, 'null', 'n/a', or empty values default to 'On Time' instead of rendering 'null'
+    if (s == 'null' || s == 'n/a' || s.isEmpty || s == 'none') {
+      return _buildLeadLagPill('On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
     }
 
+    bool isLead = s.contains('lead') || s == 'ahead';
+    bool isLag = s.contains('lag') || s == 'behind' || s == 'delay';
+
+    if (isLead) {
+      return _buildLeadLagPill('Lead', const Color(0xffDCFCE7), const Color(0xff16A34A));
+    } else if (isLag) {
+      return _buildLeadLagPill('Lag', const Color(0xffFEE2E2), const Color(0xffDC2626));
+    } else {
+      return _buildLeadLagPill('On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
+    }
+  }
+
+  Widget _buildLeadLagPill(String label, Color bgColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
@@ -1422,7 +1418,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
           ),
           const SizedBox(width: 6),
           Text(
-            displayText.toUpperCase(),
+            label.toUpperCase(),
             style: TextStyle(
               color: textColor,
               fontSize: 10.5,
@@ -1755,7 +1751,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                 _buildGanttLegend('Open', const Color(0xffF59E0B)),
                 _buildGanttLegend('In Progress', const Color(0xff2563EB)),
                 _buildGanttLegend('Under Review', const Color(0xff7C3AED)),
-                _buildGanttLegend('Reassign', const Color(0xffF97316)),
+                _buildGanttLegend('Reassign', const Color(0xFF4F46E5)),
                 _buildGanttLegend('Closed', const Color(0xff10B981)),
                 _buildGanttLegend('Overdue', const Color(0xffB91C1C)),
                 _buildGanttLegend('Rework', const Color(0xffEF4444)),

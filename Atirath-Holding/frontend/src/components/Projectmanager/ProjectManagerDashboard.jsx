@@ -113,7 +113,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
   const [loading, setLoading] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
-  
+
   const [projectsList, setProjectsList] = useState([]);
   const [milestonesList, setMilestonesList] = useState([]);
   const [tasksList, setTasksList] = useState([]);
@@ -126,10 +126,10 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       const namePart = email.split("@")[0];
       setUserName(namePart.charAt(0).toUpperCase() + namePart.slice(1));
     }
-    
+
     const loadAllDashboardData = async () => {
       const headers = authHeaders();
-      
+
       try {
         const res = await fetch(`${API_BASE}/dashboard/project-manager-metrics`, { headers });
         if (res.ok) {
@@ -193,7 +193,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     if (parts.length === 2) {
       const code = parts[0];
       const name = parts[1];
-      const project = projectsList.find(p => 
+      const project = projectsList.find(p =>
         (p.prjCd || p.prjcd || "").toLowerCase() === code.toLowerCase() &&
         (p.prjNm || p.prjnm || "").toLowerCase() === name.toLowerCase()
       );
@@ -208,11 +208,11 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     } else {
       const projectId = getProjectIdFromDisplay(forecastProject);
       if (projectId) {
-        navigate(`/project-details/${projectId}`, { 
-          state: { 
+        navigate(`/project-details/${projectId}`, {
+          state: {
             fromForecast: true,
-            projectDisplay: forecastProject 
-          } 
+            projectDisplay: forecastProject
+          }
         });
       } else {
         alert("Project details not found. Please try again.");
@@ -246,166 +246,209 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     else alert(`${actionName} functionality will be implemented here.`);
   };
 
+  const getTaskStatusStr = (t) => {
+    if (!t) return "";
+    let sts = t.taskSts ?? t.tasksts ?? t.status ?? t.task_sts;
+    if (!sts && t.rawTask) sts = t.rawTask.taskSts;
+    if (typeof sts === "object") {
+      sts = sts.statusNm || sts.status_nm || sts.name || sts.status || "";
+    }
+    const str = String(sts).trim().toUpperCase();
+    if (str === "4" || str === "CLOSED" || str === "COMPLETED" || str === "DONE") return "CLOSED";
+    if (str === "3" || str === "WIP" || str === "IN_PROGRESS" || str === "IN PROGRESS") return "WIP";
+    if (str === "2" || str === "OPEN") return "OPEN";
+    if (str === "1" || str === "DRAFT") return "DRAFT";
+    if (str === "5" || str === "HOLD") return "HOLD";
+    return str;
+  };
+
+  const getMilestoneStatusStr = (m) => {
+    if (!m) return "";
+    let sts = m.mlstnSts ?? m.mlstnsts ?? m.status ?? m.mlstn_sts;
+    if (typeof sts === "object") {
+      sts = sts.statusNm || sts.status_nm || sts.name || sts.status || "";
+    }
+    const str = String(sts).trim().toUpperCase();
+    if (str === "CLOSED" || str === "COMPLETED" || str === "DONE") return "CLOSED";
+    if (str === "WIP" || str === "IN_PROGRESS" || str === "IN PROGRESS") return "WIP";
+    return str;
+  };
+
   const calculateProjectStats = (project) => {
     const now = new Date();
-    const pId = project.prjId || project.prjid || project.id;
-    
-    const projectMilestones = milestonesList.filter(m => (m.prjId || m.prjid) === pId);
-    const milestoneIds = projectMilestones.map(m => m.mId || m.mid || m.id);
-    const projectTasks = tasksList.filter(t => milestoneIds.includes(t.milestoneId || t.mid || t.mId || t.drftMId || t.drft_m_id));
-    
+    now.setHours(0, 0, 0, 0);
+    const pId = String(project.prjId || project.prjid || project.id || project.projectId);
+
+    const projectMilestones = milestonesList.filter(m => String(m.prjId || m.prjid || m.projectId || m.prj_id) === pId);
+    const milestoneIds = projectMilestones.map(m => String(m.mId || m.mid || m.id));
+
+    const projectTasks = tasksList.filter(t => {
+      const tPrjId = String(t.prjId || t.prjid || t.projectId || t.prj_id || "");
+      if (tPrjId && tPrjId === pId) return true;
+      const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || "");
+      return milestoneIds.includes(tMId);
+    });
+
     const totalTasks = projectTasks.length;
-    const completedTasks = projectTasks.filter(t => {
-      const s = (t.taskSts || t.tasksts || "").toUpperCase();
-      return s === "COMPLETED" || s === "CLOSED";
-    }).length;
+    const completedTasks = projectTasks.filter(t => getTaskStatusStr(t) === "CLOSED").length;
+    const inProgressTasks = projectTasks.filter(t => getTaskStatusStr(t) === "WIP").length;
     const overdueTasks = projectTasks.filter(t => {
-      const status = (t.taskSts || t.tasksts || "").toUpperCase();
-      if (status === "COMPLETED" || status === "CLOSED") return false;
-      const end = t.endDt || t.enddt ? new Date(t.endDt || t.enddt) : null;
+      if (getTaskStatusStr(t) === "CLOSED") return false;
+      const end = t.endDt || t.enddt || t.endDate ? new Date(t.endDt || t.enddt || t.endDate) : null;
       return end && end < now;
-    }).length;
-    const inProgressTasks = projectTasks.filter(t => {
-      const s = (t.taskSts || t.tasksts || "").toUpperCase();
-      return s === "WIP" || s === "IN_PROGRESS";
     }).length;
     const notStartedTasks = Math.max(0, totalTasks - completedTasks - inProgressTasks - overdueTasks);
-    
-    const totalMilestones = projectMilestones.length;
-    const completedMilestones = projectMilestones.filter(m => {
-      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
-      return status === "COMPLETED" || status === "CLOSED";
-    }).length;
-    const overdueMilestones = projectMilestones.filter(m => {
-      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
-      if (status === "COMPLETED" || status === "CLOSED") return false;
-      const end = m.endDt || m.enddt ? new Date(m.endDt || m.enddt) : null;
+
+    const isMilestoneDone = (m) => {
+      if (getMilestoneStatusStr(m) === "CLOSED") return true;
+      const mId = String(m.mId || m.mid || m.id);
+      const mTasks = projectTasks.filter(t => {
+        const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || "");
+        return tMId === mId;
+      });
+      return mTasks.length > 0 && mTasks.every(t => getTaskStatusStr(t) === "CLOSED");
+    };
+
+    const isMilestoneActive = (m) => {
+      if (isMilestoneDone(m)) return false;
+      if (getMilestoneStatusStr(m) === "WIP") return true;
+      const mId = String(m.mId || m.mid || m.id);
+      const mTasks = projectTasks.filter(t => {
+        const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || "");
+        return tMId === mId;
+      });
+      const hasClosedOrWip = mTasks.some(t => getTaskStatusStr(t) === "CLOSED" || getTaskStatusStr(t) === "WIP");
+      const start = m.stDt || m.stdt || m.startDate ? new Date(m.stDt || m.stdt || m.startDate) : null;
+      const end = m.endDt || m.enddt || m.endDate ? new Date(m.endDt || m.enddt || m.endDate) : null;
+      return hasClosedOrWip || (start && start <= now && (!end || end >= now));
+    };
+
+    const isMilestoneLate = (m) => {
+      if (isMilestoneDone(m)) return false;
+      const end = m.endDt || m.enddt || m.endDate ? new Date(m.endDt || m.enddt || m.endDate) : null;
       return end && end < now;
-    }).length;
-    const inProgressMilestones = projectMilestones.filter(m => {
-      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
-      if (status === "COMPLETED" || status === "CLOSED") return false;
-      const end = m.endDt || m.enddt ? new Date(m.endDt || m.enddt) : null;
-      return (!end || end >= now) && status === "WIP";
-    }).length;
+    };
+
+    const totalMilestones = projectMilestones.length;
+    const completedMilestones = projectMilestones.filter(m => isMilestoneDone(m)).length;
+    const overdueMilestones = projectMilestones.filter(m => isMilestoneLate(m)).length;
+    const inProgressMilestones = projectMilestones.filter(m => isMilestoneActive(m)).length;
     const notStartedMilestones = Math.max(0, totalMilestones - completedMilestones - inProgressMilestones - overdueMilestones);
-    
+
     let overallProgress = 0;
     if (totalTasks > 0) {
       overallProgress = (completedTasks / totalTasks) * 100;
     } else if (totalMilestones > 0) {
       overallProgress = (completedMilestones / totalMilestones) * 100;
     }
-    
-    const next30Days = new Date();
-    next30Days.setDate(now.getDate() + 30);
+
+    const next60Days = new Date();
+    next60Days.setDate(now.getDate() + 60);
     const upcomingMilestones = projectMilestones.filter(m => {
-      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
-      if (status === "COMPLETED" || status === "CLOSED") return false;
-      const start = m.stDt || m.stdt ? new Date(m.stDt || m.stdt) : null;
-      return start && start >= now && start <= next30Days;
+      if (getMilestoneStatusStr(m) === "CLOSED") return false;
+      const start = m.stDt || m.stdt || m.startDate ? new Date(m.stDt || m.stdt || m.startDate) : null;
+      const end = m.endDt || m.enddt || m.endDate ? new Date(m.endDt || m.enddt || m.endDate) : null;
+      const targetDate = start || end;
+      return targetDate && targetDate >= now && targetDate <= next60Days;
     });
-    
+
     const taskStatusItems = [
       { label: "Closed", count: completedTasks, pct: totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#10b981" },
       { label: "In Progress", count: inProgressTasks, pct: totalTasks > 0 ? ((inProgressTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
       { label: "Not Started", count: notStartedTasks, pct: totalTasks > 0 ? ((notStartedTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
       { label: "Overdue", count: overdueTasks, pct: totalTasks > 0 ? ((overdueTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
     ];
-    
+
     const milestoneStatusItems = [
       { label: "Closed", count: completedMilestones, pct: totalMilestones > 0 ? ((completedMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#10b981" },
       { label: "In Progress", count: inProgressMilestones, pct: totalMilestones > 0 ? ((inProgressMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
       { label: "Not Started", count: notStartedMilestones, pct: totalMilestones > 0 ? ((notStartedMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
-      { label: "Overdue", count: overdueMilestones, pct: totalMilestones > 0 ? ((overdueMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
+      { label: "Delayed", count: overdueMilestones, pct: totalMilestones > 0 ? ((overdueMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
     ];
-    
+
     const portfolioItems = [
       { label: "Closed", count: completedMilestones, pct: totalMilestones > 0 ? ((completedMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#10b981" },
       { label: "In Progress", count: inProgressMilestones, pct: totalMilestones > 0 ? ((inProgressMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
       { label: "Not Started", count: notStartedMilestones, pct: totalMilestones > 0 ? ((notStartedMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
       { label: "Delayed", count: overdueMilestones, pct: totalMilestones > 0 ? ((overdueMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
     ];
-    
+
     const delayedMilestonesList = projectMilestones.filter(m => {
-      const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
-      if (status === "COMPLETED" || status === "CLOSED") return false;
-      const end = m.endDt || m.enddt ? new Date(m.endDt || m.enddt) : null;
+      if (isMilestoneDone(m)) return false;
+      const end = m.endDt || m.enddt || m.endDate ? new Date(m.endDt || m.enddt || m.endDate) : null;
       return end && end < now;
     }).map(m => {
-      const mEnd = m.endDt || m.enddt;
+      const mEnd = m.endDt || m.enddt || m.endDate;
       const delayDays = Math.ceil((now - new Date(mEnd)) / (1000 * 60 * 60 * 24));
       return {
-        name: m.mlstnTtl || m.mlstnttl,
+        name: m.mlstnTtl || m.mlstnttl || m.title || "Milestone",
         project: project.prjCd || project.prjcd || "N/A",
         delay: delayDays > 0 ? delayDays : 0
       };
     }).sort((a, b) => b.delay - a.delay).slice(0, 5);
-    
+
     const upcomingMilestonesList = upcomingMilestones.map(m => ({
-      name: m.mlstnTtl || m.mlstnttl,
+      name: m.mlstnTtl || m.mlstnttl || m.title || "Milestone",
       project: project.prjCd || project.prjcd || "N/A",
-      date: formatDateStr(m.stDt || m.stdt),
+      date: formatDateStr(m.stDt || m.stdt || m.endDt || m.enddt),
       status: m.mlstnSts || m.mlstnsts || "Pending"
     })).slice(0, 5);
-    
-    const highPriorityTasksList = projectTasks.filter(t => 
-      (t.taskSts || t.tasksts || "").toUpperCase() !== "COMPLETED"
-    ).map(t => {
-      const empId = t.empId || t.empid;
-      const emp = employeesList.find(e => (e.empId || e.empid) === empId);
+
+    const highPriorityTasksList = projectTasks.filter(t => getTaskStatusStr(t) !== "CLOSED").map(t => {
+      const empId = t.empId || t.empid || t.emp_id;
+      const emp = employeesList.find(e => String(e.empId || e.empid || e.emp_id) === String(empId));
       return {
-        task: t.taskNm || t.tasknm,
+        task: t.taskNm || t.tasknm || t.name,
         project: project.prjCd || project.prjcd || "N/A",
         assignee: emp ? `${emp.fstNm || emp.firstName || ""} ${emp.lstNm || emp.lastName || ""}`.trim() : "Unassigned",
-        due: formatDateStr(t.endDt || t.enddt),
-        urgent: (t.taskSts || t.tasksts || "").toUpperCase() === "WIP" || ((t.endDt || t.enddt) && new Date(t.endDt || t.enddt) < now)
+        due: formatDateStr(t.endDt || t.enddt || t.endDate),
+        urgent: getTaskStatusStr(t) === "WIP" || ((t.endDt || t.enddt) && new Date(t.endDt || t.enddt) < now)
       };
     }).slice(0, 5);
-    
+
     return {
       stats: [
-        { 
-          label: "Total Milestones", 
-          value: totalMilestones, 
-          sub: `${completedMilestones} Closed`, 
-          icon: Flag, 
-          color: "pm-purple" 
+        {
+          label: "Total Milestones",
+          value: totalMilestones,
+          sub: `${completedMilestones} Closed`,
+          icon: Flag,
+          color: "pm-purple"
         },
-        { 
-          label: "Milestone Progress", 
-          value: totalMilestones > 0 ? `${((completedMilestones / totalMilestones) * 100).toFixed(1)}%` : "0.0%", 
-          sub: "Overall Progress", 
-          icon: BarChart2, 
-          color: "pm-green" 
+        {
+          label: "Milestone Progress",
+          value: totalMilestones > 0 ? `${((completedMilestones / totalMilestones) * 100).toFixed(1)}%` : "0.0%",
+          sub: "Overall Progress",
+          icon: BarChart2,
+          color: "pm-green"
         },
-        { 
-          label: "Delayed Milestones", 
-          value: overdueMilestones, 
-          sub: totalMilestones > 0 ? `${((overdueMilestones / totalMilestones) * 100).toFixed(1)}% of Milestones` : "0.0%", 
-          icon: Clock, 
-          color: "pm-orange" 
+        {
+          label: "Delayed Milestones",
+          value: overdueMilestones,
+          sub: totalMilestones > 0 ? `${((overdueMilestones / totalMilestones) * 100).toFixed(1)}% of Milestones` : "0.0%",
+          icon: Clock,
+          color: "pm-orange"
         },
-        { 
-          label: "Upcoming Milestones", 
-          value: upcomingMilestones.length, 
-          sub: "Next 30 Days", 
-          icon: CalendarCheck, 
-          color: "pm-teal" 
+        {
+          label: "Upcoming Milestones",
+          value: upcomingMilestones.length,
+          sub: "Next 30 Days",
+          icon: CalendarCheck,
+          color: "pm-teal"
         },
-        { 
-          label: "Total Tasks", 
-          value: totalTasks, 
-          sub: `${completedTasks} Closed`, 
-          icon: CheckSquare, 
-          color: "pm-blue" 
+        {
+          label: "Total Tasks",
+          value: totalTasks,
+          sub: `${completedTasks} Closed`,
+          icon: CheckSquare,
+          color: "pm-blue"
         },
-        { 
-          label: "Delayed Tasks", 
-          value: overdueTasks, 
-          sub: totalTasks > 0 ? `${((overdueTasks / totalTasks) * 100).toFixed(1)}% of Tasks` : "0.0%", 
-          icon: AlertTriangle, 
-          color: "pm-red" 
+        {
+          label: "Delayed Tasks",
+          value: overdueTasks,
+          sub: totalTasks > 0 ? `${((overdueTasks / totalTasks) * 100).toFixed(1)}% of Tasks` : "0.0%",
+          icon: AlertTriangle,
+          color: "pm-red"
         },
       ],
       portfolio: {
@@ -437,14 +480,14 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
   const getForecastData = (projectDisplayValue) => {
     const now = new Date();
-    
+
     let forecastProjects = [];
     if (projectDisplayValue === "All Projects") {
       forecastProjects = projectsList;
     } else {
       const projectDetails = getProjectDetailsFromDisplay(projectDisplayValue);
       if (projectDetails) {
-        forecastProjects = projectsList.filter(p => 
+        forecastProjects = projectsList.filter(p =>
           (p.prjCd || p.prjcd || "").toLowerCase() === projectDetails.code.toLowerCase() &&
           (p.prjNm || p.prjnm || "").toLowerCase() === projectDetails.name.toLowerCase()
         );
@@ -473,7 +516,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       const ms = milestonesList.filter(m => (m.prjId || m.prjid) === pId);
       const msIds = ms.map(m => m.mId || m.mid || m.id);
       const t = tasksList.filter(task => msIds.includes(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id));
-      
+
       if (t.length > 0) {
         const completed = t.filter(task => (task.taskSts || task.tasksts || "").toUpperCase() === "COMPLETED").length;
         return (completed / t.length) * 100;
@@ -501,7 +544,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       p.stDt && (!min || new Date(p.stDt) < new Date(min)) ? p.stDt : min, null);
     const latestEndDate = forecastProjects.reduce((max, p) =>
       p.endDt && (!max || new Date(p.endDt) > new Date(max)) ? p.endDt : max, null);
-    
+
     let plannedPct = 0;
     if (earliestStartDate && latestEndDate) {
       const totalDuration = new Date(latestEndDate) - new Date(earliestStartDate);
@@ -534,20 +577,20 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     let expectedDate = null;
     if (plannedCompletionDate) {
       const daysToPlannedCompletion = Math.ceil((plannedCompletionDate - now) / (1000 * 60 * 60 * 24));
-      
+
       let adjustmentDays = 0;
       if (variance !== 0 && plannedPct > 0) {
         const daysPerPercent = daysToPlannedCompletion / plannedPct;
         adjustmentDays = variance * daysPerPercent;
       }
-      
+
       const adjustedDate = new Date(plannedCompletionDate);
       if (variance < 0) {
         adjustedDate.setDate(adjustedDate.getDate() + Math.abs(Math.round(adjustmentDays)));
       } else if (variance > 0) {
         adjustedDate.setDate(adjustedDate.getDate() - Math.round(adjustmentDays));
       }
-      
+
       if (adjustedDate < now) {
         if (avgProgress >= 100) {
           expectedDate = now;
@@ -581,7 +624,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
     // Risk Calculation
     let riskScore = 0;
-    
+
     if (variance < -10) {
       riskScore += 30;
     } else if (variance < -5) {
@@ -599,7 +642,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       const ms = milestonesList.filter(m => (m.prjId || m.prjid) === pId);
       const msIds = ms.map(m => m.mId || m.mid || m.id);
       const t = tasksList.filter(task => msIds.includes(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id));
-      
+
       totalTasks += t.length;
       totalOverdueTasks += t.filter(task => {
         const status = (task.taskSts || task.tasksts || "").toUpperCase();
@@ -631,7 +674,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       const plannedDays = Math.ceil((plannedCompletionDate - now) / (1000 * 60 * 60 * 24));
       const expectedDays = Math.ceil((expectedDate - now) / (1000 * 60 * 60 * 24));
       const daysDifference = expectedDays - plannedDays;
-      
+
       if (daysDifference > 30) {
         riskScore += 10;
       } else if (daysDifference > 15) {
@@ -676,24 +719,24 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
   const getActiveMetrics = () => {
     const isFiltered = currentProject !== "All Projects";
-    
+
     const uniqueProjectOptions = getUniqueProjectOptions(projectsList);
-    
+
     // ===== CHECK IF A SPECIFIC PROJECT IS SELECTED =====
     if (currentProject !== "All Projects" && !isFiltered) {
       const projectDetails = getProjectDetailsFromDisplay(currentProject);
       if (projectDetails) {
-        const selectedProject = projectsList.find(p => 
+        const selectedProject = projectsList.find(p =>
           (p.prjCd || p.prjcd || "").toLowerCase() === projectDetails.code.toLowerCase() &&
           (p.prjNm || p.prjnm || "").toLowerCase() === projectDetails.name.toLowerCase()
         );
         if (selectedProject) {
           const projectStats = calculateProjectStats(selectedProject);
-          
+
           const minDate = selectedProject.stDt || selectedProject.stdt;
           const maxDate = selectedProject.endDt || selectedProject.enddt;
           const dateRangeStr = minDate && maxDate ? `${formatDateStr(minDate)} ~ ${formatDateStr(maxDate)}` : "All Dates";
-          
+
           return {
             dateRange: dateRangeStr,
             ...projectStats
@@ -701,12 +744,12 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
         }
       }
     }
-    
+
     // ===== IF ALL PROJECTS SELECTED =====
     if (!isFiltered && dashboardData) {
       const minDate = projectsList.reduce((min, p) => !min || (p.stDt && new Date(p.stDt) < new Date(min)) ? p.stDt : min, null);
       const maxDate = projectsList.reduce((max, p) => !max || (p.endDt && new Date(p.endDt) > new Date(max)) ? p.endDt : max, null);
-      
+
       const dateRangeStr = minDate && maxDate ? `${formatDateStr(minDate)} ~ ${formatDateStr(maxDate)}` : "All Dates";
 
       return {
@@ -772,12 +815,12 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
     // ===== FILTERED VIEW - SINGLE PROJECT =====
     const now = new Date();
-    
+
     let filteredProjects = [...projectsList];
     if (currentProject !== "All Projects") {
       const projectDetails = getProjectDetailsFromDisplay(currentProject);
       if (projectDetails) {
-        filteredProjects = filteredProjects.filter(p => 
+        filteredProjects = filteredProjects.filter(p =>
           (p.prjCd || p.prjcd || "").toLowerCase() === projectDetails.code.toLowerCase() &&
           (p.prjNm || p.prjnm || "").toLowerCase() === projectDetails.name.toLowerCase()
         );
@@ -789,11 +832,11 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     if (filteredProjects.length === 1) {
       const selectedProject = filteredProjects[0];
       const projectStats = calculateProjectStats(selectedProject);
-      
+
       const minDate = selectedProject.stDt || selectedProject.stdt;
       const maxDate = selectedProject.endDt || selectedProject.enddt;
       const dateRangeStr = minDate && maxDate ? `${formatDateStr(minDate)} ~ ${formatDateStr(maxDate)}` : "All Dates";
-      
+
       return {
         dateRange: dateRangeStr,
         ...projectStats
@@ -811,7 +854,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       const ms = milestonesList.filter(m => (m.prjId || m.prjid) === pId);
       const msIds = ms.map(m => m.mId || m.mid || m.id);
       const t = tasksList.filter(task => msIds.includes(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id));
-      
+
       if (t.length > 0) {
         const completed = t.filter(task => (task.taskSts || task.tasksts || "").toUpperCase() === "COMPLETED").length;
         return (completed / t.length) * 100;
@@ -997,13 +1040,13 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
   const handleExportData = () => {
     let csvContent = "data:text/csv;charset=utf-8,";
     csvContent += `Dashboard Export,${currentProject}\n\n`;
-    
+
     csvContent += "Key Metrics\nMetric,Value\n";
     stats.forEach(s => csvContent += `"${s.label}","${s.value}"\n`);
-    
+
     csvContent += "\nDelayed Milestones\nMilestone,Project,Delay (Days)\n";
     delayedMilestones.forEach(m => csvContent += `"${m.name}","${m.project}","${m.delay}"\n`);
-    
+
     csvContent += "\nUpcoming Milestones\nMilestone,Project,Date,Status\n";
     upcomingMilestones.forEach(m => csvContent += `"${m.name}","${m.project}","${m.date}","${m.status}"\n`);
 
@@ -1023,10 +1066,10 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     if (!dateStr) return "";
     const parts = dateStr.trim().split("-");
     if (parts.length !== 3) return "";
-    const months = { "Jan":"01", "Feb":"02", "Mar":"03", "Apr":"04", "May":"05", "Jun":"06", "Jul":"07", "Aug":"08", "Sep":"09", "Oct":"10", "Nov":"11", "Dec":"12" };
+    const months = { "Jan": "01", "Feb": "02", "Mar": "03", "Apr": "04", "May": "05", "Jun": "06", "Jul": "07", "Aug": "08", "Sep": "09", "Oct": "10", "Nov": "11", "Dec": "12" };
     return `${parts[2]}-${months[parts[1]]}-${parts[0]}`;
   };
-  
+
   const dateParts = (dateRange || "01-May-2025 ~ 31-Dec-2025").split("~");
   const startDateStr = parseDateString(dateParts[0]);
   const endDateStr = dateParts[1] ? parseDateString(dateParts[1]) : "";
@@ -1052,9 +1095,9 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                 options={projectOptions}
                 onChange={handleProjectChange}
               />
-              <span style={{ 
-                fontSize: '12px', 
-                color: '#94a3b8', 
+              <span style={{
+                fontSize: '12px',
+                color: '#94a3b8',
                 fontWeight: '500',
                 padding: '4px 8px',
                 background: '#f1f5f9',
@@ -1064,7 +1107,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
               </span>
             </div>
             <button className="pm-export-btn" onClick={handleExportData}>
-              <Download size={14}/> Export
+              <Download size={14} /> Export
             </button>
           </div>
 
@@ -1089,7 +1132,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
               <div className="pm-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span>{currentProject === "All Projects" ? "Project Portfolio Progress" : `${currentProject} - Progress`}</span>
                 {currentProject === "All Projects" && (
-                  <button 
+                  <button
                     onClick={() => navigate('/project-list', { state: { fromDashboard: true } })}
                     style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
                   >
@@ -1113,8 +1156,8 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                     </div>
                   ))}
                   <div className="pm-legend-total">
-                    {currentProject === "All Projects" 
-                      ? `Total Projects: ${portfolio.total}` 
+                    {currentProject === "All Projects"
+                      ? `Total Projects: ${portfolio.total}`
                       : `Total Milestones: ${portfolio.total}`}
                   </div>
                 </div>
@@ -1250,7 +1293,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                   <tr>
                     <th>Task</th>
                     <th>Project</th>
-                    <th>Assignee</th>
+                    <th>EXECUTOR</th>
                     <th>Due Date</th>
                   </tr>
                 </thead>
@@ -1293,12 +1336,12 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                 />
               </div>
             </div>
-            
+
             {forecastProject !== "All Projects" && (
-              <div style={{ 
-                marginBottom: '12px', 
-                padding: '8px 14px', 
-                backgroundColor: '#eff6ff', 
+              <div style={{
+                marginBottom: '12px',
+                padding: '8px 14px',
+                backgroundColor: '#eff6ff',
                 borderRadius: '6px',
                 border: '1px solid #bfdbfe',
                 display: 'flex',
@@ -1307,9 +1350,9 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                 flexWrap: 'wrap',
                 gap: '10px'
               }}>
-                <span style={{ 
-                  fontSize: '13px', 
-                  color: '#1e40af', 
+                <span style={{
+                  fontSize: '13px',
+                  color: '#1e40af',
                   fontWeight: '500'
                 }}>
                   Showing forecast for: <strong>{forecastProject}</strong>
@@ -1348,16 +1391,16 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                 </button>
               </div>
             )}
-            
+
             <div className="pm-forecast-container">
               <div className="pm-forecast-item">
                 <div className="pm-forecast-icon-box outlined pm-icon-blue">
-                  <BarChart2 size={18} strokeWidth={2}/>
+                  <BarChart2 size={18} strokeWidth={2} />
                 </div>
                 <div>
                   <div className="pm-forecast-sub">Current Progress</div>
                   <div className="pm-forecast-val">{forecast.current}</div>
-                  <div className="pm-forecast-note">As on {new Date().toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })}</div>
+                  <div className="pm-forecast-note">As on {new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
                 </div>
               </div>
 
@@ -1365,7 +1408,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
               <div className="pm-forecast-item">
                 <div className="pm-forecast-icon-box outlined pm-icon-purple">
-                  <Flag size={18} strokeWidth={2}/>
+                  <Flag size={18} strokeWidth={2} />
                 </div>
                 <div>
                   <div className="pm-forecast-sub">Planned Progress</div>
@@ -1378,7 +1421,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
               <div className="pm-forecast-item">
                 <div className="pm-forecast-icon-box outlined pm-icon-red">
-                  <TrendingDown size={18} strokeWidth={2}/>
+                  <TrendingDown size={18} strokeWidth={2} />
                 </div>
                 <div>
                   <div className="pm-forecast-sub">Variance</div>
@@ -1393,7 +1436,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
               <div className="pm-forecast-item">
                 <div className="pm-forecast-icon-box outlined pm-icon-green">
-                  <CalendarCheck size={18} strokeWidth={2}/>
+                  <CalendarCheck size={18} strokeWidth={2} />
                 </div>
                 <div>
                   <div className="pm-forecast-sub">Planned Completion</div>
@@ -1406,7 +1449,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
               <div className="pm-forecast-item">
                 <div className="pm-forecast-icon-box outlined pm-icon-teal">
-                  <CalendarCheck size={18} strokeWidth={2}/>
+                  <CalendarCheck size={18} strokeWidth={2} />
                 </div>
                 <div>
                   <div className="pm-forecast-sub">Expected Completion</div>
@@ -1423,7 +1466,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
               <div className="pm-forecast-item">
                 <div className="pm-forecast-icon-box outlined pm-icon-orange">
-                  <AlertTriangle size={18} strokeWidth={2}/>
+                  <AlertTriangle size={18} strokeWidth={2} />
                 </div>
                 <div>
                   <div className="pm-forecast-sub">Risk</div>
@@ -1443,19 +1486,19 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
             <div className="pm-card-title">Quick Actions</div>
             <div className="pm-quick-grid">
               <button className="pm-action-btn pm-action-blue" onClick={() => handleActionClick("Create Project")}>
-                <Plus size={18}/> Create Project
+                <Plus size={18} /> Create Project
               </button>
               <button className="pm-action-btn pm-action-green" onClick={() => handleActionClick("Add Milestone")}>
-                <Flag size={18}/> Add Milestone
+                <Flag size={18} /> Add Milestone
               </button>
               <button className="pm-action-btn pm-action-purple" onClick={() => handleActionClick("Create Task")}>
-                <CheckSquare size={18}/> Create Task
+                <CheckSquare size={18} /> Create Task
               </button>
               <button className="pm-action-btn pm-action-teal" onClick={() => handleActionClick("Open Gantt Chart")}>
-                <BarChart2 size={18}/> Open Gantt Chart
+                <BarChart2 size={18} /> Open Gantt Chart
               </button>
               <button className="pm-action-btn pm-action-orange" onClick={() => handleActionClick("Run Forecast")}>
-                <TrendingUp size={18}/> Run Forecast
+                <TrendingUp size={18} /> Run Forecast
               </button>
             </div>
           </div>

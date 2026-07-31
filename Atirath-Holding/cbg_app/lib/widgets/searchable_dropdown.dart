@@ -53,13 +53,18 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
     super.didUpdateWidget(oldWidget);
     
     if (widget.items != oldWidget.items || widget.selectedItem != oldWidget.selectedItem) {
-      _controller.text = widget.selectedItem != null
+      final newText = widget.selectedItem != null
           ? widget.itemLabel(widget.selectedItem as T)
           : '';
-      _overlayEntry?.markNeedsBuild();
-      if (mounted) {
-        setState(() {});
+      if (_controller.text != newText) {
+        _controller.text = newText;
       }
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _overlayEntry?.markNeedsBuild();
+          setState(() {});
+        }
+      });
     }
   }
 
@@ -269,31 +274,32 @@ class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Label
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.label,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF334155),
-                ),
-              ),
-              if (widget.isRequired)
+        if (widget.label.isNotEmpty)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
                 Text(
-                  ' *',
+                  widget.label,
                   style: GoogleFonts.inter(
                     fontSize: 13,
                     fontWeight: FontWeight.w600,
-                    color: Colors.red,
+                    color: const Color(0xFF334155),
                   ),
                 ),
-            ],
+                if (widget.isRequired)
+                  Text(
+                    ' *',
+                    style: GoogleFonts.inter(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.red,
+                    ),
+                  ),
+              ],
+            ),
           ),
-        ),
         // Search TextField
         TapRegion(
           groupId: this,

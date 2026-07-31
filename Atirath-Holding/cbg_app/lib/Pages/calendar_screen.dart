@@ -72,7 +72,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
   DateTime _currentMonth = DateTime(DateTime.now().year, DateTime.now().month, 1);
   DateTime _selectedDate = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
   String _selectedTab = 'Month'; // 'Month', 'Week', 'Day'
-  String _selectedFilter = 'All'; // Filter state
   bool _isLoading = false;
   String? _error;
   List<TaskItem> _allTasks = [];
@@ -121,7 +120,7 @@ class _CalendarScreenState extends State<CalendarScreen> {
           .map((json) => TaskItem.fromIndividualTask(json, currentEmpId?.toString()))
           .toList();
 
-      final allTasks = [...liveTasks, ...individualTasks];
+      final allTasks = [...liveTasks, ...individualTasks].where((task) => !task.isDraft).toList();
       final Map<String, List<CalendarTaskItem>> newEventsMap = {};
 
       for (var item in feed) {
@@ -490,101 +489,6 @@ class _CalendarScreenState extends State<CalendarScreen> {
     }
   }
 
-  // Show a filter options dialog/bottom-sheet
-  void _showFilterBottomSheet() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Padding(
-              padding: const EdgeInsets.all(20.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Filter Events',
-                        style: GoogleFonts.inter(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF1E293B),
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const Divider(),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Priority Level',
-                    style: GoogleFonts.inter(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: const Color(0xFF64748B),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Wrap(
-                    spacing: 10,
-                    children: ['All', 'High', 'Medium'].map((filter) {
-                      final isSelected = _selectedFilter == filter;
-                      return ChoiceChip(
-                        label: Text(filter),
-                        selected: isSelected,
-                        onSelected: (val) {
-                          setModalState(() {
-                            _selectedFilter = filter;
-                          });
-                          setState(() {});
-                        },
-                        selectedColor: const Color(0xFF2563EB),
-                        labelStyle: TextStyle(
-                          color: isSelected ? Colors.white : const Color(0xFF1E293B),
-                          fontWeight: FontWeight.w600,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                  const SizedBox(height: 20),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 48,
-                    child: ElevatedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      child: Text(
-                        'Apply Filters',
-                        style: GoogleFonts.inter(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
   // Helper to format Date
   String _formatSelectedDate(DateTime date) {
     return DateFormat('EEEE, d MMMM yyyy').format(date);
@@ -741,11 +645,8 @@ class _CalendarScreenState extends State<CalendarScreen> {
     final gridDates = _generateGridDates(_currentMonth);
     final selectedKey = '${_selectedDate.year}-${_selectedDate.month.toString().padLeft(2, '0')}-${_selectedDate.day.toString().padLeft(2, '0')}';
     
-    // Filter events
-    List<CalendarTaskItem> activeTasks = _eventsMap[selectedKey] ?? [];
-    if (_selectedFilter != 'All') {
-      activeTasks = activeTasks.where((t) => t.priority == _selectedFilter).toList();
-    }
+    // Active events for selected date
+    final List<CalendarTaskItem> activeTasks = _eventsMap[selectedKey] ?? [];
 
     return Scaffold(
       backgroundColor: Colors.white,
@@ -762,46 +663,14 @@ class _CalendarScreenState extends State<CalendarScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Calendar Title and Filter Button
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'View and manage your schedule, tasks and project deadlines.',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 12.5,
-                                    color: const Color(0xFF64748B),
-                                    height: 1.3,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          OutlinedButton.icon(
-                            onPressed: _showFilterBottomSheet,
-                            icon: const Icon(Icons.filter_list_rounded, size: 16, color: Color(0xFF1E293B)),
-                            label: Text(
-                              'Filter',
-                              style: GoogleFonts.inter(
-                                color: const Color(0xFF1E293B),
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                            style: OutlinedButton.styleFrom(
-                              side: const BorderSide(color: Color(0xFFE2E8F0)),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                            ),
-                          ),
-                        ],
+                      // Calendar Subtitle Header
+                      Text(
+                        'View and manage your schedule, tasks and project deadlines.',
+                        style: GoogleFonts.inter(
+                          fontSize: 12.5,
+                          color: const Color(0xFF64748B),
+                          height: 1.3,
+                        ),
                       ),
                       const SizedBox(height: 16),
 

@@ -44,21 +44,9 @@ const UserOverview = ({ selectedProject }) => {
   const openCount = selectedProject.taskSummary?.openTasks || 0;
   const reviewCount = Math.max(0, total - completedCount - wipCount - openCount);
 
-  // Progress = completed tasks / total tasks × 100 (only COMPLETED tasks count)
   const completedPct = total > 0 ? Math.round((completedCount / total) * 100) : 0;
-  const remainingPct = 100 - completedPct;
-
-  let inProgressPct = 0;
-  let yetToStartPct = 0;
-
-  const incompleteCount = total - completedCount;
-  if (incompleteCount > 0) {
-    const activeCount = wipCount + reviewCount;
-    inProgressPct = Math.round(remainingPct * (activeCount / incompleteCount));
-    yetToStartPct = Math.max(0, remainingPct - inProgressPct);
-  } else {
-    yetToStartPct = remainingPct;
-  }
+  const inProgressPct = total > 0 ? Math.round(((wipCount + reviewCount) / total) * 100) : 0;
+  const yetToStartPct = total > 0 ? Math.max(0, 100 - completedPct - inProgressPct) : 100;
 
   return (
     <div className="mp-overview-grid">
@@ -138,8 +126,14 @@ const UserOverview = ({ selectedProject }) => {
         <table className="mp-milestone-table">
           <tbody>
             {(() => {
-              const todayStr = new Date().toISOString().split("T")[0];
-              const upcoming = (selectedProject.milestones || []).filter(m => m.start && m.start !== "N/A" && m.start > todayStr);
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const upcoming = (selectedProject.milestones || []).filter(m => {
+                if (!m.start || m.start === "N/A" || m.start === "No Start Date") return true;
+                const mDate = new Date(m.start);
+                if (isNaN(mDate.getTime())) return true;
+                return mDate >= today || (m.status && m.status.toUpperCase() !== "CLOSED");
+              });
               if (upcoming.length === 0) {
                 return (
                   <tr>
@@ -152,7 +146,7 @@ const UserOverview = ({ selectedProject }) => {
               return upcoming.map((m, i) => (
                 <tr key={i}>
                   <td>{m.name}</td>
-                  <td>{m.date}</td>
+                  <td>{m.date || m.start}</td>
                 </tr>
               ));
             })()}

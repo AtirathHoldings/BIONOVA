@@ -468,7 +468,7 @@ const Profile = ({ userRole, onLogout }) => {
                   </div>
 
                   <div className="pf-detail-row">
-                    <div className="pf-detail-label"><Briefcase size={16} />Employee Type</div>
+                    <div className="pf-detail-label"><Briefcase size={16} />Employment Type</div>
                     <span className="pf-detail-separator">:</span>
                     <div className="pf-detail-value">{profileDetails.employeeType}</div>
                   </div>

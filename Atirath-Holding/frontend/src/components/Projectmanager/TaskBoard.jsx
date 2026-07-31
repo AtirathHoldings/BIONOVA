@@ -172,16 +172,27 @@ const mapBackendTask = (t, projects, milestones, employees) => {
   const employee = (employees || []).find(e => (e.empId || e.id) && String(e.empId || e.id) === String(t.empId));
 
   let status = "Not Started";
-  if (t.taskSts === "COMPLETED" || t.taskSts === "CLOSED") {
+  const rawSts = (t.taskSts || t.tasksts || t.status || "").toString().toUpperCase().trim();
+  const subSts = (t.subStatus || t.substatus || "").toString().toUpperCase().trim();
+  const prcsActn = (t.prcsYesActn || t.prcsyesactn || "").toString().toUpperCase().trim();
+
+  if (rawSts === "COMPLETED" || rawSts === "CLOSED" || rawSts === "4") {
     status = "Closed";
+  } else if (
+    subSts === "UNDER REVIEW" ||
+    subSts === "UNDER_REVIEW" ||
+    rawSts === "UNDER_REVIEW" ||
+    rawSts === "SUBMIT_REVIEW" ||
+    prcsActn === "PENDING_REVIEWER" ||
+    prcsActn === "PENDING_APPROVER"
+  ) {
+    status = "Under Review";
+  } else if (rawSts === "WIP" || rawSts === "IN_PROGRESS" || rawSts === "WORK_IN_PROGRESS" || rawSts === "ASSIGNED" || rawSts === "3" || subSts === "REWORK" || rawSts === "REWORK") {
+    status = "In Progress";
   } else {
     const today = new Date().toISOString().split("T")[0];
     if (t.endDt && t.endDt < today) {
       status = "Overdue";
-    } else if (t.taskSts === "WIP" || t.taskSts === "REWORK") {
-      status = "In Progress";
-    } else if (t.taskSts === "SUBMIT_REVIEW" || t.taskSts === "UNDER_REVIEW") {
-      status = "Under Review";
     } else {
       status = "Not Started";
     }
@@ -658,11 +669,11 @@ const TaskBoard = ({ userRole, onLogout }) => {
                 const activeDept = departmentsList.find(d => d.deptId === proj.deptId)?.deptNm || "Projects";
                 
                 const pTasks = allTasks.filter(t => String(t.projectId) === String(proj.prjId || proj.prjid || proj.id));
-                const totalTasksCount = pTasks.filter(t => t.status !== "Under Review").length;
+                const totalTasksCount = pTasks.length;
                 const notStartedCount = pTasks.filter(t => t.status === "Not Started").length;
                 const inProgressCount = pTasks.filter(t => t.status === "In Progress" || t.status === "Under Review").length;
-                const completedCount = pTasks.filter(t => t.status === "Completed").length;
-                const overdueCount = pTasks.filter(t => t.status === "Overdue").length;
+                const completedCount = pTasks.filter(t => t.status === "Completed" || t.status === "Closed").length;
+                const overdueCount = pTasks.filter(t => t.status === "Overdue" || (t.dueDate && t.dueDate < new Date().toISOString().split("T")[0] && t.status !== "Closed")).length;
 
                 const notStartedPct = totalTasksCount > 0 ? ((notStartedCount / totalTasksCount) * 100).toFixed(2) : "0.00";
                 const inProgressPct = totalTasksCount > 0 ? ((inProgressCount / totalTasksCount) * 100).toFixed(2) : "0.00";

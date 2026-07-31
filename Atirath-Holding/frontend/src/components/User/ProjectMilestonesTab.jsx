@@ -492,8 +492,8 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                     </tr>
                     <tr>
                       <th style={{ fontSize: '11px', backgroundColor: '#f8fafc', fontWeight: '600' }}>Executor</th>
-                      <th style={{ fontSize: '11px', backgroundColor: '#f8fafc', fontWeight: '600' }}>Approver</th>
                       <th style={{ fontSize: '11px', backgroundColor: '#f8fafc', fontWeight: '600' }}>Reviewer</th>
+                      <th style={{ fontSize: '11px', backgroundColor: '#f8fafc', fontWeight: '600' }}>Approver</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -530,23 +530,23 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                           </td>
                           <td>
                             <div className="mt-assignee">
-                              <div className="mt-avatar" style={{ backgroundColor: '#f59e0b' }}>
-                                {approver.name.charAt(0)}
-                              </div>
-                              <div className="mt-assignee-info">
-                                <span className="mt-assignee-name">{approver.name}</span>
-                                <span className="mt-assignee-role">{approver.role}</span>
-                              </div>
-                            </div>
-                          </td>
-                          <td>
-                            <div className="mt-assignee">
                               <div className="mt-avatar" style={{ backgroundColor: '#8b5cf6' }}>
                                 {reviewer.name.charAt(0)}
                               </div>
                               <div className="mt-assignee-info">
                                 <span className="mt-assignee-name">{reviewer.name}</span>
                                 <span className="mt-assignee-role">{reviewer.role}</span>
+                              </div>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="mt-assignee">
+                              <div className="mt-avatar" style={{ backgroundColor: '#f59e0b' }}>
+                                {approver.name.charAt(0)}
+                              </div>
+                              <div className="mt-assignee-info">
+                                <span className="mt-assignee-name">{approver.name}</span>
+                                <span className="mt-assignee-role">{approver.role}</span>
                               </div>
                             </div>
                           </td>

@@ -141,7 +141,7 @@ const DatePicker = ({ value, onChange, placeholder, name }) => {
       const parts = value.split('-');
       if (parts.length === 3) {
         setDisplayValue(`${parts[2]}/${parts[1]}/${parts[0]}`);
-        setViewDate(new Date(value));
+        setViewDate(new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)));
       }
     } else {
       setDisplayValue('');
@@ -160,7 +160,10 @@ const DatePicker = ({ value, onChange, placeholder, name }) => {
   }, []);
 
   const handleDateSelect = (date) => {
-    const formatted = date.toISOString().split('T')[0];
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const formatted = `${year}-${month}-${day}`;
     onChange({ target: { name, value: formatted } });
     setIsOpen(false);
   };
@@ -199,10 +202,14 @@ const DatePicker = ({ value, onChange, placeholder, name }) => {
 
   const isSelected = (date) => {
     if (!value) return false;
-    const d = new Date(value);
-    return d.getFullYear() === date.getFullYear() &&
-           d.getMonth() === date.getMonth() &&
-           d.getDate() === date.getDate();
+    const parts = value.split('-');
+    if (parts.length !== 3) return false;
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    return date.getFullYear() === year &&
+           date.getMonth() === month &&
+           date.getDate() === day;
   };
 
   const changeMonth = (delta) => {
@@ -526,21 +533,31 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       const nextForm = { ...prev, [name]: newValue };
 
       if ((name === 'startDate' || name === 'totalProjectDays') && nextForm.startDate && nextForm.totalProjectDays) {
-        const start = new Date(nextForm.startDate);
+        const parts = nextForm.startDate.split('-');
         const days = parseInt(nextForm.totalProjectDays, 10);
-        start.setDate(start.getDate() + days - 1);
-        nextForm.endDate = start.toISOString().split('T')[0];
+        if (parts.length === 3 && !isNaN(days) && days > 0) {
+          const start = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          start.setDate(start.getDate() + days - 1);
+          const endY = start.getFullYear();
+          const endM = String(start.getMonth() + 1).padStart(2, '0');
+          const endD = String(start.getDate()).padStart(2, '0');
+          nextForm.endDate = `${endY}-${endM}-${endD}`;
+        }
       }
 
       if ((name === 'startDate' || name === 'endDate') && nextForm.startDate && nextForm.endDate && name !== 'totalProjectDays') {
-        const start = new Date(nextForm.startDate);
-        const end = new Date(nextForm.endDate);
-        const diffTime = end - start;
-        if (diffTime >= 0) {
-          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
-          nextForm.totalProjectDays = diffDays >= 0 ? String(diffDays) : "0";
-        } else {
-          nextForm.totalProjectDays = "0";
+        const startParts = nextForm.startDate.split('-');
+        const endParts = nextForm.endDate.split('-');
+        if (startParts.length === 3 && endParts.length === 3) {
+          const start = new Date(parseInt(startParts[0], 10), parseInt(startParts[1], 10) - 1, parseInt(startParts[2], 10));
+          const end = new Date(parseInt(endParts[0], 10), parseInt(endParts[1], 10) - 1, parseInt(endParts[2], 10));
+          const diffTime = end.getTime() - start.getTime();
+          if (diffTime >= 0) {
+            const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
+            nextForm.totalProjectDays = diffDays >= 0 ? String(diffDays) : "0";
+          } else {
+            nextForm.totalProjectDays = "0";
+          }
         }
       }
 
@@ -680,6 +697,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     try {
       const isLive = form.status === "Live" || form.status === "LIVE";
       const projectCodeVal = (form.projectCode || generateNextProjectCode(projects)).trim();
+      const userEmpId = sessionStorage.getItem("empId") || localStorage.getItem("empId");
       const payload = {
         prjCd: projectCodeVal,
         prjNm: (form.projectName || "").trim(),
@@ -694,6 +712,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         tentEndDt: form.endDate,
         noOfDays: parseInt(form.totalProjectDays) || 0,
         creBy: form.createdBy || "System",
+        createdBy: userEmpId ? parseInt(userEmpId) : null,
         logo: imagePreview || null,
         addlRem: (form.remarks || "").trim() || null
       };
@@ -1755,9 +1774,9 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                         style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
                                         onClick={() => {
                                           if (project._type === 'live') {
-                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'live' } });
+                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'live', projectType: 'live' } });
                                           } else {
-                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'milestones_only' } });
+                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'milestones_only', projectType: 'draft' } });
                                           }
                                           setActiveDropdown(null);
                                         }}

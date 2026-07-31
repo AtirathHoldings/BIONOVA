@@ -150,7 +150,7 @@ public class TaskLive {
     }
 
     public TimeStatus getTimeStatus() {
-        if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
+        if (taskSts != null && ("CLOSED".equalsIgnoreCase(taskSts.getStatusNm()) || "COMPLETED".equalsIgnoreCase(taskSts.getStatusNm()))) {
             if (actCmpDt != null && endDt != null) {
                 if (actCmpDt.isBefore(endDt)) {
                     return TimeStatus.LEAD;
@@ -159,15 +159,15 @@ public class TaskLive {
                 } else {
                     return TimeStatus.LAG;
                 }
+            } else if (endDt != null) {
+                return TimeStatus.ON_TIME;
             }
         } else {
             if (endDt != null) {
                 java.time.LocalDate today = java.time.LocalDate.now();
-                if (today.isBefore(endDt)) {
-                    return TimeStatus.ON_TIME;
-                } else if (today.isEqual(endDt)) {
+                if (today.isEqual(endDt)) {
                     return TimeStatus.DUE_TODAY;
-                } else {
+                } else if (today.isAfter(endDt)) {
                     return TimeStatus.OVERDUE;
                 }
             }

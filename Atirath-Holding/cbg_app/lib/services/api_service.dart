@@ -19,7 +19,7 @@ class ApiService {
   static List<dynamic>? _cachedEmployees;
   static bool _isPreloading = false;
 
-  static Future<void> clearCache() async {
+  static Future<void> clearCache({bool clearAuth = false}) async {
     _cachedProjects = null;
     _cachedLiveTasks = null;
     _cachedIndividualTasks = null;
@@ -37,11 +37,13 @@ class ApiService {
       await prefs.remove('cache_completedTasksCount');
       await prefs.remove('cache_projectsCount');
       await prefs.remove('cached_employee_list');
-      await prefs.remove('profilePhotoUrl');
-      await prefs.remove('userRole');
-      await prefs.remove('userEmail');
-      await prefs.remove('currentEmpId');
-      await prefs.remove('authToken');
+      if (clearAuth) {
+        await prefs.remove('profilePhotoUrl');
+        await prefs.remove('userRole');
+        await prefs.remove('userEmail');
+        await prefs.remove('currentEmpId');
+        await prefs.remove('authToken');
+      }
     } catch (e) {
       debugPrint("Error clearing ApiService cache: $e");
     }
@@ -461,6 +463,43 @@ class ApiService {
     return null;
   }
 
+  static Future<String> getCurrentEmployeeName() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cachedName = prefs.getString('cache_userName') ?? 
+                         prefs.getString('fullName') ?? 
+                         prefs.getString('userName') ?? 
+                         prefs.getString('employeeName');
+      if (cachedName != null && cachedName.isNotEmpty && cachedName != 'Welcome!' && cachedName != 'Reviewer') {
+        return cachedName;
+      }
+
+      final token = prefs.getString('authToken');
+      if (token != null) {
+        final response = await http.get(
+          Uri.parse("${dotenv.env['BASE_URL']}/api/profile"),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
+        ).timeout(const Duration(seconds: 5));
+
+        if (response.statusCode == 200) {
+          final Map<String, dynamic> data = jsonDecode(response.body);
+          final name = data['fullName']?.toString() ?? data['empNm']?.toString() ?? data['name']?.toString() ?? '';
+          if (name.isNotEmpty) {
+            await prefs.setString('cache_userName', name);
+            await prefs.setString('fullName', name);
+            return name;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Error fetching employee name: $e");
+    }
+    return 'Reviewer';
+  }
+
   // ==================== EMPLOYEE MILESTONES ====================
   
   static Future<List<dynamic>> getMilestonesByEmployee(int empId) async {
@@ -773,31 +812,19 @@ class ApiService {
         }
       }
 
-      // Local filtering for non-admin/manager roles
-      if (currentEmpId != null && role.isNotEmpty && role.toLowerCase() != 'admin' && role.toLowerCase() != 'manager') {
+      // Local filtering for non-admin roles (mirroring website My Tasks.jsx)
+      if (currentEmpId != null && role.isNotEmpty && role.toLowerCase() != 'admin') {
         final currentEmpIdStr = currentEmpId.toString();
         allTasks.retainWhere((task) {
-          final isAssigned = (task.rawData?['empId']?.toString() == currentEmpIdStr) || 
-                             (task.rawData?['empid']?.toString() == currentEmpIdStr) || 
-                             (task.rawData?['assignedTo']?.toString() == currentEmpIdStr);
-          final noteTxt = (task.rawData?['noteTxt'] ?? task.rawData?['note_txt'] ?? '').toString();
-          final isTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(currentEmpIdStr);
-          bool isReviewer = task.reviewer?.toString() == currentEmpIdStr;
-          bool isApprover = task.approver?.toString() == currentEmpIdStr;
-
-          if (task.isIndividualTask) {
-            final prcs = (task.rawData?['prcsYesActn'] ?? '').toString();
-            final rMatch = RegExp(r'Reviewer:\s*(\d+)').firstMatch(prcs);
-            final aMatch = RegExp(r'Approver:\s*(\d+)').firstMatch(prcs);
-            if (rMatch != null && rMatch.group(1) == currentEmpIdStr) isReviewer = true;
-            if (aMatch != null && aMatch.group(1) == currentEmpIdStr) isApprover = true;
-          }
-
-          // Also include tasks that were assigned locally (since they might not be in the live db yet)
-          final isLocal = prefs.getStringList('emp_assigned_tasks_$currentEmpIdStr')?.contains(task.id) ?? false;
-          return isAssigned || isTeamMember || isReviewer || isApprover || isLocal;
+          final raw = task.rawData ?? {};
+          final doer = (raw['empId'] ?? raw['empid'] ?? raw['assignedTo'] ?? raw['executorId'])?.toString();
+          final reviewer = (raw['reviewerId'] ?? raw['reviewer'] ?? task.reviewer)?.toString();
+          final approver = (raw['approverId'] ?? raw['approver'] ?? task.approver)?.toString();
+          return doer == currentEmpIdStr || reviewer == currentEmpIdStr || approver == currentEmpIdStr || task.isCurrentUserReviewer || task.isCurrentUserApprover;
         });
       }
+
+      allTasks.removeWhere((task) => task.isDraft);
 
       _cachedLiveTasks = allTasks;
       return allTasks;
@@ -1649,16 +1676,23 @@ class ApiService {
       if (response.statusCode == 200) {
         try {
           final data = jsonDecode(response.body);
-          if (data is Map && data.containsKey('status')) {
-            return data['status'].toString();
-          } else if (data is Map && data.containsKey('leadLag')) {
-            return data['leadLag'].toString();
-          } else if (data is Map && data.containsKey('leadLagStatus')) {
-            return data['leadLagStatus'].toString();
+          String? status;
+          if (data is Map) {
+            final raw = data['status'] ?? data['leadLag'] ?? data['leadLagStatus'] ?? data['lead_lag_status'];
+            if (raw != null && raw.toString().trim().toLowerCase() != 'null') {
+              status = raw.toString();
+            }
+          } else if (data != null && data.toString().trim().toLowerCase() != 'null') {
+            status = data.toString();
           }
-          return data.toString();
+          if (status != null && status.isNotEmpty && status.trim().toLowerCase() != 'null') {
+            return status;
+          }
         } catch (_) {
-          return response.body.trim().replaceAll('"', '');
+          final bodyStr = response.body.trim().replaceAll('"', '');
+          if (bodyStr.toLowerCase() != 'null') {
+            return bodyStr;
+          }
         }
       }
     } catch (e) {
@@ -2789,6 +2823,30 @@ class ApiService {
     } catch (e) {
       debugPrint("Error updating project task status: $e");
       rethrow;
+    }
+  }
+
+  /// Full update for live project tasks to persist prcsYesActn (REWORK / REASSIGN) and executor in DB
+  static Future<bool> updateTaskLiveFull(int taskId, Map<String, dynamic> payload) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('authToken');
+      if (token == null) return false;
+
+      final response = await http.put(
+        Uri.parse("${dotenv.env['BASE_URL']}/api/task-live/$taskId"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 10));
+
+      debugPrint("[updateTaskLiveFull] PUT response: ${response.statusCode} - ${response.body}");
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      debugPrint("Error updating task-live full: $e");
+      return false;
     }
   }
 }

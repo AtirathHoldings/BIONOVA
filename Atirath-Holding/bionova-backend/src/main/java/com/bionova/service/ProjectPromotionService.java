@@ -92,6 +92,7 @@ public class ProjectPromotionService {
         live.setDeptId(draft.getDeptId());
         live.setPrjPrty(draft.getPrjPrty());
         live.setPrjSts("LIVE");
+        live.setCreatedBy(draft.getCreatedBy());
         live.setStDt(draft.getTentStDt());
         java.time.LocalDate prjAdjustedEndDt = calendarService.calculateEndDate(
                 draft.getTentStDt(), draft.getNoOfDays() != null ? draft.getNoOfDays() : 0,

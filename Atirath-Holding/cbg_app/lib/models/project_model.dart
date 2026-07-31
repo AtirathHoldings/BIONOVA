@@ -49,7 +49,14 @@ class ProjectModel {
       return const Color(0xff22C55E); // Green for 100%
     }
   }
-  String get leadLagStatusStr => _leadLagStatus ?? leadLagStatus ?? 'Lag';
+  String get leadLagStatusStr {
+    final str = _leadLagStatus ?? leadLagStatus;
+    if (str != null && str.isNotEmpty && str.trim().toLowerCase() != 'null' && str.trim().toLowerCase() != 'n/a') {
+      return str;
+    }
+    return 'On Time';
+  }
+
   
   double? get rawProgressValue => _progressValue;
   int? get rawAssigned => _assigned;

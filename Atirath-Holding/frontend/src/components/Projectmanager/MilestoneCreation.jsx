@@ -50,7 +50,11 @@ const milestoneApi = {
   delete: (id) =>
     fetch(`${API_BASE}/milestone-drafts/${id}`, {
       method: "DELETE", headers: authHeaders()
-    }).then(res => { if (!res.ok) throw new Error("Failed to delete milestone"); return res.json(); })
+    }).then(async res => { 
+       if (!res.ok) throw new Error("Failed to delete milestone"); 
+       const text = await res.text();
+       return text ? JSON.parse(text) : {}; 
+    })
 };
 
 // ── Draft Task APIs ───────────────────────────────────────────
@@ -198,6 +202,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   const [editingId, setEditingId] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [deleteIndex, setDeleteIndex] = useState(null);
+  const [showMilestoneDeleteModal, setShowMilestoneDeleteModal] = useState(false);
+  const [milestoneToDelete, setMilestoneToDelete] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [filterType, setFilterType] = useState("ALL"); // ALL, DRAFT, LIVE
@@ -2747,6 +2753,23 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   };
 
   // ── Render List View ─────────────────────────────────────────
+  const handleDeleteMilestoneConfirm = async (e) => {
+    if (e) e.preventDefault();
+    if (!milestoneToDelete) return;
+    
+    setShowMilestoneDeleteModal(false); // Close the modal immediately
+
+    try {
+      await milestoneApi.delete(milestoneToDelete.id);
+      await loadAllData(); // Re-fetch the list from the server to guarantee UI updates
+      triggerAlert("success", "Deleted", "Milestone deleted.");
+    } catch (err) {
+      console.error(err);
+      triggerAlert("error", "Delete Error", err.message || "Failed to delete.");
+    }
+    setMilestoneToDelete(null);
+  };
+
   const renderListView = () => {
     const filtered = milestoneList.filter(m => {
       if (filterType === "ALL") return true;
@@ -2798,7 +2821,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                               <>
                                 <button className="mc-icon-btn edit" title="Edit" onClick={() => loadMilestoneForEdit(m)}><Edit size={14} /></button>
                                 <button className="mc-icon-btn" title="View" onClick={() => loadMilestoneForView(m)}><Eye size={14} /></button>
-                                <button className="mc-icon-btn danger" title="Delete" onClick={async () => { if (window.confirm("Delete this milestone?")) { try { await milestoneApi.delete(m.id); setMilestoneList(prev => prev.filter(item => !(item.type === 'draft' && item.id === m.id))); triggerAlert("success", "Deleted", "Milestone deleted."); } catch (err) { triggerAlert("error", "Delete Error", "Failed to delete."); } } }}><Trash2 size={14} /></button>
+                                <button className="mc-icon-btn danger" title="Delete" onClick={() => { setMilestoneToDelete(m); setShowMilestoneDeleteModal(true); }}><Trash2 size={14} /></button>
                               </>
                             ) : (
                               <button className="mc-icon-btn" title="View Live" onClick={() => loadMilestoneForView(m)}><Eye size={14} /></button>
@@ -2865,6 +2888,15 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             <div className="mc-modal-header"><h3>Confirm Delete</h3><button className="mc-modal-close" onClick={() => setShowModal(false)}><X size={18} /></button></div>
             <div className="mc-modal-body"><p>Are you sure you want to delete this task?</p><p className="mc-modal-warning">This action cannot be undone!</p></div>
             <div className="mc-modal-footer"><button className="mc-btn secondary" onClick={() => setShowModal(false)}>Cancel</button><button className="mc-btn danger" onClick={deleteTask}><Trash2 size={14} /> Delete</button></div>
+          </div>
+        </div>
+      )}
+      {showMilestoneDeleteModal && (
+        <div className="mc-modal-overlay" onClick={() => { setShowMilestoneDeleteModal(false); setMilestoneToDelete(null); }}>
+          <div className="mc-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="mc-modal-header"><h3>Confirm Delete</h3><button type="button" className="mc-modal-close" onClick={() => { setShowMilestoneDeleteModal(false); setMilestoneToDelete(null); }}><X size={18} /></button></div>
+            <div className="mc-modal-body"><p>Are you sure you want to delete this milestone?</p><p className="mc-modal-warning">This action cannot be undone!</p></div>
+            <div className="mc-modal-footer"><button type="button" className="mc-btn secondary" onClick={() => { setShowMilestoneDeleteModal(false); setMilestoneToDelete(null); }}>Cancel</button><button type="button" className="mc-btn danger" onClick={handleDeleteMilestoneConfirm}><Trash2 size={14} /> Delete</button></div>
           </div>
         </div>
       )}

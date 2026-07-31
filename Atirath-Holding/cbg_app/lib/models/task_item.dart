@@ -358,25 +358,12 @@ class TaskItem {
 
     final String dbSubStatus = (json['subStatus'] ?? json['sub_status'] ?? json['prcsYesActn'] ?? json['prcs_yes_actn'] ?? json['prcsActn'] ?? json['prcs_actn'] ?? '').toString();
     
-    String reviewerId = json['reviewer']?.toString() ?? '';
-    String approverId = json['approver']?.toString() ?? '';
+    final String reviewerId = json['reviewer']?.toString() ?? json['reviewerId']?.toString() ?? '';
+    final String approverId = json['approver']?.toString() ?? json['approverId']?.toString() ?? '';
     final String assignerId = json['assignedBy']?.toString() ?? json['assigned_by']?.toString() ?? '';
-    
-    final String prcsVal = (json['prcsYesActn'] ?? '').toString();
-    final rMatch = RegExp(r'Reviewer:\s*(\d+)').firstMatch(prcsVal);
-    final aMatch = RegExp(r'Approver:\s*(\d+)').firstMatch(prcsVal);
-    
-    if (reviewerId.isEmpty && rMatch != null) {
-      reviewerId = rMatch.group(1)!;
-    }
-    if (approverId.isEmpty && aMatch != null) {
-      approverId = aMatch.group(1)!;
-    }
 
-    bool isReviewer = currentEmpId != null && reviewerId == currentEmpId;
-    bool isApprover = currentEmpId != null && approverId == currentEmpId;
-    if (rMatch != null && rMatch.group(1) == currentEmpId) isReviewer = true;
-    if (aMatch != null && aMatch.group(1) == currentEmpId) isApprover = true;
+    final bool isReviewer = currentEmpId != null && reviewerId == currentEmpId;
+    final bool isApprover = currentEmpId != null && approverId == currentEmpId;
 
     final bool isAssigner = currentEmpId != null && assignerId == currentEmpId;
     final bool isDoer = currentEmpId != null && (json['empId']?.toString() == currentEmpId || json['empid']?.toString() == currentEmpId);
@@ -444,7 +431,7 @@ class TaskItem {
       iconColor = const Color(0xFFF97316);
       iconBg = const Color(0xFFFFF7ED);
     } else if (status == 'Reassigned') {
-      icon = Icons.undo;
+      icon = Icons.undo_rounded;
       iconColor = const Color(0xFF4F46E5);
       iconBg = const Color(0xFFEEF2FF);
     }
@@ -462,7 +449,14 @@ class TaskItem {
           final todayStart = DateTime(today.year, today.month, today.day);
           final endStart = DateTime(parsed.year, parsed.month, parsed.day);
           
-          if (dbStatus == 'COMPLETED' || dbStatus == 'CLOSED') {
+          final bool isClosedTask = normalizedStatus.contains('CLOSED') ||
+              normalizedStatus.contains('COMPLETED') ||
+              normalizedStatus.contains('DONE') ||
+              normalizedStatus.contains('FINISHED') ||
+              (rawSts is Map && (rawSts['statusId'] == 4 || rawSts['status_id'] == 4)) ||
+              dbStatus == '4';
+
+          if (isClosedTask) {
              final rawAct = getRawCompletionDate(json);
              if (rawAct.isNotEmpty) {
                final parsedAct = parseDateTime(rawAct);
@@ -603,7 +597,14 @@ class TaskItem {
           final todayStart = DateTime(today.year, today.month, today.day);
           final endStart = DateTime(parsed.year, parsed.month, parsed.day);
           
-          if (dbStatus == 'COMPLETED' || dbStatus == 'CLOSED') {
+          final bool isClosedTask2 = normalizedStatus.contains('CLOSED') ||
+              normalizedStatus.contains('COMPLETED') ||
+              normalizedStatus.contains('DONE') ||
+              normalizedStatus.contains('FINISHED') ||
+              (rawSts is Map && (rawSts['statusId'] == 4 || rawSts['status_id'] == 4)) ||
+              dbStatus == '4';
+
+          if (isClosedTask2) {
              final rawAct = getRawCompletionDate(json);
              if (rawAct.isNotEmpty) {
                final parsedAct = parseDateTime(rawAct);
@@ -656,7 +657,7 @@ class TaskItem {
       iconColor = const Color(0xFFF97316);
       iconBg = const Color(0xFFFFF7ED);
     } else if (status == 'Reassigned') {
-      icon = Icons.undo;
+      icon = Icons.undo_rounded;
       iconColor = const Color(0xFF4F46E5);
       iconBg = const Color(0xFFEEF2FF);
     }
@@ -894,7 +895,9 @@ class TaskItem {
   // ✅ Status helpers (BIONOVA UI Standard)
   // ============================================================
   bool get isCompleted {
-    return status == 'Closed' || status == 'Completed';
+    final s = status.toUpperCase();
+    final rawSts = (rawData?['taskSts'] ?? rawData?['status'] ?? '').toString().toUpperCase();
+    return s == 'CLOSED' || s == 'COMPLETED' || s == 'DONE' || rawSts == 'CLOSED' || rawSts == 'COMPLETED' || rawSts == 'DONE' || rawSts == '4';
   }
   bool get isInProgress => status == 'In Progress' || status == 'WIP' || status == 'Reassigned' || status == 'Rework';
   bool get isUnderReview => status == 'Under Review';
@@ -905,67 +908,42 @@ class TaskItem {
   bool get isHighTag => tag == 'High';
   bool get isLowTag => tag == 'Low';
 
+  bool get isDraft {
+    final s = status.toUpperCase();
+    final rawSts = (rawData?['taskSts'] ?? rawData?['task_sts'] ?? rawData?['status'] ?? rawData?['taskStatus'] ?? rawData?['sts'] ?? '').toString().toUpperCase().trim();
+    int? stsId;
+    if (rawData?['taskSts'] is Map) {
+      stsId = int.tryParse((rawData!['taskSts']['statusId'] ?? rawData!['taskSts']['status_id'] ?? '').toString());
+    } else {
+      stsId = int.tryParse(rawSts);
+    }
+    return s == 'DRAFT' || rawSts == 'DRAFT' || stsId == 1 || rawData?['isDraft'] == true || rawData?['is_draft'] == true;
+  }
+
   bool get isTodo {
-    if (isCompleted) return false;
+    if (isCompleted || isDraft) return false;
     return !isUpcomingTask;
   }
 
   bool get isUpcomingTask {
-    if (isCompleted) return false;
+    if (isCompleted || isDraft) return false;
+    final s = status.toUpperCase();
+    if (s == 'DRAFT') return false;
 
-    final start = rawStDt ?? startDate;
-    if (start == null || start.isEmpty) return false;
+    final start = rawStDt ?? startDate ?? rawEndDt ?? endDate ?? date;
+    if (start == null || start.isEmpty || start == 'No Date' || start == 'N/A') {
+      return true;
+    }
 
     try {
-      DateTime? taskDate;
-      if (start.contains('-')) {
-        taskDate = DateTime.tryParse(start);
-      }
-      
-      if (taskDate == null) {
-        final normalized = start.replaceAll(',', '').toLowerCase();
-        final parts = normalized.split(RegExp(r'\s+'));
-        if (parts.length == 3) {
-          int? day;
-          int? month;
-          int? year;
-          const months = {
-            'jan': 1, 'january': 1,
-            'feb': 2, 'february': 2,
-            'mar': 3, 'march': 3,
-            'apr': 4, 'april': 4,
-            'may': 5,
-            'jun': 6, 'june': 6,
-            'jul': 7, 'july': 7,
-            'aug': 8, 'august': 8,
-            'sep': 9, 'september': 9,
-            'oct': 10, 'october': 10,
-            'nov': 11, 'november': 11,
-            'dec': 12, 'december': 12,
-          };
-          final firstNum = int.tryParse(parts[0]);
-          if (firstNum != null) {
-            day = firstNum;
-            month = months[parts[1]];
-            year = int.tryParse(parts[2]);
-          } else {
-            month = months[parts[0]];
-            day = int.tryParse(parts[1]);
-            year = int.tryParse(parts[2]);
-          }
-          if (day != null && month != null && year != null) {
-            taskDate = DateTime(year, month, day);
-          }
-        }
-      }
-
+      DateTime? taskDate = parseDateTime(start);
       if (taskDate != null) {
         final now = DateTime.now();
         final today = DateTime(now.year, now.month, now.day);
-        return taskDate.isAfter(today);
+        return !taskDate.isBefore(today);
       }
     } catch (_) {}
-    return false;
+    return true;
   }
 
   String? get completionDate {
@@ -984,25 +962,20 @@ class TaskItem {
     return value;
   }
 
-  // 1. Progress Status (Badges)
+  // 1. Progress Status (Badges - Exact same logic as website)
   String get progressStatusText {
     final s = status.toUpperCase();
     if (s == 'COMPLETED' || s == 'CLOSED') return 'CLOSED';
     if (s == 'HOLD') return 'HOLD';
     if (s == 'DRAFT') return 'DRAFT';
-    if (s == 'REWORK') return 'REWORK';
-    if (s == 'REASSIGNED' || s == 'REASSIGN') return 'REASSIGN';
     if (s == 'OPEN' || s == 'PENDING') return 'OPEN';
-    if (s == 'IN PROGRESS' || s == 'UNDER REVIEW' || s == 'UNDER_REVIEW') return 'IN PROGRESS';
-    return 'OPEN';
+    return 'IN PROGRESS';
   }
 
   Color get progressStatusColor {
     switch (progressStatusText) {
       case 'OPEN': return const Color(0xFF2563EB); // BLUE
-      case 'IN PROGRESS': return const Color(0xFFF59E0B); // AMBER
-      case 'REWORK': return const Color(0xFFF97316); // ORANGE #F97316
-      case 'REASSIGN': return const Color(0xFF4F46E5); // INDIGO #4F46E5
+      case 'IN PROGRESS': return const Color(0xFFD97706); // AMBER/GOLD #D97706
       case 'HOLD': return const Color(0xFF7C3AED); // PURPLE
       case 'CLOSED':
       case 'COMPLETED': return const Color(0xFF16A34A); // GREEN
@@ -1014,9 +987,7 @@ class TaskItem {
   Color get progressStatusBg {
     switch (progressStatusText) {
       case 'OPEN': return const Color(0xFFEFF6FF); 
-      case 'IN PROGRESS': return const Color(0xFFFFF7ED); 
-      case 'REWORK': return const Color(0xFFFFF7ED); // Soft Orange tint
-      case 'REASSIGN': return const Color(0xFFEEF2FF); // Soft Indigo tint
+      case 'IN PROGRESS': return const Color(0xFFFEF3C7); // Soft Gold tint #FEF3C7
       case 'HOLD': return const Color(0xFFF5F3FF); 
       case 'CLOSED':
       case 'COMPLETED': return const Color(0xFFF0FDF4); 
@@ -1025,20 +996,22 @@ class TaskItem {
     }
   }
 
-  // 2. Process Status (Icons Only)
+  // 2. Process Status (Icons Only - Exact same icons & colors as website)
   IconData? get processIcon {
     final s = status.toUpperCase();
-    if (s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || s == 'SUBMIT_REVIEW') return Icons.remove_red_eye_outlined;
-    if (s == 'REWORK') return Icons.sync;
-    if (s == 'REASSIGNED' || s == 'REASSIGN') return Icons.undo;
+    final sub = (rawData?['prcsYesActn'] ?? rawData?['prcs_yes_actn'] ?? rawData?['subStatus'] ?? rawData?['sub_status'] ?? '').toString().toUpperCase();
+    if (s == 'REWORK' || sub == 'REWORK') return Icons.sync_rounded;
+    if (s == 'REASSIGNED' || s == 'REASSIGN' || sub == 'REASSIGN' || sub == 'REASSIGNED') return Icons.undo_rounded;
+    if (s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || sub.contains('PENDING')) return Icons.remove_red_eye_outlined;
     return null;
   }
 
   Color? get processIconColor {
     final s = status.toUpperCase();
-    if (s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || s == 'SUBMIT_REVIEW') return const Color(0xFF8B5CF6);
-    if (s == 'REWORK') return const Color(0xFFF97316); // ORANGE #F97316
-    if (s == 'REASSIGNED' || s == 'REASSIGN') return const Color(0xFF4F46E5); // INDIGO #4F46E5
+    final sub = (rawData?['prcsYesActn'] ?? rawData?['prcs_yes_actn'] ?? rawData?['subStatus'] ?? rawData?['sub_status'] ?? '').toString().toUpperCase();
+    if (s == 'REWORK' || sub == 'REWORK') return const Color(0xFFF97316); // ORANGE #F97316
+    if (s == 'REASSIGNED' || s == 'REASSIGN' || sub == 'REASSIGN' || sub == 'REASSIGNED') return const Color(0xFF4F46E5); // INDIGO #4F46E5
+    if (s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || sub.contains('PENDING')) return const Color(0xFF8B5CF6); // PURPLE #8B5CF6
     return null;
   }
 
@@ -1046,50 +1019,49 @@ class TaskItem {
   IconData get timeIcon => Icons.access_time_outlined;
 
   String get computedTimeStatus {
+    // For closed/completed tasks — ALWAYS recalculate Lead/Lag/On Time.
+    // Never trust cached timeStatus for closed tasks (it may be 'Overdue'
+    // if status was sent as a numeric ID during JSON parsing).
+    if (isCompleted) {
+      if (rawEndDt == null || rawEndDt!.isEmpty) return 'On Time';
+      try {
+        final end = DateTime.parse(rawEndDt!);
+        final target = DateTime(end.year, end.month, end.day);
+        final rawComp = rawData?['compDt'] ?? rawData?['completedDt'] ??
+            rawData?['actlEndDt'] ?? rawData?['actCmpDt'] ?? rawData?['updDt'];
+        DateTime refDate;
+        if (rawComp != null && rawComp.toString().isNotEmpty) {
+          refDate = DateTime.parse(rawComp.toString());
+        } else {
+          final today = DateTime.now();
+          refDate = DateTime(today.year, today.month, today.day);
+        }
+        final compStart = DateTime(refDate.year, refDate.month, refDate.day);
+        if (compStart.isBefore(target)) return 'Lead';
+        if (compStart.isAfter(target)) return 'Lag';
+        return 'On Time';
+      } catch (_) {
+        return 'On Time';
+      }
+    }
+
+    // For open tasks — ONLY return 'Due Today' or 'Overdue'. Never 'On Time', 'Lead', or 'Lag'!
     if (timeStatus != null && timeStatus!.isNotEmpty) {
       final ts = timeStatus!.trim().toLowerCase();
-      if (ts == 'lead') return 'Lead';
-      if (ts == 'lag') return 'Lag';
-      if (ts == 'on time' || ts == 'ontime') return 'On Time';
       if (ts == 'due today' || ts == 'duetoday') return 'Due Today';
       if (ts == 'overdue') return 'Overdue';
     }
-    if (rawEndDt == null || rawEndDt!.isEmpty) return 'On Time';
-    
+    if (rawEndDt == null || rawEndDt!.isEmpty) return '';
     try {
       final end = DateTime.parse(rawEndDt!);
       final today = DateTime.now();
       final todayStart = DateTime(today.year, today.month, today.day);
       final target = DateTime(end.year, end.month, end.day);
-      
-      if (status == 'Closed' || status == 'Completed') {
-        DateTime? completedDate;
-        final rawComp = rawData?['compDt'] ?? rawData?['completedDt'] ?? rawData?['actlEndDt'] ?? rawData?['updDt'];
-        if (rawComp != null && rawComp.toString().isNotEmpty) {
-          completedDate = DateTime.parse(rawComp.toString());
-        } else {
-          completedDate = todayStart; 
-        }
-        final compStart = DateTime(completedDate.year, completedDate.month, completedDate.day);
-        
-        if (compStart.isBefore(target)) {
-          return 'Lead';
-        } else if (compStart.isAfter(target)) {
-          return 'Lag';
-        } else {
-          return 'On Time';
-        }
-      } else {
-        if (target.isBefore(todayStart)) {
-          return 'Overdue';
-        } else if (target.isAtSameMomentAs(todayStart)) {
-          return 'Due Today';
-        } else {
-          return 'On Time';
-        }
-      }
+      if (target.isBefore(todayStart)) return 'Overdue';
+      if (target.isAtSameMomentAs(todayStart)) return 'Due Today';
+      return '';
     } catch (_) {
-      return 'On Time';
+      return '';
     }
   }
 

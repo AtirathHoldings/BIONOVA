@@ -64,4 +64,7 @@ public class ProjectDraft {
 
     @Column(name = "addl_rem", length = 255)
     private String addlRem;
+
+    @Column(name = "created_by")
+    private Long createdBy;
 }

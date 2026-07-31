@@ -113,22 +113,24 @@ const TIME_COLORS = {
 // ============================================
 
 const calculateTimeStatus = (task) => {
-  if (!task) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+  if (!task) return null;
   
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   
-  const dueDate = task.endDt ? new Date(task.endDt) : null;
-  const completedDate = task.actCmpDt ? new Date(task.actCmpDt) : null;
+  const rawSts = (task.taskSts || task.status || task.rawStatus || "").toString().toUpperCase();
+  const isClosed = rawSts === "COMPLETED" || rawSts === "CLOSED" || rawSts === "DONE" || task.progress === 100;
   
-  if (!dueDate) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+  const dueDateStr = task.endDt || task.dueDate || task.endDate || task.end_dt;
+  const completedDateStr = task.actCmpDt || task.completedDate || task.act_cmp_dt;
   
-  dueDate.setHours(0, 0, 0, 0);
-
-  // For closed/completed tasks — only show Lead / Lag / On Time
-  const rawSts = (task.taskSts || task.status || "").toString().toUpperCase();
-  const isClosed = rawSts === "COMPLETED" || rawSts === "CLOSED" || rawSts === "DONE";
+  const dueDate = dueDateStr ? new Date(dueDateStr) : null;
+  const completedDate = completedDateStr ? new Date(completedDateStr) : null;
+  
+  // ONLY for closed tasks — show Lead / Lag / On Time
   if (isClosed) {
+    if (!dueDate) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+    dueDate.setHours(0, 0, 0, 0);
     const refDate = completedDate ? new Date(completedDate) : today;
     refDate.setHours(0, 0, 0, 0);
     if (refDate < dueDate) return { status: "Lead", color: "#22C55E", icon: Clock, title: "Lead" };
@@ -136,11 +138,14 @@ const calculateTimeStatus = (task) => {
     return { status: "Lag", color: "#DC2626", icon: Clock, title: "Lag" };
   }
   
-  if (today < dueDate) return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
-  if (today.getTime() === dueDate.getTime()) return { status: "Due Today", color: "#F59E0B", icon: Clock, title: "Due Today" };
-  if (today > dueDate) return { status: "Overdue", color: "#EF4444", icon: Clock, title: "Overdue" };
+  // For open / non-closed tasks: ONLY show Due Today or Overdue. Do NOT show On Time / Lead / Lag!
+  if (dueDate) {
+    dueDate.setHours(0, 0, 0, 0);
+    if (today.getTime() === dueDate.getTime()) return { status: "Due Today", color: "#F59E0B", icon: Clock, title: "Due Today" };
+    if (today > dueDate) return { status: "Overdue", color: "#EF4444", icon: Clock, title: "Overdue" };
+  }
   
-  return { status: "On Time", color: "#3B82F6", icon: Clock, title: "On Time" };
+  return null;
 };
 
 // ============================================
@@ -312,7 +317,7 @@ const getActionButton = (task, currentUserEmpId) => {
   // Log for debugging
   console.log(`🔍 Dynamic Action Check - Task: ${task.id || task.taskId}`);
   console.log(`   Progress: ${normalizedProgress}, Process: ${normalizedProcess}`);
-  console.log(`   Time Status: ${timeStatus.status}, Priority: ${calculatedPriority}`);
+  console.log(`   Time Status: ${timeStatus?.status || 'N/A'}, Priority: ${calculatedPriority}`);
   console.log(`   IsDoer: ${isDoer}, IsReviewer: ${isReviewer}, IsApprover: ${isApprover}`);
   
   // If user has no role in this task, show View
@@ -693,14 +698,28 @@ const MyTasks = ({ userRole, onLogout }) => {
       let filteredLiveTasks = [];
       let filteredIndTasks = [];
 
-      if (adminCheck) {
-        filteredLiveTasks = tasksData || [];
-        filteredIndTasks = indTasksData || [];
-        console.log(`✅ Admin: Showing all ${filteredLiveTasks.length} live tasks and ${filteredIndTasks.length} individual tasks`);
+      const userEmpId = String(empId);
+      console.log(`🔍 Filtering tasks strictly for user ID: ${userEmpId}`);
+      
+      if (myTasksDataFromSp.length > 0) {
+        const spProjectTaskIds = new Set();
+        const spIndTaskIds = new Set();
+
+        myTasksDataFromSp.forEach(item => {
+          const raw = item.rawTask || item;
+          const tid = String(item.taskId || raw.taskId || raw.empTaskId || item.id || '').trim();
+          if (tid) {
+            if (item.isIndividual || raw.isIndividual) {
+              spIndTaskIds.add(tid);
+            } else {
+              spProjectTaskIds.add(tid);
+            }
+          }
+        });
+
+        filteredLiveTasks = (tasksData || []).filter(t => spProjectTaskIds.has(String(t.taskId || t.id || '').trim()));
+        filteredIndTasks = (indTasksData || []).filter(t => spIndTaskIds.has(String(t.empTaskId || t.taskId || t.id || '').trim()));
       } else {
-        const userEmpId = String(empId);
-        console.log(`🔍 Filtering tasks for user ID: ${userEmpId}`);
-        
         const isUserInTask = (task) => {
           const taskEmpId = String(task.empId || task.assignedTo || task.executorId || '');
           const taskReviewerId = String(task.reviewerId || task.reviewer || '');
@@ -714,37 +733,97 @@ const MyTasks = ({ userRole, onLogout }) => {
 
         filteredLiveTasks = (tasksData || []).filter(isUserInTask);
         filteredIndTasks = (indTasksData || []).filter(isUserInTask);
-
-        console.log(`✅ User tasks (Live): ${filteredLiveTasks.length} (out of ${(tasksData || []).length})`);
-        console.log(`✅ User tasks (Individual): ${filteredIndTasks.length} (out of ${(indTasksData || []).length})`);
       }
 
-      let mapped = filteredLiveTasks.map(t => mapBackendTask(t, projectsData || [], milestonesData || [], employeesData || []));
-      let mappedInd = filteredIndTasks.map(t => mapIndividualTask(t, employeesData || []));
-      mapped = [...mapped, ...mappedInd];
+      console.log(`✅ User tasks (Live): ${filteredLiveTasks.length} (out of ${(tasksData || []).length})`);
+      console.log(`✅ User tasks (Individual): ${filteredIndTasks.length} (out of ${(indTasksData || []).length})`);
 
-      // Also merge any task returned directly from get_my_tasks_data stored procedure
-      if (myTasksDataFromSp.length > 0) {
-        const spMapped = myTasksDataFromSp.map(item => {
-          const raw = item.rawTask || item;
-          const isInd = item.isIndividual || false;
-          return {
-            id: item.id || raw.taskCd || (isInd ? `IND-${raw.taskId}` : `TSK-${raw.taskId}`),
-            code: item.id || raw.taskCd || (isInd ? `IND-${raw.taskId}` : `TSK-${raw.taskId}`),
-            taskId: raw.taskId || item.taskId,
-            title: item.title || raw.taskNm,
-            name: item.title || raw.taskNm,
-            isIndividual: isInd,
-            rawStatus: item.rawStatus || raw.taskSts || item.status,
-            status: item.status || raw.taskSts,
-            progress: item.progress !== undefined ? item.progress : 0,
-            dueDate: item.dueDate || raw.endDt || "",
-            priority: item.priority || "Medium",
-            rawTask: raw
-          };
-        });
-        mapped = [...mapped, ...spMapped];
-      }
+      let mappedLive = filteredLiveTasks.map(t => {
+        const prj = (projectsData || []).find(p => String(p.prjId || p.prjid || p.id) === String(t.prjId || t.prjid || t.projectId || t.prj_id));
+        const ms = (milestonesData || []).find(m => String(m.mId || m.mid || m.id) === String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id));
+        const tid = t.taskId || t.id;
+        const code = t.taskCd || t.taskCode || `TSK-${tid}`;
+        
+        let emps = [];
+        if (t.employees && Array.isArray(t.employees) && t.employees.length > 0) {
+          emps = t.employees;
+        } else {
+          const exeId = t.empId || t.assignedTo || t.executorId;
+          const revId = t.reviewerId || t.reviewer;
+          const appId = t.approverId || t.approver;
+          
+          if (exeId) {
+            const e = (employeesData || []).find(emp => String(emp.empId || emp.id) === String(exeId));
+            emps.push({ name: e ? `${e.fstNm || e.firstName || ''} ${e.lstNm || e.lastName || ''}`.trim() : (t.executorNm || t.executorName || 'Executor'), photoUrl: e?.photoUrl || t.executorPhoto, role: 'Assignee', empId: exeId });
+          }
+          if (revId) {
+            const e = (employeesData || []).find(emp => String(emp.empId || emp.id) === String(revId));
+            emps.push({ name: e ? `${e.fstNm || e.firstName || ''} ${e.lstNm || e.lastName || ''}`.trim() : (t.reviewerNm || t.reviewerName || 'Reviewer'), photoUrl: e?.photoUrl || t.reviewerPhoto, role: 'Reviewer', empId: revId });
+          }
+          if (appId) {
+            const e = (employeesData || []).find(emp => String(emp.empId || emp.id) === String(appId));
+            emps.push({ name: e ? `${e.fstNm || e.firstName || ''} ${e.lstNm || e.lastName || ''}`.trim() : (t.approverNm || t.approverName || 'Approver'), photoUrl: e?.photoUrl || t.approverPhoto, role: 'Approver', empId: appId });
+          }
+        }
+
+        return {
+          id: code,
+          code: code,
+          taskId: tid,
+          title: t.taskNm || t.title || t.name,
+          name: t.taskNm || t.title || t.name,
+          project: prj ? (prj.prjNm || prj.name) : (t.projectName || t.project || "Internal"),
+          projectCode: prj ? (prj.prjCd || prj.code) : (t.projectCode || "Internal"),
+          milestone: ms ? (ms.mlstnTtl || ms.title) : (t.milestoneTitle || t.milestone || ""),
+          status: t.statusNm || t.status || t.taskSts,
+          rawStatus: t.statusNm || t.taskSts || t.status,
+          subStatus: t.subStatus,
+          prcsYesActn: t.prcsYesActn,
+          dueDate: t.endDt || t.dueDate || "",
+          startDate: t.stDt || t.startDate || "",
+          priority: t.priorityNm || t.priority || "Medium",
+          isIndividual: false,
+          employees: emps,
+          rawTask: t
+        };
+      });
+
+      let mappedInd = filteredIndTasks.map(t => {
+        const tid = t.empTaskId || t.taskId || t.id;
+        const code = t.taskCd || t.taskCode || `IND-${tid}`;
+        
+        let emps = [];
+        if (t.employees && Array.isArray(t.employees) && t.employees.length > 0) {
+          emps = t.employees;
+        } else if (t.empId) {
+          const e = (employeesData || []).find(emp => String(emp.empId || emp.id) === String(t.empId));
+          emps.push({ name: e ? `${e.fstNm || e.firstName || ''} ${e.lstNm || e.lastName || ''}`.trim() : 'Executor', photoUrl: e?.photoUrl, role: 'Assignee', empId: t.empId });
+        }
+
+        return {
+          id: code,
+          code: code,
+          taskId: tid,
+          empTaskId: tid,
+          title: t.taskNm || t.title || t.name,
+          name: t.taskNm || t.title || t.name,
+          project: t.taskAsgnTo || t.projectName || t.project || "Internal",
+          projectCode: t.taskAsgnTo || t.projectCode || "Internal",
+          milestone: "Individual Task",
+          status: t.statusNm || t.status || t.taskSts,
+          rawStatus: t.statusNm || t.taskSts || t.status,
+          subStatus: t.subStatus,
+          prcsYesActn: t.prcsYesActn,
+          dueDate: t.endDt || t.dueDate || "",
+          startDate: t.stDt || t.startDate || "",
+          priority: t.priorityNm || t.priority || "Medium",
+          isIndividual: true,
+          employees: emps,
+          rawTask: t
+        };
+      });
+
+      let mapped = [...mappedLive, ...mappedInd];
 
       // Final strict deduplication by unique database primary ID
       const uniqueMapped = [];
@@ -1326,6 +1405,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       const updatedTaskObj = {
         ...originalTask,
         taskSts: finalStatus,
+        subStatus: finalStatus === "COMPLETED" ? null : "Under Review",
         prcsYesActn: finalProcess,
         actCmpDt: finalStatus === "COMPLETED" ? new Date().toISOString().split("T")[0] : originalTask.actCmpDt
       };
@@ -1408,7 +1488,10 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       // WORK_IN_PROGRESS + UNDER_REVIEW -> WORK_IN_PROGRESS + REWORK
       const prefix = `[Rejected - ${sessionStorage.getItem("userName") || 'Reviewer'}]`;
       const existingRem = task.isIndividual ? originalTask.remarks : originalTask.addlRem;
-      const newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${reason}` : `${prefix}: ${reason}`;
+      let newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${reason}` : `${prefix}: ${reason}`;
+      if (newRem.length > 240) {
+        newRem = newRem.slice(-240);
+      }
 
       const updatedTaskObj = {
         ...originalTask,
@@ -1504,7 +1587,10 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       // WORK_IN_PROGRESS + UNDER_REVIEW -> WORK_IN_PROGRESS + REWORK
       const prefix = `[Rejected by Approver - ${sessionStorage.getItem("userName") || 'Approver'}]`;
       const existingRem = task.isIndividual ? originalTask.remarks : originalTask.addlRem;
-      const newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${reason}` : `${prefix}: ${reason}`;
+      let newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${reason}` : `${prefix}: ${reason}`;
+      if (newRem.length > 240) {
+        newRem = newRem.slice(-240);
+      }
 
       const updatedTaskObj = {
         ...originalTask,
@@ -1751,7 +1837,10 @@ const formatTaskCode = (code, taskId, isIndividual) => {
       const newStatus = actionType || denyData.type;
       const prefix = `[${newStatus === "REWORK" ? 'Rejected' : 'Reassigned'} - ${sessionStorage.getItem("userName") || 'Reviewer'}]`;
       const existingRem = selectedTask.isIndividual ? originalTask.remarks : originalTask.addlRem;
-      const newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${denyData.reason}` : `${prefix}: ${denyData.reason}`;
+      let newRem = existingRem ? `${existingRem}\n---\n${prefix}: ${denyData.reason}` : `${prefix}: ${denyData.reason}`;
+      if (newRem.length > 240) {
+        newRem = newRem.slice(-240);
+      }
 
       const updatedTaskObj = {
         ...originalTask,
@@ -2291,6 +2380,42 @@ const formatTaskCode = (code, taskId, isIndividual) => {
     // Determine if task is in review
     const isUnderReview = currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER" || currentProcess === "UNDER_REVIEW";
 
+    // Disable Rework button for 1st Milestone tasks of any project AND for Assignment/Individual tasks
+    const isReworkDisabled = (() => {
+      if (!task) return true;
+      const raw = task.rawTask || task;
+
+      // Rule 1: Assignment / Individual tasks -> Rework disabled
+      if (task.isIndividual || raw.isIndividual || raw.taskSource === "INDIVIDUAL" || !raw.mId) {
+        return true;
+      }
+
+      // Rule 2: 1st Milestone tasks of any project -> Rework disabled
+      const currentMId = raw.mId || raw.mid || task.mId;
+      const currentPrjId = raw.prjId || raw.prjid || task.prjId || task.projectId;
+
+      if (!currentMId) return true;
+
+      const projectMilestones = (milestonesList || []).filter(m => {
+        const mPrjId = m.prjId || m.prjid || m.prj_id;
+        return currentPrjId ? String(mPrjId) === String(currentPrjId) : true;
+      }).sort((a, b) => {
+        const ordA = a.ordrId || a.ordr_id || a.mId || a.mid || a.id || 0;
+        const ordB = b.ordrId || b.ordr_id || b.mId || b.mid || b.id || 0;
+        return Number(ordA) - Number(ordB);
+      });
+
+      if (projectMilestones.length > 0) {
+        const firstMilestone = projectMilestones[0];
+        const firstMId = firstMilestone.mId || firstMilestone.mid || firstMilestone.id;
+        if (String(currentMId) === String(firstMId)) {
+          return true;
+        }
+      }
+
+      return false;
+    })();
+
     const renderTeamMember = (empId, role, label, fallbackName = null) => {
       if (!empId && !fallbackName) return null;
       let name = getEmployeeName(empId, employeesList);
@@ -2709,8 +2834,8 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                   <div style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
                     <ClockIcon size={14} style={{ display: "inline", marginRight: "4px" }} /> Time Status
                   </div>
-                  <div style={{ fontSize: "14px", fontWeight: "600", color: timeStatus.color }}>
-                    {timeStatus.title}
+                  <div style={{ fontSize: "14px", fontWeight: "600", color: timeStatus ? timeStatus.color : "#64748b" }}>
+                    {timeStatus ? timeStatus.title : "—"}
                   </div>
                 </div>
                 <div>
@@ -3397,8 +3522,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                   onClick={() => {
                     const newToggleState = !isRaiseRequest;
                     setIsRaiseRequest(newToggleState);
-                    const isStartTask = task?.rawTask?.seq === 1 || task?.rawTask?.isStartTask || task?.taskId === 1 || task?.taskCode?.endsWith('001') || false;
-                    setDenyData({...denyData, type: newToggleState ? (isStartTask ? "REWORK" : "REASSIGN") : ""});
+                    setDenyData({...denyData, type: newToggleState ? (isReworkDisabled ? "REASSIGN" : "REWORK") : ""});
                   }}
                   style={{
                     width: "48px", height: "26px", borderRadius: "13px",
@@ -3422,105 +3546,86 @@ const formatTaskCode = (code, taskId, isIndividual) => {
             {isRaiseRequest ? (
               <div style={{ paddingTop: "8px" }}>
                 {(() => {
-                  const isStartTask = task?.rawTask?.seq === 1 || task?.rawTask?.isStartTask || task?.taskId === 1 || task?.taskCode?.endsWith('001') || false;
-                  
-                  if (isStartTask) {
-                    return (
-                      <>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "20px" }}>
-                          <div className="myt-form-group">
-                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Select Source Milestone</label>
-                            <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                              value={denyData.milestone || ""} onChange={e => setDenyData({...denyData, milestone: e.target.value})}>
-                              <option value="">Select Milestone</option>
-                              <option value={task.milestone || "Current Milestone"}>{task.milestone || "Current Milestone"}</option>
-                            </select>
-                          </div>
-                          <div className="myt-form-group">
-                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Select Deliverable</label>
-                            <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                              value={denyData.deliverable || ""} onChange={e => setDenyData({...denyData, deliverable: e.target.value})}>
-                              <option value="">Select Deliverable (Task)</option>
-                              <option value={task.title || "Current Task"}>{task.title || "Current Task"}</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div className="myt-form-group" style={{ marginBottom: "20px" }}>
-                          <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Reason</label>
-                          <textarea className="myt-input" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", minHeight: "100px", fontSize: "14px" }}
-                            placeholder="Enter detailed reason..." value={denyData.reason || ""} onChange={e => setDenyData({...denyData, reason: e.target.value})} />
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
-                          <div className="myt-form-group">
-                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
-                            <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
-                              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.webp" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
-                              <Paperclip size={18} style={{ verticalAlign: "middle", marginRight: "8px" }} /> <span style={{ fontSize: "14px" }}>Click or drag files to upload</span>
-                            </div>
-                          </div>
-                          <div className="myt-form-group">
-                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Impact</label>
-                            <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                              value={denyData.impact || "Medium"} onChange={e => setDenyData({...denyData, impact: e.target.value})}>
-                              <option value="High">High</option>
-                              <option value="Medium">Medium</option>
-                              <option value="Low">Low</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "20px", borderTop: "1px solid #e2e8f0" }}>
-                          <button className="cc-btn secondary" onClick={() => setShowDenyForm(false)} style={{ borderRadius: "8px", padding: "10px 20px" }}>Cancel</button>
-                          <button className="cc-btn primary" onClick={() => { setDenyData(prev => ({...prev, type: "REWORK"})); handleSubmitDeny("REWORK"); }} disabled={!denyData.reason} 
-                            style={{ borderRadius: "8px", backgroundColor: "#3b82f6", border: "none", color: "white", padding: "10px 24px", fontSize: "15px", fontWeight: "600" }}>
-                            Rework
-                          </button>
-                        </div>
-                      </>
-                    );
-                  } else {
-                    return (
-                      <>
-                        <div className="myt-form-group" style={{ marginBottom: "20px" }}>
-                          <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Task Dropdown</label>
-                          <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                            value={denyData.deliverable || ""} onChange={e => setDenyData({...denyData, deliverable: e.target.value})}>
-                            <option value="">Select Task</option>
-                            <option value={task.title || "Current Task"}>{task.title || "Current Task"}</option>
-                          </select>
-                        </div>
-                        <div className="myt-form-group" style={{ marginBottom: "20px" }}>
-                          <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Reason</label>
-                          <textarea className="myt-input" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", minHeight: "100px", fontSize: "14px" }}
-                            placeholder="Enter detailed reason..." value={denyData.reason || ""} onChange={e => setDenyData({...denyData, reason: e.target.value})} />
-                        </div>
-                        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
-                          <div className="myt-form-group">
-                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
-                            <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
-                              <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.webp" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
-                              <Paperclip size={18} style={{ verticalAlign: "middle", marginRight: "8px" }} /> <span style={{ fontSize: "14px" }}>Click or drag files to upload</span>
-                            </div>
-                          </div>
-                          <div className="myt-form-group">
-                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Impact</label>
-                            <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                              value={denyData.impact || "Medium"} onChange={e => setDenyData({...denyData, impact: e.target.value})}>
-                              <option value="High">High</option>
-                              <option value="Low">Low</option>
-                            </select>
-                          </div>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "20px", borderTop: "1px solid #e2e8f0" }}>
-                          <button className="cc-btn secondary" onClick={() => setShowDenyForm(false)} style={{ borderRadius: "8px", padding: "10px 20px" }}>Cancel</button>
-                          <button className="cc-btn primary" onClick={() => { setDenyData(prev => ({...prev, type: "REASSIGN"})); handleSubmitDeny("REASSIGN"); }} disabled={!denyData.reason} 
-                            style={{ borderRadius: "8px", backgroundColor: "#3b82f6", border: "none", color: "white", padding: "10px 24px", fontSize: "15px", fontWeight: "600" }}>
-                            Reassign
-                          </button>
-                        </div>
-                      </>
-                    );
-                  }
+                  const currentRawTask = task?.rawTask || task || {};
+                  const currentMId = currentRawTask.mId || currentRawTask.mid;
+                  const currentMilestoneObj = (milestonesList || []).find(m => String(m.mId || m.mid || m.id) === String(currentMId));
+                  const currentPrjId = currentRawTask.prjId || currentRawTask.prjid || currentMilestoneObj?.prjId || currentMilestoneObj?.prjid;
+
+                  const projectMilestones = (milestonesList || []).filter(m => 
+                    currentPrjId ? String(m.prjId || m.prjid) === String(currentPrjId) : true
+                  );
+
+                  const selectedMId = denyData.milestone;
+                  const matchingTasks = (tasks || []).filter(t => {
+                    const tMId = t.rawTask?.mId || t.rawTask?.mid || t.mId || t.milestoneId;
+                    return selectedMId ? String(tMId) === String(selectedMId) : true;
+                  });
+
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "20px" }}>
+                      <div className="myt-form-group">
+                        <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Select Milestone</label>
+                        <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                          value={denyData.milestone || ""} onChange={e => setDenyData({...denyData, milestone: e.target.value, targetMId: e.target.value})}>
+                          <option value="">Previous Milestone (Auto-Route)</option>
+                          {projectMilestones.map(m => (
+                            <option key={m.mId || m.mid || m.id} value={m.mId || m.mid || m.id}>
+                              {m.mlstnTtl || m.mlstnNm || m.name || m.title || `Milestone ${m.mId || m.id}`}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="myt-form-group">
+                        <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Select Deliverable (Task)</label>
+                        <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                          value={denyData.deliverable || ""} onChange={e => setDenyData({...denyData, deliverable: e.target.value})}>
+                          <option value="">Last Task of Target Milestone (Auto-Route)</option>
+                          {matchingTasks.map(t => (
+                            <option key={t.id || t.taskId} value={t.id || t.taskId}>
+                              {t.code ? `${t.code} - ${t.title || t.name}` : (t.title || t.name)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  );
                 })()}
+                <div className="myt-form-group" style={{ marginBottom: "20px" }}>
+                  <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Reason <span style={{ color: "#ef4444" }}>*</span></label>
+                  <textarea className="myt-input" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", minHeight: "100px", fontSize: "14px" }}
+                    placeholder="Enter detailed reason..." value={denyData.reason || ""} onChange={e => setDenyData({...denyData, reason: e.target.value})} />
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
+                  <div className="myt-form-group">
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
+                    <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
+                      <input type="file" accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx,.txt,.jpg,.jpeg,.png,.gif,.webp" multiple onChange={(e) => setDenyData({...denyData, attachments: e.target.files})} style={{ opacity: 0, position: "absolute", top: 0, left: 0, width: "100%", height: "100%", cursor: "pointer" }} />
+                      <Paperclip size={18} style={{ verticalAlign: "middle", marginRight: "8px" }} /> <span style={{ fontSize: "14px" }}>Click or drag files to upload</span>
+                    </div>
+                  </div>
+                  <div className="myt-form-group">
+                    <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Impact</label>
+                    <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                      value={denyData.impact || "Medium"} onChange={e => setDenyData({...denyData, impact: e.target.value})}>
+                      <option value="High">High</option>
+                      <option value="Medium">Medium</option>
+                      <option value="Low">Low</option>
+                    </select>
+                  </div>
+                </div>
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "20px", borderTop: "1px solid #e2e8f0" }}>
+                  <button className="cc-btn secondary" onClick={() => setShowDenyForm(false)} style={{ borderRadius: "8px", padding: "10px 20px" }}>Cancel</button>
+                  <button className="cc-btn secondary" onClick={() => { setDenyData(prev => ({...prev, type: "REASSIGN"})); handleSubmitDeny("REASSIGN"); }} disabled={!denyData.reason} 
+                    style={{ borderRadius: "8px", backgroundColor: "#64748b", border: "none", color: "white", padding: "10px 20px", fontSize: "14px", fontWeight: "600" }}>
+                    Reassign
+                  </button>
+                  {!isReworkDisabled && (
+                    <button className="cc-btn primary" onClick={() => { setDenyData(prev => ({...prev, type: "REWORK"})); handleSubmitDeny("REWORK"); }} disabled={!denyData.reason} 
+                      style={{ borderRadius: "8px", backgroundColor: "#f97316", border: "none", color: "white", padding: "10px 24px", fontSize: "15px", fontWeight: "600" }}>
+                      Rework
+                    </button>
+                  )}
+                </div>
               </div>
             ) : (
               <div style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>
@@ -4117,7 +4222,7 @@ const formatTaskCode = (code, taskId, isIndividual) => {
                                   <span className="cc-status-badge" style={{ backgroundColor: progressBadge.bg, color: progressBadge.color, minWidth: "90px", textAlign: "center", display: "inline-block", textTransform: "uppercase", fontWeight: "700", padding: "4px 12px", borderRadius: "12px", fontSize: "11px" }}>{progressBadge.label}</span>
                                   {/* Hide process icon for closed tasks — only show Lead/Lag/On Time clock */}
                                   {!isCompleted && processIcon && <div className="myt-custom-tooltip-wrap" title={processIcon.title} style={{ color: processIcon.color, display: "flex", alignItems: "center", cursor: "help" }}><processIcon.icon size={18} strokeWidth={2.5} /></div>}
-                                  <div className="myt-custom-tooltip-wrap" title={timeStatus.title} style={{ color: timeStatus.color, display: "flex", alignItems: "center", cursor: "help" }}><timeStatus.icon size={18} strokeWidth={2.5} /></div>
+                                  {timeStatus && <div className="myt-custom-tooltip-wrap" title={timeStatus.title} style={{ color: timeStatus.color, display: "flex", alignItems: "center", cursor: "help" }}><timeStatus.icon size={18} strokeWidth={2.5} /></div>}
                                 </div>
                               </td>
                               <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>

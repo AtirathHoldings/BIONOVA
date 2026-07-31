@@ -188,7 +188,7 @@ const Login = ({ onLogin }) => {
                         name="email" 
                         value={formData.email} 
                         onChange={handleChange}
-                        placeholder="your_email@email.com" 
+                        placeholder="enter your email" 
                         autoComplete="off"
                       />
                     </div>
@@ -203,7 +203,7 @@ const Login = ({ onLogin }) => {
                         name="password"
                         value={formData.password} 
                         onChange={handleChange} 
-                        placeholder="your_password"
+                        placeholder="enter your password"
                         className="password-input"
                       />
                       <button 

@@ -75,7 +75,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
     location.state?.activeTab || (viewMode === 'milestones_only' ? 'Milestones & Tasks' : 'Overview')
   );
   const [project, setProject] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [milestones, setMilestones] = useState([]);
   const [tasks, setTasks] = useState([]);
 
@@ -86,6 +86,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
 
   useEffect(() => {
     const fetchProject = async () => {
+      setLoading(true);
       try {
         const [draftsRes, liveRes, coyRes, pltRes, deptRes] = await Promise.all([
           fetch(`${apiBaseUrl}/api/project-drafts`, { headers: getAuthHeaders() }),
@@ -188,11 +189,16 @@ const ProjectDetails = ({ userRole, onLogout }) => {
   }, [id, location.state]);
 
   if (loading) {
-    return <div className="proj-shell-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Loading Project Details...</div>;
+    return (
+      <div className="proj-shell-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ border: '4px solid #e2e8f0', borderTop: '4px solid #3b82f6', borderRadius: '50%', width: '40px', height: '40px', animation: 'spin 1s linear infinite' }} />
+        <span style={{ color: '#475569', fontSize: '15px', fontWeight: '500' }}>Loading Project Details...</span>
+      </div>
+    );
   }
 
   if (!project) {
-    return <div className="proj-shell-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>Project Not Found.</div>;
+    return <div className="proj-shell-container" style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '60vh', color: '#64748b', fontSize: '16px' }}>Project Not Found.</div>;
   }
 
   const getTaskStatusStr = (t) => {
@@ -258,17 +264,23 @@ const ProjectDetails = ({ userRole, onLogout }) => {
 
   const formatBulletedText = (text, fallback) => {
     if (!text) return fallback;
-    if (text.includes('•')) {
-      const parts = text.split('•').map(p => p.replace(/[\n,]/g, '').trim()).filter(Boolean);
+    const parts = text
+      .split(/•|\r?\n/)
+      .map(p => p.trim())
+      .filter(Boolean);
+
+    if (parts.length > 0) {
       return (
-        <div style={{ marginTop: '4px', lineHeight: '1.5' }}>
+        <ul style={{ margin: '6px 0 0 0', paddingLeft: '20px', lineHeight: '1.6', listStyleType: 'disc' }}>
           {parts.map((p, i) => (
-            <span key={i} style={{ display: 'inline', marginRight: '8px' }}>• {p}</span>
+            <li key={i} style={{ color: '#1e293b', marginBottom: '6px', fontSize: '14px' }}>
+              {p}
+            </li>
           ))}
-        </div>
+        </ul>
       );
     }
-    return <span style={{ display: 'block', marginTop: '4px' }}>{text}</span>;
+    return <span style={{ display: 'block', marginTop: '4px', fontSize: '14px' }}>{text}</span>;
   };
 
   return (
@@ -334,7 +346,7 @@ const ProjectDetails = ({ userRole, onLogout }) => {
                   
                 </div>
 
-                <div className="pd-details-grid mt-4" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
+                <div className="pd-details-grid mt-4" style={{ gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
                   <div className="pd-detail-item">
                     <span className="pd-label">Total Project Days</span>
                     <span className="pd-value">{project.totalProjectDays ? `${project.totalProjectDays} Days` : "Not Specified"}</span>
@@ -347,18 +359,20 @@ const ProjectDetails = ({ userRole, onLogout }) => {
                     <span className="pd-label">Tentative End Date</span>
                     <span className="pd-value">{formatDateToDDMMYYYY(project.endDate)}</span>
                   </div>
-                  <div className="pd-detail-item">
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '16px' }}>
+                  <div className="pd-detail-item" style={{ width: '100%' }}>
                     <span className="pd-label">Remarks</span>
                     <span className="pd-value">{project.remarks || "No Remarks"}</span>
                   </div>
-                </div>
 
-                <div className="pd-details-grid mt-4" style={{ gridTemplateColumns: 'repeat(2, 1fr)', gap: '16px' }}>
-                  <div className="pd-detail-item">
+                  <div className="pd-detail-item" style={{ width: '100%' }}>
                     <span className="pd-label">Project Objective</span>
                     <span className="pd-value">{formatBulletedText(project.projectObjective, "No objective defined.")}</span>
                   </div>
-                  <div className="pd-detail-item">
+
+                  <div className="pd-detail-item" style={{ width: '100%' }}>
                     <span className="pd-label">Expected Deliverables</span>
                     <span className="pd-value">{formatBulletedText(project.expectedDeliverables, "Not Specified")}</span>
                   </div>

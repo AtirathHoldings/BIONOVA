@@ -91,11 +91,20 @@ const getGreeting = () => {
 
 const getInitials = (name = "") => {
   if (!name) return "U";
-  const parts = name.trim().split(" ");
+  let strName = "";
+  if (typeof name === "string") {
+    strName = name;
+  } else if (typeof name === "object") {
+    strName = name.name || name.employeeName || name.fullName || `${name.fstNm || ''} ${name.lstNm || ''}`.trim() || "U";
+  } else {
+    strName = String(name);
+  }
+  if (!strName || typeof strName !== "string") return "U";
+  const parts = strName.trim().split(" ").filter(Boolean);
   if (parts.length >= 2) {
     return (parts[0][0] + parts[1][0]).toUpperCase();
   }
-  return parts[0].substring(0, 2).toUpperCase();
+  return parts[0] ? parts[0].substring(0, 2).toUpperCase() : "U";
 };
 
 const formatDate = (dateValue) => {
@@ -147,24 +156,45 @@ const getProcessStatusBadge = (processStatus) => {
   return null;
 };
 
-const getTimeStatusBadge = (timeStatus, isOverdue) => {
-  const s = timeStatus?.toUpperCase() || (isOverdue ? 'OVERDUE' : "");
-  if (s === 'LEAD') {
-    return <ClockIcon size={14} color="#22c55e" title="Lead" />;
-  }
-  if (s === 'ON_TIME' || s === 'ON TIME' || s === 'ONTIME') {
+const getTimeStatusBadge = (timeStatus, isOverdue, isClosed) => {
+  const s = timeStatus?.toUpperCase();
+  if (isClosed) {
+    if (s === 'LEAD') {
+      return <ClockIcon size={14} color="#22c55e" title="Lead" />;
+    }
+    if (s === 'ON_TIME' || s === 'ON TIME' || s === 'ONTIME') {
+      return <ClockIcon size={14} color="#3b82f6" title="On Time" />;
+    }
+    if (s === 'LAG') {
+      return <ClockIcon size={14} color="#dc2626" title="Lag" />;
+    }
     return <ClockIcon size={14} color="#3b82f6" title="On Time" />;
   }
+  
   if (s === 'DUE_TODAY' || s === 'DUE TODAY' || s === 'DUETODAY') {
     return <ClockIcon size={14} color="#f59e0b" title="Due Today" />;
   }
-  if (s === 'OVERDUE' || s === 'DELAYED') {
+  if (s === 'OVERDUE' || s === 'DELAYED' || isOverdue) {
     return <ClockIcon size={14} color="#ef4444" title="Overdue" />;
   }
-  if (s === 'LAG') {
-    return <ClockIcon size={14} color="#dc2626" title="Lag" />;
-  }
   return null;
+};
+
+const extractProgress = (obj) => {
+  if (!obj) return 0;
+  if (obj.status && (obj.status.toUpperCase() === 'COMPLETED' || obj.status.toUpperCase() === 'CLOSED')) return 100;
+  const keys = ['progress', 'completionPercentage', 'completion', 'percentage', 'progressPercent', 'percentComplete', 'prjPrgrs', 'prjprgrs'];
+  for (const key of keys) {
+    if (obj[key] !== undefined && obj[key] !== null) {
+      let val = obj[key];
+      if (typeof val === 'string') val = parseFloat(val.replace('%', ''));
+      if (!isNaN(val) && val >= 0) {
+        if (val > 0 && val <= 1) val = val * 100;
+        return Math.min(100, Math.round(val));
+      }
+    }
+  }
+  return 0;
 };
 
 // ============================================================
@@ -527,16 +557,40 @@ const UserDashboard = ({ userRole, onLogout }) => {
       });
 
       // ============================================================
-      // MY PROJECTS - DIRECT FROM BACKEND STORED PROCEDURE
+      // MY PROJECTS - CALCULATE PROGRESS MATCHING PROJECTS.JSX
       // ============================================================
       const myProjects = (data.myProjects || []).map(p => {
+        const dashId = String(p.projectId || p.id);
+        const projMilestones = (allMilestonesList || []).filter(m => String(m.prjId || m.prjid || m.projectId || m.prj_id) === dashId);
+        const projTasks = (userTasks || []).filter(t => {
+          const tPrjId = String(t.prjId || t.prjid || t.projectId || t.prj_id || "");
+          if (tPrjId && tPrjId === dashId) return true;
+          const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || "");
+          return projMilestones.some(m => String(m.mId || m.mid || m.id) === tMId);
+        });
+
+        const totalTasksCount = projTasks.length;
+        const completedTasksCount = projTasks.filter(t => {
+          const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
+          return s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE';
+        }).length;
+
+        let progressPct = 0;
+        if (totalTasksCount > 0) {
+          progressPct = Math.round((completedTasksCount / totalTasksCount) * 100);
+        } else {
+          progressPct = extractProgress(p);
+        }
+
         return {
-          id: p.projectId || p.id,
+          id: dashId,
+          projectId: dashId,
           name: p.projectName || p.name || "",
           status: p.status || "Active",
-          progress: typeof p.progress === 'number' ? Math.round(p.progress) : 0,
+          progress: progressPct,
           quality: p.quality || "",
-          employees: p.tasksAssigned || p.employeeCount || 0,
+          employees: totalTasksCount || p.tasksAssigned || p.totalTasks || 0,
+          tasksCount: totalTasksCount || p.tasksAssigned || p.totalTasks || 0,
           client: p.clientName || "",
           location: p.location || "",
           logo: p.logo
@@ -1107,20 +1161,23 @@ const UserDashboard = ({ userRole, onLogout }) => {
                           </span>
                           <div className="ud-todo-card-badges">
                             {getProcessStatusBadge(task.processStatus)}
-                            {getTimeStatusBadge(task.timeStatus, task.isOverdue)}
+                            {getTimeStatusBadge(task.timeStatus, task.isOverdue, task.status === "CLOSED" || task.status === "COMPLETED")}
                           </div>
                           <div className="ud-todo-card-employees-compact">
                             {task.employees && task.employees.length > 0 ? (
                               <>
-                                {task.employees.slice(0, 2).map((emp, i) => (
-                                  <span key={i} className="ud-avatar-tiny" title={emp.role ? `${emp.name} - ${emp.role}` : emp.name || emp}>
-                                    {emp.photoUrl ? (
-                                      <img src={emp.photoUrl} alt={emp.name || emp} />
-                                    ) : (
-                                      getInitials(emp.name || emp)
-                                    )}
-                                  </span>
-                                ))}
+                                {task.employees.slice(0, 2).map((emp, i) => {
+                                  const empName = typeof emp === 'string' ? emp : (emp.name || `${emp.fstNm || ''} ${emp.lstNm || ''}`.trim() || 'User');
+                                  return (
+                                    <span key={i} className="ud-avatar-tiny" title={emp.role ? `${empName} - ${emp.role}` : empName}>
+                                      {emp.photoUrl ? (
+                                        <img src={emp.photoUrl} alt={empName} />
+                                      ) : (
+                                        getInitials(empName)
+                                      )}
+                                    </span>
+                                  );
+                                })}
                                 {task.employees.length > 2 && (
                                   <span className="ud-avatar-tiny-more">+{task.employees.length - 2}</span>
                                 )}
@@ -1237,15 +1294,18 @@ const UserDashboard = ({ userRole, onLogout }) => {
                       <div className="ud-upcoming-employees">
                         {task.employees && task.employees.length > 0 ? (
                           <>
-                            {task.employees.slice(0, 2).map((emp, i) => (
-                              <span key={i} className="ud-avatar-tiny" title={emp.name || emp}>
-                                {emp.photoUrl ? (
-                                  <img src={emp.photoUrl} alt={emp.name || emp} />
-                                ) : (
-                                  getInitials(emp.name || emp)
-                                )}
-                              </span>
-                            ))}
+                            {task.employees.slice(0, 2).map((emp, i) => {
+                              const empName = typeof emp === 'string' ? emp : (emp.name || `${emp.fstNm || ''} ${emp.lstNm || ''}`.trim() || 'User');
+                              return (
+                                <span key={i} className="ud-avatar-tiny" title={empName}>
+                                  {emp.photoUrl ? (
+                                    <img src={emp.photoUrl} alt={empName} />
+                                  ) : (
+                                    getInitials(empName)
+                                  )}
+                                </span>
+                              );
+                            })}
                             {task.employees.length > 2 && (
                               <span className="ud-avatar-tiny-more">+{task.employees.length - 2}</span>
                             )}
@@ -1303,8 +1363,8 @@ const UserDashboard = ({ userRole, onLogout }) => {
                               <span className="ud-project-card-status" style={{ color: getStatusColor(project.status) }}>
                                 {project.status || 'Active'}
                               </span>
-                              <span className="ud-project-card-employees">
-                                <Users size={12} /> {project.employees || 0}
+                              <span className="ud-project-card-employees" title="Tasks Assigned">
+                                <FileText size={12} /> {project.tasksCount || project.employees || 0} Tasks
                               </span>
                               {project.quality && (
                                 <span className="ud-project-card-quality">{project.quality}</span>
@@ -1315,18 +1375,26 @@ const UserDashboard = ({ userRole, onLogout }) => {
                         <div className="ud-project-card-right">
                           <div className="ud-project-card-progress">
                             <div className="ud-project-card-progress-ring">
-                              <svg viewBox="0 0 44 44" className="ud-card-ring-svg">
-                                <circle cx="22" cy="22" r="19" fill="none" stroke="#e2e8f0" strokeWidth="4" />
-                                <circle 
-                                  cx="22" cy="22" r="19" fill="none" 
-                                  stroke={progressColor}
-                                  strokeWidth="4"
-                                  strokeDasharray={`${Math.min(progressValue, 100)} ${Math.max(100 - progressValue, 0)}`}
-                                  strokeDashoffset="0"
-                                  strokeLinecap="round"
-                                  transform="rotate(-90 22 22)"
-                                />
-                              </svg>
+                              {(() => {
+                                const radius = 19;
+                                const circumference = 2 * Math.PI * radius;
+                                const dashArray = (progressValue / 100) * circumference;
+                                const gapArray = circumference - dashArray;
+                                return (
+                                  <svg viewBox="0 0 44 44" className="ud-card-ring-svg">
+                                    <circle cx="22" cy="22" r={radius} fill="none" stroke="#e2e8f0" strokeWidth="4" />
+                                    <circle 
+                                      cx="22" cy="22" r={radius} fill="none" 
+                                      stroke={progressColor}
+                                      strokeWidth="4"
+                                      strokeDasharray={`${dashArray} ${gapArray}`}
+                                      strokeDashoffset="0"
+                                      strokeLinecap="round"
+                                      transform="rotate(-90 22 22)"
+                                    />
+                                  </svg>
+                                );
+                              })()}
                               <span className="ud-card-ring-value">{Math.round(progressValue)}%</span>
                             </div>
                           </div>
@@ -1477,7 +1545,7 @@ const UserDashboard = ({ userRole, onLogout }) => {
                   </span>
                   <div style={{ display: 'flex', flexDirection: 'row', gap: '6px', alignItems: 'center' }}>
                     {getProcessStatusBadge(selectedTask.processStatus)}
-                    {getTimeStatusBadge(selectedTask.timeStatus, selectedTask.isOverdue)}
+                    {getTimeStatusBadge(selectedTask.timeStatus, selectedTask.isOverdue, selectedTask.status === "CLOSED" || selectedTask.status === "COMPLETED")}
                   </div>
                 </div>
               </div>

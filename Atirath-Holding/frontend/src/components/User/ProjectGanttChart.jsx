@@ -304,25 +304,44 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           const isAdmin = profile?.email === 'vsv.vempati@gmail.com';
 
           if (userRole === 'user' && !isAdmin && profile) {
-            const userTaskIds = new Set(userTasks.map(t => `TSK-${t.taskId}`));
+            // Build a broad set of IDs to match against gantt API item IDs
+            // which may be in formats like "TSK-123", "123", or task code
+            const userTaskIds = new Set([
+              ...userTasks.map(t => t.taskId ? `TSK-${t.taskId}` : ''),
+              ...userTasks.map(t => t.taskId ? String(t.taskId) : ''),
+              ...userTasks.map(t => t.taskCd || t.task_cd || ''),
+              ...userTasks.map(t => t.id ? String(t.id) : '')
+            ].filter(Boolean));
+
             const keptTaskIds = new Set();
             const keptMilestoneIds = new Set();
 
             rawItems.forEach(item => {
-              if (item.type === 'task' && userTaskIds.has(item.id)) {
-                keptTaskIds.add(item.id);
-                if (item.parent) {
-                  keptMilestoneIds.add(item.parent);
+              if (item.type === 'task') {
+                const itemId = String(item.id || '');
+                const matches = userTaskIds.has(itemId) ||
+                  userTaskIds.has(itemId.replace(/^TSK-/i, '')) ||
+                  userTaskIds.has(`TSK-${itemId}`);
+                if (matches) {
+                  keptTaskIds.add(item.id);
+                  if (item.parent) {
+                    keptMilestoneIds.add(item.parent);
+                  }
                 }
               }
             });
 
-            rawItems = rawItems.filter(item => {
-              if (item.type === 'project') return true;
-              if (item.type === 'milestone') return keptMilestoneIds.has(item.id);
-              if (item.type === 'task') return keptTaskIds.has(item.id);
-              return false;
-            });
+            // If no user tasks matched, show all (fallback to prevent blank chart)
+            if (keptTaskIds.size === 0) {
+              // Don't filter — show all milestones/tasks for this project
+            } else {
+              rawItems = rawItems.filter(item => {
+                if (item.type === 'project') return true;
+                if (item.type === 'milestone') return keptMilestoneIds.has(item.id);
+                if (item.type === 'task') return keptTaskIds.has(item.id);
+                return false;
+              });
+            }
           }
         } else {
           const [mlRes, taskRes, empRes, profileRes] = await Promise.all([
@@ -483,13 +502,15 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     });
   }
 
-  // Filter based on expansion state
-  rows = rows.filter(r => {
-    if (r.type === 'project') return true;
-    if (r.type === 'milestone') return expandedProjects.has(r.parentPrj);
-    if (r.type === 'task') return expandedProjects.has(r.parentPrj) && expandedMilestones.has(r.parentMs);
-    return true;
-  });
+  // Filter based on expansion state — in compact mode show all rows directly
+  if (!compact) {
+    rows = rows.filter(r => {
+      if (r.type === 'project') return true;
+      if (r.type === 'milestone') return expandedProjects.has(r.parentPrj);
+      if (r.type === 'task') return expandedProjects.has(r.parentPrj) && expandedMilestones.has(r.parentMs);
+      return true;
+    });
+  }
 
   if (compact) {
     rows = rows.filter(r => r.type !== 'project');
@@ -562,7 +583,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     const bgColor = isActual ? '#e2e8f0' : cColor;
     const isActive = activeRow === row.id;
     const barW = Math.max(w * DW, 6);
-    const fillProg = 100; // Use solid bars universally based on user request
+    const fillProg = (baseline && isActual) ? prog : 100; // Show progress fill only on the Actual bar in baseline mode
 
     return (
       <div
@@ -580,7 +601,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           outlineOffset: 1,
         }}
         onClick={(e) => handleBarClick(e, row.id, i)}
-        title={`${row.name} — ${isActual ? 'Actual' : 'Planned'}: ${prog}%`}
+        title={`${row.name}\n${isActual ? 'Actual' : 'Planned'}: ${prog}%\nStart: ${row.start} | End: ${row.end}`}
       >
         {/* background */}
         <div style={{ position: 'absolute', inset: 0, borderRadius: 3, background: bgColor }} />
@@ -599,13 +620,13 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           )}
           {prog === 100 && <span style={{ color: 'white', fontSize: 8, fontWeight: 'bold' }}>✓</span>}
         </div>
-        {/* % label — only show on planned bar (right side) */}
-        {!isActual && (
-          <span style={{
-            position: 'absolute', left: `calc(100% + 4px)`, top: '50%', transform: 'translateY(-50%)',
-            fontSize: 10, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap'
-          }}>{prog}%</span>
-        )}
+        {/* % label */}
+        <span style={{
+          position: 'absolute', left: `calc(100% + 4px)`, top: '50%', transform: 'translateY(-50%)',
+          fontSize: 10, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap'
+        }}>
+          {isActual ? `${prog}%` : '100%'}
+        </span>
       </div>
     );
   };
@@ -613,8 +634,20 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
   return (
     <div className={`gc-wrap ${compact ? 'gc-compact' : ''}`}>
 
+      {compact && (
+        <div className="gc-toolbar" style={{ justifyContent: 'flex-end', padding: '8px 16px', borderBottom: '1px solid #e2e8f0', background: '#fafbfc' }}>
+          <div className="gc-tb-right">
+            <span className="gc-lbl">Baseline Comparison</span>
+            <div className={`gc-tog ${baseline ? 'on' : ''}`} onClick={() => setBaseline(b => !b)}>
+              <div className="gc-tog-knob" />
+            </div>
+          </div>
+        </div>
+      )}
+
       {!compact && (
         <div className="gc-toolbar">
+
           <div className="gc-tb-left">
             <span className="gc-lbl">View</span>
             <select className="gc-sel" value={viewMode} onChange={e => setViewMode(e.target.value)}>
@@ -694,11 +727,10 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
       )}
 
       {/* ═══ BODY ═══ */}
-      <div className="gc-body" ref={scrollContainerRef} style={{ position: 'relative' }}>
-
+      <div className="gc-body" style={{ position: 'relative', display: 'flex', flex: 1, overflow: 'hidden' }}>
         {/* LEFT: sticky table */}
         <div className="gc-left" style={{ 
-          width: compact ? 340 : (tableCollapsed ? 212 : 422), 
+          width: tableCollapsed ? 0 : (compact ? 340 : 422), 
           borderRight: '2px solid #e2e8f0', 
           boxShadow: '2px 0 6px rgba(0,0,0,0.05)',
           transition: 'width 0.3s ease',
@@ -785,34 +817,33 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           </div>
         </div>
 
-        {!compact && (
-          <div 
-            onClick={() => setTableCollapsed(!tableCollapsed)}
-            style={{
-              position: 'absolute', 
-              left: tableCollapsed ? 212 + 8 : 422 - 24 - 8, 
-              top: 10, 
-              width: 24, 
-              height: 24,
-              background: 'white', 
-              border: '1px solid #cbd5e1', 
-              borderRadius: '50%',
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              cursor: 'pointer', 
-              zIndex: 30, 
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-              transition: 'left 0.3s ease'
-            }}
-            title={tableCollapsed ? "Expand Table" : "Collapse Table"}
-          >
-            {tableCollapsed ? <ChevronRight size={14} color="#3b82f6"/> : <ChevronLeft size={14} color="#3b82f6"/>}
+          <div style={{ position: 'relative', zIndex: 30, width: 0, alignSelf: 'stretch', overflow: 'visible' }}>
+            <div 
+              onClick={() => setTableCollapsed(!tableCollapsed)}
+              style={{
+                position: 'absolute', 
+                left: -12, 
+                top: 10, 
+                width: 24, 
+                height: 24,
+                background: 'white', 
+                border: '1px solid #cbd5e1', 
+                borderRadius: '50%',
+                display: 'flex', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                cursor: 'pointer', 
+                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                transition: 'left 0.3s ease'
+              }}
+              title={tableCollapsed ? "Expand Table" : "Collapse Table"}
+            >
+              {tableCollapsed ? <ChevronRight size={14} color="#3b82f6"/> : <ChevronLeft size={14} color="#3b82f6"/>}
+            </div>
           </div>
-        )}
 
         {/* RIGHT: scrollable timeline */}
-        <div className="gc-right">
+        <div className="gc-right" ref={scrollContainerRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', position: 'relative' }}>
 
           {/* Sticky month/day header */}
           <div className="gc-right-hdr" style={{ width: timelineW }}>

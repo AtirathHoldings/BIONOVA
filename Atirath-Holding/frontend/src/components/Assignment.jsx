@@ -197,7 +197,13 @@ const DateInputWithFormat = ({ value, onChange, min, error, placeholder }) => {
       
       const date = new Date(y, m - 1, d);
       if (date.getFullYear() === y && date.getMonth() === m - 1 && date.getDate() === d) {
-        onChange({ target: { value: `${match[3]}-${match[2]}-${match[1]}` } });
+        const formattedDate = `${match[3]}-${match[2]}-${match[1]}`;
+        if (min && formattedDate < min) {
+          setLocalError("Past dates not allowed.");
+          onChange({ target: { value: "" } });
+          return;
+        }
+        onChange({ target: { value: formattedDate } });
       } else {
         setLocalError("Invalid date.");
         onChange({ target: { value: "" } });
@@ -309,6 +315,7 @@ const Assignment = ({ userRole, onLogout }) => {
   const [tasks, setTasks] = useState([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [view, setView] = useState("list");
+  const [previewSource, setPreviewSource] = useState("list");
   const [editId, setEditId] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeTab, setActiveTab] = useState("checklist");
@@ -749,6 +756,7 @@ const Assignment = ({ userRole, onLogout }) => {
 
   const handleView = (task) => {
     handleEdit(task);
+    setPreviewSource("list");
     setView("preview");
   };
 
@@ -1301,7 +1309,7 @@ const Assignment = ({ userRole, onLogout }) => {
                             <td>{task.taskNm}</td>
                             <td>{displayName}</td>
                             <td>
-                              <span className={`cit-badge priority-${(task.priority || task.Priority || '').toLowerCase() === 'critical' ? 'high' : (task.priority || task.Priority || '').toLowerCase()}`}>
+                              <span className={`cit-badge priority-${(task.priority || task.Priority || '').toLowerCase().replace(/\s+/g, '-')}`}>
                                 {task.priority || task.Priority || 'None'}
                               </span>
                             </td>
@@ -1451,11 +1459,11 @@ const Assignment = ({ userRole, onLogout }) => {
                           </label>
                           <label className="cc-field-item">
                             <span>Start Date <b style={{ color: '#ef4444' }}>*</b></span>
-                            <DateInputWithFormat value={startDate} onChange={handleStartDateChange} />
+                            <DateInputWithFormat value={startDate} onChange={handleStartDateChange} min={formatLocal(new Date())} />
                           </label>
                           <label className="cc-field-item" style={{ position: 'relative' }}>
                             <span>Due Date <b style={{ color: '#ef4444' }}>*</b></span>
-                            <DateInputWithFormat value={dueDate} onChange={handleDueDateChange} min={startDate} error={dateError} />
+                            <DateInputWithFormat value={dueDate} onChange={handleDueDateChange} min={startDate || formatLocal(new Date())} error={dateError} />
                           </label>
                         </div>
 
@@ -1795,7 +1803,7 @@ const Assignment = ({ userRole, onLogout }) => {
                       <button type="button" className="cc-btn primary" onClick={handleAssignClick} style={{ background: '#10b981', borderColor: '#10b981', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Save size={14} /> {editId ? 'Update Assign' : 'Assign'}
                       </button>
-                      <button type="button" className="cc-btn primary" onClick={() => setView("preview")} style={{ background: '#3b82f6', borderColor: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
+                      <button type="button" className="cc-btn primary" onClick={() => { setPreviewSource("form"); setView("preview"); }} style={{ background: '#3b82f6', borderColor: '#3b82f6', color: 'white', padding: '8px 16px', borderRadius: '6px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '6px' }}>
                         <Eye size={14} /> Preview Task
                       </button>
                       <button type="button" className="cc-btn secondary" onClick={() => {
@@ -1836,10 +1844,10 @@ const Assignment = ({ userRole, onLogout }) => {
                       type="button"
                       className="cc-nav-view-btn"
                       onClick={() => {
-                        setView("form");
+                        setView(previewSource);
                       }}
                     >
-                      <ChevronLeft size={15} /> Back to Form
+                      <ChevronLeft size={15} /> Back
                     </button>
                   </div>
 
@@ -1927,7 +1935,7 @@ const Assignment = ({ userRole, onLogout }) => {
                     <div style={{ marginTop: '28px', display: 'flex', justifyContent: 'flex-end', gap: '12px', borderTop: '1px solid #e2e8f0', paddingTop: '20px' }}>
                       <button
                         onClick={() => {
-                          setView("form");
+                          setView(previewSource);
                         }}
                         style={{
                           padding: '8px 20px',

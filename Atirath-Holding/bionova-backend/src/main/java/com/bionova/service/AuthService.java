@@ -64,8 +64,13 @@ public class AuthService {
 
         // Determine role:
         // - If employee has an RBAC mapping → use the mapped role name
-        // - If no mapping exists → "full_access" (all screens visible, filter after RBAC setup)
-        String role = "full_access";
+        // - If master admin email → "admin"
+        // - Otherwise → "user"
+        String role = "user";
+        if ("vsv.vempati@gmail.com".equalsIgnoreCase(employee.getEmail())) {
+            role = "admin";
+        }
+
         List<RoleBasedEmployeeMapping> mappings = employeeMappingRepository.findByEmpId(employee.getEmpId());
         if (!mappings.isEmpty()) {
             List<RoleBasedAccessControl> rbacList = rbacRepository.findByRoleId(mappings.get(0).getRoleId());

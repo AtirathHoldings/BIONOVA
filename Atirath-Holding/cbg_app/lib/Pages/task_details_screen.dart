@@ -12,6 +12,8 @@ import '../services/api_service.dart';
 import 'manage_team_screen.dart';
 import '../models/employee_option.dart';
 import '../widgets/employee_dropdown.dart';
+import 'raise_request_screen.dart';
+import '../widgets/reassign_icon.dart';
 
 // ============================================================
 // ✅ TASK DETAILS SCREEN
@@ -604,38 +606,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         }
       }
 
-      // 3) Try with draftTaskId if present and items still empty
-      final draftId = _extractDraftTaskId();
-      if (items.isEmpty && draftId != null && draftId > 0 && draftId != taskId) {
-        final drftIndItems = await ApiService.getIndividualChecklistItems(draftId);
-        if (drftIndItems.isNotEmpty) {
-          items = drftIndItems;
-        } else {
-          final drftLiveItems = await ApiService.getLiveChecklistItems(draftId);
-          if (drftLiveItems.isNotEmpty) {
-            items = drftLiveItems;
-          }
-        }
-      }
 
-      // 4) Fallback to local storage
-      if (items.isEmpty) {
-        final prefs = await SharedPreferences.getInstance();
-        final localJson = prefs.getString('task_checklist_${task.id}') ??
-            (taskId != null ? prefs.getString('task_checklist_$taskId') : null);
-        if (localJson != null) {
-          try {
-            final List<dynamic> decoded = jsonDecode(localJson);
-            items = decoded.map<Map<String, dynamic>>((c) {
-              return {
-                'chkId': c['chkId'] ?? c['chk_id'],
-                'title': (c['title'] ?? c['chkNm'] ?? c['chk_nm'] ?? '').toString(),
-                'isDone': c['isDone'] == true || c['chkSts'] == true || c['chkSts'] == 1 || c['chkSts'] == 'true' || c['chkSts'] == 'Y',
-              };
-            }).toList();
-          } catch (_) {}
-        }
-      }
 
       if (!mounted) return;
 
@@ -1406,51 +1377,76 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
 
     if (result == null || result == false || !mounted) return;
 
-    final String remarks = (result is Map ? result['remarks'] : '') ?? '';
-
-    setState(() => _isLoadingData = true);
-    try {
-      final taskId = _extractTaskNumericId()!;
+    if (result is Map) {
+      final String remarks = (result['remarks'] ?? '').toString();
       if (isChecker) {
         _reviewerNoteController.text = remarks;
-        try {
-          await ApiService.checkerAction(taskId, 'NO', remarks, rejectionType: 'REASSIGN');
-        } catch (_) {
-          await ApiService.updateProjectTaskStatus(taskId, 'REASSIGN');
-        }
       } else {
         _approverNoteController.text = remarks;
-        try {
-          await ApiService.reviewerAction(taskId, 'NO', remarks, rejectionType: 'REASSIGN');
-        } catch (_) {
-          await ApiService.updateProjectTaskStatus(taskId, 'REASSIGN');
+      }
+
+      if (result['submitted'] == true) {
+        final actionType = (result['action'] ?? 'REASSIGN').toString();
+        final newStatus = actionType == 'REWORK' ? 'Rework' : 'Reassigned';
+        final newRaw = actionType == 'REWORK' ? 'REWORK' : 'REASSIGN';
+        setState(() {
+          _status = newStatus;
+          _rawDbStatus = newRaw;
+        });
+        await _updateLocalTaskStatus(newStatus);
+        return;
+      }
+
+      setState(() => _isLoadingData = true);
+      try {
+        final taskId = _extractTaskNumericId()!;
+        final actionType = (result['action'] ?? 'REASSIGN').toString();
+        final rejType = actionType == 'REWORK' ? 'REWORK' : 'REASSIGN';
+        final displaySts = actionType == 'REWORK' ? 'Rework' : 'Reassigned';
+
+        if (isChecker) {
+          try {
+            await ApiService.checkerAction(taskId, 'NO', remarks, rejectionType: rejType);
+          } catch (_) {
+            await ApiService.updateProjectTaskStatus(taskId, rejType);
+          }
+        } else {
+          try {
+            await ApiService.reviewerAction(taskId, 'NO', remarks, rejectionType: rejType);
+          } catch (_) {
+            await ApiService.updateProjectTaskStatus(taskId, rejType);
+          }
+        }
+
+        setState(() {
+          _status = displaySts;
+          _rawDbStatus = rejType;
+        });
+        await _updateLocalTaskStatus(displaySts);
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(actionType == 'REWORK' ? '⚠️ Denied! Task sent back for Rework.' : '🔁 Denied! Task reassigned to executor.'),
+              backgroundColor: actionType == 'REWORK' ? const Color(0xFFF97316) : const Color(0xFF4F46E5),
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint('Error in deny dialog handler: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        if (mounted) {
+          setState(() => _isLoadingData = false);
         }
       }
-
-      setState(() {
-        _status = 'Reassigned';
-        _rawDbStatus = 'REASSIGN';
-      });
-      await _updateLocalTaskStatus('Reassigned');
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('🔁 Denied! Task reassigned to executor.'),
-            backgroundColor: Color(0xFFEF4444),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e'), backgroundColor: Colors.red),
-        );
-      }
-    } finally {
-      if (mounted) setState(() => _isLoadingData = false);
     }
   }
+
 
   Future<void> _handleCheckerAction(String action) async {
     if (action == 'REJECT') {
@@ -2568,7 +2564,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 8.0),
                         child: Text(
-                          'No checklist items available for this task.',
+                          'No checklist found',
                           style: TextStyle(
                             fontSize: 12.5,
                             color: Color(0xFF64748B),
@@ -3154,13 +3150,25 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                         color: badgeBgColor,
                         borderRadius: BorderRadius.circular(6),
                       ),
-                      child: Text(
-                        value,
-                        style: TextStyle(
-                          color: badgeTextColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                        ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (value == 'Rework' || value == 'Rework Required') ...[
+                            const Icon(Icons.sync_rounded, size: 14, color: Color(0xFFF97316)),
+                            const SizedBox(width: 4),
+                          ] else if (value == 'Reassign' || value == 'Reassigned') ...[
+                            const ReassignIcon(size: 14, color: Color(0xFF4F46E5)),
+                            const SizedBox(width: 4),
+                          ],
+                          Text(
+                            value,
+                            style: TextStyle(
+                              color: badgeTextColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     )
                   : Text(
@@ -3893,407 +3901,3 @@ class ArrowBannerClipper extends CustomClipper<Path> {
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
 }
 
-// ============================================================
-// ✅ RAISE REQUEST FULL PAGE SCREEN (Toggle OFF by Default + Header & Footer)
-// ============================================================
-class RaiseRequestScreen extends StatefulWidget {
-  final TaskItem task;
-  final bool isChecker;
-  final String? initialRemarks;
-
-  const RaiseRequestScreen({
-    super.key,
-    required this.task,
-    required this.isChecker,
-    this.initialRemarks,
-  });
-
-  @override
-  State<RaiseRequestScreen> createState() => _RaiseRequestScreenState();
-}
-
-class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
-  bool _raiseRequestToggle = false; // ✅ FIRST OFF BY DEFAULT!
-  int? _selectedTaskId;
-  String _selectedTaskTitle = '';
-  String _impactLevel = 'High';
-  String? _attachedFileName;
-  String? _attachedFilePath;
-  late TextEditingController _reasonCtrl;
-  int _unreadNotificationCount = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _selectedTaskTitle = widget.task.title;
-    final cleanId = widget.task.id.replaceAll('TASK-', '').trim();
-    _selectedTaskId = int.tryParse(cleanId);
-    _reasonCtrl = TextEditingController(text: widget.initialRemarks ?? '');
-    _fetchNotifications();
-  }
-
-  Future<void> _fetchNotifications() async {
-    try {
-      final unread = await ApiService.getUnreadNotifications();
-      if (mounted) {
-        setState(() => _unreadNotificationCount = unread.length);
-      }
-    } catch (_) {}
-  }
-
-  @override
-  void dispose() {
-    _reasonCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFE),
-      appBar: CustomHeader(
-        title: 'Raise Request',
-        automaticallyImplyLeading: false,
-        notificationCount: _unreadNotificationCount,
-      ),
-      body: SingleChildScrollView(
-        physics: const BouncingScrollPhysics(),
-        padding: const EdgeInsets.all(16.0),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(20),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: const Color(0xFFE2E8F0)),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.03),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header Row: Raise Request + Toggle Switch (First OFF)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      const Text(
-                        'Raise Request',
-                        style: TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF1E293B),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Switch(
-                        value: _raiseRequestToggle,
-                        activeColor: Colors.white,
-                        activeTrackColor: const Color(0xFF2563EB),
-                        inactiveThumbColor: Colors.white,
-                        inactiveTrackColor: const Color(0xFFCBD5E1),
-                        onChanged: (val) {
-                          setState(() {
-                            _raiseRequestToggle = val;
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  Container(
-                    width: 28,
-                    height: 28,
-                    decoration: const BoxDecoration(
-                      color: Color(0xFFF1F5F9),
-                      shape: BoxShape.circle,
-                    ),
-                    child: IconButton(
-                      padding: EdgeInsets.zero,
-                      icon: const Icon(Icons.close, size: 16, color: Color(0xFF64748B)),
-                      onPressed: () => Navigator.pop(context, false),
-                    ),
-                  ),
-                ],
-              ),
-
-              // ✅ CONDITIONAL: SHOW FORM ONLY WHEN TOGGLE IS CLICKED ON!
-              if (_raiseRequestToggle) ...[
-                const SizedBox(height: 20),
-
-                // Task Dropdown Label
-                const Text(
-                  'Task Dropdown',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF334155),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                // Task Dropdown Selector
-                DropdownButtonFormField<int>(
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  value: _selectedTaskId,
-                  hint: const Text('Select Task', style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
-                  items: [
-                    DropdownMenuItem<int>(
-                      value: _selectedTaskId,
-                      child: Text(
-                        _selectedTaskTitle,
-                        style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                  onChanged: (val) {
-                    setState(() => _selectedTaskId = val);
-                  },
-                ),
-                const SizedBox(height: 18),
-
-                // Reason Label
-                const Text(
-                  'Reason',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Color(0xFF334155),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                // Reason Text Input Area
-                TextField(
-                  controller: _reasonCtrl,
-                  maxLines: 4,
-                  style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)),
-                  decoration: InputDecoration(
-                    hintText: 'Enter detailed reason...',
-                    hintStyle: const TextStyle(fontSize: 13, color: Color(0xFF94A3B8)),
-                    contentPadding: const EdgeInsets.all(14),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(8),
-                      borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
-                    ),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 18),
-
-                // Attachments & Impact Row
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Left Column: Attachments (optional)
-                    Expanded(
-                      flex: 1,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Attachments (optional)',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF334155),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          InkWell(
-                            onTap: () async {
-                              try {
-                                final result = await FilePicker.pickFiles();
-                                if (result != null && result.files.isNotEmpty) {
-                                  setState(() {
-                                    _attachedFileName = result.files.first.name;
-                                    _attachedFilePath = result.files.first.path;
-                                  });
-                                }
-                              } catch (e) {
-                                debugPrint('Error picking file: $e');
-                              }
-                            },
-                            borderRadius: BorderRadius.circular(8),
-                            child: Container(
-                              height: 52,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF8FAFC),
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: const Color(0xFFCBD5E1),
-                                  width: 1,
-                                ),
-                              ),
-                              alignment: Alignment.center,
-                              padding: const EdgeInsets.symmetric(horizontal: 12),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  const Icon(Icons.attach_file, size: 16, color: Color(0xFF64748B)),
-                                  const SizedBox(width: 6),
-                                  Flexible(
-                                    child: Text(
-                                      _attachedFileName ?? 'Click or drag files to upload',
-                                      style: TextStyle(
-                                        fontSize: 11.5,
-                                        color: _attachedFileName != null ? const Color(0xFF2563EB) : const Color(0xFF64748B),
-                                        fontWeight: _attachedFileName != null ? FontWeight.bold : FontWeight.w400,
-                                      ),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-
-                    // Right Column: Impact Dropdown
-                    Expanded(
-                      flex: 1,
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'Impact',
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Color(0xFF334155),
-                            ),
-                          ),
-                          const SizedBox(height: 6),
-                          DropdownButtonFormField<String>(
-                            decoration: InputDecoration(
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(8),
-                                borderSide: const BorderSide(color: Color(0xFF2563EB), width: 1.5),
-                              ),
-                              filled: true,
-                              fillColor: Colors.white,
-                            ),
-                            value: _impactLevel,
-                            items: const [
-                              DropdownMenuItem(value: 'Low', child: Text('Low', style: TextStyle(fontSize: 13))),
-                              DropdownMenuItem(value: 'Medium', child: Text('Medium', style: TextStyle(fontSize: 13))),
-                              DropdownMenuItem(value: 'High', child: Text('High', style: TextStyle(fontSize: 13))),
-                              DropdownMenuItem(value: 'Critical', child: Text('Critical', style: TextStyle(fontSize: 13))),
-                            ],
-                            onChanged: (val) {
-                              if (val != null) {
-                                setState(() => _impactLevel = val);
-                              }
-                            },
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 28),
-
-                // Action Buttons Footer Row (Cancel & Reassign)
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context, false),
-                      style: TextButton.styleFrom(
-                        backgroundColor: const Color(0xFFF1F5F9),
-                        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: const Text(
-                        'Cancel',
-                        style: TextStyle(
-                          color: Color(0xFF475569),
-                          fontWeight: FontWeight.w600,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context, {
-                          'remarks': _reasonCtrl.text,
-                          'impact': _impactLevel,
-                          'attachment': _attachedFilePath,
-                        });
-                      },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF2563EB),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                        elevation: 0,
-                      ),
-                      child: const Text(
-                        'Reassign',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-      bottomNavigationBar: CustomFooter(
-        currentIndex: 2,
-        onTabSelected: (index) {
-          if (MainScreen.navigatorKey.currentState != null) {
-            MainScreen.navigatorKey.currentState!.changeTab(index);
-            Navigator.popUntil(context, (route) => route.isFirst);
-          }
-        },
-      ),
-    );
-  }
-}

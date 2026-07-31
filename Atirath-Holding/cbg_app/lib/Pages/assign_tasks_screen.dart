@@ -9,6 +9,7 @@ import '../models/task_item.dart';
 import 'individual_task_screen.dart';
 import 'task_details_screen.dart';
 import 'main_screen.dart';
+import '../widgets/reassign_icon.dart';
 // ============================================================
 // INDIVIDUAL TASK LIST SCREEN
 // ============================================================
@@ -649,49 +650,60 @@ class _IndividualTaskListScreenState extends State<IndividualTaskListScreen> wit
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (task.processIcon != null) ...[
-                      Icon(task.processIcon, color: task.processIconColor, size: 18),
+                    // Hide process icon for completed tasks
+                    if (!task.isCompleted && task.processIcon != null) ...[
+                      Tooltip(
+                        message: task.status,
+                        child: task.isReassigned
+                            ? ReassignIcon(size: 18, color: task.processIconColor ?? const Color(0xFF4F46E5))
+                            : Icon(task.processIcon, color: task.processIconColor, size: 18),
+                      ),
                       const SizedBox(width: 6),
                     ],
-                    Icon(task.timeIcon, color: task.timeIconColor, size: 18),
+                    if (task.computedTimeStatus.isNotEmpty)
+                      Tooltip(
+                        message: task.computedTimeStatus,
+                        child: Icon(task.timeIcon, color: task.timeIconColor, size: 18),
+                      ),
                     const SizedBox(width: 4),
                     Icon(Icons.chevron_right, color: Colors.grey[400], size: 18),
                   ],
                 ),
                 const SizedBox(height: 8),
                 
-                // Priority Tag badge with dot
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), 
-                  decoration: BoxDecoration(
-                    color: task.tagBg, 
-                    borderRadius: BorderRadius.circular(5),
-                    border: Border.all(color: task.tagColor.withValues(alpha: 0.2), width: 0.5),
-                  ), 
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Container(
-                        width: 6,
-                        height: 6,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: task.tagColor,
+                // Priority Tag badge — hidden for completed tasks
+                if (!task.isCompleted)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), 
+                    decoration: BoxDecoration(
+                      color: task.tagBg, 
+                      borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: task.tagColor.withValues(alpha: 0.2), width: 0.5),
+                    ), 
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 6,
+                          height: 6,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: task.tagColor,
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        task.tag, 
-                        style: TextStyle(
-                          color: task.tagColor, 
-                          fontSize: 9.5, 
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.2,
+                        const SizedBox(width: 5),
+                        Text(
+                          task.tag, 
+                          style: TextStyle(
+                            color: task.tagColor, 
+                            fontSize: 9.5, 
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.2,
+                          ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
-                ),
               ],
             ),
           ],

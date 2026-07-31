@@ -14,6 +14,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cbg_app/services/notification_service.dart';
 import 'package:cbg_app/Pages/individual_task_screen.dart';
 import 'package:cbg_app/Pages/assign_tasks_screen.dart';
+import 'package:cbg_app/Pages/raise_request_screen.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -125,6 +126,7 @@ class _MyAppState extends State<MyApp> {
         '/notifications': (context) => const NotificationScreen(),
         '/individual-task': (context) => const IndividualTaskScreen(),
         '/individual-tasks-list': (context) => const IndividualTaskListScreen(),
+        '/raise-request': (context) => const RaiseRequestScreen(),
       },
     );
   }

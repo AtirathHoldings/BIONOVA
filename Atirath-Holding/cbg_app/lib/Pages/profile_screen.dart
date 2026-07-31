@@ -528,7 +528,7 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
         _showSnackBar('Password updated successfully! Please login again with your new password.');
         
         // Force logout
-        await ApiService.clearCache();
+        await ApiService.clearCache(clearAuth: true);
         
         if (mounted) {
           Navigator.pushNamedAndRemoveUntil(
@@ -851,7 +851,7 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
           _buildInfoRow(Icons.location_city_outlined, 'Work Location', _workLocation),
           _buildInfoRow(Icons.supervisor_account_outlined, 'Reporting Manager', _reportingManager),
           _buildInfoRow(Icons.calendar_month_outlined, 'Date of Joining', _doj),
-          _buildInfoRow(Icons.timelapse_outlined, 'Employee Type', _empType),
+          _buildInfoRow(Icons.timelapse_outlined, 'Employment Type', _empType),
           _buildInfoStatusRow(Icons.timelapse_outlined, 'Status', 'Active'),
         ],
       ),

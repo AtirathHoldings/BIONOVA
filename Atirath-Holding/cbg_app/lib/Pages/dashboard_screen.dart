@@ -12,6 +12,7 @@ import 'main_screen.dart';
 import '../services/api_service.dart';
 import 'task_details_screen.dart';
 import 'task_screen.dart';
+import '../widgets/reassign_icon.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -152,10 +153,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         rawIndividualTasks = rawIndividualTasks.where((t) {
           if (t is! Map) return false;
           final doer = t['empId']?.toString() ?? t['empid']?.toString();
-          final assigner = t['assignedBy']?.toString() ?? t['assigned_by']?.toString();
           final reviewer = t['reviewer']?.toString();
           final approver = t['approver']?.toString();
-          return doer == empStr || assigner == empStr || reviewer == empStr || approver == empStr;
+          return doer == empStr || reviewer == empStr || approver == empStr;
         }).toList();
       }
 
@@ -165,36 +165,223 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           .map((json) => TaskItem.fromIndividualTask(Map<String, dynamic>.from(json), currentEmpId?.toString()))
           .toList();
 
-      final combinedTasks = [...liveTasks, ...individualTasks];
+      final combinedTasks = [...liveTasks, ...individualTasks].where((task) => !task.isDraft).toList();
+
+      final prefs = await SharedPreferences.getInstance();
+      final userRole = prefs.getString('userRole') ?? '';
+      final bool filterByEmp = currentEmpId != null &&
+          userRole.isNotEmpty &&
+          userRole.toLowerCase() != 'admin' &&
+          userRole.toLowerCase() != 'manager';
 
       // Map Projects from backend dashboard data
       final List<ProjectModel> mappedProjects = [];
-      final List<dynamic> myProjectsData = dashboardData['myProjects'] as List<dynamic>? ?? [];
-      for (final p in myProjectsData) {
-        final int prjId = (p['projectId'] as num?)?.toInt() ?? 0;
-        final String prjCd = p['projectCode']?.toString() ?? '';
-        final String prjNm = p['projectName']?.toString() ?? '';
+      final List<dynamic> myProjectsData = (dashboardData['myProjects'] ?? dashboardData['my_projects'] ?? dashboardData['projects']) as List<dynamic>? ?? [];
 
-        final projectTasks = combinedTasks.where((t) => 
-          t.projectId == prjId || 
-          (t.projectCode != null && t.projectCode == prjCd) ||
-          (t.projectName != null && t.projectName == prjNm)
-        ).toList();
+      final List<ProjectModel> baseProjectList = [];
+      if (myProjectsData.isNotEmpty) {
+        for (final p in myProjectsData) {
+          if (p is Map) {
+            final map = Map<String, dynamic>.from(p);
+            final dbProj = ProjectModel.fromJson(map);
 
-        final int totalAssigned = projectTasks.length;
-        final int completed = projectTasks.where((t) => t.isCompleted).length;
+            ProjectModel? matchedFull;
+            try {
+              matchedFull = liveProjects.firstWhere(
+                (proj) => (dbProj.prjId > 0 && proj.prjId == dbProj.prjId) || 
+                          (dbProj.prjCd.isNotEmpty && proj.prjCd == dbProj.prjCd) || 
+                          (dbProj.name.isNotEmpty && proj.name.trim().toLowerCase() == dbProj.name.trim().toLowerCase()),
+              );
+            } catch (_) {}
 
-        // Use backend progress if available, otherwise fallback to task counts
-        final num? progressNum = p['progress'] ?? p['projectProgress'] ?? p['progressValue'] ?? p['progress_value'];
-        double progressVal;
-        if (progressNum != null) {
-          final double rawVal = progressNum.toDouble();
-          progressVal = rawVal > 1.0 ? rawVal / 100.0 : rawVal;
-        } else {
-          progressVal = totalAssigned > 0 ? (completed / totalAssigned) : 0.0;
+            final merged = ProjectModel(
+              prjId: dbProj.prjId > 0 ? dbProj.prjId : (matchedFull?.prjId ?? 0),
+              prjCd: dbProj.prjCd.isNotEmpty ? dbProj.prjCd : (matchedFull?.prjCd ?? ''),
+              prjNm: dbProj.prjNm.isNotEmpty ? dbProj.prjNm : (matchedFull?.prjNm ?? ''),
+              prjDesc: dbProj.prjDesc.isNotEmpty ? dbProj.prjDesc : (matchedFull?.prjDesc ?? ''),
+              prjPrty: matchedFull?.prjPrty.isNotEmpty == true ? matchedFull!.prjPrty : (dbProj.prjPrty.isNotEmpty ? dbProj.prjPrty : 'Medium'),
+              prjSts: dbProj.prjSts.isNotEmpty ? dbProj.prjSts : (matchedFull?.prjSts ?? 'In Progress'),
+              stDt: dbProj.stDt.isNotEmpty ? dbProj.stDt : (matchedFull?.stDt ?? ''),
+              endDt: dbProj.endDt.isNotEmpty ? dbProj.endDt : (matchedFull?.endDt ?? ''),
+              noOfDays: dbProj.noOfDays > 0 ? dbProj.noOfDays : (matchedFull?.noOfDays ?? 0),
+              logo: dbProj.logo ?? matchedFull?.logo,
+              pltId: matchedFull?.pltId != 0 ? matchedFull?.pltId : dbProj.pltId,
+              coyId: matchedFull?.coyId != 0 ? matchedFull?.coyId : dbProj.coyId,
+              name: dbProj.name.isNotEmpty ? dbProj.name : (matchedFull?.name ?? ''),
+              details: dbProj.details.isNotEmpty ? dbProj.details : (matchedFull?.details ?? dbProj.name),
+              role: dbProj.role.isNotEmpty ? dbProj.role : (matchedFull?.role ?? 'Assignee'),
+              assigned: dbProj.rawAssigned ?? matchedFull?.rawAssigned,
+              open: dbProj.rawOpen ?? matchedFull?.rawOpen,
+              inProgress: dbProj.rawInProgress ?? matchedFull?.rawInProgress,
+              progressValue: dbProj.rawProgressValue ?? matchedFull?.rawProgressValue,
+              progressText: dbProj.progressText != '0%' ? dbProj.progressText : matchedFull?.progressText,
+              barColor: dbProj.barColor,
+              companyName: matchedFull?.companyName ?? dbProj.companyName,
+              plantName: matchedFull?.plantName ?? dbProj.plantName,
+              location: matchedFull?.location ?? dbProj.location,
+              leadLagStatusStr: matchedFull?.leadLagStatusStr ?? dbProj.leadLagStatusStr,
+            );
+
+            if (!baseProjectList.any((p) => (p.prjId > 0 && p.prjId == merged.prjId) || (p.prjCd.isNotEmpty && p.prjCd == merged.prjCd))) {
+              baseProjectList.add(merged);
+            }
+          }
         }
+      }
+
+      // Add remaining projects from liveProjects that weren't in myProjects
+      for (final fullProj in liveProjects) {
+        if (!baseProjectList.any((p) => (p.prjId > 0 && p.prjId == fullProj.prjId) || (p.prjCd.isNotEmpty && p.prjCd == fullProj.prjCd))) {
+          baseProjectList.add(fullProj);
+        }
+      }
+
+      for (final p in baseProjectList) {
+        List<dynamic> milestoneTasksRaw = [];
+        try {
+          if (p.prjId > 0) {
+            final fetchedMilestones = await ApiService.getMilestones(p.prjId);
+            final taskFutures = fetchedMilestones.map((m) async {
+              final rawMId = m['mId'] ?? m['mid'];
+              if (rawMId == null) return <dynamic>[];
+              final int mId = (rawMId as num).toInt();
+              try {
+                return await ApiService.getTasksForMilestone(mId);
+              } catch (_) {
+                return <dynamic>[];
+              }
+            }).toList();
+            final allMTasks = await Future.wait(taskFutures);
+            for (final tList in allMTasks) {
+              milestoneTasksRaw.addAll(tList);
+            }
+          }
+        } catch (e) {
+          debugPrint('Error fetching milestone tasks for dashboard project ${p.prjId}: $e');
+        }
+
+        int totalAssigned = 0;
+        int completedCount = 0;
+        int openCount = 0;
+        int inProgressCount = 0;
+        double totalWeightedProgress = 0.0;
+
+        if (milestoneTasksRaw.isNotEmpty) {
+          final List<dynamic> filteredMilestoneTasks = [];
+          for (var t in milestoneTasksRaw) {
+            if (filterByEmp && currentEmpId != null) {
+              final strEmpId = currentEmpId.toString();
+              final doerId = (t['empId'] ?? t['empid'])?.toString();
+              final reviewer = t['reviewer']?.toString();
+              final approver = t['approver']?.toString();
+              final noteTxt = (t['noteTxt'] ?? t['note_txt'] ?? '').toString();
+              final isTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(strEmpId);
+              
+              if (doerId == strEmpId || reviewer == strEmpId || approver == strEmpId || isTeamMember) {
+                filteredMilestoneTasks.add(t);
+              }
+            } else {
+              filteredMilestoneTasks.add(t);
+            }
+          }
+
+          totalAssigned = filteredMilestoneTasks.length;
+          for (final t in filteredMilestoneTasks) {
+            final String tStatus = (t['taskSts']?.toString() ?? 'OPEN').toUpperCase().trim();
+            double taskProg = 0.0;
+            switch (tStatus) {
+              case 'COMPLETED':
+              case 'CLOSED':
+              case 'DONE':
+                taskProg = 1.0;
+                completedCount++;
+                break;
+              case 'SUBMIT_REVIEW':
+              case 'UNDER_REVIEW':
+              case 'UNDERREVIEW':
+                taskProg = 0.8;
+                openCount++;
+                inProgressCount++;
+                break;
+              case 'WIP':
+              case 'INPROGRESS':
+              case 'IN PROGRESS':
+                taskProg = 0.5;
+                openCount++;
+                inProgressCount++;
+                break;
+              case 'OVERDUE':
+                taskProg = 0.5;
+                openCount++;
+                inProgressCount++;
+                break;
+              case 'REASSIGN':
+                taskProg = 0.4;
+                openCount++;
+                break;
+              case 'REWORK':
+                taskProg = 0.3;
+                openCount++;
+                break;
+              default: // OPEN
+                taskProg = 0.0;
+                openCount++;
+                break;
+            }
+            totalWeightedProgress += taskProg;
+          }
+        } else {
+          final projectTasks = combinedTasks.where((t) => 
+            (p.prjId > 0 && t.projectId == p.prjId) || 
+            (p.prjCd.isNotEmpty && t.projectCode != null && t.projectCode == p.prjCd) ||
+            (p.name.isNotEmpty && t.projectName != null && t.projectName!.trim().toLowerCase() == p.name.trim().toLowerCase())
+          ).toList();
+
+          totalAssigned = projectTasks.length;
+          for (final t in projectTasks) {
+            final String st = (t.status).toUpperCase().trim();
+            double taskProg = 0.0;
+            if (t.isCompleted || st == 'COMPLETED' || st == 'CLOSED' || st == 'DONE') {
+              taskProg = 1.0;
+              completedCount++;
+            } else if (st == 'SUBMIT_REVIEW' || st == 'UNDER_REVIEW' || st == 'UNDERREVIEW' || t.isUnderReview) {
+              taskProg = 0.8;
+              openCount++;
+              inProgressCount++;
+            } else if (st == 'WIP' || st == 'INPROGRESS' || st == 'IN PROGRESS' || t.isInProgress) {
+              taskProg = 0.5;
+              openCount++;
+              inProgressCount++;
+            } else if (st == 'OVERDUE' || t.isOverdue) {
+              taskProg = 0.5;
+              openCount++;
+              inProgressCount++;
+            } else if (st == 'REASSIGN') {
+              taskProg = 0.4;
+              openCount++;
+            } else if (st == 'REWORK') {
+              taskProg = 0.3;
+              openCount++;
+            } else {
+              taskProg = 0.0;
+              openCount++;
+            }
+            totalWeightedProgress += taskProg;
+          }
+        }
+
+        double progressVal;
+        if (totalAssigned > 0) {
+          progressVal = totalWeightedProgress / totalAssigned;
+        } else if (p.rawProgressValue != null) {
+          final double val = p.rawProgressValue!;
+          progressVal = val > 1.0 ? val / 100.0 : val;
+        } else {
+          progressVal = 0.0;
+        }
+
         final progressTxt = '${(progressVal * 100).round()}%';
-        
+            
         Color barColor;
         if (progressVal < 0.5) {
           barColor = const Color(0xffF97316);
@@ -204,19 +391,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           barColor = const Color(0xff22C55E);
         }
 
-        final int assignedCount = (p['tasksAssigned'] ?? p['assigned'] ?? totalAssigned) as int;
-        final int openCount = (p['openTasks'] ?? p['open'] ?? projectTasks.where((t) => !t.isCompleted).length) as int;
-
-        // Find full-detail matched project
-        ProjectModel? matchedFull;
-        try {
-          matchedFull = liveProjects.firstWhere((proj) => proj.prjId == prjId);
-        } catch (_) {}
-
-        // Resolve Company Name
-        String? companyName = matchedFull?.companyName;
+        String? companyName = p.companyName;
         if (companyName == null || companyName.isEmpty) {
-          final coyId = matchedFull?.coyId ?? (p['coyId'] as num?)?.toInt();
+          final coyId = p.coyId;
           if (coyId != null && coyId > 0) {
             final matched = companies.firstWhere(
               (c) => (c['coyId'] ?? c['coy_id']) == coyId,
@@ -226,17 +403,16 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           }
         }
 
-        // Resolve Plant Name and Location
-        String? plantName = matchedFull?.plantName;
-        String? location = matchedFull?.location;
-        final pltId = matchedFull?.pltId ?? (p['pltId'] as num?)?.toInt();
-        if (pltId != null && pltId > 0) {
+        String? plantName = p.plantName;
+        String? location = p.location;
+        final pltId = p.pltId;
+        if (pltId != null && pltId > 0 && (plantName == null || plantName.isEmpty)) {
           final matched = plants.firstWhere(
             (pl) => (pl['pltId'] ?? pl['plt_id']) == pltId,
             orElse: () => null,
           );
           if (matched != null) {
-            plantName ??= matched['pltNm'] ?? matched['plt_nm'];
+            plantName = matched['pltNm'] ?? matched['plt_nm'];
             if (location == null || location.isEmpty) {
               final addr = matched['addr']?.toString() ?? '';
               final dist = matched['dist']?.toString() ?? '';
@@ -245,114 +421,102 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           }
         }
 
+        final int finalAssigned = totalAssigned > 0 ? totalAssigned : (p.rawAssigned ?? 0);
+        final int finalOpen = totalAssigned > 0 ? openCount : (p.rawOpen ?? 0);
+
         mappedProjects.add(ProjectModel(
-          prjId: prjId,
-          prjCd: prjCd.isNotEmpty ? prjCd : (matchedFull?.prjCd ?? ''),
-          prjNm: prjNm.isNotEmpty ? prjNm : (matchedFull?.prjNm ?? ''),
-          prjDesc: matchedFull?.prjDesc ?? p['projectName']?.toString() ?? '',
-          prjPrty: matchedFull?.prjPrty.isNotEmpty == true ? matchedFull!.prjPrty : 'Medium',
-          prjSts: p['status']?.toString() ?? matchedFull?.prjSts ?? '',
-          stDt: matchedFull?.stDt ?? '',
-          endDt: matchedFull?.endDt ?? '',
-          noOfDays: matchedFull?.noOfDays ?? 0,
-          logo: matchedFull?.logo,
+          prjId: p.prjId,
+          prjCd: p.prjCd,
+          prjNm: p.prjNm,
+          prjDesc: p.prjDesc,
+          prjPrty: p.prjPrty,
+          prjSts: p.prjSts,
+          stDt: p.stDt,
+          endDt: p.endDt,
+          noOfDays: p.noOfDays,
+          logo: p.logo,
           pltId: pltId,
-          coyId: matchedFull?.coyId ?? (p['coyId'] as num?)?.toInt(),
-          name: prjNm.isNotEmpty ? prjNm : (matchedFull?.name ?? ''),
-          details: matchedFull?.details ?? p['clientName']?.toString() ?? prjNm,
-          role: p['role']?.toString() ?? matchedFull?.role ?? 'Assignee',
-          assigned: assignedCount,
-          open: openCount,
+          coyId: p.coyId,
+          name: p.name,
+          details: p.details.isNotEmpty ? p.details : (companyName ?? p.name),
+          role: p.role,
+          assigned: finalAssigned,
+          open: finalOpen,
+          inProgress: inProgressCount,
           progressValue: progressVal,
           progressText: progressTxt,
           barColor: barColor,
           companyName: companyName,
           plantName: plantName,
           location: location,
-          leadLagStatusStr: matchedFull?.leadLagStatusStr,
+          leadLagStatusStr: p.leadLagStatusStr,
         ));
       }
 
-      // Merge any additional live projects from backend DB to display full project data
-      for (final liveProj in liveProjects) {
-        if (!mappedProjects.any((mp) => mp.prjId == liveProj.prjId || (mp.prjCd.isNotEmpty && mp.prjCd == liveProj.prjCd))) {
-          final projectTasks = combinedTasks.where((t) =>
-            t.projectId == liveProj.prjId ||
-            (t.projectCode != null && t.projectCode == liveProj.prjCd) ||
-            (t.projectName != null && t.projectName == liveProj.name)
-          ).toList();
-
-          final int totalAssigned = projectTasks.length;
-          final int completed = projectTasks.where((t) => t.isCompleted).length;
-          final double progressVal = totalAssigned > 0 ? (completed / totalAssigned) : 0.0;
-          final String progressTxt = '${(progressVal * 100).round()}%';
-
-          Color barColor;
-          if (progressVal < 0.5) {
-            barColor = const Color(0xffF97316);
-          } else if (progressVal < 1.0) {
-            barColor = const Color(0xff3B82F6);
-          } else {
-            barColor = const Color(0xff22C55E);
-          }
-
-          mappedProjects.add(ProjectModel(
-            prjId: liveProj.prjId,
-            prjCd: liveProj.prjCd,
-            prjNm: liveProj.prjNm,
-            prjDesc: liveProj.prjDesc,
-            prjPrty: liveProj.prjPrty,
-            prjSts: liveProj.prjSts,
-            stDt: liveProj.stDt,
-            endDt: liveProj.endDt,
-            noOfDays: liveProj.noOfDays,
-            logo: liveProj.logo,
-            pltId: liveProj.pltId,
-            coyId: liveProj.coyId,
-            name: liveProj.name,
-            details: liveProj.details,
-            role: liveProj.role,
-            assigned: totalAssigned,
-            open: totalAssigned - completed,
-            progressValue: progressVal,
-            progressText: progressTxt,
-            barColor: barColor,
-            companyName: liveProj.companyName,
-            plantName: liveProj.plantName,
-            location: liveProj.location,
-            leadLagStatusStr: liveProj.leadLagStatusStr,
-          ));
-        }
-      }
-
-      bool isTodoTask(TaskItem task) => task.isTodo;
-      bool isUpcomingTask(TaskItem task) => task.isUpcomingTask;
+      bool isTodoTask(TaskItem task) => !task.isCompleted && !task.isDraft;
+      bool isUpcomingTask(TaskItem task) => !task.isCompleted && !task.isDraft;
 
       // Map To-Do List tasks matching the backend order & IDs
-      final List<dynamic> todoListData = dashboardData['todoList'] as List<dynamic>? ?? [];
+      final List<dynamic> todoListData = (dashboardData['todoList'] ?? dashboardData['todo_list'] ?? dashboardData['todo']) as List<dynamic>? ?? [];
       final List<TaskItem> mappedTodoTasks = [];
       for (final t in todoListData) {
-        final String tId = t['taskId']?.toString() ?? '';
-        final match = combinedTasks.firstWhere(
-          (item) => item.id == tId,
-          orElse: () => const TaskItem(id: '', title: '', subtitle: '', date: '', tag: '', tagColor: Colors.transparent, tagBg: Colors.transparent, icon: Icons.error, iconColor: Colors.transparent, iconBg: Colors.transparent, status: '', priority: ''),
-        );
-        if (match.id.isNotEmpty && isTodoTask(match)) {
-          mappedTodoTasks.add(match);
+        if (t is Map) {
+          final map = Map<String, dynamic>.from(t);
+          final String tId = (map['taskId'] ?? map['task_id'] ?? map['empTaskId'] ?? map['emp_task_id'] ?? map['id'] ?? '').toString();
+          final String title = (map['taskNm'] ?? map['task_nm'] ?? map['title'] ?? map['name'] ?? '').toString().trim().toLowerCase();
+
+          TaskItem? match;
+          for (final item in combinedTasks) {
+            if ((tId.isNotEmpty && (item.id == tId || item.id.endsWith(tId))) ||
+                (title.isNotEmpty && item.title.trim().toLowerCase() == title)) {
+              match = item;
+              break;
+            }
+          }
+          if (match != null) {
+            if (!mappedTodoTasks.any((m) => m.id == match!.id)) {
+              mappedTodoTasks.add(match);
+            }
+          } else {
+            try {
+              final parsed = TaskItem.fromIndividualTask(map, currentEmpId?.toString());
+              if (!parsed.isDraft && !mappedTodoTasks.any((m) => m.id == parsed.id)) {
+                mappedTodoTasks.add(parsed);
+              }
+            } catch (_) {}
+          }
         }
       }
 
       // Map Upcoming tasks matching the backend order & IDs
-      final List<dynamic> upcomingListData = dashboardData['upcomingTasks'] as List<dynamic>? ?? [];
+      final List<dynamic> upcomingListData = (dashboardData['upcomingTasks'] ?? dashboardData['upcoming_tasks'] ?? dashboardData['upcoming']) as List<dynamic>? ?? [];
       final List<TaskItem> mappedUpcomingTasks = [];
       for (final t in upcomingListData) {
-        final String tId = t['taskId']?.toString() ?? '';
-        final match = combinedTasks.firstWhere(
-          (item) => item.id == tId,
-          orElse: () => const TaskItem(id: '', title: '', subtitle: '', date: '', tag: '', tagColor: Colors.transparent, tagBg: Colors.transparent, icon: Icons.error, iconColor: Colors.transparent, iconBg: Colors.transparent, status: '', priority: ''),
-        );
-        if (match.id.isNotEmpty && isUpcomingTask(match)) {
-          mappedUpcomingTasks.add(match);
+        if (t is Map) {
+          final map = Map<String, dynamic>.from(t);
+          final String tId = (map['taskId'] ?? map['task_id'] ?? map['empTaskId'] ?? map['emp_task_id'] ?? map['id'] ?? '').toString();
+          final String title = (map['taskNm'] ?? map['task_nm'] ?? map['title'] ?? map['name'] ?? '').toString().trim().toLowerCase();
+
+          TaskItem? match;
+          for (final item in combinedTasks) {
+            if ((tId.isNotEmpty && (item.id == tId || item.id.endsWith(tId))) ||
+                (title.isNotEmpty && item.title.trim().toLowerCase() == title)) {
+              match = item;
+              break;
+            }
+          }
+          if (match != null) {
+            if (!mappedUpcomingTasks.any((m) => m.id == match!.id)) {
+              mappedUpcomingTasks.add(match);
+            }
+          } else {
+            try {
+              final parsed = TaskItem.fromIndividualTask(map, currentEmpId?.toString());
+              if (!parsed.isDraft && !mappedUpcomingTasks.any((m) => m.id == parsed.id)) {
+                mappedUpcomingTasks.add(parsed);
+              }
+            } catch (_) {}
+          }
         }
       }
 
@@ -403,7 +567,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         dashboardData['myTasksCount'] ??
         dashboardData['assignedTasksCount'] ??
         dashboardData['totalTasks'] ??
-        dashboardData['myTasks'],
+        dashboardData['myTasks'] ??
+        dashboardData['assignedTasks'],
         combinedTasks.length,
       );
 
@@ -412,8 +577,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         dashboardData['openTasksCount'] ??
         dashboardData['openCount'] ??
         dashboardData['openTasks'] ??
-        getFromCountsMap(['Open', 'Pending', 'open', 'pending']),
-        combinedTasks.where((t) => t.isOpen || t.status == 'Open' || t.status == 'Pending').length,
+        getFromCountsMap(['Open', 'OPEN', 'Pending', 'open', 'pending']),
+        combinedTasks.where((t) => t.isOpen || t.status.toUpperCase() == 'OPEN' || t.status == 'Pending').length,
       );
 
       final int inProgressCountVal = safeIntVal(
@@ -422,8 +587,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         dashboardData['inProgressCount'] ??
         dashboardData['inProgressTasks'] ??
         dashboardData['inProgress'] ??
-        getFromCountsMap(['In Progress', 'WIP', 'in_progress', 'wip']),
-        combinedTasks.where((t) => t.isInProgress || t.isUnderReview || t.status == 'In Progress' || t.status == 'Rework' || t.status == 'Reassigned').length,
+        getFromCountsMap(['In Progress', 'IN PROGRESS', 'WIP', 'in_progress', 'wip', 'Under Review']),
+        combinedTasks.where((t) => t.isInProgress || t.isUnderReview || t.status == 'In Progress' || t.status == 'WIP' || t.status == 'Rework' || t.status == 'Reassigned').length,
       );
 
       final int overdueCountVal = safeIntVal(
@@ -431,8 +596,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         dashboardData['overdueTasksCount'] ??
         dashboardData['overdueCount'] ??
         dashboardData['overdueTasks'] ??
-        getFromCountsMap(['Overdue', 'overdue']),
-        combinedTasks.where((t) => t.isOverdue).length,
+        getFromCountsMap(['Overdue', 'OVERDUE', 'overdue']),
+        combinedTasks.where((t) => t.isOverdue || t.status.toUpperCase() == 'OVERDUE').length,
       );
 
       final int completedCountVal = safeIntVal(
@@ -442,8 +607,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
         dashboardData['closedTasksCount'] ??
         dashboardData['completedCount'] ??
         dashboardData['closedCount'] ??
-        getFromCountsMap(['Closed', 'Completed', 'closed', 'completed']),
-        combinedTasks.where((t) => t.isCompleted || t.status == 'Closed' || t.status == 'Completed').length,
+        getFromCountsMap(['Closed', 'CLOSED', 'Completed', 'COMPLETED', 'closed', 'completed', 'Done']),
+        combinedTasks.where((t) => t.isCompleted || t.status == 'Closed' || t.status == 'Completed' || t.status == 'DONE').length,
       );
 
       final int projectsCountVal = safeIntVal(
@@ -1262,21 +1427,18 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
   }
 
   Widget _buildTaskProgressOverview(List<TaskItem> overviewTasks) {
-    final filteredTasks = overviewTasks.where((task) => _isTaskInTimeframe(task, _selectedOverviewTimeframe)).toList();
-
     int overviewCompleted = 0;
     int overviewInProgress = 0;
     int overviewOpen = 0;
     int overviewOverdue = 0;
-    int overviewTotal = 0;
 
-    if (_selectedOverviewTimeframe == 'All Time' && _backendStatusCounts != null) {
-      overviewCompleted = (_backendStatusCounts!['Closed'] ?? _backendStatusCounts!['Completed'] ?? 0);
-      overviewInProgress = (_backendStatusCounts!['In Progress'] ?? 0) + (_backendStatusCounts!['Under Review'] ?? 0);
-      overviewOpen = _backendStatusCounts!['Pending'] ?? 0;
-      overviewOverdue = _backendStatusCounts!['Overdue'] ?? 0;
-      overviewTotal = overviewCompleted + overviewInProgress + overviewOpen + overviewOverdue;
+    if (_selectedOverviewTimeframe == 'All Time') {
+      overviewCompleted = _completedTasksCount;
+      overviewInProgress = _inProgressTasksCount;
+      overviewOpen = _openTasksCount;
+      overviewOverdue = _overdueTasksCount;
     } else {
+      final filteredTasks = overviewTasks.where((task) => _isTaskInTimeframe(task, _selectedOverviewTimeframe)).toList();
       for (final task in filteredTasks) {
         if (task.isOverdue) {
           overviewOverdue++;
@@ -1288,8 +1450,9 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
           overviewOpen++;
         }
       }
-      overviewTotal = filteredTasks.length;
     }
+
+    final int overviewTotal = overviewCompleted + overviewInProgress + overviewOpen + overviewOverdue;
     final double completedPct = overviewTotal == 0 ? 0.0 : (overviewCompleted / overviewTotal * 100);
     final double inProgressPct = overviewTotal == 0 ? 0.0 : (overviewInProgress / overviewTotal * 100);
     final double openPct = overviewTotal == 0 ? 0.0 : (overviewOpen / overviewTotal * 100);
@@ -1418,7 +1581,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                           Text(
                             '${completedPct.round()}%',
                             style: GoogleFonts.inter(
-                              fontSize: 18,
+                              fontSize: 16,
                               fontWeight: FontWeight.bold,
                               color: const Color(0xFF0F172A),
                             ),
@@ -1913,36 +2076,38 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: getPriorityBg(task.priority),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: getPriorityColor(task.priority).withValues(alpha: 0.15), width: 1),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: getPriorityColor(task.priority),
+                          if (!task.isCompleted) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: getPriorityBg(task.priority),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: getPriorityColor(task.priority).withValues(alpha: 0.15), width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: getPriorityColor(task.priority),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  task.priority,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: getPriorityColor(task.priority),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    task.priority,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: getPriorityColor(task.priority),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
+                          ],
                           const Spacer(),
                           _buildTaskAvatarsRow(task),
                         ],
@@ -2027,13 +2192,24 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(color: task.progressStatusColor.withValues(alpha: 0.15), width: 1),
                             ),
-                            child: Text(
-                              task.progressStatusText,
-                              style: GoogleFonts.inter(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.bold,
-                                color: task.progressStatusColor,
-                              ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                if (!task.isCompleted && task.processIcon != null) ...[
+                                  task.isReassigned
+                                      ? ReassignIcon(size: 11, color: task.processIconColor ?? task.progressStatusColor)
+                                      : Icon(task.processIcon, size: 11, color: task.processIconColor ?? task.progressStatusColor),
+                                  const SizedBox(width: 3),
+                                ],
+                                Text(
+                                  task.progressStatusText,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.bold,
+                                    color: task.progressStatusColor,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
@@ -2067,36 +2243,38 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                       const SizedBox(height: 8),
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: getPriorityBg(task.priority),
-                              borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: getPriorityColor(task.priority).withValues(alpha: 0.15), width: 1),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  width: 6,
-                                  height: 6,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: getPriorityColor(task.priority),
+                          if (!task.isCompleted) ...[
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: getPriorityBg(task.priority),
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: getPriorityColor(task.priority).withValues(alpha: 0.15), width: 1),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: getPriorityColor(task.priority),
+                                    ),
                                   ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  task.priority,
-                                  style: GoogleFonts.inter(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.bold,
-                                    color: getPriorityColor(task.priority),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    task.priority,
+                                    style: GoogleFonts.inter(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.bold,
+                                      color: getPriorityColor(task.priority),
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
-                          ),
+                          ],
                           const Spacer(),
                           _buildTaskAvatarsRow(task),
                         ],

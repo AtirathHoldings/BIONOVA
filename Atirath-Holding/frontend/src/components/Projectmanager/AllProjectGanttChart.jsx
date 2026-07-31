@@ -106,10 +106,23 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
     });
   };
 
+  const parseLocalDate = (dateStr) => {
+    if (!dateStr) return null;
+    try {
+      const dateOnly = String(dateStr).split('T')[0];
+      const [year, month, day] = dateOnly.split('-');
+      const d = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+      d.setHours(0, 0, 0, 0);
+      return d;
+    } catch (e) {
+      return new Date(dateStr);
+    }
+  };
+
   const formatDateString = (dateStr) => {
     if (!dateStr) return 'N/A';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
+    const d = parseLocalDate(dateStr);
+    if (!d || isNaN(d.getTime())) return dateStr;
     const day = String(d.getDate()).padStart(2, '0');
     const month = d.toLocaleDateString('en-GB', { month: 'short' });
     const year = String(d.getFullYear()).slice(-2);
@@ -119,8 +132,8 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
   // Returns exact day offset from timeline start (month boundary aligned)
   const getDayOffset = (dateStr, tStart) => {
     if (!dateStr || !tStart) return 0;
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return 0;
+    const d = parseLocalDate(dateStr);
+    if (!d || isNaN(d.getTime())) return 0;
     // Count exact calendar days from tStart (1st of first month) to the target date
     const tStartMid = new Date(tStart.getFullYear(), tStart.getMonth(), 1);
     const dTargetMid = new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -131,9 +144,9 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
 
   const getDurationDays = (startStr, endStr) => {
     if (!startStr || !endStr) return 1;
-    const s = new Date(startStr);
-    const e = new Date(endStr);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return 1;
+    const s = parseLocalDate(startStr);
+    const e = parseLocalDate(endStr);
+    if (!s || !e || isNaN(s.getTime()) || isNaN(e.getTime())) return 1;
     const sMid = new Date(s.getFullYear(), s.getMonth(), s.getDate());
     const eMid = new Date(e.getFullYear(), e.getMonth(), e.getDate());
     const diffMs = eMid - sMid;
@@ -181,8 +194,8 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
 
         const updateMinMax = (dateStr) => {
           if (!dateStr) return;
-          const d = new Date(dateStr);
-          if (isNaN(d.getTime())) return;
+          const d = parseLocalDate(dateStr);
+          if (!d || isNaN(d.getTime())) return;
           if (!minDate || d < minDate) minDate = d;
           if (!maxDate || d > maxDate) maxDate = d;
         };
@@ -195,8 +208,8 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
           else if (s === 'HOLD') label = 'Not Started';
           
           if (label !== 'Completed' && endDate) {
-            const end = new Date(endDate);
-            if (!isNaN(end.getTime()) && end < today) {
+            const end = parseLocalDate(endDate);
+            if (end && !isNaN(end.getTime()) && end < today) {
               label = 'Overdue';
             }
           }
@@ -358,12 +371,6 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
       else if (r.type === 'task') rProjectId = r.grandParentId;
       
       if (String(rProjectId) !== String(projectFilter)) match = false;
-    }
-
-    // In single project view: still respect expand/collapse state
-    if (singleProjectView) {
-      if (r.type === 'milestone') return expandedProjects.has(r.parentId);
-      if (r.type === 'task') return expandedProjects.has(r.grandParentId) && expandedMilestones.has(r.parentId);
     }
 
     if (startDateFilter && match) {
@@ -548,7 +555,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
               
                   {/* Left Table Section with Collapse */}
               {!tableCollapsed && (
-                <div className="gantt-table-section" style={{ width: tableWidth, flexShrink: 0, position: 'relative' }}>
+                <div className="gantt-table-section" style={{ width: tableWidth, flexShrink: 0, position: 'sticky', left: 0, zIndex: 40, background: '#fff' }}>
                   <div className="gantt-thead">
                     <div className="gantt-th" style={{ flex: 1, minWidth: '180px' }}>Project / Task / Status</div>
 
@@ -599,7 +606,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
 
                 {/* Expand button when table collapsed */}
                 {tableCollapsed && (
-                  <div style={{ flexShrink: 0, position: 'relative', width: 32, zIndex: 30, background: 'white', borderRight: '1px solid #e2e8f0' }}>
+                  <div style={{ flexShrink: 0, position: 'sticky', left: 0, width: 32, zIndex: 40, background: 'white', borderRight: '1px solid #e2e8f0' }}>
                     <button
                       onClick={() => setTableCollapsed(false)}
                       title="Expand table"
@@ -618,8 +625,9 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                       width: 6,
                       cursor: 'col-resize',
                       background: '#e2e8f0',
-                      zIndex: 30,
-                      position: 'relative',
+                      zIndex: 41,
+                      position: 'sticky',
+                      left: tableWidth,
                       flexShrink: 0
                     }}
                     title="Drag to resize table"
@@ -684,7 +692,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                                 {/* Day number — every day */}
                                 <span style={{
                                   position: 'absolute',
-                                  left: leftPx + 1,
+                                  left: leftPx + 2,
                                   top: 1,
                                   fontSize: 9,
                                   lineHeight: '11px',
@@ -692,9 +700,9 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                                   fontWeight: isToday ? 800 : isMajor ? 700 : 400,
                                   userSelect: 'none',
                                   whiteSpace: 'nowrap',
-                                  width: `${DW - 1}px`,
+                                  width: `${DW - 2}px`,
                                   overflow: 'hidden',
-                                  textAlign: 'center',
+                                  textAlign: 'left',
                                 }}>
                                   {String(dayNum).padStart(2, '0')}
                                 </span>
@@ -761,20 +769,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                               <div style={{ position: 'absolute', inset: 0, background: isActive ? '#fed7aa' : barBg }} />
                               {/* Progress fill */}
                               <div style={{ position: 'absolute', top: 0, left: 0, width: progWidth, height: '100%', background: highlightColor, transition: 'width 0.3s ease' }} />
-                              {/* Label inside bar (only if bar wide enough) */}
-                              {barWidth > 60 && (
-                                <span style={{ position: 'absolute', top: 0, left: 6, right: 6, height: '100%', display: 'flex', alignItems: 'center', zIndex: 2, fontSize: row.type === 'project' ? 11 : 10, fontWeight: 700, color: row.prog > 45 ? 'white' : '#1e293b', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', pointerEvents: 'none' }}>
-                                  {row.name}
-                                </span>
-                              )}
                             </div>
-
-                            {/* Label outside bar (when bar too narrow) */}
-                            {barWidth <= 60 && (
-                              <span style={{ position: 'absolute', top: barTop, left: barLeft + barWidth + 4, fontSize: 10, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap', lineHeight: `${barH}px`, pointerEvents: 'none' }}>
-                                {row.name}
-                              </span>
-                            )}
 
                             {/* Progress % badge at right edge of bar */}
                             {barWidth > 30 && (

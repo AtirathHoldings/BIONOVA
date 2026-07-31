@@ -120,7 +120,7 @@ class _MenuScreenState extends State<MenuScreen> {
   }
 
   void _handleLogout() async {
-    await ApiService.clearCache();
+    await ApiService.clearCache(clearAuth: true);
 
     if (mounted) {
       Navigator.pushNamedAndRemoveUntil(

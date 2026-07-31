@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/project_model.dart';
 import '../models/task_item.dart';
 import '../services/api_service.dart';
@@ -16,6 +17,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   
   String _selectedFilter = 'All Projects';
   String _searchQuery = '';
+  int _currentPage = 1;
+  static const int _itemsPerPage = 3;
 
   List<ProjectModel> _projects = [];
   bool _isLoading = false;
@@ -46,48 +49,64 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       final List<dynamic> myProjectsData = dashboardData?['myProjects'] as List<dynamic>? ?? [];
       final List<ProjectModel> fullDetailProjects = fetchResults[5] as List<ProjectModel>;
 
-      final List<ProjectModel> liveProjects;
-      if (myProjectsData.isNotEmpty) {
-        liveProjects = myProjectsData.map((json) {
+      final List<ProjectModel> liveProjects = [];
+
+      // 1. Process projects from dashboard data (myProjects)
+      for (final json in myProjectsData) {
+        if (json is Map) {
           final dbProj = ProjectModel.fromJson(Map<String, dynamic>.from(json));
-          final matchedFull = fullDetailProjects.firstWhere(
-            (p) => p.prjId == dbProj.prjId,
-            orElse: () => dbProj,
+          ProjectModel? matchedFull;
+          try {
+            matchedFull = fullDetailProjects.firstWhere(
+              (p) => (dbProj.prjId > 0 && p.prjId == dbProj.prjId) ||
+                    (dbProj.prjCd.isNotEmpty && p.prjCd == dbProj.prjCd) ||
+                    (dbProj.name.isNotEmpty && p.name.trim().toLowerCase() == dbProj.name.trim().toLowerCase()),
+            );
+          } catch (_) {}
+
+          final merged = ProjectModel(
+            prjId: dbProj.prjId > 0 ? dbProj.prjId : (matchedFull?.prjId ?? 0),
+            prjCd: dbProj.prjCd.isNotEmpty ? dbProj.prjCd : (matchedFull?.prjCd ?? ''),
+            prjNm: dbProj.prjNm.isNotEmpty ? dbProj.prjNm : (matchedFull?.prjNm ?? ''),
+            prjDesc: dbProj.prjDesc.isNotEmpty ? dbProj.prjDesc : (matchedFull?.prjDesc ?? ''),
+            prjPrty: matchedFull?.prjPrty.isNotEmpty == true ? matchedFull!.prjPrty : (dbProj.prjPrty.isNotEmpty ? dbProj.prjPrty : 'Medium'),
+            prjSts: dbProj.prjSts.isNotEmpty ? dbProj.prjSts : (matchedFull?.prjSts ?? 'In Progress'),
+            stDt: dbProj.stDt.isNotEmpty ? dbProj.stDt : (matchedFull?.stDt ?? ''),
+            endDt: dbProj.endDt.isNotEmpty ? dbProj.endDt : (matchedFull?.endDt ?? ''),
+            noOfDays: dbProj.noOfDays > 0 ? dbProj.noOfDays : (matchedFull?.noOfDays ?? 0),
+            logo: dbProj.logo ?? matchedFull?.logo,
+            addlRem: dbProj.addlRem ?? matchedFull?.addlRem,
+            leadLagStatus: matchedFull?.leadLagStatus ?? dbProj.leadLagStatus,
+            pltId: matchedFull?.pltId != 0 ? matchedFull?.pltId : dbProj.pltId,
+            coyId: matchedFull?.coyId != 0 ? matchedFull?.coyId : dbProj.coyId,
+            name: dbProj.name.isNotEmpty ? dbProj.name : (matchedFull?.name ?? ''),
+            details: dbProj.details.isNotEmpty ? dbProj.details : (matchedFull?.details ?? dbProj.name),
+            role: dbProj.role.isNotEmpty ? dbProj.role : (matchedFull?.role ?? 'Assignee'),
+            assigned: dbProj.rawAssigned ?? matchedFull?.rawAssigned,
+            open: dbProj.rawOpen ?? matchedFull?.rawOpen,
+            inProgress: dbProj.rawInProgress ?? matchedFull?.rawInProgress,
+            progressValue: dbProj.rawProgressValue ?? matchedFull?.rawProgressValue,
+            progressText: dbProj.progressText != '0%' ? dbProj.progressText : matchedFull?.progressText,
+            barColor: dbProj.barColor,
+            companyName: matchedFull?.companyName ?? dbProj.companyName,
+            plantName: matchedFull?.plantName ?? dbProj.plantName,
+            location: matchedFull?.location ?? dbProj.location,
+            leadLagStatusStr: matchedFull?.leadLagStatusStr ?? dbProj.leadLagStatusStr,
           );
-          
-          return ProjectModel(
-            prjId: dbProj.prjId,
-            prjCd: dbProj.prjCd.isNotEmpty ? dbProj.prjCd : matchedFull.prjCd,
-            prjNm: dbProj.prjNm.isNotEmpty ? dbProj.prjNm : matchedFull.prjNm,
-            prjDesc: dbProj.prjDesc.isNotEmpty ? dbProj.prjDesc : matchedFull.prjDesc,
-            prjPrty: matchedFull.prjPrty.isNotEmpty ? matchedFull.prjPrty : dbProj.prjPrty,
-            prjSts: dbProj.prjSts.isNotEmpty ? dbProj.prjSts : matchedFull.prjSts,
-            stDt: matchedFull.stDt.isNotEmpty ? matchedFull.stDt : dbProj.stDt,
-            endDt: matchedFull.endDt.isNotEmpty ? matchedFull.endDt : dbProj.endDt,
-            noOfDays: matchedFull.noOfDays > 0 ? matchedFull.noOfDays : dbProj.noOfDays,
-            logo: matchedFull.logo ?? dbProj.logo,
-            addlRem: matchedFull.addlRem ?? dbProj.addlRem,
-            leadLagStatus: matchedFull.leadLagStatus ?? dbProj.leadLagStatus,
-            pltId: matchedFull.pltId != 0 ? matchedFull.pltId : dbProj.pltId,
-            coyId: matchedFull.coyId != 0 ? matchedFull.coyId : dbProj.coyId,
-            name: dbProj.name.isNotEmpty ? dbProj.name : matchedFull.name,
-            details: dbProj.details.isNotEmpty ? dbProj.details : matchedFull.details,
-            role: dbProj.role.isNotEmpty ? dbProj.role : matchedFull.role,
-            assigned: dbProj.rawAssigned ?? matchedFull.rawAssigned,
-            open: dbProj.rawOpen ?? matchedFull.rawOpen,
-            inProgress: dbProj.rawInProgress ?? matchedFull.rawInProgress,
-            progressValue: dbProj.rawProgressValue, // Do NOT fall back to matchedFull.rawProgressValue which has wrong static values!
-            progressText: dbProj.progressText != '0%' ? dbProj.progressText : (dbProj.rawProgressValue != null ? dbProj.progressText : null),
-            barColor: dbProj.progressText != '0%' ? dbProj.barColor : (dbProj.rawProgressValue != null ? dbProj.barColor : null),
-            companyName: matchedFull.companyName ?? dbProj.companyName,
-            plantName: matchedFull.plantName ?? dbProj.plantName,
-            location: matchedFull.location ?? dbProj.location,
-            leadLagStatusStr: matchedFull.leadLagStatusStr != 'Lag' ? matchedFull.leadLagStatusStr : dbProj.leadLagStatusStr,
-          );
-        }).toList();
-      } else {
-        liveProjects = fullDetailProjects;
+
+          if (!liveProjects.any((p) => (p.prjId > 0 && p.prjId == merged.prjId) || (p.prjCd.isNotEmpty && p.prjCd == merged.prjCd))) {
+            liveProjects.add(merged);
+          }
+        }
       }
+
+      // 2. Add remaining projects from fullDetailProjects that weren't in myProjects
+      for (final fullProj in fullDetailProjects) {
+        if (!liveProjects.any((p) => (p.prjId > 0 && p.prjId == fullProj.prjId) || (p.prjCd.isNotEmpty && p.prjCd == fullProj.prjCd))) {
+          liveProjects.add(fullProj);
+        }
+      }
+
       final companies     = fetchResults[1] as List<dynamic>;
       final plants        = fetchResults[2] as List<dynamic>;
       final liveTasks     = fetchResults[3] as List<TaskItem>;
@@ -99,10 +118,9 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         rawIndividualTasks = rawIndividualTasks.where((t) {
           if (t is! Map) return false;
           final doer = t['empId']?.toString() ?? t['empid']?.toString();
-          final assigner = t['assignedBy']?.toString() ?? t['assigned_by']?.toString();
           final reviewer = t['reviewer']?.toString();
           final approver = t['approver']?.toString();
-          return doer == empStr || assigner == empStr || reviewer == empStr || approver == empStr;
+          return doer == empStr || reviewer == empStr || approver == empStr;
         }).toList();
       }
 
@@ -112,7 +130,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           .map((json) => TaskItem.fromIndividualTask(Map<String, dynamic>.from(json), currentEmpId?.toString()))
           .toList();
 
-      final combinedTasks = [...liveTasks, ...individualTasks];
+      final combinedTasks = [...liveTasks, ...individualTasks].where((task) => !task.isDraft).toList();
 
       final leadLagFutures = liveProjects.map((p) => ApiService.getProjectLeadLagStatus(p.prjId)).toList();
       final leadLagResults = await Future.wait(leadLagFutures);
@@ -121,24 +139,160 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
         leadLagMap[liveProjects[i].prjId] = leadLagResults[i];
       }
 
+      final prefs = await SharedPreferences.getInstance();
+      final userRole = prefs.getString('userRole') ?? '';
+      final bool filterByEmp = currentEmpId != null &&
+          userRole.isNotEmpty &&
+          userRole.toLowerCase() != 'admin' &&
+          userRole.toLowerCase() != 'manager';
+
       final List<ProjectModel> mappedProjects = [];
       for (final p in liveProjects) {
-        final projectTasks = combinedTasks.where((t) => 
-          t.projectId == p.prjId || 
-          (t.projectCode != null && t.projectCode == p.prjCd) ||
-          (t.projectName != null && t.projectName == p.prjNm)
-        ).toList();
+        List<dynamic> milestoneTasksRaw = [];
+        try {
+          if (p.prjId > 0) {
+            final fetchedMilestones = await ApiService.getMilestones(p.prjId);
+            final taskFutures = fetchedMilestones.map((m) async {
+              final rawMId = m['mId'] ?? m['mid'];
+              if (rawMId == null) return <dynamic>[];
+              final int mId = (rawMId as num).toInt();
+              try {
+                return await ApiService.getTasksForMilestone(mId);
+              } catch (_) {
+                return <dynamic>[];
+              }
+            }).toList();
+            final allMTasks = await Future.wait(taskFutures);
+            for (final tList in allMTasks) {
+              milestoneTasksRaw.addAll(tList);
+            }
+          }
+        } catch (e) {
+          debugPrint('Error fetching milestone tasks for project ${p.prjId}: $e');
+        }
 
-        final int totalAssigned = projectTasks.length;
-        final int completed = projectTasks.where((t) => t.isCompleted).length;
-        final int inProgress = projectTasks.where((t) => t.isInProgress || t.isUnderReview).length;
-        final int open = totalAssigned - completed;
+        int totalAssigned = 0;
+        int completedCount = 0;
+        int openCount = 0;
+        int inProgressCount = 0;
+        double totalWeightedProgress = 0.0;
 
-        // Use backend progress if available, otherwise fallback to task counts
-        final double progressVal = p.rawProgressValue ?? (totalAssigned > 0 ? (completed / totalAssigned) : 0.0);
-        final String progressTxt = p.rawProgressValue != null 
-            ? p.progressText 
-            : '${(progressVal * 100).round()}%';
+        if (milestoneTasksRaw.isNotEmpty) {
+          final List<dynamic> filteredMilestoneTasks = [];
+          for (var t in milestoneTasksRaw) {
+            if (filterByEmp && currentEmpId != null) {
+              final strEmpId = currentEmpId.toString();
+              final doerId = (t['empId'] ?? t['empid'])?.toString();
+              final reviewer = t['reviewer']?.toString();
+              final approver = t['approver']?.toString();
+              final noteTxt = (t['noteTxt'] ?? t['note_txt'] ?? '').toString();
+              final isTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(strEmpId);
+              
+              if (doerId == strEmpId || reviewer == strEmpId || approver == strEmpId || isTeamMember) {
+                filteredMilestoneTasks.add(t);
+              }
+            } else {
+              filteredMilestoneTasks.add(t);
+            }
+          }
+
+          totalAssigned = filteredMilestoneTasks.length;
+          for (final t in filteredMilestoneTasks) {
+            final String tStatus = (t['taskSts']?.toString() ?? 'OPEN').toUpperCase().trim();
+            double taskProg = 0.0;
+            switch (tStatus) {
+              case 'COMPLETED':
+              case 'CLOSED':
+              case 'DONE':
+                taskProg = 1.0;
+                completedCount++;
+                break;
+              case 'SUBMIT_REVIEW':
+              case 'UNDER_REVIEW':
+              case 'UNDERREVIEW':
+                taskProg = 0.8;
+                openCount++;
+                inProgressCount++;
+                break;
+              case 'WIP':
+              case 'INPROGRESS':
+              case 'IN PROGRESS':
+                taskProg = 0.5;
+                openCount++;
+                inProgressCount++;
+                break;
+              case 'OVERDUE':
+                taskProg = 0.5;
+                openCount++;
+                inProgressCount++;
+                break;
+              case 'REASSIGN':
+                taskProg = 0.4;
+                openCount++;
+                break;
+              case 'REWORK':
+                taskProg = 0.3;
+                openCount++;
+                break;
+              default: // OPEN
+                taskProg = 0.0;
+                openCount++;
+                break;
+            }
+            totalWeightedProgress += taskProg;
+          }
+        } else {
+          // Fallback to combinedTasks if project milestone tasks list is empty
+          final projectTasks = combinedTasks.where((t) => 
+            (p.prjId > 0 && t.projectId == p.prjId) || 
+            (p.prjCd.isNotEmpty && t.projectCode != null && t.projectCode == p.prjCd) ||
+            (p.name.isNotEmpty && t.projectName != null && t.projectName!.trim().toLowerCase() == p.name.trim().toLowerCase())
+          ).toList();
+
+          totalAssigned = projectTasks.length;
+          for (final t in projectTasks) {
+            final String st = (t.status).toUpperCase().trim();
+            double taskProg = 0.0;
+            if (t.isCompleted || st == 'COMPLETED' || st == 'CLOSED' || st == 'DONE') {
+              taskProg = 1.0;
+              completedCount++;
+            } else if (st == 'SUBMIT_REVIEW' || st == 'UNDER_REVIEW' || st == 'UNDERREVIEW' || t.isUnderReview) {
+              taskProg = 0.8;
+              openCount++;
+              inProgressCount++;
+            } else if (st == 'WIP' || st == 'INPROGRESS' || st == 'IN PROGRESS' || t.isInProgress) {
+              taskProg = 0.5;
+              openCount++;
+              inProgressCount++;
+            } else if (st == 'OVERDUE' || t.isOverdue) {
+              taskProg = 0.5;
+              openCount++;
+              inProgressCount++;
+            } else if (st == 'REASSIGN') {
+              taskProg = 0.4;
+              openCount++;
+            } else if (st == 'REWORK') {
+              taskProg = 0.3;
+              openCount++;
+            } else {
+              taskProg = 0.0;
+              openCount++;
+            }
+            totalWeightedProgress += taskProg;
+          }
+        }
+
+        double progressVal;
+        if (totalAssigned > 0) {
+          progressVal = totalWeightedProgress / totalAssigned;
+        } else if (p.rawProgressValue != null) {
+          final double val = p.rawProgressValue!;
+          progressVal = val > 1.0 ? val / 100.0 : val;
+        } else {
+          progressVal = 0.0;
+        }
+
+        final String progressTxt = '${(progressVal * 100).round()}%';
             
         Color barColor;
         if (progressVal < 0.5) {
@@ -149,8 +303,8 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           barColor = const Color(0xff22C55E);
         }
 
-        final int assigned = p.rawAssigned ?? totalAssigned;
-        final int openCount = p.rawOpen ?? open;
+        final int finalAssigned = totalAssigned > 0 ? totalAssigned : (p.rawAssigned ?? 0);
+        final int finalOpen = totalAssigned > 0 ? openCount : (p.rawOpen ?? 0);
 
         // Company / plant details
         String? companyName = p.companyName;
@@ -200,11 +354,11 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           pltId: p.pltId,
           coyId: p.coyId,
           name: p.name,
-          details: p.details,
+          details: p.details.isNotEmpty ? p.details : (companyName ?? p.name),
           role: p.role,
-          assigned: assigned,
-          open: openCount,
-          inProgress: inProgress,
+          assigned: finalAssigned,
+          open: finalOpen,
+          inProgress: inProgressCount,
           progressValue: progressVal,
           progressText: progressTxt,
           barColor: barColor,
@@ -264,6 +418,25 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
       return matchesSearch && matchesFilter;
     }).toList();
+  }
+
+  int get _totalPages {
+    final count = _filteredProjects.length;
+    if (count == 0) return 1;
+    return (count / _itemsPerPage).ceil();
+  }
+
+  List<ProjectModel> get _paginatedProjects {
+    final filtered = _filteredProjects;
+    if (filtered.isEmpty) return [];
+    int page = _currentPage;
+    if (page > _totalPages) page = _totalPages;
+    if (page < 1) page = 1;
+    final startIndex = (page - 1) * _itemsPerPage;
+    final endIndex = (startIndex + _itemsPerPage < filtered.length)
+        ? startIndex + _itemsPerPage
+        : filtered.length;
+    return filtered.sublist(startIndex, endIndex);
   }
 
   Color getPriorityColor(String? priority) {
@@ -335,10 +508,10 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
                     Expanded(
                       child: ListView.builder(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: _filteredProjects.length,
+                        itemCount: _paginatedProjects.length,
                         itemBuilder: (context, index) {
                           return _buildProjectCard(
-                            _filteredProjects[index],
+                            _paginatedProjects[index],
                             themeColor,
                           );
                         },
@@ -368,6 +541,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
               onChanged: (value) {
                 setState(() {
                   _searchQuery = value;
+                  _currentPage = 1;
                 });
               },
               decoration: const InputDecoration(
@@ -420,6 +594,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           onChanged: (value) {
             setState(() {
               _selectedFilter = value!;
+              _currentPage = 1;
             });
           },
         ),
@@ -753,32 +928,25 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
 
   Widget _buildLeadLagBadge(String statusStr) {
     final String s = statusStr.trim().toLowerCase();
-    bool isLead = s == 'lead';
-    bool isLag = s == 'lag';
-    bool isOnTime = s == 'on time' || s == 'ontime' || s == 'on-time';
-
-    String displayText = isLead
-        ? 'Lead'
-        : isLag
-            ? 'Lag'
-            : isOnTime
-                ? 'On Time'
-                : (statusStr.isEmpty ? 'Lag' : statusStr);
-
-    Color bgColor = const Color(0xffF1F5F9);
-    Color textColor = const Color(0xff475569);
-
-    if (isLead) {
-      bgColor = const Color(0xffDCFCE7);
-      textColor = const Color(0xff16A34A);
-    } else if (isLag) {
-      bgColor = const Color(0xffFEE2E2);
-      textColor = const Color(0xffDC2626);
-    } else if (isOnTime) {
-      bgColor = const Color(0xffDBEAFE);
-      textColor = const Color(0xff2563EB);
+    
+    // Ensure null, 'null', 'n/a', or empty values default to 'On Time' instead of rendering 'null'
+    if (s == 'null' || s == 'n/a' || s.isEmpty || s == 'none') {
+      return _buildLeadLagPill('On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
     }
 
+    bool isLead = s.contains('lead') || s == 'ahead';
+    bool isLag = s.contains('lag') || s == 'behind' || s == 'delay';
+
+    if (isLead) {
+      return _buildLeadLagPill('Lead', const Color(0xffDCFCE7), const Color(0xff16A34A));
+    } else if (isLag) {
+      return _buildLeadLagPill('Lag', const Color(0xffFEE2E2), const Color(0xffDC2626));
+    } else {
+      return _buildLeadLagPill('On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
+    }
+  }
+
+  Widget _buildLeadLagPill(String label, Color bgColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.symmetric(
         horizontal: 12,
@@ -805,7 +973,7 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
           ),
           const SizedBox(width: 6),
           Text(
-            displayText.toUpperCase(),
+            label.toUpperCase(),
             style: TextStyle(
               color: textColor,
               fontSize: 10.5,
@@ -818,6 +986,16 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
   }
 
   Widget _buildPagination() {
+    final totalCount = _filteredProjects.length;
+    final totalPages = _totalPages;
+    
+    int page = _currentPage;
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+
+    final startItem = totalCount == 0 ? 0 : ((page - 1) * _itemsPerPage + 1);
+    final endItem = totalCount == 0 ? 0 : ((page - 1) * _itemsPerPage + _paginatedProjects.length);
+
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 10, 16, 12),
       decoration: const BoxDecoration(
@@ -827,34 +1005,78 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            'Showing 1 to ${_filteredProjects.length} of ${_filteredProjects.length} projects',
-            style: const TextStyle(fontSize: 11, color: Color(0xff64748B), fontWeight: FontWeight.w500),
+          Expanded(
+            child: Text(
+              'Showing $startItem to $endItem of $totalCount projects',
+              style: const TextStyle(fontSize: 11, color: Color(0xff64748B), fontWeight: FontWeight.w500),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
-          Row(
-            children: [
-              _buildPageButton(Icons.chevron_left, false),
-              const SizedBox(width: 4),
-              _buildPageButton(null, true, labelText: '1'),
-              const SizedBox(width: 4),
-              _buildPageButton(Icons.chevron_right, false),
-            ],
+          const SizedBox(width: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Previous Button (<)
+                GestureDetector(
+                  onTap: page > 1
+                      ? () => setState(() => _currentPage = page - 1)
+                      : null,
+                  child: _buildPageButton(
+                    Icons.chevron_left,
+                    false,
+                    isDisabled: page <= 1,
+                  ),
+                ),
+                const SizedBox(width: 4),
+
+                // Page Number Buttons (1, 2, 3...)
+                ...List.generate(totalPages, (i) {
+                  final pageNum = i + 1;
+                  final isActive = pageNum == page;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 4.0),
+                    child: GestureDetector(
+                      onTap: () => setState(() => _currentPage = pageNum),
+                      child: _buildPageButton(
+                        null,
+                        isActive,
+                        labelText: '$pageNum',
+                      ),
+                    ),
+                  );
+                }),
+
+                // Next Button (>)
+                GestureDetector(
+                  onTap: page < totalPages
+                      ? () => setState(() => _currentPage = page + 1)
+                      : null,
+                  child: _buildPageButton(
+                    Icons.chevron_right,
+                    false,
+                    isDisabled: page >= totalPages,
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildPageButton(IconData? icon, bool isActive, {String? labelText}) {
+  Widget _buildPageButton(IconData? icon, bool isActive, {String? labelText, bool isDisabled = false}) {
     return Container(
-      width: 26,
-      height: 26,
+      width: 28,
+      height: 28,
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(4),
+        color: isActive ? const Color(0xffEFF6FF) : Colors.white,
+        borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isActive ? const Color(0xff2563EB) : const Color(0xffE2E8F0),
-          width: isActive ? 1.2 : 1,
+          width: isActive ? 1.5 : 1,
         ),
       ),
       child: Center(
@@ -862,12 +1084,16 @@ class _ProjectsScreenState extends State<ProjectsScreen> {
             ? Text(
                 labelText,
                 style: TextStyle(
-                  fontSize: 11,
+                  fontSize: 11.5,
                   fontWeight: FontWeight.w700,
                   color: isActive ? const Color(0xff2563EB) : const Color(0xff475569),
                 ),
               )
-            : Icon(icon, size: 14, color: const Color(0xff94A3B8)),
+            : Icon(
+                icon,
+                size: 16,
+                color: isDisabled ? const Color(0xffCBD5E1) : const Color(0xff475569),
+              ),
       ),
     );
   }

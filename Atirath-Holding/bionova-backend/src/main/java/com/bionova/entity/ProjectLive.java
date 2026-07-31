@@ -90,6 +90,9 @@ public class ProjectLive {
     @Column(name = "act_cmp_dt")
     private java.time.LocalDate actCmpDt;
 
+    @Column(name = "created_by")
+    private Long createdBy;
+
     @Transient
     private String location;
 

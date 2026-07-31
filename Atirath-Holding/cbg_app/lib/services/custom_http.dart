@@ -19,7 +19,7 @@ class CustomHttp {
       debugPrint("Token expired (401 Unauthorized). Automatically logging out...");
 
       try {
-        await ApiService.clearCache();
+        await ApiService.clearCache(clearAuth: true);
       } catch (e) {
         debugPrint("Error clearing preferences: $e");
       }

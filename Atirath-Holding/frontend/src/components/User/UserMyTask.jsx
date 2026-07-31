@@ -31,13 +31,15 @@ const UserMyTask = ({ selectedProject, userTasks = [] }) => {
     const milestoneObj = selectedProject?.milestones?.find(m => (m.mId || m.mid || m.id) === tMId);
     const milestoneName = milestoneObj ? milestoneObj.name : "Unknown Milestone";
     const statusVal = (t.taskSts || t.tasksts || "").toUpperCase();
-    const progressVal = (statusVal === 'COMPLETED' || statusVal === 'CLOSED') ? 100 : statusVal === 'WIP' ? 50 : (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') ? 80 : 0;
+    const subSts = (t.subStatus || t.substatus || "").toUpperCase();
+    const isRework = subSts === 'REWORK' || statusVal === 'REWORK';
+    const progressVal = (statusVal === 'COMPLETED' || statusVal === 'CLOSED') ? 100 : (statusVal === 'WIP' || isRework) ? 50 : (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') ? 80 : 0;
     
     let displayStatus = "Not Started";
     if (statusVal === 'COMPLETED' || statusVal === 'CLOSED') displayStatus = "Closed";
-    else if (statusVal === 'WIP') displayStatus = "In Progress";
+    else if (statusVal === 'WIP' || isRework) displayStatus = "In Progress";
     else if (statusVal === 'SUBMIT_REVIEW' || statusVal === 'UNDER_REVIEW') displayStatus = "In Progress";
-    else if (statusVal === 'OPEN' || statusVal === 'REWORK') displayStatus = "Pending";
+    else if (statusVal === 'OPEN') displayStatus = "Pending";
 
     return {
       code: t.taskCd || t.taskcd || `TSK-${t.taskId}`,

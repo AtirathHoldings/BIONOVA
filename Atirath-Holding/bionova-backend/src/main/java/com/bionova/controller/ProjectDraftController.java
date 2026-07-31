@@ -31,6 +31,9 @@ public class ProjectDraftController {
     @Autowired
     private com.bionova.repository.ProcessConfigRepository processConfigRepository;
 
+    @Autowired
+    private com.bionova.repository.EmployeeRepository employeeRepository;
+
     /** GET all drafts */
     @GetMapping
     public List<ProjectDraft> getAll() {
@@ -69,6 +72,17 @@ public class ProjectDraftController {
         }
 
         draft.setPrjSts("DRAFT");
+
+        // Auto-populate createdBy if not sent in request body
+        if (draft.getCreatedBy() == null) {
+            try {
+                org.springframework.security.core.Authentication auth = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+                if (auth != null && auth.getName() != null && !auth.getName().isEmpty() && !"anonymousUser".equals(auth.getName())) {
+                    String principal = auth.getName();
+                    employeeRepository.findByEmail(principal).ifPresent(emp -> draft.setCreatedBy(emp.getEmpId()));
+                }
+            } catch (Exception ignored) {}
+        }
 
         // Auto-compute tentative days (inclusive: start=day1, so Jul2→Jul26 = 25 days)
         if (draft.getTentStDt() != null && draft.getTentEndDt() != null) {
