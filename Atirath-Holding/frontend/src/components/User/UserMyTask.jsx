@@ -11,6 +11,30 @@ const HorizontalProgress = ({ pct, color }) => (
   </div>
 );
 
+const formatDateDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === "N/A") return "N/A";
+  try {
+    const cleanStr = String(dateStr).split('T')[0];
+    const parts = cleanStr.split('-');
+    if (parts.length === 3) {
+      const [year, month, day] = parts;
+      if (year.length === 4) {
+        return `${day.padStart(2, '0')}-${month.padStart(2, '0')}-${year}`;
+      }
+    }
+    const d = new Date(dateStr);
+    if (!isNaN(d.getTime())) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const month = String(d.getMonth() + 1).padStart(2, '0');
+      const year = d.getFullYear();
+      return `${day}-${month}-${year}`;
+    }
+    return dateStr;
+  } catch (e) {
+    return dateStr;
+  }
+};
+
 const UserMyTask = ({ selectedProject, userTasks = [] }) => {
   const [statusFilter, setStatusFilter] = useState("All Status");
   const [priorityFilter, setPriorityFilter] = useState("All Priority");
@@ -47,7 +71,7 @@ const UserMyTask = ({ selectedProject, userTasks = [] }) => {
       milestone: milestoneName,
       milestoneId: tMId,
       priority: t.priority || "Medium",
-      due: t.endDt || t.enddt || "N/A",
+      due: formatDateDDMMYYYY(t.endDt || t.enddt || "N/A"),
       status: displayStatus,
       progress: progressVal
     };

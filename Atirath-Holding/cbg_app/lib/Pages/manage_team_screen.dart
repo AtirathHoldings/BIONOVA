@@ -62,34 +62,48 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
       // Load current team list from DB with local storage fallback
       List<EmployeeOption> dbTeam = [];
       try {
-        if (widget.task.isIndividualTask) throw Exception('Skip API for individual task');
-        final dbTask = await ApiService.getLiveTask(int.parse(widget.task.id));
-        if (dbTask != null) {
-          final String? noteTxt = dbTask['noteTxt'] ?? dbTask['note_txt'];
-          if (noteTxt != null && noteTxt.trim().isNotEmpty) {
-            final List<String> employeeIds = noteTxt.split(',');
+        final taskIdInt = int.tryParse(widget.task.id);
+        if (taskIdInt != null) {
+          final contributors = await ApiService.getContributors(taskIdInt, widget.task.isIndividualTask);
+          if (contributors.isNotEmpty) {
             final dbEmployees = await ApiService.getEmployees();
-            for (final empId in employeeIds) {
-              final match = dbEmployees.firstWhere((emp) => emp['id']?.toString() == empId.trim() || emp['empId']?.toString() == empId.trim(), orElse: () => null);
-              if (match != null) {
-                dbTeam.add(EmployeeOption.fromJson(match));
+            for (final c in contributors) {
+              final cEmpId = (c['empId'] ?? c['id'] ?? c['emp_id'])?.toString();
+              if (cEmpId != null) {
+                final match = dbEmployees.firstWhere(
+                  (emp) => emp['id']?.toString() == cEmpId || emp['empId']?.toString() == cEmpId,
+                  orElse: () => null,
+                );
+                if (match != null) {
+                  dbTeam.add(EmployeeOption.fromJson(match));
+                }
               }
             }
           }
-        } else {
-          final savedTeamJson = prefs.getString('task_team_${widget.task.id}');
-          if (savedTeamJson != null) {
-            final List<dynamic> decoded = jsonDecode(savedTeamJson);
-            dbTeam = decoded.map((item) => EmployeeOption.fromJson(item)).toList();
+        }
+        if (dbTeam.isEmpty) {
+          final dbTask = widget.task.isIndividualTask
+              ? await ApiService.getIndividualTaskById(int.parse(widget.task.id))
+              : await ApiService.getLiveTask(int.parse(widget.task.id));
+          if (dbTask != null) {
+            final String? noteTxt = dbTask['noteTxt'] ?? dbTask['note_txt'];
+            if (noteTxt != null && noteTxt.trim().isNotEmpty) {
+              final List<String> employeeIds = noteTxt.split(',');
+              final dbEmployees = await ApiService.getEmployees();
+              for (final empId in employeeIds) {
+                final match = dbEmployees.firstWhere(
+                  (emp) => emp['id']?.toString() == empId.trim() || emp['empId']?.toString() == empId.trim(),
+                  orElse: () => null,
+                );
+                if (match != null) {
+                  dbTeam.add(EmployeeOption.fromJson(match));
+                }
+              }
+            }
           }
         }
       } catch (e) {
         debugPrint("Error loading team from db: $e");
-        final savedTeamJson = prefs.getString('task_team_${widget.task.id}');
-        if (savedTeamJson != null) {
-          final List<dynamic> decoded = jsonDecode(savedTeamJson);
-          dbTeam = decoded.map((item) => EmployeeOption.fromJson(item)).toList();
-        }
       }
 
       if (mounted) {
@@ -253,25 +267,27 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
                                               localTasks.remove(widget.task.id);
                                               await prefs.setStringList('emp_assigned_tasks_$empId', localTasks);
 
-                                              // 4. Update the database!
+                                              // Save to DB table team_members directly via API!
                                               try {
+                                                final taskIdInt = int.tryParse(widget.task.id) ?? 0;
+                                                final List<Map<String, dynamic>> payload = _currentTaskTeam.map((m) => {
+                                                  "empId": m.id is int ? m.id : int.tryParse(m.id?.toString() ?? '') ?? 0,
+                                                  "asgnRmk": "Collaborator"
+                                                }).toList();
+
+                                                await ApiService.saveContributors(taskIdInt, widget.task.isIndividualTask, payload);
+
                                                 if (widget.task.isIndividualTask) {
-                                                  final dbTask = await ApiService.getIndividualTaskById(int.parse(widget.task.id));
+                                                  final dbTask = await ApiService.getIndividualTaskById(taskIdInt);
                                                   if (dbTask != null) {
                                                     dbTask['noteTxt'] = _currentTaskTeam.map((m) => m.id).join(',');
-                                                    final success = await ApiService.updateIndividualTask(int.parse(widget.task.id), dbTask);
-                                                    if (!success) {
-                                                      debugPrint("Failed to remove task team on individual task database.");
-                                                    }
+                                                    await ApiService.updateIndividualTask(taskIdInt, dbTask);
                                                   }
                                                 } else {
-                                                  final dbTask = await ApiService.getLiveTask(int.parse(widget.task.id));
+                                                  final dbTask = await ApiService.getLiveTask(taskIdInt);
                                                   if (dbTask != null) {
                                                     dbTask['noteTxt'] = _currentTaskTeam.map((m) => m.id).join(',');
-                                                    final success = await ApiService.updateLiveTask(int.parse(widget.task.id), dbTask);
-                                                    if (!success) {
-                                                      debugPrint("Failed to remove task team on database.");
-                                                    }
+                                                    await ApiService.updateLiveTask(taskIdInt, dbTask);
                                                   }
                                                 }
                                               } catch (e) {
@@ -357,25 +373,26 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
                                 await prefs.setString('task_item_data_${widget.task.id}', jsonEncode(widget.task.toJson()));
 
                                 // 4. Update the database!
-                                // 4. Update the database!
                                 try {
+                                  final taskIdInt = int.tryParse(widget.task.id) ?? 0;
+                                  final List<Map<String, dynamic>> payload = _currentTaskTeam.map((m) => {
+                                    "empId": m.id is int ? m.id : int.tryParse(m.id?.toString() ?? '') ?? 0,
+                                    "asgnRmk": "Collaborator"
+                                  }).toList();
+
+                                  await ApiService.saveContributors(taskIdInt, widget.task.isIndividualTask, payload);
+
                                   if (widget.task.isIndividualTask) {
-                                    final dbTask = await ApiService.getIndividualTaskById(int.parse(widget.task.id));
+                                    final dbTask = await ApiService.getIndividualTaskById(taskIdInt);
                                     if (dbTask != null) {
                                       dbTask['noteTxt'] = _currentTaskTeam.map((m) => m.id).join(',');
-                                      final success = await ApiService.updateIndividualTask(int.parse(widget.task.id), dbTask);
-                                      if (!success) {
-                                        debugPrint("Failed to update individual task team on database.");
-                                      }
+                                      await ApiService.updateIndividualTask(taskIdInt, dbTask);
                                     }
                                   } else {
-                                    final dbTask = await ApiService.getLiveTask(int.parse(widget.task.id));
+                                    final dbTask = await ApiService.getLiveTask(taskIdInt);
                                     if (dbTask != null) {
                                       dbTask['noteTxt'] = _currentTaskTeam.map((m) => m.id).join(',');
-                                      final success = await ApiService.updateLiveTask(int.parse(widget.task.id), dbTask);
-                                      if (!success) {
-                                        debugPrint("Failed to update task team on database.");
-                                      }
+                                      await ApiService.updateLiveTask(taskIdInt, dbTask);
                                     }
                                   }
                                 } catch (e) {

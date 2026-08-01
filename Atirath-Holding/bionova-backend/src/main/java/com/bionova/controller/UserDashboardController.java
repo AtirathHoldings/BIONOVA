@@ -182,7 +182,9 @@ public class UserDashboardController {
         }
 
         // 4. Task Status Counts (Donut Chart) Mapping
-        int completedVal = counts.hasNonNull("Completed") ? counts.path("Completed").asInt() : counts.path("Closed").asInt();
+        // SQL returns 'Closed' key (from stored procedure taskStatusCounts)
+        int completedVal = counts.hasNonNull("Closed") ? counts.path("Closed").asInt()
+                : (counts.hasNonNull("Completed") ? counts.path("Completed").asInt() : 0);
         int inProgressVal = counts.path("In Progress").asInt();
         int underReviewVal = counts.path("Under Review").asInt();
         int overdueVal = counts.path("Overdue").asInt();
@@ -201,22 +203,18 @@ public class UserDashboardController {
         taskStatusCounts.put("Rework",       reworkVal);
         taskStatusCounts.put("Draft",        draftVal);
 
-        int mainCompleted = counts.path("MainClosed").asInt();
-        int mainWip = counts.path("MainWIP").asInt();
-        int mainOpen = counts.path("MainOpen").asInt();
-
-        double total = mainCompleted + mainWip + mainOpen;
+        int totalForPct = completedVal + inProgressVal + openVal + overdueVal + underReviewVal + reassignedVal + reworkVal + draftVal;
 
         Map<String, Integer> taskStatusPercentages = new HashMap<>();
-        if (total > 0) {
-            taskStatusPercentages.put("Closed",       (int) Math.round((mainCompleted / total) * 100));
-            taskStatusPercentages.put("In Progress",  (int) Math.round((mainWip / total) * 100));
-            taskStatusPercentages.put("Open",         (int) Math.round((mainOpen / total) * 100));
-            taskStatusPercentages.put("Under Review", 0);
-            taskStatusPercentages.put("Overdue",      0);
-            taskStatusPercentages.put("Reassigned",   0);
-            taskStatusPercentages.put("Rework",       0);
-            taskStatusPercentages.put("Draft",        0);
+        if (totalForPct > 0) {
+            taskStatusPercentages.put("Closed",       (int) Math.round((completedVal   / (double) totalForPct) * 100));
+            taskStatusPercentages.put("In Progress",  (int) Math.round((inProgressVal  / (double) totalForPct) * 100));
+            taskStatusPercentages.put("Open",         (int) Math.round((openVal         / (double) totalForPct) * 100));
+            taskStatusPercentages.put("Under Review", (int) Math.round((underReviewVal  / (double) totalForPct) * 100));
+            taskStatusPercentages.put("Overdue",      (int) Math.round((overdueVal      / (double) totalForPct) * 100));
+            taskStatusPercentages.put("Reassigned",   (int) Math.round((reassignedVal   / (double) totalForPct) * 100));
+            taskStatusPercentages.put("Rework",       (int) Math.round((reworkVal       / (double) totalForPct) * 100));
+            taskStatusPercentages.put("Draft",        (int) Math.round((draftVal        / (double) totalForPct) * 100));
         } else {
             taskStatusPercentages.put("Closed",       0);
             taskStatusPercentages.put("In Progress",  0);
@@ -265,8 +263,8 @@ public class UserDashboardController {
         dto.setClosedTasksCount(closedTasksCount);
 
         JsonNode trendsNode = root.path("metricsTrends");
-        int totalActiveAssigned = summary.hasNonNull("totalTasks") ? summary.path("totalTasks").asInt() 
-                : (summary.hasNonNull("myTasksCount") ? summary.path("myTasksCount").asInt() + closedTasksCount + overdueTasksCount : (openVal + inProgressVal + closedTasksCount));
+        int totalActiveAssigned = summary.hasNonNull("totalTasks") ? summary.path("totalTasks").asInt()
+                : summary.path("myTasksCount").asInt(openVal + inProgressVal + closedTasksCount + overdueTasksCount);
         dto.setAssignedTasksCard(mapMetricCard(trendsNode.path("assignedTasks"), totalActiveAssigned));
         dto.setOpenTasksCard(mapMetricCard(trendsNode.path("openTasks"), openVal));
         dto.setInProgressCard(mapMetricCard(trendsNode.path("inProgress"), inProgressVal));

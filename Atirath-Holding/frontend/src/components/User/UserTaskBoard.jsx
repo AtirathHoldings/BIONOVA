@@ -16,6 +16,18 @@ const authHeaders = () => ({
   Authorization: `Bearer ${getAuthToken()}`,
 });
 
+const formatDate = (dateStr) => {
+  if (!dateStr || typeof dateStr !== 'string') return dateStr || '';
+  const cleanStr = dateStr.trim().split('T')[0].split(' ')[0];
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(cleanStr)) return cleanStr;
+  const parts = cleanStr.split('-');
+  if (parts.length === 3 && parts[0].length === 4) {
+    const [year, month, day] = parts;
+    return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+  }
+  return dateStr;
+};
+
 // ------------------- Helper: Determine display status from raw task -------------------
 const getTaskDisplayStatus = (t) => {
   const rawSts = (t.taskSts || t.tasksts || t.status || "DRAFT").toString().toUpperCase().trim();
@@ -56,6 +68,57 @@ const getTaskDisplayStatus = (t) => {
   return "Open";
 };
 
+const checkIsUpcoming = (task) => {
+  const rawSts = (task.rawStatus || "").toUpperCase();
+  if (rawSts === "COMPLETED" || rawSts === "CLOSED" || rawSts === "WIP" || rawSts === "IN_PROGRESS" || rawSts === "WORK_IN_PROGRESS" || rawSts === "REWORK" || rawSts === "REASSIGN") {
+    return false;
+  }
+  const stDtStr = task.rawTask?.stDt || task.rawTask?.stdt || task.rawTask?.st_dt || task.rawTask?.startDate || task.stDt || task.startDate;
+  if (stDtStr) {
+    try {
+      const todayObj = new Date();
+      todayObj.setHours(0, 0, 0, 0);
+
+      const dateOnly = String(stDtStr).split('T')[0].split(' ')[0];
+      const parts = dateOnly.split('-');
+      if (parts.length === 3) {
+        const [year, month, day] = parts;
+        const startDateObj = new Date(parseInt(year, 10), parseInt(month, 10) - 1, parseInt(day, 10));
+        startDateObj.setHours(0, 0, 0, 0);
+
+        if (startDateObj > todayObj) {
+          return true;
+        }
+      }
+    } catch (e) {}
+  }
+  return false;
+};
+
+const getScheduleStatusInfo = (task) => {
+  if (!task) return { status: 'ON TIME', bg: '#eff6ff', color: '#3b82f6', border: '#bfdbfe' };
+  
+  const refDate = task.completedOn || task.submittedOn;
+  let status = 'ON TIME';
+
+  if (refDate && task.due) {
+    if (refDate < task.due) status = 'LEAD';
+    else if (refDate > task.due) status = 'LAG';
+    else status = 'ON TIME';
+  } else if (task.due) {
+    const today = new Date().toISOString().split('T')[0];
+    if (today > task.due || task.isOverdue) status = 'LAG';
+    else status = 'ON TIME';
+  }
+
+  if (status === 'LEAD') {
+    return { status: 'LEAD', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+  } else if (status === 'LAG') {
+    return { status: 'LAG', bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+  }
+  return { status: 'ON TIME', bg: '#eff6ff', color: '#3b82f6', border: '#bfdbfe' };
+};
+
 // ------------------- Main Component -------------------
 const UserTaskBoard = ({ userRole, onLogout }) => {
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -72,7 +135,6 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
     todo: [],
     overdue: [],
     inProgress: [],
-    underReview: [],
     completed: []
   });
 
@@ -131,7 +193,8 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
           String(t.empId) === String(empId) ||
           String(t.empid) === String(empId) ||
           String(t.reviewerId) === String(empId) ||
-          String(t.approverId) === String(empId)
+          String(t.approverId) === String(empId) ||
+          (Array.isArray(t.teamMembers) && t.teamMembers.some(tm => String(tm.empId) === String(empId)))
         );
       });
 
@@ -144,7 +207,8 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
           String(t.empId) === String(empId) ||
           String(t.empid) === String(empId) ||
           String(t.reviewerId) === String(empId) ||
-          String(t.approverId) === String(empId)
+          String(t.approverId) === String(empId) ||
+          (Array.isArray(t.teamMembers) && t.teamMembers.some(tm => String(tm.empId) === String(empId)))
         );
       });
 
@@ -253,7 +317,7 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
 
       // Group by status
       const today = new Date().toISOString().split("T")[0];
-      const todo = [], overdue = [], inProgress = [], underReview = [], completed = [];
+      const todo = [], overdue = [], inProgress = [], completed = [];
 
       allMapped.forEach(task => {
         const rawSts = (task.rawStatus || "").toUpperCase();
@@ -270,25 +334,25 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
           prcsActn.includes("APPROVER")
         );
 
+        const isUpcoming = checkIsUpcoming(task);
+
         if (isClosed) {
           completed.push(task);
         } else {
-          if (isUnderReview) {
-            underReview.push(task);
-          }
-          if (task.status === "In Progress" || rawSts === "WIP" || rawSts === "IN_PROGRESS" || rawSts === "WORK_IN_PROGRESS") {
+          if (isUnderReview || task.status === "In Progress" || rawSts === "WIP" || rawSts === "IN_PROGRESS" || rawSts === "WORK_IN_PROGRESS") {
             inProgress.push(task);
-            if (task.isOverdue) overdue.push(task);
-          } else if (task.isOverdue || task.status === "Overdue") {
-            overdue.push(task);
-          } else if (!isUnderReview) {
+          } else if (!isUpcoming) {
             todo.push(task);
+          }
+
+          if (task.isOverdue || task.status === "Overdue") {
+            overdue.push(task);
           }
         }
       });
 
       setTotalTasksCount(allMapped.length);
-      setTasks({ todo, overdue, inProgress, underReview, completed });
+      setTasks({ todo, overdue, inProgress, completed });
     } catch (err) {
       console.error("Error fetching task board data:", err);
     } finally {
@@ -331,10 +395,9 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
     todo: tasks.todo.length,
     overdue: tasks.overdue.length,
     inProgress: tasks.inProgress.length,
-    underReview: tasks.underReview.length,
     completed: tasks.completed.length,
     open: tasks.todo.length,
-    total: totalTasksCount || 41
+    total: (tasks.todo.length + tasks.inProgress.length + tasks.completed.length)
   };
 
   // Render a task card
@@ -349,15 +412,18 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
               {task.priority}
             </span>
           )}
-          {isCompleted && (
-            <span className="utb-badge" style={{ 
-                backgroundColor: (!task.completedOn || !task.due || task.completedOn === task.due) ? '#eff6ff' : (task.completedOn < task.due ? '#f0fdf4' : '#fef2f2'),
-                color: (!task.completedOn || !task.due || task.completedOn === task.due) ? '#3b82f6' : (task.completedOn < task.due ? '#16a34a' : '#dc2626'),
-                border: `1px solid ${(!task.completedOn || !task.due || task.completedOn === task.due) ? '#bfdbfe' : (task.completedOn < task.due ? '#bbf7d0' : '#fecaca')}`
-            }}>
-              {(!task.completedOn || !task.due || task.completedOn === task.due) ? 'ON TIME' : (task.completedOn < task.due ? 'LEAD' : 'LAG')}
-            </span>
-          )}
+          {isCompleted && (() => {
+            const info = getScheduleStatusInfo(task);
+            return (
+              <span className="utb-badge" style={{ 
+                  backgroundColor: info.bg,
+                  color: info.color,
+                  border: `1px solid ${info.border}`
+              }}>
+                {info.status}
+              </span>
+            );
+          })()}
         </div>
         <h4 className="utb-card-title">{task.title}</h4>
         <div className="utb-card-details">
@@ -368,12 +434,12 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', marginBottom: '12px' }}>
           {!isCompleted && task.due && (
             <div className={`utb-card-meta ${task.isOverdue ? 'overdue-text' : ''}`} style={{ marginBottom: 0, fontWeight: task.isOverdue ? 'bold' : 'normal', color: task.isOverdue ? '#ef4444' : 'inherit' }}>
-              <Calendar size={14} /> {task.isOverdue ? 'Overdue:' : 'Due:'} {task.due}
+              <Calendar size={14} /> {task.isOverdue ? 'Overdue:' : 'Due:'} {formatDate(task.due)}
             </div>
           )}
           {task.submittedOn && !isCompleted && (
             <div className="utb-card-meta" style={{ marginBottom: 0 }}>
-              <Calendar size={14} /> Submitted on: {task.submittedOn}
+              <Calendar size={14} /> Submitted on: {formatDate(task.submittedOn)}
             </div>
           )}
 
@@ -401,7 +467,7 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
   };
 
   // Unique projects for dropdown
-  const allTasksForDropdown = [...tasks.todo, ...tasks.overdue, ...tasks.inProgress, ...tasks.underReview, ...tasks.completed];
+  const allTasksForDropdown = [...tasks.todo, ...tasks.overdue, ...tasks.inProgress, ...tasks.completed];
   const uniqueProjects = ["All", ...new Set(allTasksForDropdown.map(t => t.project).filter(Boolean))];
 
   return (
@@ -434,7 +500,6 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
                   { key: 'todo', label: 'Open', icon: ListTodo, color: '#3b82f6', count: stats.todo, bg: '#f5f8ff', activeBg: '#e5edff', border: '#e5edff', activeBorder: '#3b82f6' },
                   { key: 'overdue', label: 'Overdue', icon: AlertCircle, color: '#ef4444', count: stats.overdue, bg: '#fef2f2', activeBg: '#fee2e2', border: '#fee2e2', activeBorder: '#ef4444' },
                   { key: 'inProgress', label: 'In Progress', icon: Loader, color: '#f59e0b', count: stats.inProgress, bg: '#fffbeb', activeBg: '#fef3c7', border: '#fef3c7', activeBorder: '#f59e0b' },
-                  { key: 'underReview', label: 'Under Review', icon: Eye, color: '#a855f7', count: stats.underReview, bg: '#faf5ff', activeBg: '#f3e8ff', border: '#f3e8ff', activeBorder: '#a855f7' },
                   { key: 'completed', label: 'Closed', icon: CheckCircle2, color: '#22c55e', count: stats.completed, bg: '#f0fdf4', activeBg: '#bbf7d0', border: '#bbf7d0', activeBorder: '#22c55e' },
                 ].map((item) => (
                   <div
@@ -516,17 +581,7 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
                   </div>
                 )}
 
-                {shouldShowColumn('underReview') && (
-                  <div className="utb-column review">
-                    <div className="utb-col-header">
-                      <h3 className="utb-col-title">Under Review</h3>
-                      <span className="utb-col-count">{filterTasks(tasks.underReview).length}</span>
-                    </div>
-                    <div className="utb-col-content">
-                      {filterTasks(tasks.underReview).map(t => renderCard(t, 'review'))}
-                    </div>
-                  </div>
-                )}
+
 
                 {shouldShowColumn('completed') && (
                   <div className="utb-column completed">
@@ -584,8 +639,36 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
               </div>
               <div className="utb-modal-row">
                 <div className="utb-modal-field">
-                  <label>Priority</label>
-                  <p><span className={`utb-badge ${selectedTask.priority.toLowerCase()}`}>{selectedTask.priority}</span></p>
+                  {(() => {
+                    const isClosedTask = selectedTask.status === "Closed" || selectedTask.status === "Completed" || selectedTask.rawStatus === "CLOSED" || selectedTask.rawStatus === "COMPLETED";
+                    if (isClosedTask) {
+                      const info = getScheduleStatusInfo(selectedTask);
+                      return (
+                        <>
+                          <label>Schedule Status</label>
+                          <p>
+                            <span className="utb-badge" style={{
+                              backgroundColor: info.bg,
+                              color: info.color,
+                              border: `1px solid ${info.border}`
+                            }}>
+                              {info.status}
+                            </span>
+                          </p>
+                        </>
+                      );
+                    }
+                    return (
+                      <>
+                        <label>Priority</label>
+                        <p>
+                          <span className={`utb-badge ${(selectedTask.priority || 'medium').toLowerCase().replace(/\s+/g, '-')}`}>
+                            {selectedTask.priority}
+                          </span>
+                        </p>
+                      </>
+                    );
+                  })()}
                 </div>
                 <div className="utb-modal-field">
                   <label>Assigned To</label>
@@ -596,9 +679,9 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
                 <div className="utb-modal-field">
                   <label>Relevant Dates</label>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    {selectedTask.due && <div>Due: {selectedTask.due}</div>}
-                    {selectedTask.submittedOn && <div>Submitted: {selectedTask.submittedOn}</div>}
-                    {selectedTask.completedOn && <div>Closed: {selectedTask.completedOn}</div>}
+                    {selectedTask.due && <div>Due: {formatDate(selectedTask.due)}</div>}
+                    {selectedTask.submittedOn && <div>Submitted: {formatDate(selectedTask.submittedOn)}</div>}
+                    {selectedTask.completedOn && <div>Closed: {formatDate(selectedTask.completedOn)}</div>}
                   </div>
                 </div>
               )}

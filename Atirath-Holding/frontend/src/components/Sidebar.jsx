@@ -20,6 +20,7 @@ const Sidebar = ({ onLogout }) => {
   const [isCollapsed, setIsCollapsed] = useState(
     localStorage.getItem("sidebarCollapsed") === "true"
   );
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
   const [menuItems, setMenuItems] = useState([]);
   const [singleItems, setSingleItems] = useState([]);
@@ -98,7 +99,7 @@ const Sidebar = ({ onLogout }) => {
             'MY_TASK': { path: '/my-tasks', icon: ClipboardCheck },
             'MY_PROJECTS': { path: '/projects', icon: FolderPlus },
             'CALENDAR': { path: '/calendar', icon: Calendar },
-            'USER_TASK_BOARD': { path: '/user-task-board', icon: ClipboardCheck },
+            'USER_TASK_BOARD': { path: '/user-task-board', icon: ClipboardCheck, displayName: "Task Board" },
 
             'PUBLIC_HOLIDAYS': { path: '/public-holidays', icon: Calendar },
             'PROFILE': { path: '/profile', icon: User },
@@ -439,7 +440,7 @@ const Sidebar = ({ onLogout }) => {
           )}
         </ul>
 
-        <div className="logout-button" onClick={() => { onLogout(); closeMobileSidebar(); }}>
+        <div className="logout-button" onClick={() => setShowLogoutConfirm(true)}>
           <LogOut size={20} /> <span>Logout</span>
         </div>
 
@@ -523,7 +524,7 @@ const Sidebar = ({ onLogout }) => {
               : "You do not have permission to view this specific screen. Please contact your Administrator or Project Manager to request access."}
           </p>
           <button 
-            onClick={() => { onLogout(); }}
+            onClick={() => setShowLogoutConfirm(true)}
             style={{
               backgroundColor: "#EF4444",
               color: "white",
@@ -542,6 +543,107 @@ const Sidebar = ({ onLogout }) => {
           >
             <LogOut size={18} /> Logout Account
           </button>
+        </div>
+      )}
+
+      {/* Logout Confirmation Alert Popup Modal */}
+      {showLogoutConfirm && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          backgroundColor: "rgba(15, 23, 42, 0.6)",
+          backdropFilter: "blur(4px)",
+          zIndex: 9999999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "20px"
+        }}>
+          <div style={{
+            backgroundColor: "#ffffff",
+            borderRadius: "16px",
+            padding: "28px 24px",
+            maxWidth: "380px",
+            width: "100%",
+            boxShadow: "0 25px 50px -12px rgba(0, 0, 0, 0.25)",
+            textAlign: "center",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            gap: "16px",
+            animation: "fadeIn 0.2s ease-out"
+          }}>
+            <div style={{
+              width: "56px",
+              height: "56px",
+              borderRadius: "50%",
+              backgroundColor: "#fee2e2",
+              color: "#ef4444",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center"
+            }}>
+              <LogOut size={26} />
+            </div>
+
+            <div>
+              <h3 style={{ fontSize: "18px", fontWeight: "700", color: "#0f172a", margin: "0 0 8px 0" }}>
+                Confirm Logout
+              </h3>
+              <p style={{ fontSize: "14px", color: "#64748b", margin: 0, lineHeight: "1.5" }}>
+                Are you sure you want to log out? You will need to log in again to access your account.
+              </p>
+            </div>
+
+            <div style={{ display: "flex", gap: "12px", width: "100%", marginTop: "8px" }}>
+              <button
+                onClick={() => setShowLogoutConfirm(false)}
+                style={{
+                  flex: 1,
+                  padding: "10px 16px",
+                  borderRadius: "8px",
+                  border: "1px solid #cbd5e1",
+                  backgroundColor: "#ffffff",
+                  color: "#475569",
+                  fontWeight: "600",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  transition: "all 0.15s ease"
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#f8fafc"}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#ffffff"}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  if (onLogout) onLogout();
+                  closeMobileSidebar();
+                }}
+                style={{
+                  flex: 1,
+                  padding: "10px 16px",
+                  borderRadius: "8px",
+                  border: "none",
+                  backgroundColor: "#ef4444",
+                  color: "#ffffff",
+                  fontWeight: "600",
+                  fontSize: "14px",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 12px rgba(239, 68, 68, 0.25)",
+                  transition: "all 0.15s ease"
+                }}
+                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = "#dc2626"}
+                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = "#ef4444"}
+              >
+                OK
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

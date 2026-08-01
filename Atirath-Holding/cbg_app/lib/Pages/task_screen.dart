@@ -111,7 +111,10 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
           final doer = (raw['empId'] ?? raw['empid'] ?? raw['assignedTo'] ?? raw['executorId'])?.toString();
           final reviewer = (raw['reviewerId'] ?? raw['reviewer'] ?? t.reviewer)?.toString();
           final approver = (raw['approverId'] ?? raw['approver'] ?? t.approver)?.toString();
-          return doer == empStr || reviewer == empStr || approver == empStr || t.isCurrentUserReviewer || t.isCurrentUserApprover;
+          final noteTxt = (raw['noteTxt'] ?? raw['note_txt'] ?? '').toString();
+          final hasTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(empStr) ||
+              (raw['teamMembers'] is List && (raw['teamMembers'] as List).any((tm) => tm['empId']?.toString() == empStr || tm['emp_id']?.toString() == empStr));
+          return doer == empStr || reviewer == empStr || approver == empStr || t.isCurrentUserReviewer || t.isCurrentUserApprover || hasTeamMember;
         }).toList();
 
         rawIndividualTasks = rawIndividualTasks.where((t) {
@@ -119,7 +122,10 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
           final doer = (t['empId'] ?? t['empid'] ?? t['assignedTo'] ?? t['executorId'])?.toString();
           final reviewer = (t['reviewerId'] ?? t['reviewer'])?.toString();
           final approver = (t['approverId'] ?? t['approver'])?.toString();
-          return doer == empStr || reviewer == empStr || approver == empStr;
+          final noteTxt = (t['noteTxt'] ?? t['note_txt'] ?? '').toString();
+          final hasTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(empStr) ||
+              (t['teamMembers'] is List && (t['teamMembers'] as List).any((tm) => tm['empId']?.toString() == empStr || tm['emp_id']?.toString() == empStr));
+          return doer == empStr || reviewer == empStr || approver == empStr || hasTeamMember;
         }).toList();
       }
 
@@ -711,8 +717,8 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
                   children: [
                     if (!task.isCompleted && task.processIcon != null) ...[
                       Tooltip(
-                        message: task.status,
-                        child: task.isReassigned
+                        message: task.processIconTooltip,
+                        child: (task.isReassigned || task.processIcon == Icons.undo_rounded)
                             ? ReassignIcon(size: 18, color: task.processIconColor ?? const Color(0xFF4F46E5))
                             : Icon(task.processIcon, color: task.processIconColor, size: 18),
                       ),
@@ -1264,7 +1270,7 @@ class TaskTileRow extends StatelessWidget {
                   children: [
                     // Hide process icon for completed tasks
                     if (!task.isCompleted && task.processIcon != null) ...[
-                      task.isReassigned
+                      (task.isReassigned || task.processIcon == Icons.undo_rounded)
                           ? ReassignIcon(size: 16, color: task.processIconColor ?? const Color(0xFF4F46E5))
                           : Icon(task.processIcon, color: task.processIconColor, size: 16),
                       const SizedBox(width: 6),

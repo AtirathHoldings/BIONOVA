@@ -4,528 +4,621 @@ import java.io.FileWriter;
 
 public class SQLPrinter {
     public static void main(String[] args) throws Exception {
-        String sql = 
-                    "CREATE OR REPLACE FUNCTION get_user_dashboard(p_emp_id BIGINT) " +
-                    "RETURNS jsonb " +
-                    "LANGUAGE plpgsql " +
-                    "SECURITY DEFINER " +
-                    "AS $$ " +
-                    "DECLARE " +
-                    "  v_today          DATE := CURRENT_DATE; " +
-                    "  v_emp            RECORD; " +
-                    "  v_full_name      TEXT; " +
-                    "  v_total_tasks    INT := 0; " +
-                    "  v_completed      INT := 0; " +
-                    "  v_overdue        INT := 0; " +
-                    "  v_due_today      INT := 0; " +
-                    "  v_wip            INT := 0; " +
-                    "  v_under_review   INT := 0; " +
-                    "  v_open           INT := 0; " +
-                    "  v_reassigned     INT := 0; " +
-                    "  v_rework         INT := 0; " +
-                    "  v_draft          INT := 0; " +
-                    "  v_my_prj_count   BIGINT := 0; " +
-                    "  v_todo_list      jsonb; " +
-                    "  v_upcoming       jsonb; " +
-                    "  v_my_projects    jsonb; " +
-                    "  v_metrics_trends jsonb; " +
-                    "  v_recent_activity jsonb; " +
-                    "  v_performance    jsonb; " +
-                    "  v_productivity   INT := 100; " +
-                    "  v_quality        INT := 100; " +
-                    "BEGIN " +
-                    "  /* 1. Employee Profile Details */ " +
-                    "  SELECT em.emp_id, em.fst_nm, em.lst_nm, em.photo_url, " +
-                    "         dm.desig_nm, dept.dept_nm " +
-                    "  INTO v_emp " +
-                    "  FROM employee_master em " +
-                    "  LEFT JOIN designation_master dm   ON dm.desig_id = em.desig_id " +
-                    "  LEFT JOIN department_master  dept ON dept.dept_id = em.dept_id " +
-                    "  WHERE em.emp_id = p_emp_id; " +
-                    " " +
-                    "  v_full_name := TRIM(COALESCE(v_emp.fst_nm,'')||' '||COALESCE(v_emp.lst_nm,'')); " +
-                    " " +
-                    "  /* 2. Task Counts from BOTH project tasks and individual assignments using Temporary Table */ " +
-                    "  DROP TABLE IF EXISTS temp_all_tasks; " +
-                    "  CREATE TEMPORARY TABLE temp_all_tasks ON COMMIT DROP AS " +
-                    "    SELECT " +
-                    "      t.task_id, " +
-                    "      t.task_nm, " +
-                    "      t.st_dt, " +
-                    "      t.end_dt, " +
-                    "      t.act_cmp_dt, " +
-                    "      t.no_of_days, " +
-                    "      t.task_sts, " +
-                    "      tsm.status_nm, " +
-                    "      COALESCE(p.prj_cd || ' - ' || m.mlstn_ttl, '') AS project_info, " +
-                    "      COALESCE(p.prj_cd, '') AS prj_cd, " +
-                    "      CASE " +
-                    "        WHEN t.emp_id = p_emp_id THEN 'Executor' " +
-                    "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 1) THEN 'Reviewer' " +
-                    "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 2) THEN 'Approver' " +
-                    "        ELSE 'Executor' " +
-                    "      END AS user_badge, " +
-                    "      pm.priority_nm, " +
-                    "      'PROJECT' AS task_source " +
-                    "    FROM task_live_master t " +
-                    "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id " +
-                    "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id " +
-                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
-                    "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
-                    "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
-                    "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "    )) " +
-                    " " +
-                    "    UNION ALL " +
-                    " " +
-                    "    SELECT " +
-                    "      t.emp_task_id AS task_id, " +
-                    "      t.task_nm, " +
-                    "      t.st_dt, " +
-                    "      t.end_dt, " +
-                    "      CASE WHEN tsm.status_nm = 'COMPLETED' THEN t.end_dt ELSE NULL END AS act_cmp_dt, " +
-                    "      (t.end_dt - t.st_dt) AS no_of_days, " +
-                    "      t.task_sts, " +
-                    "      tsm.status_nm, " +
-                    "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS project_info, " +
-                    "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, " +
-                    "      'Executor' AS user_badge, " +
-                    "      pm.priority_nm, " +
-                    "      'INDIVIDUAL' AS task_source " +
-                    "    FROM employee_individual_task_master t " +
-                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
-                    "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
-                    "    WHERE t.emp_id = p_emp_id AND COALESCE(t.sts, true) = true " +
-                    "  ; " +
-                    "  SELECT " +
-                    "    COUNT(*), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'COMPLETED'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'OVER_DUE' OR (status_nm <> 'COMPLETED' AND end_dt IS NOT NULL AND end_dt < v_today)), " +
-                    "    COUNT(*) FILTER (WHERE status_nm <> 'COMPLETED' AND end_dt = v_today), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'WIP'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'UNDER_REVIEW'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'OPEN'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'REASSIGN'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'REWORK'), " +
-                    "    COUNT(*) FILTER (WHERE status_nm = 'DRAFT') " +
-                    "  INTO v_total_tasks, v_completed, v_overdue, v_due_today, " +
-                    "       v_wip, v_under_review, v_open, v_reassigned, v_rework, v_draft " +
-                    "  FROM temp_all_tasks; " +
-                    " " +
-                    "  /* 3. Projects Count (Only active projects) */ " +
-                    "  SELECT COUNT(DISTINCT m.prj_id) INTO v_my_prj_count " +
-                    "  FROM task_live_master t " +
-                    "  JOIN milestone_live_master m ON m.m_id = t.m_id " +
-                    "  JOIN project_live_master p ON p.prj_id = m.prj_id " +
-                    "  WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
-                    "    SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "  )) AND p.prj_sts = 'LIVE'; " +
-                    " " +
-                    "  /* 4. To-Do List (Limit 5, ordered by end_dt) */ " +
-                    "  WITH all_todo AS ( " +
-                    "    SELECT " +
-                    "      t.task_id, " +
-                    "      t.task_nm, " +
-                    "      t.st_dt, " +
-                    "      t.end_dt, " +
-                    "      t.task_sts, " +
-                    "      tsm.status_nm, " +
-                    "      COALESCE(p.prj_cd || ' - ' || m.mlstn_ttl, '') AS project_info, " +
-                    "      CASE " +
-                    "        WHEN t.emp_id = p_emp_id THEN 'Executor' " +
-                    "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 1) THEN 'Reviewer' " +
-                    "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true AND pc.ordr_id = 2) THEN 'Approver' " +
-                    "        ELSE 'Executor' " +
-                    "      END AS user_badge, " +
-                    "      pm.priority_nm, " +
-                    "      ( " +
-                    "        SELECT jsonb_agg(jsonb_build_object( " +
-                    "          'empId', em.emp_id, " +
-                    "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), " +
-                    "          'photoUrl', em.photo_url, " +
-                    "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END " +
-                    "        )) " +
-                    "        FROM employee_master em " +
-                    "        WHERE em.emp_id = t.emp_id " +
-                    "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.task_id = t.task_id AND pc.is_live = true) " +
-                    "      ) AS employees " +
-                    "    FROM task_live_master t " +
-                    "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id " +
-                    "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id " +
-                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
-                    "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
-                    "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
-                    "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "    )) " +
-                    " " +
-                    "    UNION ALL " +
-                    " " +
-                    "    SELECT " +
-                    "      t.emp_task_id AS task_id, " +
-                    "      t.task_nm, " +
-                    "      t.st_dt, " +
-                    "      t.end_dt, " +
-                    "      t.task_sts, " +
-                    "      tsm.status_nm, " +
-                    "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS project_info, " +
-                    "      'Executor' AS user_badge, " +
-                    "      pm.priority_nm, " +
-                    "      ( " +
-                    "        SELECT jsonb_agg(jsonb_build_object( " +
-                    "          'empId', em.emp_id, " +
-                    "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), " +
-                    "          'photoUrl', em.photo_url, " +
-                    "          'role', 'Executor' " +
-                    "        )) " +
-                    "        FROM employee_master em " +
-                    "        WHERE em.emp_id = t.emp_id " +
-                    "      ) AS employees " +
-                    "    FROM employee_individual_task_master t " +
-                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
-                    "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
-                    "    WHERE t.emp_id = p_emp_id AND COALESCE(t.sts, true) = true " +
-                    "  ) " +
-                    "  SELECT jsonb_agg(sub) INTO v_todo_list " +
-                    "  FROM ( " +
-                    "    SELECT jsonb_build_object( " +
-                    "      'taskId', t.task_id, " +
-                    "      'taskNm', t.task_nm, " +
-                    "      'project', t.project_info, " +
-                    "      'endDt', t.end_dt, " +
-                    "      'status', t.status_nm, " +
-                    "      'isOverdue', (t.status_nm = 'OVER_DUE' OR (t.status_nm <> 'COMPLETED' AND t.end_dt < v_today)), " +
-                    "      'isDueToday', (t.status_nm <> 'COMPLETED' AND t.end_dt = v_today), " +
-                    "      'priority', CASE COALESCE(t.priority_nm, 'MEDIUM') " +
-                    "                    WHEN 'LOW' THEN 'Low' " +
-                    "                    WHEN 'NORMAL' THEN 'Medium' " +
-                    "                    WHEN 'MEDIUM' THEN 'Medium' " +
-                    "                    WHEN 'HIGH' THEN 'High' " +
-                    "                    WHEN 'CRITICAL' THEN 'High' " +
-                    "                    ELSE 'Medium' " +
-                    "                  END, " +
-                    "      'badge', t.user_badge, " +
-                    "      'employees', COALESCE(t.employees, '[]'::jsonb) " +
-                    "    ) AS sub " +
-                    "    FROM all_todo t " +
-                    "    WHERE t.status_nm <> 'COMPLETED' AND t.st_dt <= v_today " +
-                    "    ORDER BY t.end_dt ASC NULLS LAST " +
-                    "    LIMIT 5 " +
-                    "  ) x; " +
-                    " " +
-                    "  /* 5. Upcoming Tasks (Limit 5, ordered by end_dt) */ " +
-                    "  WITH all_upcoming AS ( " +
-                    "    SELECT " +
-                    "      t.task_id, " +
-                    "      t.task_nm, " +
-                    "      t.st_dt, " +
-                    "      t.end_dt, " +
-                    "      t.no_of_days, " +
-                    "      t.task_sts, " +
-                    "      tsm.status_nm, " +
-                    "      COALESCE(p.prj_cd, '') AS prj_cd, " +
-                    "      pm.priority_nm, " +
-                    "      ( " +
-                    "        SELECT jsonb_agg(jsonb_build_object( " +
-                    "          'empId', em.emp_id, " +
-                    "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), " +
-                    "          'photoUrl', em.photo_url, " +
-                    "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END " +
-                    "        )) " +
-                    "        FROM employee_master em " +
-                    "        WHERE em.emp_id = t.emp_id " +
-                    "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.task_id = t.task_id AND pc.is_live = true) " +
-                    "      ) AS employees " +
-                    "    FROM task_live_master t " +
-                    "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id " +
-                    "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id " +
-                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
-                    "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
-                    "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
-                    "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "    )) " +
-                    " " +
-                    "    UNION ALL " +
-                    " " +
-                    "    SELECT " +
-                    "      t.emp_task_id AS task_id, " +
-                    "      t.task_nm, " +
-                    "      t.st_dt, " +
-                    "      t.end_dt, " +
-                    "      (t.end_dt - t.st_dt) AS no_of_days, " +
-                    "      t.task_sts, " +
-                    "      tsm.status_nm, " +
-                    "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, " +
-                    "      pm.priority_nm, " +
-                    "      ( " +
-                    "        SELECT jsonb_agg(jsonb_build_object( " +
-                    "          'empId', em.emp_id, " +
-                    "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), " +
-                    "          'photoUrl', em.photo_url, " +
-                    "          'role', 'Executor' " +
-                    "        )) " +
-                    "        FROM employee_master em " +
-                    "        WHERE em.emp_id = t.emp_id " +
-                    "      ) AS employees " +
-                    "    FROM employee_individual_task_master t " +
-                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
-                    "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority " +
-                    "    WHERE t.emp_id = p_emp_id AND COALESCE(t.sts, true) = true " +
-                    "  ) " +
-                    "  SELECT jsonb_agg(sub) INTO v_upcoming " +
-                    "  FROM ( " +
-                    "    SELECT jsonb_build_object( " +
-                    "      'taskId', t.task_id, " +
-                    "      'taskNm', t.task_nm, " +
-                    "      'prjCd', t.prj_cd, " +
-                    "      'stDt', t.st_dt, " +
-                    "      'endDt', t.end_dt, " +
-                    "      'durationDays', t.no_of_days, " +
-                    "      'priority', CASE COALESCE(t.priority_nm, 'MEDIUM') " +
-                    "                    WHEN 'LOW' THEN 'Low' " +
-                    "                    WHEN 'NORMAL' THEN 'Medium' " +
-                    "                    WHEN 'MEDIUM' THEN 'Medium' " +
-                    "                    WHEN 'HIGH' THEN 'High' " +
-                    "                    WHEN 'CRITICAL' THEN 'High' " +
-                    "                    ELSE 'Medium' " +
-                    "                  END, " +
-                    "      'employees', COALESCE(t.employees, '[]'::jsonb) " +
-                    "    ) AS sub " +
-                    "    FROM all_upcoming t " +
-                    "    WHERE t.status_nm <> 'COMPLETED' AND t.st_dt > v_today " +
-                    "    ORDER BY t.end_dt ASC NULLS LAST " +
-                    "    LIMIT 5 " +
-                    "  ) x; " +
-                    " " +
-                    "  /* 6. User Projects list with details and progress */ " +
-                    "  SELECT jsonb_agg(sub) INTO v_my_projects " +
-                    "  FROM ( " +
-                    "    SELECT jsonb_build_object( " +
-                    "      'projectId',     p.prj_id, " +
-                    "      'projectName',   p.prj_nm, " +
-                    "      'projectCode',   p.prj_cd, " +
-                    "      'clientName',    COALESCE(cm.coy_nm, (SELECT coy_nm FROM company_master LIMIT 1), ''), " +
-                    "      'plantName',     COALESCE(pm.plt_nm, (SELECT plt_nm FROM plant_master LIMIT 1), ''), " +
-                    "      'location',      COALESCE(cm.ct_vlg, (SELECT ct_vlg FROM company_master LIMIT 1), ''), " +
-                    "      'logo',          p.logo, " +
-                    "      'role',          COALESCE(pa.access_type, 'Team Member'), " +
-                    "      'status',        CASE " +
-                    "                         WHEN p.prj_sts = 'HOLD' THEN 'On Hold' " +
-                    "                         WHEN p.prj_sts = 'CLOSED' THEN 'Completed' " +
-                    "                         ELSE 'In Progress' " +
-                    "                       END, " +
-                    "      'dueDate',       p.end_dt, " +
-                    "      'tasksAssigned', COUNT(t.task_id), " +
-                    "      'openTasks',     COUNT(t.task_id) FILTER (WHERE tsm.status_nm <> 'COMPLETED'), " +
-                    "      'progress',      ROUND( " +
-                    "        CASE WHEN COUNT(t.task_id) > 0 " +
-                    "          THEN (COUNT(t.task_id) FILTER (WHERE tsm.status_nm = 'COMPLETED')::NUMERIC / COUNT(t.task_id)) * 100 " +
-                    "          ELSE 0 END, 0) " +
-                    "    ) AS sub " +
-                    "    FROM task_live_master t " +
-                    "    JOIN milestone_live_master  ml ON ml.m_id   = t.m_id " +
-                    "    JOIN project_live_master    p  ON p.prj_id  = ml.prj_id " +
-                    "    LEFT JOIN company_master    cm ON cm.coy_id = p.coy_id " +
-                    "    LEFT JOIN plant_master      pm ON pm.plt_id = p.plt_id " +
-                    "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts " +
-                    "    LEFT JOIN project_access pa ON pa.prj_id = p.prj_id AND pa.emp_id = p_emp_id AND pa.sts = true " +
-                    "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( " +
-                    "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "    )) AND p.prj_sts IN ('LIVE', 'CLOSED', 'HOLD') " +
-                    "    GROUP BY p.prj_id, p.prj_nm, p.prj_cd, p.logo, cm.coy_nm, pm.plt_nm, cm.ct_vlg, p.prj_sts, pa.access_type, p.end_dt " +
-                    "    ORDER BY p.prj_nm " +
-                    "  ) x; " +
-                    " " +
-                    "  /* 8. Trend and Weekly Change Calculations */ " +
-                    "  DECLARE " +
-                    "    trend_rec RECORD; " +
-                    "  BEGIN " +
-                    "    WITH days AS ( " +
-                    "      SELECT (v_today - i * INTERVAL '1 day')::DATE AS d " +
-                    "      FROM generate_series(6, 0, -1) AS i " +
-                    "    ), " +
-                    "    trend_data AS ( " +
-                    "      SELECT " +
-                    "        d, " +
-                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d) AS assigned_count, " +
-                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d AND status_nm = 'OPEN' AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS open_count, " +
-                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d AND status_nm = 'WIP' AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS wip_count, " +
-                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE end_dt < d AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS overdue_count, " +
-                    "        (SELECT COUNT(*) FROM temp_all_tasks WHERE act_cmp_dt <= d) AS completed_count, " +
-                    "        (SELECT COUNT(DISTINCT m.prj_id) " +
-                    "         FROM task_live_master t_tr " +
-                    "         JOIN milestone_live_master m ON m.m_id = t_tr.m_id " +
-                    "         JOIN project_live_master p_tr ON p_tr.prj_id = m.prj_id " +
-                    "         WHERE (t_tr.emp_id = p_emp_id OR t_tr.task_id IN ( " +
-                    "           SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "         )) AND p_tr.prj_sts = 'LIVE' AND p_tr.st_dt <= d) AS projects_count " +
-                    "      FROM days " +
-                    "      ORDER BY d " +
-                    "    ) " +
-                    "    SELECT " +
-                    "      jsonb_object_agg(metric, jsonb_build_object( " +
-                    "        'trend', trend_array, " +
-                    "        'weeklyChange', GREATEST(0, current_val - seven_days_ago_val) " +
-                    "      )) " +
-                    "    INTO v_metrics_trends " +
-                    "    FROM ( " +
-                    "      SELECT " +
-                    "        'assignedTasks' AS metric, " +
-                    "        (SELECT jsonb_agg(assigned_count) FROM trend_data) AS trend_array, " +
-                    "        (SELECT assigned_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT assigned_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
-                    "      UNION ALL " +
-                    "      SELECT " +
-                    "        'openTasks' AS metric, " +
-                    "        (SELECT jsonb_agg(open_count) FROM trend_data) AS trend_array, " +
-                    "        (SELECT open_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT open_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
-                    "      UNION ALL " +
-                    "      SELECT " +
-                    "        'inProgress' AS metric, " +
-                    "        (SELECT jsonb_agg(wip_count) FROM trend_data) AS trend_array, " +
-                    "        (SELECT wip_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT wip_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
-                    "      UNION ALL " +
-                    "      SELECT " +
-                    "        'overdueTasks' AS metric, " +
-                    "        (SELECT jsonb_agg(overdue_count) FROM trend_data) AS trend_array, " +
-                    "        (SELECT overdue_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT overdue_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
-                    "      UNION ALL " +
-                    "      SELECT " +
-                    "        'completedTasks' AS metric, " +
-                    "        (SELECT jsonb_agg(completed_count) FROM trend_data) AS trend_array, " +
-                    "        (SELECT completed_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT completed_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
-                    "      UNION ALL " +
-                    "      SELECT " +
-                    "        'myProjects' AS metric, " +
-                    "        (SELECT jsonb_agg(projects_count) FROM trend_data) AS trend_array, " +
-                    "        (SELECT projects_count FROM trend_data WHERE d = v_today) AS current_val, " +
-                    "        COALESCE((SELECT projects_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val " +
-                    "    ) x; " +
-                    "  END; " +
-                    " " +
-                    "  /* 9. Recent Activity List */ " +
-                    "  SELECT jsonb_agg(sub) INTO v_recent_activity " +
-                    "  FROM ( " +
-                    "    SELECT jsonb_build_object( " +
-                    "      'logId',      al.log_id, " +
-                    "      'entityTyp',  al.entity_typ, " +
-                    "      'entityId',   al.entity_id, " +
-                    "      'statusFrom', al.status_from, " +
-                    "      'statusTo',   al.status_to, " +
-                    "      'logDt',      al.log_dt, " +
-                    "      'message',    CASE " +
-                    "                      WHEN al.entity_typ = 'TASK' THEN " +
-                    "                        'Task \"' || COALESCE(t.task_nm, 'Unknown Task') || '\" updated from ' || al.status_from || ' to ' || al.status_to " +
-                    "                      WHEN al.entity_typ = 'MILESTONE' THEN " +
-                    "                        'Milestone \"' || COALESCE(m.mlstn_ttl, 'Unknown Milestone') || '\" updated from ' || al.status_from || ' to ' || al.status_to " +
-                    "                      WHEN al.entity_typ = 'PROJECT' THEN " +
-                    "                        'Project \"' || COALESCE(p.prj_nm, 'Unknown Project') || '\" updated from ' || al.status_from || ' to ' || al.status_to " +
-                    "                      ELSE 'Activity log updated' " +
-                    "                    END, " +
-                    "      'projectName', COALESCE(p.prj_nm, p_ind.prj_nm, 'Internal') " +
-                    "    ) AS sub " +
-                    "    FROM activity_log_transaction al " +
-                    "    LEFT JOIN task_live_master t ON al.entity_typ = 'TASK' AND t.task_id = al.entity_id " +
-                    "    LEFT JOIN milestone_live_master m ON " +
-                    "      (al.entity_typ = 'MILESTONE' AND m.m_id = al.entity_id) OR " +
-                    "      (al.entity_typ = 'TASK' AND m.m_id = t.m_id) " +
-                    "    LEFT JOIN project_live_master p ON " +
-                    "      (al.entity_typ = 'PROJECT' AND p.prj_id = al.entity_id) OR " +
-                    "      (m.prj_id = p.prj_id) " +
-                    "    LEFT JOIN employee_individual_task_master ind ON al.entity_typ = 'TASK' AND ind.emp_task_id = al.entity_id " +
-                    "    LEFT JOIN (SELECT DISTINCT prj_cd, prj_nm FROM project_live_master) p_ind ON p_ind.prj_cd = ind.task_asgn_to " +
-                    "    WHERE " +
-                    "      (al.entity_typ = 'TASK' AND (t.emp_id = p_emp_id OR ind.emp_id = p_emp_id OR t.task_id IN ( " +
-                    "         SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "      ))) " +
-                    "      OR (p.prj_id IN ( " +
-                    "         SELECT DISTINCT ml_sub.prj_id " +
-                    "         FROM task_live_master t_sub " +
-                    "         JOIN milestone_live_master ml_sub ON ml_sub.m_id = t_sub.m_id " +
-                    "         WHERE t_sub.emp_id = p_emp_id OR t_sub.task_id IN ( " +
-                    "           SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.is_live = true " +
-                    "         ) " +
-                    "      )) " +
-                    "    ORDER BY al.log_dt DESC " +
-                    "    LIMIT 5 " +
-                    "  ) x; " +
-                    " " +
-                    "  /* 10. Performance Calculations */ " +
-                    "  SELECT COALESCE( " +
-                    "    ROUND( " +
-                    "      (COUNT(*) FILTER (WHERE status_nm = 'COMPLETED' AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / " +
-                    "       NULLIF(COUNT(*) FILTER (WHERE status_nm = 'COMPLETED'), 0)) * 100, " +
-                    "      0 " +
-                    "    )::INT, " +
-                    "    100 " +
-                    "  ) INTO v_productivity " +
-                    "  FROM temp_all_tasks; " +
-                    " " +
-                    "  v_quality := GREATEST(50, 100 - ((v_reassigned + v_rework) * 5)); " +
-                    " " +
-                    "  v_performance := jsonb_build_object( " +
-                    "    'productivity', jsonb_build_object( " +
-                    "      'score', v_productivity, " +
-                    "      'rating', CASE " +
-                    "                  WHEN v_productivity >= 90 THEN 'Excellent' " +
-                    "                  WHEN v_productivity >= 75 THEN 'Good' " +
-                    "                  WHEN v_productivity >= 50 THEN 'Satisfactory' " +
-                    "                  ELSE 'Needs Improvement' " +
-                    "                END " +
-                    "    ), " +
-                    "    'taskCompletion', jsonb_build_object( " +
-                    "      'score', CASE WHEN v_total_tasks > 0 THEN ROUND((v_completed::NUMERIC/v_total_tasks)*100,0)::INT ELSE 100 END, " +
-                    "      'rating', CASE " +
-                    "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 90 THEN 'Excellent' " +
-                    "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 75 THEN 'Good' " +
-                    "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 50 THEN 'Satisfactory' " +
-                    "                  ELSE 'Needs Improvement' " +
-                    "                END " +
-                    "    ), " +
-                    "    'qualityScore', jsonb_build_object( " +
-                    "      'score', v_quality, " +
-                    "      'rating', CASE " +
-                    "                  WHEN v_quality >= 90 THEN 'Excellent' " +
-                    "                  WHEN v_quality >= 75 THEN 'Good' " +
-                    "                  WHEN v_quality >= 50 THEN 'Satisfactory' " +
-                    "                  ELSE 'Needs Improvement' " +
-                    "                END " +
-                    "    ) " +
-                    "  ); " +
-                    " " +
-                    "  /* 7. Combined response return */ " +
-                    "  RETURN jsonb_build_object( " +
-                    "    'profile', jsonb_build_object( " +
-                    "      'empId', p_emp_id, 'fullName', v_full_name, " +
-                    "      'role', COALESCE(v_emp.desig_nm, 'Site Engineer'), " +
-                    "      'department', COALESCE(v_emp.dept_nm, 'Projects Department'), " +
-                    "      'photoUrl', v_emp.photo_url), " +
-                    "    'summary', jsonb_build_object( " +
-                    "      'myTasksCount', (v_total_tasks - v_completed - v_overdue), " +
-                    "      'completedTasksCount', v_completed, " +
-                    "      'overdueTasksCount', v_overdue, " +
-                    "      'dueTodayCount', v_due_today, " +
-                    "      'myProjectsCount', v_my_prj_count, " +
-                    "      'overallCompletion', CASE WHEN v_total_tasks > 0 " +
-                    "        THEN ROUND((v_completed::NUMERIC/v_total_tasks)*100,2) ELSE 0 END), " +
-                    "    'taskStatusCounts', jsonb_build_object( " +
-                    "      'Completed', v_completed, 'In Progress', v_wip, " +
-                    "      'Under Review', v_under_review, 'Overdue', v_overdue, " +
-                    "      'Open', v_open, 'Reassigned', v_reassigned, " +
-                    "      'Rework', v_rework, 'Draft', v_draft), " +
-                    "    'todoList',      COALESCE(v_todo_list, '[]'::jsonb), " +
-                    "    'upcomingTasks', COALESCE(v_upcoming, '[]'::jsonb), " +
-                    "    'myProjects',    COALESCE(v_my_projects, '[]'::jsonb), " +
-                    "    'metricsTrends', COALESCE(v_metrics_trends, '{}'::jsonb), " +
-                    "    'recentActivity', COALESCE(v_recent_activity, '[]'::jsonb), " +
-                    "    'performance',   v_performance " +
-                    "  ); " +
-                    "END; " +
-                    "$$;";
-        
+        // Source: D:\sample\db-query-scratch\db_user_dashboard_current.sql (31-07-2026)
+        // This is the exact working stored procedure — do NOT modify status filters here.
+        // Status values in DB: 'CLOSED', 'COMPLETED', 'WIP', 'IN PROGRESS', 'OPEN', 'OVER_DUE', 'DRAFT'
+        // sub_status values: 'UNDER REVIEW', 'REASSIGN', 'REWORK'
+        String sql =
+            "CREATE OR REPLACE FUNCTION public.get_user_dashboard(p_emp_id bigint)\n" +
+            " RETURNS jsonb\n" +
+            " LANGUAGE plpgsql\n" +
+            " SECURITY DEFINER\n" +
+            "AS $function$ \n" +
+            "DECLARE \n" +
+            "  v_today          DATE := CURRENT_DATE; \n" +
+            "  v_emp            RECORD; \n" +
+            "  v_full_name      TEXT; \n" +
+            "  v_total_tasks    INT := 0; \n" +
+            "  v_completed      INT := 0; \n" +
+            "  v_overdue        INT := 0; \n" +
+            "  v_due_today      INT := 0; \n" +
+            "  v_wip            INT := 0; \n" +
+            "  v_under_review   INT := 0; \n" +
+            "  v_open           INT := 0; \n" +
+            "  v_reassigned     INT := 0; \n" +
+            "  v_rework         INT := 0; \n" +
+            "  v_draft          INT := 0; \n" +
+            "  v_my_prj_count   BIGINT := 0; \n" +
+            "  v_todo_list      jsonb; \n" +
+            "  v_upcoming       jsonb; \n" +
+            "  v_my_projects    jsonb; \n" +
+            "  v_metrics_trends jsonb; \n" +
+            "  v_recent_activity jsonb; \n" +
+            "  v_performance    jsonb; \n" +
+            "  v_productivity   INT := 100; \n" +
+            "  v_quality        INT := 100; \n" +
+            "BEGIN \n" +
+            "  /* 1. Employee Profile Details */ \n" +
+            "  SELECT em.emp_id, em.fst_nm, em.lst_nm, em.photo_url, \n" +
+            "         dm.desig_nm, dept.dept_nm \n" +
+            "  INTO v_emp \n" +
+            "  FROM employee_master em \n" +
+            "  LEFT JOIN designation_master dm   ON dm.desig_id = em.desig_id \n" +
+            "  LEFT JOIN department_master  dept ON dept.dept_id = em.dept_id \n" +
+            "  WHERE em.emp_id = p_emp_id; \n" +
+            "\n" +
+            "  v_full_name := TRIM(COALESCE(v_emp.fst_nm,'')||' '||COALESCE(v_emp.lst_nm,'')); \n" +
+            "\n" +
+            "  /* 2. Task Counts from BOTH project tasks and individual assignments using Temporary Table */ \n" +
+            "  DROP TABLE IF EXISTS temp_all_tasks; \n" +
+            "  CREATE TEMPORARY TABLE temp_all_tasks ON COMMIT DROP AS \n" +
+            "    SELECT DISTINCT ON (t.task_id)\n" +
+            "      t.task_id, \n" +
+            "      t.task_nm, \n" +
+            "      t.st_dt, \n" +
+            "      t.end_dt, \n" +
+            "      COALESCE(t.act_cmp_dt, CASE WHEN UPPER(tsm.status_nm) IN ('CLOSED', 'COMPLETED') THEN t.end_dt ELSE NULL END) AS act_cmp_dt, \n" +
+            "      t.no_of_days, \n" +
+            "      t.task_sts, \n" +
+            "      tsm.status_nm, \n" +
+            "      t.sub_status,\n" +
+            "      COALESCE(p.prj_cd || ' - ' || m.mlstn_ttl, '') AS project_info, \n" +
+            "      COALESCE(p.prj_cd, '') AS prj_cd, \n" +
+            "      CASE \n" +
+            "        WHEN t.emp_id = p_emp_id THEN 'Executor' \n" +
+            "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true AND pc.ordr_id = 1) THEN 'Reviewer' \n" +
+            "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true AND pc.ordr_id = 2) THEN 'Approver' \n" +
+            "        ELSE 'Executor' \n" +
+            "      END AS user_badge, \n" +
+            "      pm.priority_nm, \n" +
+            "      'PROJECT' AS task_source \n" +
+            "    FROM task_live_master t \n" +
+            "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id \n" +
+            "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id \n" +
+            "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts \n" +
+            "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority \n" +
+            "    WHERE (\n" +
+            "      t.emp_id = p_emp_id \n" +
+            "      OR t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true)\n" +
+            "      OR t.task_id IN (SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL)\n" +
+            "    ) \n" +
+            "    AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' \n" +
+            "    AND (t.st_dt IS NULL OR t.st_dt <= v_today OR UPPER(tsm.status_nm) IN ('CLOSED', 'COMPLETED'))\n" +
+            " \n" +
+            "    UNION ALL \n" +
+            " \n" +
+            "    SELECT DISTINCT ON (t.emp_task_id)\n" +
+            "      t.emp_task_id AS task_id, \n" +
+            "      t.task_nm, \n" +
+            "      t.st_dt, \n" +
+            "      t.end_dt, \n" +
+            "      CASE WHEN UPPER(tsm.status_nm) IN ('CLOSED', 'COMPLETED') THEN t.end_dt ELSE NULL END AS act_cmp_dt, \n" +
+            "      (t.end_dt - t.st_dt) AS no_of_days, \n" +
+            "      t.task_sts, \n" +
+            "      tsm.status_nm, \n" +
+            "      t.sub_status,\n" +
+            "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS project_info, \n" +
+            "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, \n" +
+            "      CASE \n" +
+            "        WHEN t.emp_id = p_emp_id THEN 'Executor' \n" +
+            "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 1) THEN 'Reviewer' \n" +
+            "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 2) THEN 'Approver' \n" +
+            "        ELSE 'Executor' \n" +
+            "      END AS user_badge, \n" +
+            "      pm.priority_nm, \n" +
+            "      'INDIVIDUAL' AS task_source \n" +
+            "    FROM employee_individual_task_master t \n" +
+            "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts \n" +
+            "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority \n" +
+            "    WHERE COALESCE(t.sts, true) = true \n" +
+            "    AND (\n" +
+            "      t.emp_id = p_emp_id \n" +
+            "      OR t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL)\n" +
+            "      OR t.emp_task_id IN (SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL)\n" +
+            "    ) \n" +
+            "    AND COALESCE(UPPER(tsm.status_nm), '') <> 'DRAFT' \n" +
+            "    AND (t.st_dt IS NULL OR t.st_dt <= v_today OR UPPER(tsm.status_nm) IN ('CLOSED', 'COMPLETED'))\n" +
+            "  ; \n" +
+            " \n" +
+            "  SELECT \n" +
+            "    COUNT(*), \n" +
+            "    COUNT(*) FILTER (WHERE UPPER(status_nm) IN ('CLOSED', 'COMPLETED')), \n" +
+            "    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'OVER_DUE' OR (UPPER(status_nm) NOT IN ('CLOSED', 'COMPLETED') AND end_dt IS NOT NULL AND end_dt < v_today)), \n" +
+            "    COUNT(*) FILTER (WHERE UPPER(status_nm) NOT IN ('CLOSED', 'COMPLETED') AND end_dt = v_today), \n" +
+            "    COUNT(*) FILTER (WHERE (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS')), \n" +
+            "    COUNT(*) FILTER (WHERE (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS') AND UPPER(sub_status) = 'UNDER REVIEW'), \n" +
+            "    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'OPEN' OR status_nm IS NULL), \n" +
+            "    COUNT(*) FILTER (WHERE (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS') AND UPPER(sub_status) = 'REASSIGN'), \n" +
+            "    COUNT(*) FILTER (WHERE (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS') AND UPPER(sub_status) = 'REWORK'), \n" +
+            "    COUNT(*) FILTER (WHERE UPPER(status_nm) = 'DRAFT') \n" +
+            "  INTO v_total_tasks, v_completed, v_overdue, v_due_today, \n" +
+            "       v_wip, v_under_review, v_open, v_reassigned, v_rework, v_draft \n" +
+            "  FROM temp_all_tasks; \n" +
+            "\n" +
+            "  /* 3. Projects Count (Only active projects) */ \n" +
+            "  SELECT COUNT(DISTINCT m.prj_id) INTO v_my_prj_count \n" +
+            "  FROM task_live_master t \n" +
+            "  JOIN milestone_live_master m ON m.m_id = t.m_id \n" +
+            "  JOIN project_live_master p ON p.prj_id = m.prj_id \n" +
+            "  WHERE (t.emp_id = p_emp_id OR t.task_id IN ( \n" +
+            "    SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true\n" +
+            "  ) OR t.task_id IN (\n" +
+            "    SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL\n" +
+            "  )) AND p.prj_sts = 'LIVE'; \n" +
+            "\n" +
+            "  /* 4. To-Do List (Limit 5, ordered by end_dt) */ \n" +
+            "  WITH all_todo AS ( \n" +
+            "    SELECT \n" +
+            "      t.task_id, \n" +
+            "      t.task_cd,\n" +
+            "      t.task_nm, \n" +
+            "      t.st_dt, \n" +
+            "      t.end_dt, \n" +
+            "      t.task_sts, \n" +
+            "      tsm.status_nm, \n" +
+            "      COALESCE(p.prj_cd || ' - ' || m.mlstn_ttl, '') AS project_info, \n" +
+            "      CASE \n" +
+            "        WHEN t.emp_id = p_emp_id THEN 'Executor' \n" +
+            "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true AND pc.ordr_id = 1) THEN 'Reviewer' \n" +
+            "        WHEN t.task_id IN (SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true AND pc.ordr_id = 2) THEN 'Approver' \n" +
+            "        ELSE 'Executor' \n" +
+            "      END AS user_badge, \n" +
+            "      pm.priority_nm, \n" +
+            "      'PROJECT' AS task_source,\n" +
+            "      ( \n" +
+            "        SELECT jsonb_agg(jsonb_build_object( \n" +
+            "          'empId', em.emp_id, \n" +
+            "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), \n" +
+            "          'photoUrl', em.photo_url, \n" +
+            "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END \n" +
+            "        )) \n" +
+            "        FROM employee_master em \n" +
+            "        WHERE em.emp_id = t.emp_id \n" +
+            "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.task_id = t.task_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true) \n" +
+            "      ) AS employees \n" +
+            "    FROM task_live_master t \n" +
+            "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id \n" +
+            "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id \n" +
+            "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts \n" +
+            "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority \n" +
+            "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( \n" +
+            "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true\n" +
+            "    ) OR t.task_id IN (\n" +
+            "      SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL\n" +
+            "    )) \n" +
+            "\n" +
+            "    UNION ALL \n" +
+            "\n" +
+            "    SELECT \n" +
+            "      t.emp_task_id AS task_id, \n" +
+            "      t.task_cd,\n" +
+            "      t.task_nm, \n" +
+            "      t.st_dt, \n" +
+            "      t.end_dt, \n" +
+            "      t.task_sts, \n" +
+            "      tsm.status_nm, \n" +
+            "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS project_info, \n" +
+            "      CASE \n" +
+            "        WHEN t.emp_id = p_emp_id THEN 'Executor' \n" +
+            "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 1) THEN 'Reviewer' \n" +
+            "        WHEN t.emp_task_id IN (SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL AND pc.ordr_id = 2) THEN 'Approver' \n" +
+            "        ELSE 'Executor' \n" +
+            "      END AS user_badge, \n" +
+            "      pm.priority_nm, \n" +
+            "      'INDIVIDUAL' AS task_source,\n" +
+            "      ( \n" +
+            "        SELECT jsonb_agg(jsonb_build_object( \n" +
+            "          'empId', em.emp_id, \n" +
+            "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), \n" +
+            "          'photoUrl', em.photo_url, \n" +
+            "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END \n" +
+            "        )) \n" +
+            "        FROM employee_master em \n" +
+            "        WHERE em.emp_id = t.emp_id \n" +
+            "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.emp_task_id = t.emp_task_id AND pc.emp_task_id IS NOT NULL) \n" +
+            "      ) AS employees \n" +
+            "    FROM employee_individual_task_master t \n" +
+            "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts \n" +
+            "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority \n" +
+            "    WHERE (t.emp_id = p_emp_id OR t.emp_task_id IN ( \n" +
+            "      SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL\n" +
+            "    ) OR t.emp_task_id IN (\n" +
+            "      SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL\n" +
+            "    )) AND COALESCE(t.sts, true) = true \n" +
+            "  ) \n" +
+            "  SELECT jsonb_agg(sub) INTO v_todo_list \n" +
+            "  FROM ( \n" +
+            "    SELECT jsonb_build_object( \n" +
+            "      'taskId', t.task_id, \n" +
+            "      'taskCode', COALESCE(t.task_cd, CASE WHEN t.task_source = 'INDIVIDUAL' THEN 'IND-' || t.task_id ELSE 'TSK-' || t.task_id END),\n" +
+            "      'taskNm', t.task_nm, \n" +
+            "      'project', t.project_info, \n" +
+            "      'endDt', t.end_dt, \n" +
+            "      'status', t.status_nm, \n" +
+            "      'isOverdue', (UPPER(t.status_nm) = 'OVER_DUE' OR (UPPER(t.status_nm) NOT IN ('COMPLETED', 'CLOSED') AND t.end_dt < v_today)), \n" +
+            "      'isDueToday', (UPPER(t.status_nm) NOT IN ('COMPLETED', 'CLOSED') AND t.end_dt = v_today), \n" +
+            "      'priority', CASE COALESCE(t.priority_nm, 'MEDIUM') \n" +
+            "                    WHEN 'LOW' THEN 'Low' \n" +
+            "                    WHEN 'NORMAL' THEN 'Medium' \n" +
+            "                    WHEN 'MEDIUM' THEN 'Medium' \n" +
+            "                    WHEN 'HIGH' THEN 'High' \n" +
+            "                    WHEN 'CRITICAL' THEN 'High' \n" +
+            "                    ELSE 'Medium' \n" +
+            "                  END, \n" +
+            "      'badge', t.user_badge, \n" +
+            "      'taskSource', t.task_source,\n" +
+            "      'employees', COALESCE(t.employees, '[]'::jsonb) \n" +
+            "    ) AS sub \n" +
+            "    FROM all_todo t \n" +
+            "    WHERE UPPER(COALESCE(t.status_nm, '')) NOT IN ('COMPLETED', 'CLOSED') \n" +
+            "      AND (t.st_dt IS NULL OR t.st_dt <= v_today) \n" +
+            "    ORDER BY t.end_dt ASC NULLS LAST \n" +
+            "    LIMIT 5 \n" +
+            "  ) x; \n" +
+            "\n" +
+            "  /* 5. Upcoming Tasks (Limit 5, ordered by end_dt) */ \n" +
+            "  WITH all_upcoming AS ( \n" +
+            "    SELECT \n" +
+            "      t.task_id, \n" +
+            "      t.task_cd,\n" +
+            "      t.task_nm, \n" +
+            "      t.st_dt, \n" +
+            "      t.end_dt, \n" +
+            "      t.no_of_days, \n" +
+            "      t.task_sts, \n" +
+            "      tsm.status_nm, \n" +
+            "      COALESCE(p.prj_cd, '') AS prj_cd, \n" +
+            "      pm.priority_nm, \n" +
+            "      'PROJECT' AS task_source,\n" +
+            "      ( \n" +
+            "        SELECT jsonb_agg(jsonb_build_object( \n" +
+            "          'empId', em.emp_id, \n" +
+            "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), \n" +
+            "          'photoUrl', em.photo_url, \n" +
+            "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END \n" +
+            "        )) \n" +
+            "        FROM employee_master em \n" +
+            "        WHERE em.emp_id = t.emp_id \n" +
+            "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.task_id = t.task_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true) \n" +
+            "      ) AS employees \n" +
+            "    FROM task_live_master t \n" +
+            "    LEFT JOIN milestone_live_master m ON m.m_id = t.m_id \n" +
+            "    LEFT JOIN project_live_master p ON p.prj_id = m.prj_id \n" +
+            "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts \n" +
+            "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority \n" +
+            "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( \n" +
+            "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true\n" +
+            "    ) OR t.task_id IN (\n" +
+            "      SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL\n" +
+            "    )) \n" +
+            "\n" +
+            "    UNION ALL \n" +
+            "\n" +
+            "    SELECT \n" +
+            "      t.emp_task_id AS task_id, \n" +
+            "      t.task_cd,\n" +
+            "      t.task_nm, \n" +
+            "      t.st_dt, \n" +
+            "      t.end_dt, \n" +
+            "      (t.end_dt - t.st_dt) AS no_of_days, \n" +
+            "      t.task_sts, \n" +
+            "      tsm.status_nm, \n" +
+            "      COALESCE(INITCAP(t.task_asgn_to), 'Internal') AS prj_cd, \n" +
+            "      pm.priority_nm, \n" +
+            "      'INDIVIDUAL' AS task_source,\n" +
+            "      ( \n" +
+            "        SELECT jsonb_agg(jsonb_build_object( \n" +
+            "          'empId', em.emp_id, \n" +
+            "          'fullName', TRIM(COALESCE(em.fst_nm,'')||' '||COALESCE(em.lst_nm,'')), \n" +
+            "          'photoUrl', em.photo_url, \n" +
+            "          'role', CASE WHEN t.emp_id = em.emp_id THEN 'Executor' ELSE 'Reviewer/Approver' END \n" +
+            "        )) \n" +
+            "        FROM employee_master em \n" +
+            "        WHERE em.emp_id = t.emp_id \n" +
+            "           OR em.emp_id IN (SELECT pc.emp_id FROM process_config pc WHERE pc.emp_task_id = t.emp_task_id AND pc.emp_task_id IS NOT NULL) \n" +
+            "      ) AS employees \n" +
+            "    FROM employee_individual_task_master t \n" +
+            "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts \n" +
+            "    LEFT JOIN task_priority_master pm ON pm.priority_id = t.priority \n" +
+            "    WHERE (t.emp_id = p_emp_id OR t.emp_task_id IN ( \n" +
+            "      SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL\n" +
+            "    ) OR t.emp_task_id IN (\n" +
+            "      SELECT tm.emp_task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.emp_task_id IS NOT NULL\n" +
+            "    )) AND COALESCE(t.sts, true) = true \n" +
+            "  ) \n" +
+            "  SELECT jsonb_agg(sub) INTO v_upcoming \n" +
+            "  FROM ( \n" +
+            "    SELECT jsonb_build_object( \n" +
+            "      'taskId', t.task_id, \n" +
+            "      'taskCode', COALESCE(t.task_cd, CASE WHEN t.task_source = 'INDIVIDUAL' THEN 'IND-' || t.task_id ELSE 'TSK-' || t.task_id END),\n" +
+            "      'taskNm', t.task_nm, \n" +
+            "      'prjCd', t.prj_cd, \n" +
+            "      'stDt', t.st_dt, \n" +
+            "      'endDt', t.end_dt, \n" +
+            "      'durationDays', t.no_of_days, \n" +
+            "      'priority', CASE COALESCE(t.priority_nm, 'MEDIUM') \n" +
+            "                    WHEN 'LOW' THEN 'Low' \n" +
+            "                    WHEN 'NORMAL' THEN 'Medium' \n" +
+            "                    WHEN 'MEDIUM' THEN 'Medium' \n" +
+            "                    WHEN 'HIGH' THEN 'High' \n" +
+            "                    WHEN 'CRITICAL' THEN 'High' \n" +
+            "                    ELSE 'Medium' \n" +
+            "                  END, \n" +
+            "      'employees', COALESCE(t.employees, '[]'::jsonb) \n" +
+            "    ) AS sub \n" +
+            "    FROM all_upcoming t \n" +
+            "    WHERE UPPER(t.status_nm) NOT IN ('COMPLETED', 'CLOSED') AND t.st_dt > v_today \n" +
+            "    ORDER BY t.end_dt ASC NULLS LAST \n" +
+            "    LIMIT 5 \n" +
+            "  ) x; \n" +
+            "\n" +
+            "  /* 6. User Projects list with details and progress */ \n" +
+            "  SELECT jsonb_agg(sub) INTO v_my_projects \n" +
+            "  FROM ( \n" +
+            "    SELECT jsonb_build_object( \n" +
+            "      'projectId',     p.prj_id, \n" +
+            "      'projectName',   p.prj_nm, \n" +
+            "      'projectCode',   p.prj_cd, \n" +
+            "      'clientName',    COALESCE(cm.coy_nm, (SELECT coy_nm FROM company_master LIMIT 1), ''), \n" +
+            "      'plantName',     COALESCE(pm.plt_nm, (SELECT plt_nm FROM plant_master LIMIT 1), ''), \n" +
+            "      'location',      COALESCE(cm.ct_vlg, (SELECT ct_vlg FROM company_master LIMIT 1), ''), \n" +
+            "      'logo',          p.logo, \n" +
+            "      'role',          COALESCE(pa.access_type, 'Team Member'), \n" +
+            "      'status',        CASE \n" +
+            "                         WHEN p.prj_sts = 'HOLD' THEN 'On Hold' \n" +
+            "                         WHEN p.prj_sts = 'CLOSED' THEN 'Completed' \n" +
+            "                         ELSE 'In Progress' \n" +
+            "                       END, \n" +
+            "      'dueDate',       p.end_dt, \n" +
+            "      'tasksAssigned', COUNT(t.task_id), \n" +
+            "      'openTasks',     COUNT(t.task_id) FILTER (WHERE UPPER(tsm.status_nm) NOT IN ('COMPLETED', 'CLOSED')), \n" +
+            "      'closedTasks',   COUNT(t.task_id) FILTER (WHERE UPPER(tsm.status_nm) IN ('COMPLETED', 'CLOSED')),\n" +
+            "      'progress',      COALESCE((\n" +
+            "        SELECT ROUND(\n" +
+            "          (SUM(\n" +
+            "            CASE \n" +
+            "              WHEN UPPER(tsm_all.status_nm) = 'COMPLETED' OR UPPER(tsm_all.status_nm) = 'CLOSED' THEN 1.0\n" +
+            "              WHEN UPPER(tsm_all.status_nm) = 'WIP' OR UPPER(tsm_all.status_nm) = 'IN PROGRESS' THEN \n" +
+            "                CASE \n" +
+            "                  WHEN UPPER(t_all.sub_status) = 'UNDER REVIEW' THEN 0.8\n" +
+            "                  WHEN UPPER(t_all.sub_status) = 'REWORK' THEN 0.2\n" +
+            "                  ELSE 0.5\n" +
+            "                END\n" +
+            "              ELSE 0.0\n" +
+            "            END\n" +
+            "          ) / NULLIF(COUNT(t_all.task_id), 0)) * 100, 0)\n" +
+            "        FROM task_live_master t_all\n" +
+            "        JOIN milestone_live_master ml_all ON ml_all.m_id = t_all.m_id\n" +
+            "        LEFT JOIN task_status_master tsm_all ON tsm_all.status_id = t_all.task_sts\n" +
+            "        WHERE ml_all.prj_id = p.prj_id\n" +
+            "          AND (t_all.emp_id = p_emp_id OR t_all.task_id IN (\n" +
+            "            SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true\n" +
+            "          ) OR t_all.task_id IN (\n" +
+            "            SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL\n" +
+            "          ))\n" +
+            "          AND COALESCE(UPPER(tsm_all.status_nm), '') <> 'DRAFT'\n" +
+            "      ), 0)\n" +
+            "    ) AS sub \n" +
+            "    FROM task_live_master t \n" +
+            "    JOIN milestone_live_master  ml ON ml.m_id   = t.m_id \n" +
+            "    JOIN project_live_master    p  ON p.prj_id  = ml.prj_id \n" +
+            "    LEFT JOIN company_master    cm ON cm.coy_id = p.coy_id \n" +
+            "    LEFT JOIN plant_master      pm ON pm.plt_id = p.plt_id \n" +
+            "    LEFT JOIN task_status_master tsm ON tsm.status_id = t.task_sts \n" +
+            "    LEFT JOIN project_access pa ON pa.prj_id = p.prj_id AND pa.emp_id = p_emp_id AND pa.sts = true \n" +
+            "    WHERE (t.emp_id = p_emp_id OR t.task_id IN ( \n" +
+            "      SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true \n" +
+            "    ) OR t.task_id IN (\n" +
+            "      SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL\n" +
+            "    )) AND p.prj_sts IN ('LIVE', 'CLOSED', 'HOLD') \n" +
+            "    GROUP BY p.prj_id, p.prj_nm, p.prj_cd, p.logo, cm.coy_nm, pm.plt_nm, cm.ct_vlg, p.prj_sts, pa.access_type, p.end_dt \n" +
+            "    ORDER BY p.prj_nm \n" +
+            "  ) x; \n" +
+            "\n" +
+            "  /* 8. Trend and Weekly Change Calculations */ \n" +
+            "  DECLARE \n" +
+            "    trend_rec RECORD; \n" +
+            "  BEGIN \n" +
+            "    WITH days AS ( \n" +
+            "      SELECT (v_today - i * INTERVAL '1 day')::DATE AS d \n" +
+            "      FROM generate_series(6, 0, -1) AS i \n" +
+            "    ), \n" +
+            "    trend_data AS ( \n" +
+            "      SELECT \n" +
+            "        d, \n" +
+            "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d) AS assigned_count, \n" +
+            "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d AND UPPER(status_nm) = 'OPEN' AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS open_count, \n" +
+            "        (SELECT COUNT(*) FROM temp_all_tasks WHERE st_dt <= d AND (UPPER(status_nm) = 'WIP' OR UPPER(status_nm) = 'IN PROGRESS') AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS wip_count, \n" +
+            "        (SELECT COUNT(*) FROM temp_all_tasks WHERE end_dt < d AND (act_cmp_dt IS NULL OR act_cmp_dt > d)) AS overdue_count, \n" +
+            "        (SELECT COUNT(*) FROM temp_all_tasks WHERE act_cmp_dt <= d) AS completed_count, \n" +
+            "        (SELECT COUNT(DISTINCT m.prj_id) \n" +
+            "         FROM task_live_master t_tr \n" +
+            "         JOIN milestone_live_master m ON m.m_id = t_tr.m_id \n" +
+            "         JOIN project_live_master p_tr ON p_tr.prj_id = m.prj_id \n" +
+            "         WHERE (t_tr.emp_id = p_emp_id OR t_tr.task_id IN ( \n" +
+            "           SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true \n" +
+            "         ) OR t_tr.task_id IN (\n" +
+            "           SELECT tm.task_id FROM team_members tm WHERE tm.emp_id = p_emp_id AND tm.task_id IS NOT NULL\n" +
+            "         )) AND p_tr.prj_sts = 'LIVE' AND p_tr.st_dt <= d) AS projects_count \n" +
+            "      FROM days \n" +
+            "      ORDER BY d \n" +
+            "    ) \n" +
+            "    SELECT \n" +
+            "      jsonb_object_agg(metric, jsonb_build_object( \n" +
+            "        'trend', trend_array, \n" +
+            "        'weeklyChange', GREATEST(0, current_val - seven_days_ago_val) \n" +
+            "      )) \n" +
+            "    INTO v_metrics_trends \n" +
+            "    FROM ( \n" +
+            "      SELECT \n" +
+            "        'assignedTasks' AS metric, \n" +
+            "        (SELECT jsonb_agg(assigned_count) FROM trend_data) AS trend_array, \n" +
+            "        (SELECT assigned_count FROM trend_data WHERE d = v_today) AS current_val, \n" +
+            "        COALESCE((SELECT assigned_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val \n" +
+            "      UNION ALL \n" +
+            "      SELECT \n" +
+            "        'openTasks' AS metric, \n" +
+            "        (SELECT jsonb_agg(open_count) FROM trend_data) AS trend_array, \n" +
+            "        (SELECT open_count FROM trend_data WHERE d = v_today) AS current_val, \n" +
+            "        COALESCE((SELECT open_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val \n" +
+            "      UNION ALL \n" +
+            "      SELECT \n" +
+            "        'inProgress' AS metric, \n" +
+            "        (SELECT jsonb_agg(wip_count) FROM trend_data) AS trend_array, \n" +
+            "        (SELECT wip_count FROM trend_data WHERE d = v_today) AS current_val, \n" +
+            "        COALESCE((SELECT wip_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val \n" +
+            "      UNION ALL \n" +
+            "      SELECT \n" +
+            "        'overdueTasks' AS metric, \n" +
+            "        (SELECT jsonb_agg(overdue_count) FROM trend_data) AS trend_array, \n" +
+            "        (SELECT overdue_count FROM trend_data WHERE d = v_today) AS current_val, \n" +
+            "        COALESCE((SELECT overdue_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val \n" +
+            "      UNION ALL \n" +
+            "      SELECT \n" +
+            "        'closedTasks' AS metric, \n" +
+            "        (SELECT jsonb_agg(completed_count) FROM trend_data) AS trend_array, \n" +
+            "        (SELECT completed_count FROM trend_data WHERE d = v_today) AS current_val, \n" +
+            "        COALESCE((SELECT completed_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val \n" +
+            "      UNION ALL \n" +
+            "      SELECT \n" +
+            "        'completedTasks' AS metric, \n" +
+            "        (SELECT jsonb_agg(completed_count) FROM trend_data) AS trend_array, \n" +
+            "        (SELECT completed_count FROM trend_data WHERE d = v_today) AS current_val, \n" +
+            "        COALESCE((SELECT completed_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val \n" +
+            "      UNION ALL \n" +
+            "      SELECT \n" +
+            "        'myProjects' AS metric, \n" +
+            "        (SELECT jsonb_agg(projects_count) FROM trend_data) AS trend_array, \n" +
+            "        (SELECT projects_count FROM trend_data WHERE d = v_today) AS current_val, \n" +
+            "        COALESCE((SELECT projects_count FROM trend_data LIMIT 1), 0) AS seven_days_ago_val \n" +
+            "    ) x; \n" +
+            "  END; \n" +
+            "\n" +
+            "  /* 9. Recent Activity List */ \n" +
+            "  SELECT jsonb_agg(sub) INTO v_recent_activity \n" +
+            "  FROM ( \n" +
+            "    SELECT jsonb_build_object( \n" +
+            "      'logId',      al.log_id, \n" +
+            "      'entityTyp',  al.entity_typ, \n" +
+            "      'entityId',   al.entity_id, \n" +
+            "      'statusFrom', al.status_from, \n" +
+            "      'statusTo',   al.status_to, \n" +
+            "      'logDt',      al.log_dt, \n" +
+            "      'message',    CASE \n" +
+            "                      WHEN al.entity_typ = 'TASK' THEN \n" +
+            "                        'Task \"' || COALESCE(t.task_nm, 'Unknown Task') || '\" updated from ' || al.status_from || ' to ' || al.status_to \n" +
+            "                      WHEN al.entity_typ = 'MILESTONE' THEN \n" +
+            "                        'Milestone \"' || COALESCE(m.mlstn_ttl, 'Unknown Milestone') || '\" updated from ' || al.status_from || ' to ' || al.status_to \n" +
+            "                      WHEN al.entity_typ = 'PROJECT' THEN \n" +
+            "                        'Project \"' || COALESCE(p.prj_nm, 'Unknown Project') || '\" updated from ' || al.status_from || ' to ' || al.status_to \n" +
+            "                      ELSE 'Activity log updated' \n" +
+            "                    END, \n" +
+            "      'projectName', COALESCE(p.prj_nm, p_ind.prj_nm, 'Internal') \n" +
+            "    ) AS sub \n" +
+            "    FROM activity_log_transaction al \n" +
+            "    LEFT JOIN task_live_master t ON al.entity_typ = 'TASK' AND t.task_id = al.entity_id \n" +
+            "    LEFT JOIN milestone_live_master m ON \n" +
+            "      (al.entity_typ = 'MILESTONE' AND m.m_id = al.entity_id) OR \n" +
+            "      (al.entity_typ = 'TASK' AND m.m_id = t.m_id) \n" +
+            "    LEFT JOIN project_live_master p ON \n" +
+            "      (al.entity_typ = 'PROJECT' AND p.prj_id = al.entity_id) OR \n" +
+            "      (m.prj_id = p.prj_id) \n" +
+            "    LEFT JOIN employee_individual_task_master ind ON al.entity_typ = 'TASK' AND ind.emp_task_id = al.entity_id \n" +
+            "    LEFT JOIN (SELECT DISTINCT prj_cd, prj_nm FROM project_live_master) p_ind ON p_ind.prj_cd = ind.task_asgn_to \n" +
+            "    WHERE \n" +
+            "      (al.entity_typ = 'TASK' AND (t.emp_id = p_emp_id OR ind.emp_id = p_emp_id OR t.task_id IN ( \n" +
+            "         SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true \n" +
+            "      ) OR ind.emp_task_id IN ( \n" +
+            "         SELECT pc.emp_task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.emp_task_id IS NOT NULL \n" +
+            "      ))) \n" +
+            "      OR (p.prj_id IN ( \n" +
+            "         SELECT DISTINCT ml_sub.prj_id \n" +
+            "         FROM task_live_master t_sub \n" +
+            "         JOIN milestone_live_master ml_sub ON ml_sub.m_id = t_sub.m_id \n" +
+            "         WHERE t_sub.emp_id = p_emp_id OR t_sub.task_id IN ( \n" +
+            "           SELECT pc.task_id FROM process_config pc WHERE pc.emp_id = p_emp_id AND pc.task_id IS NOT NULL AND COALESCE(pc.is_live, true) = true \n" +
+            "         ) \n" +
+            "      )) \n" +
+            "    ORDER BY al.log_dt DESC \n" +
+            "    LIMIT 5 \n" +
+            "  ) x; \n" +
+            "\n" +
+            "  /* 10. Performance Calculations */ \n" +
+            "  SELECT COALESCE( \n" +
+            "    ROUND( \n" +
+            "      (COUNT(*) FILTER (WHERE UPPER(status_nm) IN ('CLOSED', 'COMPLETED') AND (act_cmp_dt IS NULL OR act_cmp_dt <= end_dt))::NUMERIC / \n" +
+            "       NULLIF(COUNT(*) FILTER (WHERE UPPER(status_nm) IN ('CLOSED', 'COMPLETED')), 0)) * 100, \n" +
+            "      0 \n" +
+            "    )::INT, \n" +
+            "    100 \n" +
+            "  ) INTO v_productivity \n" +
+            "  FROM temp_all_tasks; \n" +
+            "\n" +
+            "  v_quality := GREATEST(50, 100 - ((v_reassigned + v_rework) * 5)); \n" +
+            "\n" +
+            "  v_performance := jsonb_build_object( \n" +
+            "    'productivity', jsonb_build_object( \n" +
+            "      'score', v_productivity, \n" +
+            "      'rating', CASE \n" +
+            "                  WHEN v_productivity >= 90 THEN 'Excellent' \n" +
+            "                  WHEN v_productivity >= 75 THEN 'Good' \n" +
+            "                  WHEN v_productivity >= 50 THEN 'Satisfactory' \n" +
+            "                  ELSE 'Needs Improvement' \n" +
+            "                END \n" +
+            "    ), \n" +
+            "    'taskCompletion', jsonb_build_object( \n" +
+            "      'score', CASE WHEN v_total_tasks > 0 THEN ROUND((v_completed::NUMERIC/v_total_tasks)*100,0)::INT ELSE 100 END, \n" +
+            "      'rating', CASE \n" +
+            "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 90 THEN 'Excellent' \n" +
+            "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 75 THEN 'Good' \n" +
+            "                  WHEN (CASE WHEN v_total_tasks > 0 THEN (v_completed::NUMERIC/v_total_tasks)*100 ELSE 100 END) >= 50 THEN 'Satisfactory' \n" +
+            "                  ELSE 'Needs Improvement' \n" +
+            "                END \n" +
+            "    ), \n" +
+            "    'qualityScore', jsonb_build_object( \n" +
+            "      'score', v_quality, \n" +
+            "      'rating', CASE \n" +
+            "                  WHEN v_quality >= 90 THEN 'Excellent' \n" +
+            "                  WHEN v_quality >= 75 THEN 'Good' \n" +
+            "                  WHEN v_quality >= 50 THEN 'Satisfactory' \n" +
+            "                  ELSE 'Needs Improvement' \n" +
+            "                END \n" +
+            "    ) \n" +
+            "  ); \n" +
+            "\n" +
+            "  /* 7. Combined response return */ \n" +
+            "  RETURN jsonb_build_object( \n" +
+            "    'profile', jsonb_build_object( \n" +
+            "      'empId', p_emp_id, 'fullName', v_full_name, \n" +
+            "      'role', COALESCE(v_emp.desig_nm, 'Site Engineer'), \n" +
+            "      'department', COALESCE(v_emp.dept_nm, 'Projects Department'), \n" +
+            "      'photoUrl', v_emp.photo_url), \n" +
+            "    'summary', jsonb_build_object( \n" +
+            "      'totalTasks', v_total_tasks,\n" +
+            "      'myTasksCount', v_total_tasks, \n" +
+            "      'closedTasksCount', v_completed,\n" +
+            "      'closedCount', v_completed,\n" +
+            "      'completedTasksCount', v_completed,\n" +
+            "      'overdueTasksCount', v_overdue, \n" +
+            "      'dueTodayCount', v_due_today, \n" +
+            "      'myProjectsCount', v_my_prj_count, \n" +
+            "      'overallCompletion', CASE WHEN v_total_tasks > 0 \n" +
+            "        THEN ROUND((v_completed::NUMERIC/v_total_tasks)*100,2) ELSE 0 END), \n" +
+            "    'taskStatusCounts', jsonb_build_object( \n" +
+            "      'Closed', v_completed, 'In Progress', v_wip, \n" +
+            "      'Under Review', v_under_review, 'Overdue', v_overdue, \n" +
+            "      'Open', v_open, 'Reassigned', v_reassigned, \n" +
+            "      'Rework', v_rework, 'Draft', v_draft), \n" +
+            "    'todoList',      COALESCE(v_todo_list, '[]'::jsonb), \n" +
+            "    'upcomingTasks', COALESCE(v_upcoming, '[]'::jsonb), \n" +
+            "    'myProjects',    COALESCE(v_my_projects, '[]'::jsonb), \n" +
+            "    'metricsTrends', COALESCE(v_metrics_trends, '{}'::jsonb), \n" +
+            "    'recentActivity', COALESCE(v_recent_activity, '[]'::jsonb), \n" +
+            "    'performance',   v_performance \n" +
+            "  ); \n" +
+            "END; \n" +
+            "$function$;";
+
         try (FileWriter fw = new FileWriter("sql_check.sql")) {
             fw.write(sql);
         }

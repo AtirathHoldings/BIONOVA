@@ -1660,16 +1660,15 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                             </label>
                             <label className="al-field-item">
                               <span>Alloted for <b style={{ color: '#ef4444' }}>*</b></span>
-                              <SearchableSelect 
+                              <select 
                                 name="allotedFor" 
                                 value={form.allotedFor} 
-                                onChange={handleChange} 
-                                placeholder="Select Alloted for"
-                                options={[
-                                  { value: "Agriculture Land", label: "Agriculture Land" },
-                                  { value: "Plant", label: "Plant" }
-                                ]}
-                              />
+                                onChange={handleChange}
+                              >
+                                <option value="">Select Alloted for</option>
+                                <option value="Agriculture Land">Agriculture Land</option>
+                                <option value="Plant">Plant</option>
+                              </select>
                             </label>
                           </div>
                         </section>

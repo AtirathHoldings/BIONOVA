@@ -490,7 +490,7 @@ class TaskItem {
              }
           } else {
              if (todayStart.isBefore(endStart)) {
-                timeStatus = 'On Time';
+                timeStatus = null;
              } else if (todayStart.isAtSameMomentAs(endStart)) {
                 timeStatus = 'Due Today';
              } else {
@@ -638,7 +638,7 @@ class TaskItem {
              }
           } else {
              if (todayStart.isBefore(endStart)) {
-                timeStatus = 'On Time';
+                timeStatus = null;
              } else if (todayStart.isAtSameMomentAs(endStart)) {
                 timeStatus = 'Due Today';
              } else {
@@ -915,8 +915,13 @@ class TaskItem {
   bool get isInProgress => status == 'In Progress' || status == 'WIP' || status == 'Reassigned' || status == 'Rework';
   bool get isUnderReview => status == 'Under Review';
   bool get isOpen => (status == 'Open' || status == 'Pending') && status != 'Reassigned' && status != 'Rework';
-  bool get isRework => status == 'Rework';
-  bool get isReassigned => status == 'Reassigned';
+  bool get isReassigned {
+    final s = status.toUpperCase();
+    final sub = (rawData?['prcsYesActn'] ?? rawData?['prcs_yes_actn'] ?? rawData?['subStatus'] ?? rawData?['sub_status'] ?? '').toString().toUpperCase();
+    if (s == 'REASSIGNED' || s == 'REASSIGN' || sub == 'REASSIGN' || sub == 'REASSIGNED') return true;
+    final addlRem = (rawData?['addlRem'] ?? rawData?['remarks'] ?? '').toString();
+    return addlRem.contains('[Reassigned') || addlRem.contains('reassign') || addlRem.contains('REASSIGN');
+  }
   bool get isCriticalTag => tag == 'Critical';
   bool get isHighTag => tag == 'High';
   bool get isLowTag => tag == 'Low';
@@ -1023,7 +1028,7 @@ class TaskItem {
     final s = status.toUpperCase();
     final sub = (rawData?['prcsYesActn'] ?? rawData?['prcs_yes_actn'] ?? rawData?['subStatus'] ?? rawData?['sub_status'] ?? '').toString().toUpperCase();
     if (s == 'REWORK' || sub == 'REWORK') return Icons.sync_rounded;
-    if (s == 'REASSIGNED' || s == 'REASSIGN' || sub == 'REASSIGN' || sub == 'REASSIGNED') return Icons.undo_rounded;
+    if (isReassigned) return Icons.undo_rounded;
     if (s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || sub.contains('PENDING')) return Icons.remove_red_eye_outlined;
     return null;
   }
@@ -1032,9 +1037,17 @@ class TaskItem {
     final s = status.toUpperCase();
     final sub = (rawData?['prcsYesActn'] ?? rawData?['prcs_yes_actn'] ?? rawData?['subStatus'] ?? rawData?['sub_status'] ?? '').toString().toUpperCase();
     if (s == 'REWORK' || sub == 'REWORK') return const Color(0xFFF97316); // ORANGE #F97316
-    if (s == 'REASSIGNED' || s == 'REASSIGN' || sub == 'REASSIGN' || sub == 'REASSIGNED') return const Color(0xFF4F46E5); // INDIGO #4F46E5
+    if (isReassigned) return const Color(0xFF4F46E5); // INDIGO #4F46E5
     if (s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || sub.contains('PENDING')) return const Color(0xFF8B5CF6); // PURPLE #8B5CF6
     return null;
+  }
+
+  String get processIconTooltip {
+    final icon = processIcon;
+    if (icon == Icons.remove_red_eye_outlined) return 'Under Review';
+    if (icon == Icons.sync_rounded) return 'Rework';
+    if (icon == Icons.undo_rounded) return 'Reassigned';
+    return status;
   }
 
   // 3. Time Status (Icons Only)
@@ -1094,7 +1107,7 @@ class TaskItem {
       case 'Due Today': return const Color(0xFFF59E0B); // AMBER
       case 'Overdue': return const Color(0xFFEF4444); // RED
       case 'Lag': return const Color(0xFFDC2626); // DARK RED
-      default: return const Color(0xFF3B82F6);
+      default: return const Color(0xFF94A3B8); // GREY (For open future tasks)
     }
   }
 }

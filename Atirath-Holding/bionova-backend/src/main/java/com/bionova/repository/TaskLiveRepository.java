@@ -20,10 +20,10 @@ public interface TaskLiveRepository extends JpaRepository<TaskLive, Long> {
     @Query("SELECT t FROM TaskLive t WHERE t.mId = :mId AND t.empId = :empId")
     List<TaskLive> findByMilestoneIdAndEmpId(@Param("mId") Long mId, @Param("empId") Long empId);
 
-    @Query("SELECT t FROM TaskLive t WHERE t.empId = :empId OR t.taskId IN (SELECT pc.taskId FROM ProcessConfig pc WHERE pc.empId = :empId AND pc.taskId IS NOT NULL)")
+    @Query("SELECT t FROM TaskLive t WHERE t.empId = :empId OR t.taskId IN (SELECT pc.taskId FROM ProcessConfig pc WHERE pc.empId = :empId AND pc.taskId IS NOT NULL) OR t.taskId IN (SELECT tm.taskId FROM TeamMember tm WHERE tm.empId = :empId AND tm.taskId IS NOT NULL)")
     List<TaskLive> findTasksForEmployee(@Param("empId") Long empId);
 
-    @Query("SELECT t FROM TaskLive t WHERE t.mId = :mId AND (t.empId = :empId OR t.taskId IN (SELECT pc.taskId FROM ProcessConfig pc WHERE pc.empId = :empId AND pc.taskId IS NOT NULL))")
+    @Query("SELECT t FROM TaskLive t WHERE t.mId = :mId AND (t.empId = :empId OR t.taskId IN (SELECT pc.taskId FROM ProcessConfig pc WHERE pc.empId = :empId AND pc.taskId IS NOT NULL) OR t.taskId IN (SELECT tm.taskId FROM TeamMember tm WHERE tm.empId = :empId AND tm.taskId IS NOT NULL))")
     List<TaskLive> findByMilestoneIdAndEmployeeOrReviewer(@Param("mId") Long mId, @Param("empId") Long empId);
 
     @Query("SELECT t FROM TaskLive t WHERE t.depTaskId = :depTaskId")

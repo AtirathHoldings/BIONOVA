@@ -935,42 +935,48 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         return;
       }
       try {
-        final dbTask = await ApiService.getLiveTask(_extractTaskNumericId()!);
-        if (dbTask != null) {
-          final String? noteTxt = dbTask['noteTxt'] ?? dbTask['note_txt'];
-          if (noteTxt != null && noteTxt.trim().isNotEmpty) {
-            final List<String> employeeIds = noteTxt.split(',');
+        final taskIdInt = _extractTaskNumericId() ?? int.tryParse(task.id);
+        if (taskIdInt != null) {
+          final contributors = await ApiService.getContributors(taskIdInt, widget.isIndividualTask);
+          if (contributors.isNotEmpty) {
             final dbEmployees = await ApiService.getEmployees();
-            for (final empId in employeeIds) {
-              final match = dbEmployees.firstWhere(
-                (emp) =>
-                    emp['id']?.toString() == empId.trim() ||
-                    emp['empId']?.toString() == empId.trim(),
-                orElse: () => null,
-              );
-              if (match != null) {
-                dbTeam.add(EmployeeOption.fromJson(match));
+            for (final c in contributors) {
+              final cEmpId = (c['empId'] ?? c['id'] ?? c['emp_id'])?.toString();
+              if (cEmpId != null) {
+                final match = dbEmployees.firstWhere(
+                  (emp) => emp['id']?.toString() == cEmpId || emp['empId']?.toString() == cEmpId,
+                  orElse: () => null,
+                );
+                if (match != null) {
+                  dbTeam.add(EmployeeOption.fromJson(match));
+                }
               }
             }
           }
-        } else {
-          final savedTeamJson = prefs.getString('task_team_${task.id}');
-          if (savedTeamJson != null) {
-            final List<dynamic> decoded = jsonDecode(savedTeamJson);
-            dbTeam = decoded
-                .map((item) => EmployeeOption.fromJson(item))
-                .toList();
+        }
+        if (dbTeam.isEmpty) {
+          final dbTask = widget.isIndividualTask
+              ? await ApiService.getIndividualTaskById(_extractTaskNumericId() ?? int.parse(task.id))
+              : await ApiService.getLiveTask(_extractTaskNumericId() ?? int.parse(task.id));
+          if (dbTask != null) {
+            final String? noteTxt = dbTask['noteTxt'] ?? dbTask['note_txt'];
+            if (noteTxt != null && noteTxt.trim().isNotEmpty) {
+              final List<String> employeeIds = noteTxt.split(',');
+              final dbEmployees = await ApiService.getEmployees();
+              for (final empId in employeeIds) {
+                final match = dbEmployees.firstWhere(
+                  (emp) => emp['id']?.toString() == empId.trim() || emp['empId']?.toString() == empId.trim(),
+                  orElse: () => null,
+                );
+                if (match != null) {
+                  dbTeam.add(EmployeeOption.fromJson(match));
+                }
+              }
+            }
           }
         }
       } catch (e) {
         debugPrint("Error loading team from db: $e");
-        final savedTeamJson = prefs.getString('task_team_${task.id}');
-        if (savedTeamJson != null) {
-          final List<dynamic> decoded = jsonDecode(savedTeamJson);
-          dbTeam = decoded
-              .map((item) => EmployeeOption.fromJson(item))
-              .toList();
-        }
       }
 
       if (mounted) {
@@ -1773,6 +1779,8 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         (task.approver != null && _currentEmpId != null && task.approver.toString() == _currentEmpId.toString()) ||
         (_userRole.toLowerCase() == 'approver');
 
+    final bool isPrimaryExecutor = _currentEmpId != null && executorId != null && _currentEmpId.toString() == executorId.toString();
+
     String displayRole = 'Executor';
     String actionMessage = task.priority;
 
@@ -1782,7 +1790,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       displayRole = 'Reviewer';
     } else if (isUserApprover) {
       displayRole = 'Approver';
-    } else if (_currentEmpId != null && (_currentEmpId == executorId || _currentTaskTeam.any((emp) => emp.id == _currentEmpId))) {
+    } else if (_currentEmpId != null && (_currentEmpId.toString() == executorId?.toString() || _currentTaskTeam.any((emp) => emp.id?.toString() == _currentEmpId.toString()))) {
       displayRole = 'Executor';
     } else {
       if (_userRole.toLowerCase() == 'checker' || _userRole.toLowerCase() == 'reviewer') {
@@ -1888,7 +1896,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                       ),
                     ),
                   ),
-                  if (_status != 'Under Review' && _status != 'Closed' && _status != 'Completed')
+                  if (_status != 'Under Review' && _status != 'Closed' && _status != 'Completed' && isPrimaryExecutor && !isUserReviewer && !isUserApprover)
                     TextButton.icon(
                       onPressed: () async {
                         await Navigator.push(
@@ -3380,7 +3388,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
             ),
             const SizedBox(width: 12),
             const Text(
-              'Team Added',
+              'Collabrators',
               style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
             ),
             const Spacer(),

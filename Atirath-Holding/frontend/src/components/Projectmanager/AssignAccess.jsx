@@ -230,9 +230,9 @@ const AssignAccess = ({ userRole, onLogout }) => {
         const filteredData = data.filter(emp => 
           emp.permissions && 
           Array.isArray(emp.permissions) && 
-          emp.permissions.length > 0
+          emp.permissions.some(p => p.viewFlg || p.addFlg || p.editFlg || p.deleteFlg || p.view || p.create || p.edit || p.delete)
         );
-        console.log('Employees with access:', filteredData.map(e => ({ name: e.name, count: e.permissions?.length })));
+        console.log('Employees with access:', filteredData.map(e => ({ name: e.name, count: e.permissions?.filter(p => p.viewFlg || p.addFlg || p.editFlg || p.deleteFlg)?.length })));
         setEmployeePermissions(filteredData);
       } else {
         const perms = [];
@@ -244,8 +244,7 @@ const AssignAccess = ({ userRole, onLogout }) => {
             });
             if (res.ok) {
               const p = await res.json();
-              // Only push if permissions exist and have length > 0
-              if (p && Array.isArray(p) && p.length > 0) {
+              if (p && Array.isArray(p) && p.some(item => item.viewFlg || item.addFlg || item.editFlg || item.deleteFlg || item.view || item.create || item.edit || item.delete)) {
                 perms.push({
                   employeeId: empId,
                   name: `${emp.fstNm || emp.firstName || ''} ${emp.lstNm || emp.lastName || ''}`.trim(),
@@ -3252,12 +3251,12 @@ const AssignAccess = ({ userRole, onLogout }) => {
     const employeesWithAccess = employeePermissions.filter(emp => 
       emp.permissions && 
       Array.isArray(emp.permissions) && 
-      emp.permissions.length > 0
+      emp.permissions.some(p => p.viewFlg || p.addFlg || p.editFlg || p.deleteFlg || p.view || p.create || p.edit || p.delete)
     );
 
     const totalWithAccess = employeesWithAccess.length;
     const totalNoAccess = employees.length - totalWithAccess;
-    const totalScreens = employeesWithAccess.reduce((sum, emp) => sum + (emp.permissions?.length || 0), 0);
+    const totalScreens = dbScreenGroups.reduce((sum, g) => sum + (g.screens?.length || 0), 0);
 
     const filteredManageEmployees = employeesWithAccess
       .filter(emp => {
@@ -3331,17 +3330,16 @@ const AssignAccess = ({ userRole, onLogout }) => {
                   </tr>
                 ) : (
                   filteredManageEmployees.map((emp) => {
-                    const screenCount = emp.permissions?.length || 0;
+                    const activePermissions = (emp.permissions || []).filter(p => p.viewFlg || p.addFlg || p.editFlg || p.deleteFlg || p.view || p.create || p.edit || p.delete);
+                    const screenCount = activePermissions.length;
                     
                     let viewCount = 0, createCount = 0, editCount = 0, deleteCount = 0;
-                    if (emp.permissions) {
-                      emp.permissions.forEach(p => {
-                        if (p.viewFlg) viewCount++;
-                        if (p.addFlg) createCount++;
-                        if (p.editFlg) editCount++;
-                        if (p.deleteFlg) deleteCount++;
-                      });
-                    }
+                    activePermissions.forEach(p => {
+                      if (p.viewFlg || p.view) viewCount++;
+                      if (p.addFlg || p.create) createCount++;
+                      if (p.editFlg || p.edit) editCount++;
+                      if (p.deleteFlg || p.delete) deleteCount++;
+                    });
                     
                     let permParts = [];
                     if (viewCount > 0) permParts.push('View');
@@ -3419,7 +3417,7 @@ const AssignAccess = ({ userRole, onLogout }) => {
   const renderViewModal = () => {
     if (!showViewModal || !selectedEmployee) return null;
 
-    const permissions = selectedEmployee.permissions || [];
+    const permissions = (selectedEmployee.permissions || []).filter(p => p.viewFlg || p.addFlg || p.editFlg || p.deleteFlg || p.view || p.create || p.edit || p.delete);
     const groupedPermissions = {};
     permissions.forEach(p => {
       const group = p.groupNm || 'Uncategorized';

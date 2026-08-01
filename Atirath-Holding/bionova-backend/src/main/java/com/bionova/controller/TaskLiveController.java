@@ -146,6 +146,9 @@ public class TaskLiveController {
                 }
             }
         }
+        if (task.getTaskId() != null) {
+            task.setTeamMembers(teamMemberRepository.findByTaskId(task.getTaskId()));
+        }
     }
 
     private void populateReviewerAndApprover(List<TaskLive> tasks) {
@@ -163,6 +166,10 @@ public class TaskLiveController {
                 ? java.util.Collections.emptyList()
                 : processConfigRepository.findByTaskIdInAndIsLiveOrderByOrdrIdAsc(taskIds, true);
 
+        java.util.List<TeamMember> allTeamMembers = taskIds.isEmpty()
+                ? java.util.Collections.emptyList()
+                : teamMemberRepository.findByTaskIdIn(taskIds);
+
         for (com.bionova.entity.ProcessConfig pc : allConfigs) {
             if (pc.getEmpId() != null) empIds.add(pc.getEmpId());
         }
@@ -179,7 +186,12 @@ public class TaskLiveController {
                 .filter(pc -> pc.getTaskId() != null)
                 .collect(java.util.stream.Collectors.groupingBy(com.bionova.entity.ProcessConfig::getTaskId));
 
+        java.util.Map<Long, java.util.List<TeamMember>> teamMemberMap = allTeamMembers.stream()
+                .filter(tm -> tm.getTaskId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(TeamMember::getTaskId));
+
         for (TaskLive task : tasks) {
+            task.setTeamMembers(teamMemberMap.getOrDefault(task.getTaskId(), java.util.Collections.emptyList()));
             java.util.List<com.bionova.entity.ProcessConfig> configs = configMap.getOrDefault(task.getTaskId(), java.util.Collections.emptyList());
             for (com.bionova.entity.ProcessConfig pc : configs) {
                 if (pc.getOrdrId() == 1) {
@@ -225,7 +237,8 @@ public class TaskLiveController {
                 .map(task -> {
                     if (hasProjectModuleAccess(employee) || 
                         employee.getEmpId().equals(task.getEmpId()) ||
-                        isReviewerOrApproverForTask(task.getTaskId(), employee.getEmpId())) {
+                        isReviewerOrApproverForTask(task.getTaskId(), employee.getEmpId()) ||
+                        teamMemberRepository.existsByTaskIdAndEmpId(task.getTaskId(), employee.getEmpId())) {
                         populateReviewerAndApprover(task);
                         return ResponseEntity.ok(task);
                     } else {

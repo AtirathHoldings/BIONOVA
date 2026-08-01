@@ -35,8 +35,10 @@ public class ProcessController {
 
     /** Full audit log of all process actions for a task */
     @GetMapping("/task/{taskId}")
-    public List<ProcessMaster> getHistory(@PathVariable Long taskId) {
-        if (taskLiveRepo.existsById(taskId)) {
+    public List<ProcessMaster> getHistory(
+            @PathVariable Long taskId,
+            @RequestParam(required = false, defaultValue = "false") boolean isIndividual) {
+        if (!isIndividual) {
             return processRepo.findByTaskIdOrderByOrdrIdAsc(taskId);
         } else {
             return processRepo.findByEmpTaskIdOrderByOrdrIdAsc(taskId);
@@ -53,7 +55,8 @@ public class ProcessController {
             @PathVariable Long taskId,
             @RequestBody Map<String, Object> body) {
 
-        if (taskLiveRepo.existsById(taskId)) {
+        boolean isIndividual = Boolean.parseBoolean(String.valueOf(body.getOrDefault("isIndividual", "false")));
+        if (!isIndividual && taskLiveRepo.existsById(taskId)) {
             TaskLive task = getTask(taskId);
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
@@ -64,9 +67,10 @@ public class ProcessController {
 
             task.setTaskSts(TaskStatusMaster.WIP);
             task.setSubStatus(null);
+            task.setPrcsYesActn("NONE");
             taskLiveRepo.save(task);
 
-            ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", "YES");
+            ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "EXECUTOR", "YES");
             event.setRemarks("Task started — moved to WIP");
             processRepo.save(event);
 
@@ -83,9 +87,10 @@ public class ProcessController {
 
             task.setTaskSts(TaskStatusMaster.WIP);
             task.setSubStatus(null);
+            task.setPrcsYesActn("NONE");
             assignmentRepo.save(task);
 
-            ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "REVIEWER", "YES");
+            ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "EXECUTOR", "YES");
             event.setRemarks("Task started — moved to WIP");
             processRepo.save(event);
 
@@ -105,7 +110,8 @@ public class ProcessController {
             @PathVariable Long taskId,
             @RequestBody Map<String, Object> body) {
 
-        if (taskLiveRepo.existsById(taskId)) {
+        boolean isIndividual = Boolean.parseBoolean(String.valueOf(body.getOrDefault("isIndividual", "false")));
+        if (!isIndividual && taskLiveRepo.existsById(taskId)) {
             TaskLive task = getTask(taskId);
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
@@ -131,11 +137,14 @@ public class ProcessController {
             task.setSubStatus(newSubStatus);
             if (!needsReview) {
                 task.setActCmpDt(java.time.LocalDate.now());
+                task.setPrcsYesActn("NONE");
+            } else {
+                task.setPrcsYesActn(getString(body, "prcsYesActn", "PENDING_REVIEWER"));
             }
             taskLiveRepo.save(task);
 
-            ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", "YES");
-            event.setRemarks(getString(body, "remarks", !needsReview ? "Task completed directly (no review process required)" : "Submitted for review"));
+            ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "EXECUTOR", "YES");
+            event.setRemarks(getString(body, "remarks", ""));
             processRepo.save(event);
 
             projectStatusCascadeService.cascadeStatusFromTask(taskId);
@@ -166,13 +175,46 @@ public class ProcessController {
 
             task.setTaskSts(targetStatus);
             task.setSubStatus(newSubStatus);
+            if (!needsReview) {
+                task.setPrcsYesActn("NONE");
+            } else {
+                task.setPrcsYesActn(getString(body, "prcsYesActn", "PENDING_REVIEWER"));
+            }
             assignmentRepo.save(task);
 
-            ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "REVIEWER", "YES");
-            event.setRemarks(getString(body, "remarks", !needsReview ? "Task completed directly (no review process required)" : "Submitted for review"));
+            ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "EXECUTOR", "YES");
+            event.setRemarks(getString(body, "remarks", ""));
             processRepo.save(event);
 
             return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", newSubStatus != null ? newSubStatus : "", "message", !needsReview ? "Task completed successfully." : "Task submitted for review."));
+        }
+    }
+
+    // ── UPDATE PROGRESS (Intermediate Saves) ──────────────────────────────
+    @PostMapping("/task/{taskId}/update-progress")
+    @Transactional
+    public ResponseEntity<?> updateProgress(
+            @PathVariable Long taskId,
+            @RequestBody Map<String, Object> body) {
+        
+        boolean isIndividual = Boolean.parseBoolean(String.valueOf(body.getOrDefault("isIndividual", "false")));
+        if (!isIndividual && taskLiveRepo.existsById(taskId)) {
+            TaskLive task = getTask(taskId);
+            
+            ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "EXECUTOR", "UPD");
+            event.setRemarks(getString(body, "remarks", "Progress updated"));
+            processRepo.save(event);
+            
+            return ResponseEntity.ok(Map.of("message", "Progress logged."));
+        } else {
+            Assignment task = assignmentRepo.findById(taskId)
+                    .orElseThrow(() -> new RuntimeException("Task not found with ID: " + taskId));
+            
+            ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "EXECUTOR", "UPD");
+            event.setRemarks(getString(body, "remarks", "Progress updated"));
+            processRepo.save(event);
+            
+            return ResponseEntity.ok(Map.of("message", "Progress logged."));
         }
     }
 
@@ -188,12 +230,14 @@ public class ProcessController {
             @PathVariable Long taskId,
             @RequestBody Map<String, Object> body) {
 
-        if (taskLiveRepo.existsById(taskId)) {
+        boolean isIndividual = Boolean.parseBoolean(String.valueOf(body.getOrDefault("isIndividual", "false")));
+        if (!isIndividual && taskLiveRepo.existsById(taskId)) {
             TaskLive task = getTask(taskId);
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
             String subStatus = task.getSubStatus() != null ? task.getSubStatus() : "";
-            if (!"WIP".equalsIgnoreCase(currentStatus) || (!"Rework".equalsIgnoreCase(subStatus) && !"Reassign".equalsIgnoreCase(subStatus))) {
+            boolean isProcessReworkOrReassign = "REWORK".equalsIgnoreCase(task.getPrcsYesActn()) || "REASSIGN".equalsIgnoreCase(task.getPrcsYesActn());
+            if (!"WIP".equalsIgnoreCase(currentStatus) || (!"Rework".equalsIgnoreCase(subStatus) && !"Reassign".equalsIgnoreCase(subStatus) && !isProcessReworkOrReassign)) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("message", "Task must be in WIP status with Rework or Reassign sub-status to resubmit. Current: " + currentStatus + " (" + subStatus + ")"));
             }
@@ -209,10 +253,11 @@ public class ProcessController {
 
             task.setTaskSts(TaskStatusMaster.WIP);
             task.setSubStatus("Under Review");
+            task.setPrcsYesActn(getString(body, "prcsYesActn", "PENDING_REVIEWER"));
             taskLiveRepo.save(task);
 
-            ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", "YES");
-            event.setRemarks(getString(body, "remarks", "Resubmitted after rework"));
+            ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "EXECUTOR", "YES");
+            event.setRemarks(getString(body, "remarks", ""));
             processRepo.save(event);
 
             return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", "Under Review", "message", "Task resubmitted for review."));
@@ -222,7 +267,8 @@ public class ProcessController {
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
             String subStatus = task.getSubStatus() != null ? task.getSubStatus() : "";
-            if (!"WIP".equalsIgnoreCase(currentStatus) || (!"Rework".equalsIgnoreCase(subStatus) && !"Reassign".equalsIgnoreCase(subStatus))) {
+            boolean isProcessReworkOrReassign = "REWORK".equalsIgnoreCase(task.getPrcsYesActn()) || "REASSIGN".equalsIgnoreCase(task.getPrcsYesActn());
+            if (!"WIP".equalsIgnoreCase(currentStatus) || (!"Rework".equalsIgnoreCase(subStatus) && !"Reassign".equalsIgnoreCase(subStatus) && !isProcessReworkOrReassign)) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("message", "Task must be in WIP status with Rework or Reassign sub-status to resubmit. Current: " + currentStatus + " (" + subStatus + ")"));
             }
@@ -238,10 +284,11 @@ public class ProcessController {
 
             task.setTaskSts(TaskStatusMaster.WIP);
             task.setSubStatus("Under Review");
+            task.setPrcsYesActn(getString(body, "prcsYesActn", "PENDING_REVIEWER"));
             assignmentRepo.save(task);
 
-            ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "REVIEWER", "YES");
-            event.setRemarks(getString(body, "remarks", "Resubmitted after rework"));
+            ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "EXECUTOR", "YES");
+            event.setRemarks(getString(body, "remarks", ""));
             processRepo.save(event);
 
             return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", "Under Review", "message", "Task resubmitted for review."));
@@ -259,14 +306,15 @@ public class ProcessController {
             @PathVariable Long taskId,
             @RequestBody Map<String, Object> body) {
 
-        if (taskLiveRepo.existsById(taskId)) {
+        boolean isIndividual = Boolean.parseBoolean(String.valueOf(body.getOrDefault("isIndividual", "false")));
+        if (!isIndividual && taskLiveRepo.existsById(taskId)) {
             TaskLive task = getTask(taskId);
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
             String subStatus = task.getSubStatus() != null ? task.getSubStatus() : "";
-            if (!"WIP".equalsIgnoreCase(currentStatus) || !"Under Review".equalsIgnoreCase(subStatus)) {
+            if (!"WIP".equalsIgnoreCase(currentStatus) || (!"Under Review".equalsIgnoreCase(subStatus) && !"PENDING_REVIEWER".equalsIgnoreCase(task.getPrcsYesActn()))) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("message", "Task must be in WIP status with Under Review sub-status for reviewer action. Current: " + currentStatus + " (" + subStatus + ")"));
+                        .body(Map.of("message", "Task must be in WIP status with Under Review sub-status for reviewer action. Current: " + currentStatus + " (" + subStatus + "), PrcsYesActn: " + task.getPrcsYesActn()));
             }
 
             String decision = getString(body, "decision", "").toUpperCase();
@@ -280,57 +328,60 @@ public class ProcessController {
                 String rejectionType = getString(body, "rejectionType", "REASSIGN").toUpperCase();
                 targetSubStatus = "REWORK".equals(rejectionType) ? "Rework" : "Reassign";
 
-                Long targetMId = body.get("targetMId") != null ? Long.valueOf(body.get("targetMId").toString()) : null;
-
-                if ("REWORK".equals(rejectionType)) {
-                    TaskLive reworkTarget = projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId);
-                    if (reworkTarget != null && !reworkTarget.getTaskId().equals(taskId)) {
-                        targetSubStatus = "Rework";
-                    }
-                } else {
-                    if (targetMId != null) {
-                        task.setMId(targetMId);
-                    }
-                    if (body.get("targetEmpId") != null) {
-                        task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
-                    }
-                    task.setTaskSts(TaskStatusMaster.WIP);
-                    task.setSubStatus(targetSubStatus);
-                    taskLiveRepo.save(task);
-                    projectStatusCascadeService.cascadeReworkDownstream(taskId);
-                    projectStatusCascadeService.cascadeStatusFromTask(taskId);
+                if (body.get("targetMId") != null) {
+                    task.setMId(Long.valueOf(body.get("targetMId").toString()));
                 }
-            } else {
-                task.setTaskSts(TaskStatusMaster.WIP);
-                task.setSubStatus(targetSubStatus);
-                task.setPrcsYesActn("PENDING_APPROVER");
-                taskLiveRepo.save(task);
-                projectStatusCascadeService.cascadeStatusFromTask(taskId);
+                if (body.get("targetEmpId") != null) {
+                    task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
+                }
             }
 
+            task.setTaskSts(TaskStatusMaster.WIP);
+            task.setSubStatus(targetSubStatus);
+            if ("NO".equals(decision)) {
+                task.setPrcsYesActn(getString(body, "rejectionType", "REASSIGN").toUpperCase());
+            } else {
+                task.setPrcsYesActn("PENDING_APPROVER");
+            }
+            String eventRemarks = getString(body, "remarks", "");
+            if ("NO".equals(decision)) {
+                String prefix = "Rework".equals(targetSubStatus) ? "[Rejected - Reviewer]" : "[Reassigned - Reviewer]";
+                String existingRem = task.getAddlRem();
+                String newRem = prefix + ": " + eventRemarks;
+                if (existingRem != null && !existingRem.trim().isEmpty()) {
+                    newRem = existingRem + "\n---\n" + newRem;
+                }
+                task.setAddlRem(newRem);
+            }
+            taskLiveRepo.save(task);
+
             ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", decision);
-            event.setRemarks(getString(body, "remarks",
-                    "YES".equals(decision) ? "Reviewer approved — sent to approver" : "Reviewer rejected — task sent back"));
+            event.setRemarks(eventRemarks);
             processRepo.save(event);
 
-            TaskLive currentT = getTask(taskId);
-            String finalSts = currentT.getTaskSts() != null ? currentT.getTaskSts().getStatusNm() : "Open";
-            String finalSubSts = currentT.getSubStatus() != null ? currentT.getSubStatus() : "";
+            if ("NO".equals(decision) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
+                if ("Rework".equals(targetSubStatus)) {
+                    Long targetMId = body.get("targetMId") != null ? Long.valueOf(body.get("targetMId").toString()) : null;
+                    projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId);
+                }
+                projectStatusCascadeService.cascadeReworkDownstream(taskId);
+            }
+            projectStatusCascadeService.cascadeStatusFromTask(taskId);
 
             String message = "YES".equals(decision)
                     ? "Reviewer approved. Task moved to Under Review."
-                    : "Reviewer rejected. Task moved to " + finalSts + (finalSubSts.isEmpty() ? "" : " (" + finalSubSts + ")") + ".";
+                    : "Reviewer rejected. Task moved to WIP (" + targetSubStatus + ").";
 
-            return ResponseEntity.ok(Map.of("taskSts", finalSts, "subStatus", finalSubSts, "message", message));
+            return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", targetSubStatus, "message", message));
         } else {
             Assignment task = assignmentRepo.findById(taskId)
                     .orElseThrow(() -> new RuntimeException("Task not found with ID: " + taskId));
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
             String subStatus = task.getSubStatus() != null ? task.getSubStatus() : "";
-            if (!"WIP".equalsIgnoreCase(currentStatus) || !"Under Review".equalsIgnoreCase(subStatus)) {
+            if (!"WIP".equalsIgnoreCase(currentStatus) || (!"Under Review".equalsIgnoreCase(subStatus) && !"PENDING_REVIEWER".equalsIgnoreCase(task.getPrcsYesActn()))) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("message", "Task must be in WIP status with Under Review sub-status for reviewer action. Current: " + currentStatus + " (" + subStatus + ")"));
+                        .body(Map.of("message", "Task must be in WIP status with Under Review sub-status for reviewer action. Current: " + currentStatus + " (" + subStatus + "), PrcsYesActn: " + task.getPrcsYesActn()));
             }
 
             String decision = getString(body, "decision", "").toUpperCase();
@@ -351,11 +402,25 @@ public class ProcessController {
 
             task.setTaskSts(TaskStatusMaster.WIP);
             task.setSubStatus(targetSubStatus);
+            if ("NO".equals(decision)) {
+                task.setPrcsYesActn(getString(body, "rejectionType", "REASSIGN").toUpperCase());
+            } else {
+                task.setPrcsYesActn("PENDING_APPROVER");
+            }
+            String eventRemarks = getString(body, "remarks", "");
+            if ("NO".equals(decision)) {
+                String prefix = "Rework".equals(targetSubStatus) ? "[Rejected - Reviewer]" : "[Reassigned - Reviewer]";
+                String existingRem = task.getRemarks();
+                String newRem = prefix + ": " + eventRemarks;
+                if (existingRem != null && !existingRem.trim().isEmpty()) {
+                    newRem = existingRem + "\n---\n" + newRem;
+                }
+                task.setRemarks(newRem);
+            }
             assignmentRepo.save(task);
 
             ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "REVIEWER", decision);
-            event.setRemarks(getString(body, "remarks",
-                    "YES".equals(decision) ? "Reviewer approved — sent to approver" : "Reviewer rejected — task sent back"));
+            event.setRemarks(eventRemarks);
             processRepo.save(event);
 
             String message = "YES".equals(decision)
@@ -377,14 +442,15 @@ public class ProcessController {
             @PathVariable Long taskId,
             @RequestBody Map<String, Object> body) {
 
-        if (taskLiveRepo.existsById(taskId)) {
+        boolean isIndividual = Boolean.parseBoolean(String.valueOf(body.getOrDefault("isIndividual", "false")));
+        if (!isIndividual && taskLiveRepo.existsById(taskId)) {
             TaskLive task = getTask(taskId);
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
             String subStatus = task.getSubStatus() != null ? task.getSubStatus() : "";
-            if (!"WIP".equalsIgnoreCase(currentStatus) || !"Under Review".equalsIgnoreCase(subStatus)) {
+            if (!"WIP".equalsIgnoreCase(currentStatus) || (!"Under Review".equalsIgnoreCase(subStatus) && !"PENDING_APPROVER".equalsIgnoreCase(task.getPrcsYesActn()))) {
                 return ResponseEntity.badRequest()
-                        .body(Map.of("message", "Task must be in WIP status with Under Review sub-status for approver action. Current: " + currentStatus + " (" + subStatus + ")"));
+                        .body(Map.of("message", "Task must be in WIP status with Under Review sub-status for approver action. Current: " + currentStatus + " (" + subStatus + "), PrcsYesActn: " + task.getPrcsYesActn()));
             }
 
             String decision = getString(body, "decision", "").toUpperCase();
@@ -401,36 +467,37 @@ public class ProcessController {
                 String rejectionType = getString(body, "rejectionType", "REASSIGN").toUpperCase();
                 targetSubStatus = "REWORK".equals(rejectionType) ? "Rework" : "Reassign";
 
-                Long targetMId = body.get("targetMId") != null ? Long.valueOf(body.get("targetMId").toString()) : null;
-
-                if ("REWORK".equals(rejectionType)) {
-                    TaskLive reworkTarget = projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId);
-                    if (reworkTarget != null && !reworkTarget.getTaskId().equals(taskId)) {
-                        targetSubStatus = "Rework";
-                    }
-                } else {
-                    if (targetMId != null) {
-                        task.setMId(targetMId);
-                    }
-                    if (body.get("targetEmpId") != null) {
-                        task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
-                    }
-                    task.setTaskSts(targetStatus);
-                    task.setSubStatus(targetSubStatus);
-                    taskLiveRepo.save(task);
-                    projectStatusCascadeService.cascadeReworkDownstream(taskId);
-                    projectStatusCascadeService.cascadeStatusFromTask(taskId);
+                if (body.get("targetMId") != null) {
+                    task.setMId(Long.valueOf(body.get("targetMId").toString()));
                 }
-            } else {
-                task.setTaskSts(targetStatus);
-                task.setSubStatus(targetSubStatus);
-                task.setPrcsYesActn("NONE");
-                if (TaskStatusMaster.CLOSED.equals(targetStatus)) {
-                    task.setActCmpDt(java.time.LocalDate.now());
+                if (body.get("targetEmpId") != null) {
+                    task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
                 }
-                taskLiveRepo.save(task);
-                projectStatusCascadeService.cascadeStatusFromTask(taskId);
             }
+
+            task.setTaskSts(targetStatus);
+            task.setSubStatus(targetSubStatus);
+            if ("NO".equals(decision)) {
+                task.setPrcsYesActn(getString(body, "rejectionType", "REASSIGN").toUpperCase());
+            } else {
+                task.setPrcsYesActn("NONE");
+            }
+
+            if (TaskStatusMaster.CLOSED.equals(targetStatus)) {
+                task.setActCmpDt(java.time.LocalDate.now());
+            }
+            
+            String eventRemarks = getString(body, "remarks", "");
+            if ("NO".equals(decision)) {
+                String prefix = "Rework".equals(targetSubStatus) ? "[Rejected - Approver]" : "[Reassigned - Approver]";
+                String existingRem = task.getAddlRem();
+                String newRem = prefix + ": " + eventRemarks;
+                if (existingRem != null && !existingRem.trim().isEmpty()) {
+                    newRem = existingRem + "\n---\n" + newRem;
+                }
+                task.setAddlRem(newRem);
+            }
+            taskLiveRepo.save(task);
 
             Integer rId = body.get("rId") != null
                     ? Integer.valueOf(body.get("rId").toString()) : null;
@@ -446,28 +513,32 @@ public class ProcessController {
             event.setEmpId(empId);
             event.setRId(rId);
             event.setPrcsSts(decision);
-            event.setRemarks(getString(body, "remarks",
-                    "YES".equals(decision) ? "Approver approved — CLOSED" : "Approver rejected — task sent back"));
+            event.setRemarks(eventRemarks);
 
             applyCountsFromHistory(taskId, event, decision);
             processRepo.save(event);
 
-            TaskLive currentT = getTask(taskId);
-            String finalSts = currentT.getTaskSts() != null ? currentT.getTaskSts().getStatusNm() : "Open";
-            String finalSubSts = currentT.getSubStatus() != null ? currentT.getSubStatus() : "";
+            if (TaskStatusMaster.WIP.equals(targetStatus) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
+                if ("Rework".equals(targetSubStatus)) {
+                    Long targetMId = body.get("targetMId") != null ? Long.valueOf(body.get("targetMId").toString()) : null;
+                    projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId);
+                }
+                projectStatusCascadeService.cascadeReworkDownstream(taskId);
+            }
+            projectStatusCascadeService.cascadeStatusFromTask(taskId);
 
             String message = "YES".equals(decision)
                     ? "Approver approved. Task CLOSED! 🎉"
-                    : "Approver rejected. Task moved to " + finalSts + (finalSubSts.isEmpty() ? "" : " (" + finalSubSts + ")") + ".";
+                    : "Approver rejected. Task moved to WIP (" + targetSubStatus + ").";
 
-            return ResponseEntity.ok(Map.of("taskSts", finalSts, "subStatus", finalSubSts, "message", message));
+            return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", targetSubStatus, "message", message));
         } else {
             Assignment task = assignmentRepo.findById(taskId)
                     .orElseThrow(() -> new RuntimeException("Task not found with ID: " + taskId));
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
             String subStatus = task.getSubStatus() != null ? task.getSubStatus() : "";
-            if (!"WIP".equalsIgnoreCase(currentStatus) || !"Under Review".equalsIgnoreCase(subStatus)) {
+            if (!"WIP".equalsIgnoreCase(currentStatus) || (!"Under Review".equalsIgnoreCase(subStatus) && !"PENDING_APPROVER".equalsIgnoreCase(task.getPrcsYesActn()))) {
                 return ResponseEntity.badRequest()
                         .body(Map.of("message", "Task must be in WIP status with Under Review sub-status for approver action. Current: " + currentStatus + " (" + subStatus + ")"));
             }
@@ -491,8 +562,23 @@ public class ProcessController {
                 }
             }
 
+            String eventRemarks = getString(body, "remarks", "");
+            if ("NO".equals(decision)) {
+                String prefix = "Rework".equals(targetSubStatus) ? "[Rejected - Approver]" : "[Reassigned - Approver]";
+                String existingRem = task.getRemarks();
+                String newRem = prefix + ": " + eventRemarks;
+                if (existingRem != null && !existingRem.trim().isEmpty()) {
+                    newRem = existingRem + "\n---\n" + newRem;
+                }
+                task.setRemarks(newRem);
+            }
             task.setTaskSts(targetStatus);
             task.setSubStatus(targetSubStatus);
+            if ("NO".equals(decision)) {
+                task.setPrcsYesActn(getString(body, "rejectionType", "REASSIGN").toUpperCase());
+            } else {
+                task.setPrcsYesActn("NONE");
+            }
             assignmentRepo.save(task);
 
             Integer rId = body.get("rId") != null
@@ -509,8 +595,7 @@ public class ProcessController {
             event.setEmpId(empId);
             event.setRId(rId);
             event.setPrcsSts(decision);
-            event.setRemarks(getString(body, "remarks",
-                    "YES".equals(decision) ? "Approver approved — CLOSED" : "Approver rejected — task sent back"));
+            event.setRemarks(eventRemarks);
 
             applyCountsFromHistoryForIndividual(taskId, event, decision);
             processRepo.save(event);
@@ -538,7 +623,7 @@ public class ProcessController {
     // ── Helpers ─────────────────────────────────────────────────────────────
 
     private Integer getRoleIdForRole(String role) {
-        String roleName = "REVIEWER".equalsIgnoreCase(role) ? "Reviewer" : "Approver";
+        String roleName = "REVIEWER".equalsIgnoreCase(role) ? "Reviewer" : ("EXECUTOR".equalsIgnoreCase(role) ? "Executor" : "Approver");
         return reviewerMasterRepo.findAll().stream()
                 .filter(r -> roleName.equalsIgnoreCase(r.getRNm()))
                 .findFirst()

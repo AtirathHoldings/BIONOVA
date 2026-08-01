@@ -175,7 +175,7 @@ const MyProjects = ({ userRole, onLogout }) => {
           const totalTasksCount = projTasks.length;
           const completedTasksCount = projTasks.filter(t => {
             const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
-            return s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE';
+            return s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE' || s === '4' || t.progress === 100 || Boolean(t.actCmpDt || t.actcmpdt);
           }).length;
           const wipTasksCount = projTasks.filter(t => {
             const s = (t.taskSts || t.tasksts || t.status || "").toUpperCase();
@@ -193,9 +193,7 @@ const MyProjects = ({ userRole, onLogout }) => {
           // Calculate progress from effective tasks
           let progressPct = 0;
           if (totalTasksCount > 0) {
-            progressPct = Math.round(
-              ((completedTasksCount + reviewTasksCount * 0.8 + wipTasksCount * 0.5) / totalTasksCount) * 100
-            );
+            progressPct = Math.round((completedTasksCount / totalTasksCount) * 100);
           } else {
             const extractProgress = (obj) => {
               if (obj.status && (obj.status.toUpperCase() === 'COMPLETED' || obj.status.toUpperCase() === 'CLOSED')) return 100;
@@ -298,7 +296,10 @@ const MyProjects = ({ userRole, onLogout }) => {
             department: deptName,
             reportingTo: actualManager,
             description: proj.prjDesc || proj.prjdesc || "",
-            milestones: projMilestones.map(m => {
+            milestones: projMilestones.filter(m => {
+              const mId = String(m.mId || m.mid || m.id);
+              return projUserTasks.some(t => String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id) === mId);
+            }).map(m => {
               const mId = m.mId || m.mid || m.id;
               const rawMStart = m.stDt || m.stdt || m.startDate || m.st_dt;
               const rawMEnd = m.endDt || m.enddt || m.endDate || m.end_dt;

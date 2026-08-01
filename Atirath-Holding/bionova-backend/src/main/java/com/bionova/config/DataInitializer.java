@@ -103,5 +103,46 @@ public class DataInitializer implements CommandLineRunner {
         } catch (Exception e) {
             System.err.println("Could not copy mappings from old table to new table: " + e.getMessage());
         }
+
+        // 5. Ensure task_draft_master task_sts and priority columns are INTEGER in PostgreSQL
+        try {
+            jdbcTemplate.execute(
+                "ALTER TABLE task_draft_master " +
+                "ALTER COLUMN task_sts TYPE integer " +
+                "USING ( " +
+                "  CASE " +
+                "    WHEN task_sts::text ~ '^[0-9]+$' THEN task_sts::text::integer " +
+                "    WHEN UPPER(task_sts::text) = 'DRAFT' THEN 1 " +
+                "    WHEN UPPER(task_sts::text) = 'OPEN' THEN 2 " +
+                "    WHEN UPPER(task_sts::text) IN ('WIP', 'IN_PROGRESS', 'IN PROGRESS', 'UNDER_REVIEW', 'REWORK', 'REASSIGN') THEN 3 " +
+                "    WHEN UPPER(task_sts::text) IN ('CLOSED', 'COMPLETED') THEN 4 " +
+                "    WHEN UPPER(task_sts::text) = 'HOLD' THEN 5 " +
+                "    ELSE 1 " +
+                "  END " +
+                ");"
+            );
+        } catch (Exception e) {
+            System.out.println("task_draft_master.task_sts column migration note: " + e.getMessage());
+        }
+
+        try {
+            jdbcTemplate.execute(
+                "ALTER TABLE task_draft_master " +
+                "ALTER COLUMN priority TYPE integer " +
+                "USING ( " +
+                "  CASE " +
+                "    WHEN priority::text ~ '^[0-9]+$' THEN priority::text::integer " +
+                "    WHEN UPPER(priority::text) = 'LOW' THEN 1 " +
+                "    WHEN UPPER(priority::text) IN ('MEDIUM', 'NORMAL') THEN 2 " +
+                "    WHEN UPPER(priority::text) = 'HIGH' THEN 3 " +
+                "    WHEN UPPER(priority::text) = 'CRITICAL' THEN 4 " +
+                "    WHEN UPPER(priority::text) IN ('ATMOST CRITICAL', 'AT MOST CRITICAL', 'ATMOST_CRITICAL') THEN 5 " +
+                "    ELSE 2 " +
+                "  END " +
+                ");"
+            );
+        } catch (Exception e) {
+            System.out.println("task_draft_master.priority column migration note: " + e.getMessage());
+        }
     }
 }

@@ -2849,4 +2849,70 @@ class ApiService {
       return false;
     }
   }
+
+  /// Get team members from DB table `team_members`
+  static Future<List<dynamic>> getContributors(int taskId, bool isIndividualTask) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('authToken');
+      if (token == null) return [];
+
+      final endpoint = isIndividualTask
+          ? "/api/assignments/$taskId/contributors"
+          : "/api/task-live/$taskId/contributors";
+
+      final baseUrl = dotenv.env['BASE_URL'];
+      final response = await http.get(
+        Uri.parse("$baseUrl$endpoint"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is List) return data;
+      }
+      return [];
+    } catch (e) {
+      debugPrint("Error fetching contributors from DB: $e");
+      return [];
+    }
+  }
+
+  /// Save team members to DB table `team_members`
+  static Future<bool> saveContributors(int taskId, bool isIndividualTask, List<Map<String, dynamic>> teamMembers) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('authToken');
+      if (token == null) return false;
+
+      final endpoint = isIndividualTask
+          ? "/api/assignments/$taskId/contributors"
+          : "/api/task-live/$taskId/contributors";
+
+      final payload = teamMembers.map((tm) => {
+        "empId": tm["empId"] ?? tm["id"],
+        "asgnRmk": tm["asgnRmk"] ?? "Collaborator",
+        if (isIndividualTask) "empTaskId": taskId else "taskId": taskId
+      }).toList();
+
+      final baseUrl = dotenv.env['BASE_URL'];
+      final response = await http.post(
+        Uri.parse("$baseUrl$endpoint"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 10));
+
+      debugPrint("[saveContributors] POST response: ${response.statusCode} - ${response.body}");
+      return response.statusCode == 200 || response.statusCode == 201;
+    } catch (e) {
+      debugPrint("Error saving contributors to DB: $e");
+      return false;
+    }
+  }
 }

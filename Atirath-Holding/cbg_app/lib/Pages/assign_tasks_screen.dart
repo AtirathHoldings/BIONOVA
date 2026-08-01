@@ -181,11 +181,12 @@ class _IndividualTaskListScreenState extends State<IndividualTaskListScreen> wit
                   _currentEmpId.toString();
 
           final noteTxt = (t['noteTxt'] ?? t['note_txt'] ?? '').toString();
+          final hasTeamMemberInTeamMembers = (t['teamMembers'] is List) && (t['teamMembers'] as List).any((tm) => tm['empId']?.toString() == _currentEmpId.toString() || tm['emp_id']?.toString() == _currentEmpId.toString());
           final isTeamMember = noteTxt
               .split(',')
               .map((e) => e.trim())
               .where((e) => e.isNotEmpty)
-              .contains(_currentEmpId.toString());
+              .contains(_currentEmpId.toString()) || hasTeamMemberInTeamMembers;
 
           final isReviewer = (t['reviewer']?.toString() == _currentEmpId.toString()) || reviewerTaskIds.contains(taskId);
           final isApprover = (t['approver']?.toString() == _currentEmpId.toString()) || approverTaskIds.contains(taskId);
@@ -653,8 +654,8 @@ class _IndividualTaskListScreenState extends State<IndividualTaskListScreen> wit
                     // Hide process icon for completed tasks
                     if (!task.isCompleted && task.processIcon != null) ...[
                       Tooltip(
-                        message: task.status,
-                        child: task.isReassigned
+                        message: task.processIconTooltip,
+                        child: (task.isReassigned || task.processIcon == Icons.undo_rounded)
                             ? ReassignIcon(size: 18, color: task.processIconColor ?? const Color(0xFF4F46E5))
                             : Icon(task.processIcon, color: task.processIconColor, size: 18),
                       ),

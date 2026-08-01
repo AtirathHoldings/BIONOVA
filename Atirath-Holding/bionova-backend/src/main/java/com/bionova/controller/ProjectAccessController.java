@@ -237,13 +237,17 @@ public class ProjectAccessController {
                 }
 
                 double progressPercent = 0.0;
-                try {
-                    Map<String, Object> ll = leadLagService.getLeadLagDetail(project.getPrjId());
-                    Object ap = ll.get("actualProgress");
-                    if (ap instanceof Number n) {
-                        progressPercent = n.doubleValue();
-                    }
-                } catch (Exception ignored) {}
+                if (totalTasks > 0) {
+                    progressPercent = (completedTasks * 100.0) / totalTasks;
+                } else {
+                    try {
+                        Map<String, Object> ll = leadLagService.getLeadLagDetail(project.getPrjId());
+                        Object ap = ll.get("actualProgress");
+                        if (ap instanceof Number n) {
+                            progressPercent = n.doubleValue();
+                        }
+                    } catch (Exception ignored) {}
+                }
                 int progress = (int) Math.round(progressPercent);
 
                 // Collect assigned employee IDs
@@ -414,13 +418,17 @@ public class ProjectAccessController {
             }
 
             double progressPercent = 0.0;
-            try {
-                Map<String, Object> ll = leadLagService.getLeadLagDetail(prjId);
-                Object ap = ll.get("actualProgress");
-                if (ap instanceof Number n) {
-                    progressPercent = n.doubleValue();
-                }
-            } catch (Exception ignored) {}
+            if (totalTasks > 0) {
+                progressPercent = (completedTasks * 100.0) / totalTasks;
+            } else {
+                try {
+                    Map<String, Object> ll = leadLagService.getLeadLagDetail(prjId);
+                    Object ap = ll.get("actualProgress");
+                    if (ap instanceof Number n) {
+                        progressPercent = n.doubleValue();
+                    }
+                } catch (Exception ignored) {}
+            }
             int progress = (int) Math.round(progressPercent);
 
             String managerName = resolveProjectManager(prjId);
@@ -544,25 +552,6 @@ public class ProjectAccessController {
                         }
                     }
 
-                    // Check process status overrides
-                    com.bionova.enums.ProcessStatus processSts = task.getProcessStatus();
-                    if (processSts == com.bionova.enums.ProcessStatus.UNDER_REVIEW) {
-                        resolvedStatus = "Under Review";
-                    } else if (processSts == com.bionova.enums.ProcessStatus.REWORK) {
-                        resolvedStatus = "Rework";
-                    } else if (processSts == com.bionova.enums.ProcessStatus.REASSIGN) {
-                        resolvedStatus = "Reassign";
-                    }
-
-                    // Check time status overrides (if not completed)
-                    if (!"Closed".equalsIgnoreCase(resolvedStatus)) {
-                        com.bionova.enums.TimeStatus timeSts = task.getTimeStatus();
-                        if (timeSts == com.bionova.enums.TimeStatus.OVERDUE) {
-                            resolvedStatus = "Overdue";
-                        } else if (timeSts == com.bionova.enums.TimeStatus.DUE_TODAY) {
-                            resolvedStatus = "Due Today";
-                        }
-                    }
                     tMap.put("status", resolvedStatus);
                     
                     // Resolve names
@@ -756,6 +745,12 @@ public class ProjectAccessController {
                     targetConfig.setEmpId(empId);
                     processConfigRepository.save(targetConfig);
                 }
+
+                // Auto-update prcs_flg in task_live_master based on active process configs
+                List<ProcessConfig> remainingConfigs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(taskId, true);
+                boolean hasAnyProcessRole = remainingConfigs.stream().anyMatch(c -> c.getEmpId() != null);
+                task.setPrcsFlg(hasAnyProcessRole);
+                taskLiveRepository.save(task);
             } else {
                 return ResponseEntity.badRequest().body(Map.of("error", "Invalid roleType. Must be assignee, reviewer, or approver"));
             }

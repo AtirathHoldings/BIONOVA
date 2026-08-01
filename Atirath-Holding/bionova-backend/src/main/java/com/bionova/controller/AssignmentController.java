@@ -94,6 +94,9 @@ public class AssignmentController {
                 }
             }
         }
+        if (task.getEmpTaskId() != null) {
+            task.setTeamMembers(teamMemberRepository.findByEmpTaskId(task.getEmpTaskId()));
+        }
     }
 
     private void populateReviewerAndApprover(List<Assignment> tasks) {
@@ -112,6 +115,10 @@ public class AssignmentController {
                 ? java.util.Collections.emptyList() 
                 : processConfigRepo.findByEmpTaskIdInOrderByOrdrIdAsc(taskIds);
 
+        java.util.List<TeamMember> allTeamMembers = taskIds.isEmpty()
+                ? java.util.Collections.emptyList()
+                : teamMemberRepository.findByEmpTaskIdIn(taskIds);
+
         for (com.bionova.entity.ProcessConfig pc : allConfigs) {
             if (pc.getEmpId() != null) empIds.add(pc.getEmpId());
         }
@@ -128,6 +135,10 @@ public class AssignmentController {
                 .filter(pc -> pc.getEmpTaskId() != null)
                 .collect(java.util.stream.Collectors.groupingBy(com.bionova.entity.ProcessConfig::getEmpTaskId));
 
+        java.util.Map<Long, java.util.List<TeamMember>> teamMemberMap = allTeamMembers.stream()
+                .filter(tm -> tm.getEmpTaskId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(TeamMember::getEmpTaskId));
+
         for (Assignment task : tasks) {
             if (task.getEmpId() != null) {
                 task.setEmpNm(empNameMap.get(task.getEmpId()));
@@ -135,6 +146,7 @@ public class AssignmentController {
             if (task.getAssignedBy() != null) {
                 task.setAssignedByNm(empNameMap.get(task.getAssignedBy()));
             }
+            task.setTeamMembers(teamMemberMap.getOrDefault(task.getEmpTaskId(), java.util.Collections.emptyList()));
             java.util.List<com.bionova.entity.ProcessConfig> configs = configMap.getOrDefault(task.getEmpTaskId(), java.util.Collections.emptyList());
             for (com.bionova.entity.ProcessConfig pc : configs) {
                 if (pc.getOrdrId() == 1) {
@@ -187,7 +199,8 @@ public class AssignmentController {
                     if (isAdminOrManager(employee)
                             || employee.getEmpId().equals(task.getEmpId())
                             || employee.getEmpId().equals(task.getAssignedBy())
-                            || isReviewerOrApproverForAssignment(task.getEmpTaskId(), employee.getEmpId())) {
+                            || isReviewerOrApproverForAssignment(task.getEmpTaskId(), employee.getEmpId())
+                            || teamMemberRepository.existsByEmpTaskIdAndEmpId(task.getEmpTaskId(), employee.getEmpId())) {
                         populateReviewerAndApprover(task);
                         return ResponseEntity.ok(task);
                     }

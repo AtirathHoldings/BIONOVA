@@ -152,8 +152,7 @@
   display: flex;
   flex: 1;
   overflow-x: auto;
-  overflow-y: auto;
-  max-height: 550px;
+  overflow-y: hidden;
   position: relative;
   min-height: 0;
   align-items: flex-start;
@@ -181,13 +180,7 @@
 }
 
 .gc-left-body {
-  overflow-y: scroll;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-}
-
-.gc-left-body::-webkit-scrollbar {
-  display: none;
+  /* Naturally expands to content height */
 }
 
 /* DIVIDER */

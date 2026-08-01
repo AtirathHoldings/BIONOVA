@@ -445,7 +445,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
           progressPercent={singleProjectView ? singleProjectView.prog : undefined}
         />
 
-        <div className="gantt-main" style={{ display: 'flex', flexDirection: 'column' }}>
+        <div className="gantt-main">
           
           <div className="gantt-header-row" style={{ flexShrink: 0, justifyContent: 'space-between', alignItems: 'center' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -556,7 +556,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                   {/* Left Table Section with Collapse */}
               {!tableCollapsed && (
                 <div className="gantt-table-section" style={{ width: tableWidth, flexShrink: 0, position: 'sticky', left: 0, zIndex: 40, background: '#fff' }}>
-                  <div className="gantt-thead">
+                  <div className="gantt-thead" style={{ position: 'sticky', top: 0, zIndex: 11, background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
                     <div className="gantt-th" style={{ flex: 1, minWidth: '180px' }}>Project / Task / Status</div>
 
                     {baseline && <div className="gantt-th" style={{ width: '60px' }}>Act%</div>}
@@ -657,7 +657,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                   setMarkerOff(snappedX);
                 }}>
                   <div style={{ width: timelineW, position: 'relative' }}>
-                    <div className="gantt-timeline-header">
+                    <div className="gantt-timeline-header" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
                       {/* Month row */}
                       <div className="gantt-months-row">
                         {months.map((m, i) => {
@@ -768,12 +768,12 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                               {/* Background track */}
                               <div style={{ position: 'absolute', inset: 0, background: isActive ? '#fed7aa' : barBg }} />
                               {/* Progress fill */}
-                              <div style={{ position: 'absolute', top: 0, left: 0, width: progWidth, height: '100%', background: highlightColor, transition: 'width 0.3s ease' }} />
+                              <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: highlightColor, transition: 'width 0.3s ease' }} />
                             </div>
 
-                            {/* Progress % badge at right edge of bar */}
+                            {/* Progress % badge */}
                             {barWidth > 30 && (
-                              <span style={{ position: 'absolute', top: barTop + barH + 2, left: barLeft, fontSize: 9, color: barColor, fontWeight: 600, pointerEvents: 'none' }}>
+                              <span style={{ position: 'absolute', top: baseline ? barTop + barH + 14 : barTop + barH + 2, left: barLeft, fontSize: 9, color: barColor, fontWeight: 600, pointerEvents: 'none' }}>
                                 {row.prog}%
                               </span>
                             )}
@@ -781,12 +781,12 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                             {/* ── Baseline Actual Bar (only when baseline ON) ── */}
                             {baseline && (
                               <div
-                                style={{ position: 'absolute', top: barTop + barH + 10, left: row.aOff * DW, width: Math.max(row.aW * DW, 8), height: 10, borderRadius: 2, overflow: 'hidden', cursor: 'pointer', zIndex: 4 }}
-                                title={`Actual: ${row.aProg || 0}%`}
+                                style={{ position: 'absolute', top: barTop + barH + 2, left: barLeft, width: barWidth, height: 10, borderRadius: 2, overflow: 'hidden', cursor: 'pointer', zIndex: 4 }}
+                                title={`Progress: ${row.prog || 0}%`}
                                 onClick={(e) => { e.stopPropagation(); setActiveRow(row.id); if (row.type === 'project') toggleProjectExpand(row.id); if (row.type === 'milestone') toggleMilestoneExpand(row.id); }}
                               >
                                 <div style={{ position: 'absolute', inset: 0, background: '#e2e8f0' }} />
-                                <div style={{ position: 'absolute', top: 0, left: 0, width: `${Math.min(row.aProg || 0, 100)}%`, height: '100%', background: isActive ? '#f97316' : '#64748b', transition: 'width 0.3s ease' }} />
+                                <div style={{ position: 'absolute', top: 0, left: 0, width: progWidth, height: '100%', background: isActive ? '#f97316' : '#64748b', transition: 'width 0.3s ease' }} />
                               </div>
                             )}
                           </div>

@@ -27,7 +27,7 @@ const DonutChart = ({ completedPct, inProgressPct, yetToStartPct, overallPct }) 
       })}
       <text x="50%" y="46%" textAnchor="middle" dominantBaseline="middle"
         style={{ transform: "rotate(90deg)", transformOrigin: "center", fontSize: "22px", fontWeight: 800, fill: "#0d1126" }}>
-        {overallPct}%
+        {completedPct}%
       </text>
       <text x="50%" y="60%" textAnchor="middle" dominantBaseline="middle"
         style={{ transform: "rotate(90deg)", transformOrigin: "center", fontSize: "11px", fill: "#6b7280" }}>

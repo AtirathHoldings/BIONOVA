@@ -52,6 +52,21 @@ export async function apiPost(path, body) {
   return handleResponse(response);
 }
 
+export async function apiPostMultipart(path, formData) {
+  const token = sessionStorage.getItem('authToken');
+  const headers = {};
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+  
+  const response = await fetch(`${BASE_URL}${path}`, {
+    method: 'POST',
+    headers,
+    body: formData,
+  });
+  return handleResponse(response);
+}
+
 export async function apiPut(path, body) {
   const response = await fetch(`${BASE_URL}${path}`, {
     method: 'PUT',

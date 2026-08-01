@@ -56,8 +56,8 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     const allProjectIds = ganttRows.filter(r => r.type === 'project').map(r => r.id);
     const allMilestoneIds = ganttRows.filter(r => r.type === 'milestone').map(r => r.id);
 
-    const allProjectsExpanded = allProjectIds.every(id => expandedProjects.has(id));
-    const allMilestonesExpanded = allMilestoneIds.every(id => expandedMilestones.has(id));
+    const allProjectsExpanded = allProjectIds.length === 0 || allProjectIds.every(id => expandedProjects.has(id));
+    const allMilestonesExpanded = allMilestoneIds.length === 0 || allMilestoneIds.every(id => expandedMilestones.has(id));
 
     if (allProjectsExpanded && allMilestonesExpanded) {
       // Collapse all
@@ -297,19 +297,31 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
             fetch(`${API_BASE}/profile`, { headers: authHeaders() })
           ]);
           if (res.ok) {
-            rawItems = await res.json();
+            const rawGantt = await res.json();
+            rawItems = Array.isArray(rawGantt) ? rawGantt : (rawGantt?.data && Array.isArray(rawGantt.data) ? rawGantt.data : []);
           }
-          const userTasks = taskRes.ok ? await taskRes.json() : [];
+          const taskResData = taskRes.ok ? await taskRes.json() : [];
+          const userTasksRaw = Array.isArray(taskResData) ? taskResData : (taskResData?.data && Array.isArray(taskResData.data) ? taskResData.data : []);
           const profile = profileRes.ok ? await profileRes.json() : null;
           const isAdmin = profile?.email === 'vsv.vempati@gmail.com';
 
           if (userRole === 'user' && !isAdmin && profile) {
+            const loggedInEmpId = profile?.empId || profile?.empid || profile?.id;
+            
+            // Filter tasks to only include those assigned or involved to logged in user
+            const userTasks = userTasksRaw.filter(t => 
+              String(t.empId || t.empid) === String(loggedInEmpId) ||
+              String(t.reviewer) === String(loggedInEmpId) ||
+              String(t.approver) === String(loggedInEmpId)
+            );
+
             // Build a broad set of IDs to match against gantt API item IDs
             // which may be in formats like "TSK-123", "123", or task code
             const userTaskIds = new Set([
               ...userTasks.map(t => t.taskId ? `TSK-${t.taskId}` : ''),
               ...userTasks.map(t => t.taskId ? String(t.taskId) : ''),
               ...userTasks.map(t => t.taskCd || t.task_cd || ''),
+              ...userTasks.map(t => t.id ? `TSK-${t.id}` : ''),
               ...userTasks.map(t => t.id ? String(t.id) : '')
             ].filter(Boolean));
 
@@ -317,7 +329,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
             const keptMilestoneIds = new Set();
 
             rawItems.forEach(item => {
-              if (item.type === 'task') {
+              if ((item.type || '').toLowerCase() === 'task') {
                 const itemId = String(item.id || '');
                 const matches = userTaskIds.has(itemId) ||
                   userTaskIds.has(itemId.replace(/^TSK-/i, '')) ||
@@ -331,17 +343,14 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
               }
             });
 
-            // If no user tasks matched, show all (fallback to prevent blank chart)
-            if (keptTaskIds.size === 0) {
-              // Don't filter — show all milestones/tasks for this project
-            } else {
-              rawItems = rawItems.filter(item => {
-                if (item.type === 'project') return true;
-                if (item.type === 'milestone') return keptMilestoneIds.has(item.id);
-                if (item.type === 'task') return keptTaskIds.has(item.id);
-                return false;
-              });
-            }
+            // For users, hide the project row and only show their milestones and tasks
+            rawItems = rawItems.filter(item => {
+              const iType = (item.type || '').toLowerCase();
+              if (iType === 'project') return false; // Hide the project row as requested
+              if (iType === 'milestone') return keptMilestoneIds.has(item.id);
+              if (iType === 'task') return keptTaskIds.has(item.id);
+              return false;
+            });
           }
         } else {
           const [mlRes, taskRes, empRes, profileRes] = await Promise.all([
@@ -358,7 +367,11 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           const isAdmin = profile?.email === 'vsv.vempati@gmail.com';
 
           if (userRole === 'user' && !isAdmin && profile) {
-            taskData = taskData.filter(t => t.empId === profile.empId);
+            taskData = taskData.filter(t => 
+              String(t.empId) === String(profile.empId) || 
+              String(t.reviewer) === String(profile.empId) || 
+              String(t.approver) === String(profile.empId)
+            );
           }
 
           const prjDto = {
@@ -431,6 +444,20 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           }
 
           rawItems = [prjDto, ...msDtos, ...taskDtos];
+
+          // For users, hide the project row and empty milestones (like LIVE)
+          if (userRole === 'user' && !isAdmin && profile) {
+            const draftKeptTasks = new Set(taskDtos.map(t => t.id));
+            const draftKeptMilestones = new Set(taskDtos.map(t => t.parent));
+            
+            rawItems = rawItems.filter(item => {
+              const iType = (item.type || '').toLowerCase();
+              if (iType === 'project') return false;
+              if (iType === 'milestone') return draftKeptMilestones.has(item.id);
+              if (iType === 'task') return draftKeptTasks.has(item.id);
+              return false;
+            });
+          }
         }
 
         if (rawItems.length === 0) {
@@ -466,7 +493,6 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
   /* ── vertical sync ── */
   const scrollContainerRef = useRef(null);
-  const leftBodyRef = useRef(null);
 
   if (loading) {
     return (
@@ -507,8 +533,8 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
   if (!compact) {
     rows = rows.filter(r => {
       if (r.type === 'project') return true;
-      if (r.type === 'milestone') return expandedProjects.has(r.parentPrj);
-      if (r.type === 'task') return expandedProjects.has(r.parentPrj) && expandedMilestones.has(r.parentMs);
+      if (r.type === 'milestone') return r.parentPrj === 'unknown' || expandedProjects.has(r.parentPrj);
+      if (r.type === 'task') return (r.parentPrj === 'unknown' || expandedProjects.has(r.parentPrj)) && expandedMilestones.has(r.parentMs);
       return true;
     });
   }
@@ -566,8 +592,8 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
   /* ── render a bar (planned or actual) ── */
   const renderBar = (row, i, isActual = false) => {
-    const off = isActual ? row.aOff : row.off;
-    const w = isActual ? row.aW : row.w;
+    const off = row.off; // Always match planned bar's position
+    const w = row.w;     // Always match planned bar's width
     const prog = isActual ? row.aProg : row.prog;
     const col = SC[row.status] || { bar: '#94a3b8', bg: '#f1f5f9' };
 
@@ -756,16 +782,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
               )}
             </tr></thead></table>
           </div>
-          <div 
-            className="gc-left-body" 
-            ref={leftBodyRef}
-            onWheel={(e) => {
-              if (scrollContainerRef.current) {
-                scrollContainerRef.current.scrollTop += e.deltaY;
-              }
-            }}
-            style={{ width: compact ? 340 : 422, maxHeight: '500px', overflowY: 'scroll', scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
+          <div className="gc-left-body" style={{ width: compact ? 340 : 422 }}>
             <table className="gc-tbl" style={{ tableLayout: 'fixed' }}><tbody>
               {rows.map((row, i) => (
                 <tr
@@ -853,16 +870,7 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           </div>
 
         {/* RIGHT: scrollable timeline */}
-        <div 
-          className="gc-right" 
-          ref={scrollContainerRef} 
-          onScroll={(e) => {
-            if (leftBodyRef.current) {
-              leftBodyRef.current.scrollTop = e.target.scrollTop;
-            }
-          }}
-          style={{ flex: 1, maxHeight: '500px', overflowX: 'auto', overflowY: 'auto', position: 'relative' }}
-        >
+        <div className="gc-right" ref={scrollContainerRef} style={{ flex: 1, overflowX: 'auto', overflowY: 'hidden', position: 'relative' }}>
 
           {/* Sticky month/day header */}
           <div className="gc-right-hdr" style={{ width: timelineW }}>

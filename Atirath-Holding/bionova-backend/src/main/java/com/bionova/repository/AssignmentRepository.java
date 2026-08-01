@@ -18,10 +18,10 @@ public interface AssignmentRepository
     // Employee Wise Tasks
     List<Assignment> findByEmpId(Long empId);
 
-    @org.springframework.data.jpa.repository.Query("SELECT t FROM Assignment t WHERE t.empId = :empId OR t.empTaskId IN (SELECT pc.empTaskId FROM ProcessConfig pc WHERE pc.empId = :empId AND pc.empTaskId IS NOT NULL)")
+    @org.springframework.data.jpa.repository.Query("SELECT t FROM Assignment t WHERE t.empId = :empId OR t.empTaskId IN (SELECT pc.empTaskId FROM ProcessConfig pc WHERE pc.empId = :empId AND pc.empTaskId IS NOT NULL) OR t.empTaskId IN (SELECT tm.empTaskId FROM TeamMember tm WHERE tm.empId = :empId AND tm.empTaskId IS NOT NULL)")
     List<Assignment> findTasksForEmployee(@org.springframework.data.repository.query.Param("empId") Long empId);
 
-    @org.springframework.data.jpa.repository.Query("SELECT t FROM Assignment t WHERE t.empId = :empId AND t.assignedBy != :empId")
+    @org.springframework.data.jpa.repository.Query("SELECT t FROM Assignment t WHERE (t.empId = :empId AND t.assignedBy != :empId) OR t.empTaskId IN (SELECT tm.empTaskId FROM TeamMember tm WHERE tm.empId = :empId AND tm.empTaskId IS NOT NULL)")
     List<Assignment> findAssignedToMe(@org.springframework.data.repository.query.Param("empId") Long empId);
 
     @org.springframework.data.jpa.repository.Query("SELECT t FROM Assignment t WHERE t.assignedBy = :empId AND t.empId != :empId")

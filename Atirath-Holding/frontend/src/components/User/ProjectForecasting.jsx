@@ -19,16 +19,21 @@ const getHelperDateStr = (dateStr) => {
 
 export default function ProjectForecasting({ project }) {
   const [forecastData, setForecastData] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   const isDraft = project?.status === "DRAFT" || project?.status === "Draft" || project?._type === "draft";
 
   const fetchForecast = async () => {
-    if (!project?.id || isDraft) {
+    if (isDraft) {
       setLoading(false);
       return;
     }
+    if (!project?.id) {
+      setLoading(true);
+      return;
+    }
+    setLoading(true);
     setError(null);
     try {
       const data = await apiGet(`/api/project-forecasting/${project.id}`);
@@ -100,23 +105,11 @@ export default function ProjectForecasting({ project }) {
     );
   }
 
-  if (loading) {
+  if (loading || !forecastData) {
     return (
-      <div className="fc-container" style={{ padding: '80px 20px', textAlign: 'center', color: '#64748b' }}>
-        <RefreshCw size={32} className="animate-spin" style={{ margin: '0 auto 12px auto' }} />
-        <p>Calculating project forecasting from database tables...</p>
-      </div>
-    );
-  }
-
-  if (error || !forecastData) {
-    return (
-      <div className="fc-container" style={{ padding: '40px 20px', textAlign: 'center' }}>
-        <div className="fc-panel" style={{ maxWidth: '600px', margin: '0 auto', padding: '30px', borderColor: '#fee2e2' }}>
-          <AlertTriangle size={48} color="#ef4444" style={{ margin: '0 auto 16px auto' }} />
-          <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#991b1b', marginBottom: '8px' }}>Calculation Error</h3>
-          <p style={{ color: '#b91c1c', fontSize: '14px' }}>{error || "Project data could not be computed."}</p>
-        </div>
+      <div className="fc-container" style={{ padding: '80px 20px', textAlign: 'center', color: '#2563eb', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '300px' }}>
+        <RefreshCw size={36} style={{ margin: '0 auto 14px auto', animation: 'spin 0.8s linear infinite' }} />
+        <p style={{ fontSize: '15px', fontWeight: '600', color: '#334155' }}>Calculating project forecasting...</p>
       </div>
     );
   }

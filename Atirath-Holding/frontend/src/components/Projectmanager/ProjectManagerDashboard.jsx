@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import {
   FolderOpen, Play, BarChart2, Clock, CalendarCheck, AlertTriangle,
   Download, Filter, ChevronDown, Plus, Flag, CheckSquare,
-  TrendingUp, TrendingDown, ArrowRight, Shield, AlertCircle, Eye
+  TrendingUp, TrendingDown, ArrowRight, Shield, AlertCircle, Eye, Loader2
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../Sidebar.jsx";
@@ -107,9 +107,17 @@ const authHeaders = () => {
 const ProjectManagerDashboard = ({ userRole, onLogout }) => {
   const [userName, setUserName] = useState("Ravi Kumar");
   const [currentProject, setCurrentProject] = useState("All Projects");
-  const [forecastProject, setForecastProject] = useState("All Projects");
 
   const navigate = useNavigate();
+  const [isViewAllLoading, setIsViewAllLoading] = useState(false);
+
+  const handleViewAllClick = (e) => {
+    if (e) e.preventDefault();
+    setIsViewAllLoading(true);
+    setTimeout(() => {
+      navigate('/project-list', { state: { fromDashboard: true } });
+    }, 400);
+  };
 
   const [loading, setLoading] = useState(false);
   const [dashboardData, setDashboardData] = useState(null);
@@ -203,15 +211,15 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
   };
 
   const handleViewInDetail = () => {
-    if (forecastProject === "All Projects") {
+    if (currentProject === "All Projects") {
       navigate('/project-list');
     } else {
-      const projectId = getProjectIdFromDisplay(forecastProject);
+      const projectId = getProjectIdFromDisplay(currentProject);
       if (projectId) {
         navigate(`/project-details/${projectId}`, {
           state: {
             fromForecast: true,
-            projectDisplay: forecastProject
+            projectDisplay: currentProject
           }
         });
       } else {
@@ -221,21 +229,6 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
   };
 
   const handleProjectChange = (val) => setCurrentProject(val);
-  const handleForecastProjectChange = (val) => {
-    setForecastProject(val);
-    if (val !== "All Projects") {
-      const projectId = getProjectIdFromDisplay(val);
-      if (projectId) {
-        navigate(`/project-details/${projectId}`, {
-          state: {
-            activeTab: 'Forecasting',
-            fromForecast: true,
-            projectDisplay: val
-          }
-        });
-      }
-    }
-  };
 
   const handleActionClick = (actionName) => {
     if (actionName === 'Create Project') navigate('/project-creation');
@@ -467,7 +460,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       delayedMilestones: delayedMilestonesList,
       upcomingMilestones: upcomingMilestonesList,
       highPriorityTasks: highPriorityTasksList,
-      forecast: getForecastData(forecastProject)
+      forecast: getForecastData(currentProject)
     };
   };
 
@@ -482,7 +475,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     const now = new Date();
 
     let forecastProjects = [];
-    if (projectDisplayValue === "All Projects") {
+    if (!projectDisplayValue || projectDisplayValue === "All Projects") {
       forecastProjects = projectsList;
     } else {
       const projectDetails = getProjectDetailsFromDisplay(projectDisplayValue);
@@ -512,115 +505,132 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     }
 
     const getProjectProgress = (p) => {
-      const pId = p.prjId || p.prjid || p.id;
-      const ms = milestonesList.filter(m => (m.prjId || m.prjid) === pId);
-      const msIds = ms.map(m => m.mId || m.mid || m.id);
-      const t = tasksList.filter(task => msIds.includes(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id));
+      const pId = String(p.prjId || p.prjid || p.id || p.projectId || "");
+      const ms = milestonesList.filter(m => String(m.prjId || m.prjid || m.projectId || m.prj_id || "") === pId);
+      const msIds = ms.map(m => String(m.mId || m.mid || m.id));
+      const t = tasksList.filter(task => {
+        const tPrjId = String(task.prjId || task.prjid || task.projectId || task.prj_id || "");
+        if (tPrjId && tPrjId === pId) return true;
+        const tMId = String(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id || "");
+        return msIds.includes(tMId);
+      });
 
       if (t.length > 0) {
-        const completed = t.filter(task => (task.taskSts || task.tasksts || "").toUpperCase() === "COMPLETED").length;
+        const completed = t.filter(task => getTaskStatusStr(task) === "CLOSED").length;
         return (completed / t.length) * 100;
       } else if (ms.length > 0) {
-        const completed = ms.filter(m => {
-          const status = (m.mlstnSts || m.mlstnsts || "").toUpperCase();
-          return status === "COMPLETED" || status === "CLOSED";
-        }).length;
+        const completed = ms.filter(m => getMilestoneStatusStr(m) === "CLOSED").length;
         return (completed / ms.length) * 100;
       }
       return 0;
     };
 
-    const avgProgress = forecastProjects.length > 0
-      ? (forecastProjects.reduce((sum, p) => sum + getProjectProgress(p), 0) / forecastProjects.length)
-      : 0;
+    let avgProgress = 0;
+    if ((!projectDisplayValue || projectDisplayValue === "All Projects") && dashboardData?.summary?.overallProgress != null) {
+      avgProgress = dashboardData.summary.overallProgress;
+    } else if (forecastProjects.length > 0) {
+      avgProgress = forecastProjects.reduce((sum, p) => sum + getProjectProgress(p), 0) / forecastProjects.length;
+    }
+    avgProgress = Math.min(100, Math.max(0, avgProgress));
 
     const delayedProjectsCount = forecastProjects.filter(p => {
       const progress = getProjectProgress(p);
-      const end = p.endDt || p.enddt;
+      const end = p.endDt || p.enddt || p.endDate;
       return end && new Date(end) < now && progress < 100;
     }).length;
 
-    const earliestStartDate = forecastProjects.reduce((min, p) =>
-      p.stDt && (!min || new Date(p.stDt) < new Date(min)) ? p.stDt : min, null);
-    const latestEndDate = forecastProjects.reduce((max, p) =>
-      p.endDt && (!max || new Date(p.endDt) > new Date(max)) ? p.endDt : max, null);
+    const parseProjDate = (dt) => {
+      if (!dt) return null;
+      const d = new Date(dt);
+      return isNaN(d.getTime()) ? null : d;
+    };
+
+    const validStarts = forecastProjects.map(p => parseProjDate(p.stDt || p.stdt || p.startDate || p.st_dt)).filter(Boolean);
+    const validEnds = forecastProjects.map(p => parseProjDate(p.endDt || p.enddt || p.endDate || p.end_dt)).filter(Boolean);
+
+    const earliestStartDate = validStarts.length > 0 ? new Date(Math.min(...validStarts.map(d => d.getTime()))) : null;
+    const latestEndDate = validEnds.length > 0 ? new Date(Math.max(...validEnds.map(d => d.getTime()))) : null;
 
     let plannedPct = 0;
-    if (earliestStartDate && latestEndDate) {
-      const totalDuration = new Date(latestEndDate) - new Date(earliestStartDate);
-      const elapsed = now - new Date(earliestStartDate);
-      plannedPct = totalDuration > 0 ? Math.min(100, Math.max(0, (elapsed / totalDuration) * 100)) : 0;
+    let totalTasksCount = 0;
+    let totalTaskPlannedProgress = 0;
+
+    forecastProjects.forEach(p => {
+      const pId = String(p.prjId || p.prjid || p.id || p.projectId || "");
+      const ms = milestonesList.filter(m => String(m.prjId || m.prjid || m.projectId || m.prj_id || "") === pId);
+      const msIds = ms.map(m => String(m.mId || m.mid || m.id));
+      const pTasks = tasksList.filter(task => {
+        const tPrjId = String(task.prjId || task.prjid || task.projectId || task.prj_id || "");
+        if (tPrjId && tPrjId === pId) return true;
+        const tMId = String(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id || "");
+        return msIds.includes(tMId);
+      });
+
+      pTasks.forEach(t => {
+        totalTasksCount++;
+        const st = parseProjDate(t.stDt || t.stdt || t.startDate || t.st_dt);
+        const end = parseProjDate(t.endDt || t.enddt || t.endDate || t.end_dt);
+        if (st && end) {
+          if (now >= end) totalTaskPlannedProgress += 100;
+          else if (now <= st) totalTaskPlannedProgress += 0;
+          else {
+            const dur = end.getTime() - st.getTime();
+            const el = now.getTime() - st.getTime();
+            totalTaskPlannedProgress += dur > 0 ? Math.min(100, Math.max(0, (el / dur) * 100)) : 0;
+          }
+        } else if (end) {
+          if (now >= end) totalTaskPlannedProgress += 100;
+        }
+      });
+    });
+
+    if (totalTasksCount > 0 && totalTaskPlannedProgress > 0) {
+      plannedPct = totalTaskPlannedProgress / totalTasksCount;
+    } else if (earliestStartDate && latestEndDate) {
+      const totalDuration = latestEndDate.getTime() - earliestStartDate.getTime();
+      const elapsed = now.getTime() - earliestStartDate.getTime();
+      if (elapsed <= 0) {
+        plannedPct = 0;
+      } else if (totalDuration > 0) {
+        plannedPct = Math.min(100, Math.max(0, (elapsed / totalDuration) * 100));
+      }
     }
+    plannedPct = Math.min(100, Math.max(0, plannedPct));
 
     const variance = avgProgress - plannedPct;
 
-    let plannedCompletionDate = null;
-    if (forecastProjects.length === 1) {
-      const project = forecastProjects[0];
-      const endDate = project.endDt || project.enddt;
-      if (endDate) {
-        plannedCompletionDate = new Date(endDate);
-      }
-    } else {
-      const latestEnd = forecastProjects.reduce((max, p) => {
-        const end = p.endDt || p.enddt;
-        if (!end) return max;
-        const endDate = new Date(end);
-        if (!max || endDate > max) return endDate;
-        return max;
-      }, null);
-      if (latestEnd) {
-        plannedCompletionDate = latestEnd;
-      }
-    }
+    let plannedCompletionDate = latestEndDate;
 
+    // EVM Velocity-based Expected Completion Date Calculation
     let expectedDate = null;
-    if (plannedCompletionDate) {
-      const daysToPlannedCompletion = Math.ceil((plannedCompletionDate - now) / (1000 * 60 * 60 * 24));
-
-      let adjustmentDays = 0;
-      if (variance !== 0 && plannedPct > 0) {
-        const daysPerPercent = daysToPlannedCompletion / plannedPct;
-        adjustmentDays = variance * daysPerPercent;
-      }
-
-      const adjustedDate = new Date(plannedCompletionDate);
-      if (variance < 0) {
-        adjustedDate.setDate(adjustedDate.getDate() + Math.abs(Math.round(adjustmentDays)));
-      } else if (variance > 0) {
-        adjustedDate.setDate(adjustedDate.getDate() - Math.round(adjustmentDays));
-      }
-
-      if (adjustedDate < now) {
-        if (avgProgress >= 100) {
-          expectedDate = now;
-        } else {
-          expectedDate = adjustedDate;
-        }
+    if (avgProgress >= 100) {
+      expectedDate = (plannedCompletionDate && now < plannedCompletionDate) ? now : (plannedCompletionDate || now);
+    } else if (earliestStartDate && now > earliestStartDate && avgProgress > 0) {
+      const elapsedDays = (now.getTime() - earliestStartDate.getTime()) / (1000 * 60 * 60 * 24);
+      const velocityPctPerDay = avgProgress / elapsedDays; // % progress per day
+      if (velocityPctPerDay > 0) {
+        const remainingPct = 100 - avgProgress;
+        const remainingDaysNeeded = Math.ceil(remainingPct / velocityPctPerDay);
+        const projectedDate = new Date(now.getTime() + remainingDaysNeeded * 24 * 60 * 60 * 1000);
+        expectedDate = projectedDate;
       } else {
-        expectedDate = adjustedDate;
+        expectedDate = plannedCompletionDate || now;
       }
     } else {
-      if (avgProgress >= 100) {
-        expectedDate = now;
-      } else {
-        const startDate = earliestStartDate ? new Date(earliestStartDate) : now;
-        const elapsedDays = Math.ceil((now - startDate) / (1000 * 60 * 60 * 24));
-        if (elapsedDays > 0 && avgProgress > 0) {
-          const daysNeeded = (100 - avgProgress) * (elapsedDays / avgProgress);
-          const predictedDate = new Date(now);
-          predictedDate.setDate(predictedDate.getDate() + Math.ceil(daysNeeded));
-          expectedDate = predictedDate;
-        } else {
-          expectedDate = plannedCompletionDate || now;
-        }
-      }
+      expectedDate = plannedCompletionDate || now;
     }
 
-    const daysLeft = expectedDate ? Math.ceil((expectedDate - now) / (1000 * 60 * 60 * 24)) : null;
-    const daysAheadStr = daysLeft !== null
-      ? (daysLeft >= 0 ? `${daysLeft} Days Remaining` : `${Math.abs(daysLeft)} Days Overdue`)
-      : "—";
+    let daysAheadStr = "—";
+    if (expectedDate) {
+      const daysLeft = Math.ceil((expectedDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      if (expectedDate < now && avgProgress < 100) {
+        daysAheadStr = `${Math.abs(daysLeft)} Days Overdue`;
+      } else if (daysLeft >= 0) {
+        daysAheadStr = `${daysLeft} Days Remaining`;
+      } else {
+        daysAheadStr = `Completed`;
+      }
+    }
 
     // Risk Calculation
     let riskScore = 0;
@@ -638,16 +648,20 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     let totalOverdueTasks = 0;
     let totalTasks = 0;
     forecastProjects.forEach(p => {
-      const pId = p.prjId || p.prjid || p.id;
-      const ms = milestonesList.filter(m => (m.prjId || m.prjid) === pId);
-      const msIds = ms.map(m => m.mId || m.mid || m.id);
-      const t = tasksList.filter(task => msIds.includes(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id));
+      const pId = String(p.prjId || p.prjid || p.id || p.projectId || "");
+      const ms = milestonesList.filter(m => String(m.prjId || m.prjid || m.projectId || m.prj_id || "") === pId);
+      const msIds = ms.map(m => String(m.mId || m.mid || m.id));
+      const t = tasksList.filter(task => {
+        const tPrjId = String(task.prjId || task.prjid || task.projectId || task.prj_id || "");
+        if (tPrjId && tPrjId === pId) return true;
+        const tMId = String(task.milestoneId || task.mid || task.mId || task.drftMId || task.drft_m_id || "");
+        return msIds.includes(tMId);
+      });
 
       totalTasks += t.length;
       totalOverdueTasks += t.filter(task => {
-        const status = (task.taskSts || task.tasksts || "").toUpperCase();
-        if (status === "COMPLETED") return false;
-        const end = task.endDt || task.enddt ? new Date(task.endDt || task.enddt) : null;
+        if (getTaskStatusStr(task) === "CLOSED") return false;
+        const end = task.endDt || task.enddt || task.endDate ? new Date(task.endDt || task.enddt || task.endDate) : null;
         return end && end < now;
       }).length;
     });
@@ -670,17 +684,14 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       riskScore += 10;
     }
 
-    if (plannedCompletionDate && expectedDate) {
-      const plannedDays = Math.ceil((plannedCompletionDate - now) / (1000 * 60 * 60 * 24));
-      const expectedDays = Math.ceil((expectedDate - now) / (1000 * 60 * 60 * 24));
-      const daysDifference = expectedDays - plannedDays;
-
-      if (daysDifference > 30) {
+    if (plannedCompletionDate && expectedDate && expectedDate > plannedCompletionDate) {
+      const delayDays = Math.ceil((expectedDate.getTime() - plannedCompletionDate.getTime()) / (1000 * 60 * 60 * 24));
+      if (delayDays > 30) {
+        riskScore += 20;
+      } else if (delayDays > 15) {
+        riskScore += 15;
+      } else if (delayDays > 5) {
         riskScore += 10;
-      } else if (daysDifference > 15) {
-        riskScore += 8;
-      } else if (daysDifference > 5) {
-        riskScore += 5;
       }
     }
 
@@ -809,7 +820,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
           due: t.dueDate,
           urgent: true
         })),
-        forecast: getForecastData(forecastProject)
+        forecast: getForecastData(currentProject)
       };
     }
 
@@ -1021,7 +1032,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
           urgent: (t.taskSts || t.tasksts || "").toUpperCase() === "WIP" || ((t.endDt || t.enddt) && new Date(t.endDt || t.enddt) < now)
         };
       }).slice(0, 5),
-      forecast: getForecastData(forecastProject)
+      forecast: getForecastData(currentProject)
     };
   };
 
@@ -1076,10 +1087,31 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
   const uniqueProjectOptions = getUniqueProjectOptions(projectsList);
   const projectOptions = ["All Projects", ...uniqueProjectOptions];
-  const forecastProjectOptions = ["All Projects", ...uniqueProjectOptions];
 
   return (
     <div className="pm-shell-container">
+      {isViewAllLoading && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          width: "100vw",
+          height: "100vh",
+          backgroundColor: "rgba(255, 255, 255, 0.75)",
+          backdropFilter: "blur(4px)",
+          zIndex: 99999,
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "12px"
+        }}>
+          <Loader2 size={38} className="pm-spin" style={{ color: "#2563eb", animation: "spin 0.8s linear infinite" }} />
+          <span style={{ fontSize: "14px", fontWeight: "600", color: "#1e293b", fontFamily: "Inter, sans-serif" }}>
+            Loading project...
+          </span>
+        </div>
+      )}
       <Sidebar userRole={userRole} onLogout={onLogout} />
 
       <div className="pm-shell">
@@ -1133,10 +1165,19 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                 <span>{currentProject === "All Projects" ? "Project Portfolio Progress" : `${currentProject} - Progress`}</span>
                 {currentProject === "All Projects" && (
                   <button
-                    onClick={() => navigate('/project-list', { state: { fromDashboard: true } })}
+                    onClick={handleViewAllClick}
+                    disabled={isViewAllLoading}
                     style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
                   >
-                    View All <ArrowRight size={14} />
+                    {isViewAllLoading ? (
+                      <>
+                        <Loader2 size={14} style={{ animation: "spin 0.8s linear infinite" }} /> Loading...
+                      </>
+                    ) : (
+                      <>
+                        View All <ArrowRight size={14} />
+                      </>
+                    )}
                   </button>
                 )}
               </div>
@@ -1214,7 +1255,20 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
             <div className="pm-card pm-table-card">
               <div className="pm-table-header">
                 <span className="pm-card-title">Delayed Milestones</span>
-                <button onClick={() => navigate('/project-list')} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }} className="pm-view-all">View All</button>
+                <button
+                  onClick={handleViewAllClick}
+                  disabled={isViewAllLoading}
+                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                  className="pm-view-all"
+                >
+                  {isViewAllLoading ? (
+                    <>
+                      <Loader2 size={14} style={{ animation: "spin 0.8s linear infinite" }} /> Loading...
+                    </>
+                  ) : (
+                    "View All"
+                  )}
+                </button>
               </div>
               <table className="pm-table">
                 <thead>
@@ -1247,7 +1301,20 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
             <div className="pm-card pm-table-card">
               <div className="pm-table-header">
                 <span className="pm-card-title">Upcoming Milestones <span className="pm-card-sub">(Next 30 Days)</span></span>
-                <button onClick={() => navigate('/project-list')} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }} className="pm-view-all">View All</button>
+                <button
+                  onClick={handleViewAllClick}
+                  disabled={isViewAllLoading}
+                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                  className="pm-view-all"
+                >
+                  {isViewAllLoading ? (
+                    <>
+                      <Loader2 size={14} style={{ animation: "spin 0.8s linear infinite" }} /> Loading...
+                    </>
+                  ) : (
+                    "View All"
+                  )}
+                </button>
               </div>
               <table className="pm-table">
                 <thead>
@@ -1286,7 +1353,20 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
             <div className="pm-card pm-table-card">
               <div className="pm-table-header">
                 <span className="pm-card-title">High Priority Tasks</span>
-                <button onClick={() => navigate('/project-list')} style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: '500', cursor: 'pointer' }} className="pm-view-all">View All</button>
+                <button
+                  onClick={handleViewAllClick}
+                  disabled={isViewAllLoading}
+                  style={{ background: 'none', border: 'none', color: '#2563eb', fontSize: '13px', fontWeight: '500', display: 'flex', alignItems: 'center', gap: '4px', cursor: 'pointer' }}
+                  className="pm-view-all"
+                >
+                  {isViewAllLoading ? (
+                    <>
+                      <Loader2 size={14} style={{ animation: "spin 0.8s linear infinite" }} /> Loading...
+                    </>
+                  ) : (
+                    "View All"
+                  )}
+                </button>
               </div>
               <table className="pm-table">
                 <thead>
@@ -1325,19 +1405,11 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
 
           {/* ===== FORECAST SUMMARY ===== */}
           <div className="pm-card pm-forecast-card">
-            <div className="pm-card-title" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '10px' }}>
+            <div className="pm-card-title">
               <span>Forecast Summary</span>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Monitor Project:</span>
-                <CustomDropdown
-                  value={forecastProject}
-                  options={forecastProjectOptions}
-                  onChange={handleForecastProjectChange}
-                />
-              </div>
             </div>
 
-            {forecastProject !== "All Projects" && (
+            {currentProject !== "All Projects" && (
               <div style={{
                 marginBottom: '12px',
                 padding: '8px 14px',
@@ -1355,7 +1427,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
                   color: '#1e40af',
                   fontWeight: '500'
                 }}>
-                  Showing forecast for: <strong>{forecastProject}</strong>
+                  Showing forecast for: <strong>{currentProject}</strong>
                   {forecast.projectCount > 1 && ` (${forecast.projectCount} projects found)`}
                 </span>
                 <button
@@ -1420,12 +1492,14 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
               <div className="pm-forecast-divider" />
 
               <div className="pm-forecast-item">
-                <div className="pm-forecast-icon-box outlined pm-icon-red">
-                  <TrendingDown size={18} strokeWidth={2} />
+                <div className={`pm-forecast-icon-box outlined ${parseFloat(forecast.variance) < 0 ? "pm-icon-red" : "pm-icon-green"}`}>
+                  {parseFloat(forecast.variance) < 0 ? <TrendingDown size={18} strokeWidth={2} /> : <TrendingUp size={18} strokeWidth={2} />}
                 </div>
                 <div>
                   <div className="pm-forecast-sub">Variance</div>
-                  <div className="pm-forecast-val pm-text-red">{forecast.variance}</div>
+                  <div className={`pm-forecast-val ${parseFloat(forecast.variance) < 0 ? "pm-text-red" : "pm-text-green"}`}>
+                    {parseFloat(forecast.variance) > 0 ? `+${forecast.variance}` : forecast.variance}
+                  </div>
                   <div className="pm-forecast-note">
                     {parseFloat(forecast.variance) < 0 ? "(Behind Plan)" : parseFloat(forecast.variance) > 0 ? "(Ahead of Plan)" : "(On Track)"}
                   </div>

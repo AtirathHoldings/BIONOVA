@@ -19,6 +19,12 @@ public interface TeamMemberRepository extends JpaRepository<TeamMember, Integer>
     /** All team members assigned to a specific individual assignment */
     List<TeamMember> findByEmpTaskId(Long empTaskId);
 
+    /** All team members assigned to a list of tasks */
+    List<TeamMember> findByTaskIdIn(List<Long> taskIds);
+
+    /** All team members assigned to a list of individual assignments */
+    List<TeamMember> findByEmpTaskIdIn(List<Long> empTaskIds);
+
     /** All task assignments for a specific employee */
     List<TeamMember> findByEmpId(Long empId);
 

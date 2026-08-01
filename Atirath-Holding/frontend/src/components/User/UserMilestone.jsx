@@ -74,7 +74,7 @@ const UserMilestone = ({ selectedProject, userTasks = [], allTasks = [], employe
       status: statusVal,
       color: (statusVal === "Closed" || statusVal === "Completed") ? "#10b981" : statusVal === "In Progress" ? "#195dfa" : "#9ca3af"
     };
-  });
+  }).filter(m => m.assigned > 0);
 
   const [selectedMilestone, setSelectedMilestone] = useState(null);
 

@@ -30,7 +30,7 @@ import "../../styles/TaskBoard.css";
 import plantImage from "../../assets/cbg_plant_construction.png";
 
 // ─── Searchable Select Component ──────────────────────────────────────────
-const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled }) => {
+const SearchableSelect = ({ options, value, onChange, placeholder, name, style, disabled, showSearch = true }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const wrapperRef = useRef(null);
@@ -43,7 +43,9 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filtered = options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()));
+  const filtered = showSearch
+    ? options.filter(o => o.label.toLowerCase().includes(search.toLowerCase()))
+    : options;
   const selected = options.find(o => String(o.value) === String(value));
 
   return (
@@ -75,24 +77,26 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
           backgroundColor: 'white', border: '1px solid #cbd5e1', borderRadius: '6px',
           boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)', zIndex: 1000
         }}>
-          <div style={{ padding: '8px' }}>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search..."
-              style={{
-                width: '100%',
-                padding: '8px',
-                border: '1px solid #e2e8f0',
-                borderRadius: '4px',
-                outline: 'none',
-                fontSize: '14px',
-                boxSizing: 'border-box'
-              }}
-              onClick={(e) => e.stopPropagation()}
-            />
-          </div>
+          {showSearch && (
+            <div style={{ padding: '8px' }}>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search..."
+                style={{
+                  width: '100%',
+                  padding: '8px',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '4px',
+                  outline: 'none',
+                  fontSize: '14px',
+                  boxSizing: 'border-box'
+                }}
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          )}
           <div style={{ maxHeight: '200px', overflowY: 'auto' }}>
             {filtered.length > 0 ? (
               filtered.map(opt => (
@@ -156,11 +160,14 @@ const mapStatusToApi = (uiStatus) => {
   return "OPEN";
 };
 
-const mapPriorityFromApi = (prjPrty) => {
-  if (!prjPrty) return "Medium";
-  const p = prjPrty.toUpperCase();
-  if (p === "HIGH") return "High";
-  if (p === "LOW") return "Low";
+const mapPriorityFromApi = (prty) => {
+  if (!prty) return "Medium";
+  const p = String(prty).toUpperCase().trim();
+  if (p === "CRITICAL" || p === "CRIT" || p === "1") return "Critical";
+  if (p === "HIGH" || p === "H" || p === "2") return "High";
+  if (p === "MEDIUM" || p === "MED" || p === "M" || p === "3") return "Medium";
+  if (p === "NORMAL" || p === "NORM" || p === "N" || p === "4") return "Normal";
+  if (p === "LOW" || p === "L" || p === "5") return "Low";
   return "Medium";
 };
 
@@ -228,7 +235,7 @@ const mapBackendTask = (t, projects, milestones, employees) => {
     startDate: t.stDt || t.stdt || "",
     subtasksCount: t.wrkDays || t.wrkdays || 3,
     subtasksCompleted: (status === "Closed" || status === "Completed") ? (t.wrkDays || t.wrkdays || 3) : 0,
-    priority: (status === "Closed" || status === "Completed") ? "Closed" : status === "Overdue" ? "Overdue" : mapPriorityFromApi(project ? (project.prjPrty || project.prjprty) : "Medium"),
+    priority: mapPriorityFromApi(t.taskPrty || t.taskprty || t.priority || t.prty || t.task_prty || project?.prjPrty || project?.prjprty || "Medium"),
     taskType: (t.taskAsgnTo || t.taskasgnto) === "EXTERNAL" ? "External" : "Internal",
     status: status,
     description: t.taskDesc || t.taskdesc || "",
@@ -631,6 +638,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
                   name="priority"
                   value={selectedPriority}
                   onChange={(e) => setSelectedPriority(e.target.value)}
+                  showSearch={false}
                   options={[
                     { value: "All", label: "All" },
                     { value: "Critical", label: "Critical" },
@@ -1179,7 +1187,7 @@ const TaskBoard = ({ userRole, onLogout }) => {
               </div>
               <div className="tb-form-row">
                 <div className="tb-modal-detail-row">
-                  <span className="tb-modal-detail-label">Assignee</span>
+                  <span className="tb-modal-detail-label">Executor</span>
                   <span className="tb-modal-detail-value">{selectedTask.assignee}</span>
                 </div>
                 <div className="tb-modal-detail-row">

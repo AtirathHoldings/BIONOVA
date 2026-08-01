@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
-/// ReassignIcon renders the exact SVG path matching the website's Reassign icon
-/// (Lucide Undo2 / CornerUpLeft: top line going right, curving 180° down on the right side,
-/// bottom line going left, ending with an arrowhead pointing left at the bottom left).
+/// ReassignIcon renders the exact Reverse C Arrow icon (↩) matching the website's Reassign icon
 class ReassignIcon extends StatelessWidget {
   final double size;
   final Color color;
@@ -46,23 +44,22 @@ class _ReassignIconPainter extends CustomPainter {
       ..strokeCap = StrokeCap.round
       ..strokeJoin = StrokeJoin.round;
 
-    // Arrowhead at (4,18) pointing left: polyline 9,14 -> 4,18 -> 9,22
+    // Arrowhead pointing left at (4,18)
     final arrowPath = Path()
       ..moveTo(9 * scale, 14 * scale)
       ..lineTo(4 * scale, 18 * scale)
       ..lineTo(9 * scale, 22 * scale);
 
-    // Body: M 4,18 H 15 A 5,5 0 0,0 15,8 H 8
-    // Bottom line from (4,18) right to (15,18), curves 180° UP around right side to (15,8), top line left to (8,8)
+    // Body: Reverse 'C' curve (Start (8,8) -> line right to (15,8) -> curve 180° down right side to (15,18) -> line left to (4,18))
     final bodyPath = Path()
-      ..moveTo(4 * scale, 18 * scale)
-      ..lineTo(15 * scale, 18 * scale)
+      ..moveTo(8 * scale, 8 * scale)
+      ..lineTo(15 * scale, 8 * scale)
       ..arcToPoint(
-        Offset(15 * scale, 8 * scale),
+        Offset(15 * scale, 18 * scale),
         radius: Radius.circular(5 * scale),
-        clockwise: false,
+        clockwise: true,
       )
-      ..lineTo(8 * scale, 8 * scale);
+      ..lineTo(4 * scale, 18 * scale);
 
     canvas.drawPath(arrowPath, paint);
     canvas.drawPath(bodyPath, paint);

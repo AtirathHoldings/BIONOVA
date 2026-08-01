@@ -769,7 +769,7 @@ const UserDashboard = ({ userRole, onLogout }) => {
   };
 
   const handleTaskClick = (task) => {
-    const taskId = task?.taskId || task?.id;
+    const taskId = task?.taskId || task?.rawTask?.taskId || task?.rawTask?.empTaskId || task?.id || task?.code;
     navigate('/my-tasks', { state: { selectedTaskId: taskId } });
   };
 

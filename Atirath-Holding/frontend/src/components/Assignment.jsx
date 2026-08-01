@@ -18,6 +18,16 @@ const getAuthHeaders = () => ({
   "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
 });
 
+const formatListDate = (dateString) => {
+  if (!dateString) return "";
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 // ============================================================
 // SearchableSelect component
 // ============================================================
@@ -1326,8 +1336,8 @@ const Assignment = ({ userRole, onLogout }) => {
                                 {isClosedTask ? "Closed" : (task.taskSts?.statusNm || task.taskSts)}
                               </span>
                             </td>
-                            <td>{task.stDt ? String(task.stDt).substring(0, 10) : ''}</td>
-                            <td>{task.endDt ? String(task.endDt).substring(0, 10) : ''}</td>
+                            <td>{formatListDate(task.stDt)}</td>
+                            <td>{formatListDate(task.endDt)}</td>
                             <td>{task.reviewerName || "N/A"}</td>
                             <td>{task.approverName || "N/A"}</td>
                             <td>{task.checklistCount || 0} Items</td>

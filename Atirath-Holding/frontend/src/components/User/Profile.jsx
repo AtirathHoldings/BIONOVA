@@ -43,6 +43,16 @@ const authHeaders = () => {
   };
 };
 
+const formatDate = (dateString) => {
+  if (!dateString) return "-";
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
+};
+
 const Profile = ({ userRole, onLogout }) => {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -468,7 +478,7 @@ const Profile = ({ userRole, onLogout }) => {
                   </div>
 
                   <div className="pf-detail-row">
-                    <div className="pf-detail-label"><Briefcase size={16} />Employment Type</div>
+                    <div className="pf-detail-label"><Briefcase size={16} />Employee Type</div>
                     <span className="pf-detail-separator">:</span>
                     <div className="pf-detail-value">{profileDetails.employeeType}</div>
                   </div>
@@ -500,7 +510,7 @@ const Profile = ({ userRole, onLogout }) => {
                   <div className="pf-detail-row">
                     <div className="pf-detail-label"><Calendar size={16} />Date of Joining</div>
                     <span className="pf-detail-separator">:</span>
-                    <div className="pf-detail-value">{profileDetails.dateOfJoining}</div>
+                    <div className="pf-detail-value">{formatDate(profileDetails.dateOfJoining)}</div>
                   </div>
 
                   <div className="pf-detail-row">

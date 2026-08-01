@@ -6,7 +6,7 @@ import {
   CheckCircle, AlertCircle, Save, Building2, Settings,
   Check, ArrowLeft, Pencil, Trash2, User, Calendar, Clock,
   Grid, List, LayoutGrid, UserCheck, UserX, UserCog, UserCheck as UserApprover,
-  PauseCircle, TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle
+  PauseCircle, TrendingUp, TrendingDown, Minus, RefreshCw, AlertTriangle, Loader2
 } from 'lucide-react';
 import Sidebar from '../Sidebar';
 import Header from '../Header';
@@ -220,6 +220,7 @@ const ProjectAccess = ({ userRole, onLogout }) => {
   const [employees, setEmployees] = useState([]);
   const [milestones, setMilestones] = useState([]);
   const [allEmployeesPermissions, setAllEmployeesPermissions] = useState([]);
+  const [loadingProjects, setLoadingProjects] = useState(true);
 
   // Fetch initial data
   useEffect(() => {
@@ -228,6 +229,7 @@ const ProjectAccess = ({ userRole, onLogout }) => {
   }, []);
 
   const fetchProjects = async () => {
+    setLoadingProjects(true);
     try {
       const data = await apiGet('/api/projects/access');
       const mappedProjects = (data || []).map(proj => ({
@@ -248,6 +250,8 @@ const ProjectAccess = ({ userRole, onLogout }) => {
     } catch (err) {
       console.error("Error fetching projects:", err);
       showAlert('error', 'Error', 'Failed to load projects.');
+    } finally {
+      setLoadingProjects(false);
     }
   };
 
@@ -886,38 +890,34 @@ const ProjectAccess = ({ userRole, onLogout }) => {
   const confirmRemoveEmployee = async (empId, employeeTasks) => {
     try {
       await apiDelete(`/api/projects/${selectedProject.id}/access/${empId}`);
+
+      if (employeeTasks.length > 0) {
+        const emp = employees.find(e => String(e.id) === String(empId));
+        const matchCode = emp ? (emp.empCode ? `(${emp.empCode})` : `(${emp.id})`) : `(${empId})`;
+        const matchName = emp ? emp.name : '';
+
+        for (const t of employeeTasks) {
+          const isAssignee = t.assignee && (t.assignee.includes(matchCode) || (matchName && t.assignee.includes(matchName)));
+          const isReviewer = t.reviewer && (t.reviewer.includes(matchCode) || (matchName && t.reviewer.includes(matchName)));
+          const isApprover = t.approver && (t.approver.includes(matchCode) || (matchName && t.approver.includes(matchName)));
+
+          if (isAssignee) {
+            await apiPost(`/api/projects/tasks/${t.id}/assign-role`, { roleType: 'assignee', empId: null });
+          }
+          if (isReviewer) {
+            await apiPost(`/api/projects/tasks/${t.id}/assign-role`, { roleType: 'reviewer', empId: null });
+          }
+          if (isApprover) {
+            await apiPost(`/api/projects/tasks/${t.id}/assign-role`, { roleType: 'approver', empId: null });
+          }
+        }
+      }
+
       await refreshProjectDetails(selectedProject.id);
 
       if (employeeTasks.length > 0) {
-        const updatedMilestones = milestones.map(milestone => ({
-          ...milestone,
-          tasks: milestone.tasks.map(task => {
-            let updatedTask = { ...task };
-            const emp = employees.find(e => String(e.id) === String(empId));
-            const matchCode = emp ? (emp.empCode ? `(${emp.empCode})` : `(${emp.id})`) : `(${empId})`;
-            const matchName = emp ? emp.name : '';
-
-            if (task.assignee && (task.assignee.includes(matchCode) || (matchName && task.assignee.includes(matchName)))) {
-              updatedTask.assignee = 'Unassigned';
-            }
-            if (task.reviewer && (task.reviewer.includes(matchCode) || (matchName && task.reviewer.includes(matchName)))) {
-              updatedTask.reviewer = 'Unassigned';
-            }
-            if (task.approver && (task.approver.includes(matchCode) || (matchName && task.approver.includes(matchName)))) {
-              updatedTask.approver = 'Unassigned';
-            }
-            if (updatedTask.assignee === 'Unassigned' || 
-                updatedTask.reviewer === 'Unassigned' || 
-                updatedTask.approver === 'Unassigned') {
-              updatedTask.status = 'Pending';
-            }
-            return updatedTask;
-          })
-        }));
-        setMilestones(updatedMilestones);
-        
         showAlert('info', 'Tasks Unassigned', 
-          `${employeeTasks.length} task(s) have been unassigned and marked as "Pending".`
+          `${employeeTasks.length} task(s) have been unassigned in the database.`
         );
       } else {
         showAlert('success', 'Employee Removed', 'Employee has been removed from the project.');
@@ -1047,6 +1047,15 @@ const ProjectAccess = ({ userRole, onLogout }) => {
 
   // ── RENDER: Projects View ──
   const renderProjectsView = () => {
+    if (loadingProjects) {
+      return (
+        <div className="pac-empty-state">
+          <Loader2 size={48} className="spinning" />
+          <h4>Loading Projects...</h4>
+        </div>
+      );
+    }
+
     if (filteredProjects.length === 0) {
       return (
         <div className="pac-empty-state">
@@ -1370,43 +1379,29 @@ const ProjectAccess = ({ userRole, onLogout }) => {
       const isUnassigned = !name || name === 'Unassigned' || name === '—';
       
       if (showEditPermissions) {
-        if (isUnassigned) {
-          return (
+        const matchedEmp = employees.find(e => {
+          const codeStr = e.empCode ? `(${e.empCode})` : `(${e.id})`;
+          return name && (name.includes(codeStr) || name.includes(e.name));
+        });
+        const currentVal = matchedEmp ? String(matchedEmp.id) : "";
+
+        return (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
             <select
               className="pac-assign-select"
-              value=""
+              value={currentVal}
               onChange={(e) => {
-                if (e.target.value) {
-                  handleAssignRole(taskId, type, e.target.value);
-                }
+                const val = e.target.value ? Number(e.target.value) : null;
+                handleAssignRole(taskId, type, val);
               }}
             >
-              <option value="">+ Add Employee</option>
+              <option value="">-- Unassigned --</option>
               {employees.map(emp => (
-                <option key={emp.id} value={emp.id}>{emp.name}</option>
+                <option key={emp.id} value={emp.id}>{emp.name} {emp.empCode ? `(${emp.empCode})` : ''}</option>
               ))}
             </select>
-          );
-        } else {
-          const color = getAvatarColor(name);
-          const initials = getInitials(name);
-          return (
-            <div className="pac-person-wrapper">
-              <div className="pac-person">
-                <span className="pac-person-avatar" style={{ background: color }}>{initials}</span>
-                <span className="pac-person-name">{name}</span>
-              </div>
-              <button 
-                className="pac-remove-person-btn" 
-                title="Remove Employee"
-                onClick={() => handleAssignRole(taskId, type, null)}
-                style={{ marginLeft: '4px', cursor: 'pointer' }}
-              >
-                <X size={14} />
-              </button>
-            </div>
-          );
-        }
+          </div>
+        );
       } else {
         if (isUnassigned) {
           return <span className="pac-person-unassigned">—</span>;

@@ -31,7 +31,7 @@ export default function ProjectList({ userRole, onLogout }) {
   const location = useLocation();
   const fromDashboard = location.state?.fromDashboard || false;
   const [projects, setProjects] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Search/filter state
   const [searchText, setSearchText] = useState('');
@@ -48,6 +48,7 @@ export default function ProjectList({ userRole, onLogout }) {
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
   const fetchProjects = async () => {
+    setLoading(true);
     try {
       const [draftsRes, liveRes, coyRes, pltRes, deptRes] = await Promise.all([
         fetch(`${apiBaseUrl}/api/project-drafts`, { headers: getAuthHeaders() }),
@@ -295,8 +296,9 @@ export default function ProjectList({ userRole, onLogout }) {
 
             <div className="pl-table-container">
               {loading ? (
-                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>
-                  Loading projects...
+                <div style={{ textAlign: 'center', padding: '60px 20px', color: '#2563eb', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: '12px' }}>
+                  <RefreshCw size={32} style={{ animation: "spin 0.8s linear infinite" }} />
+                  <span style={{ fontSize: '14px', fontWeight: '500', color: '#475569' }}>Loading projects...</span>
                 </div>
               ) : (
                 <table className="pl-table">

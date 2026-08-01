@@ -42,11 +42,23 @@ const milestoneApi = {
   create: (data) =>
     fetch(`${API_BASE}/milestone-drafts`, {
       method: "POST", headers: authHeaders(), body: JSON.stringify(data)
-    }).then(res => { if (!res.ok) throw new Error("Failed to create milestone"); return res.json(); }),
+    }).then(async res => { 
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || errJson.error || "Failed to create milestone");
+      }
+      return res.json();
+    }),
   update: (id, data) =>
     fetch(`${API_BASE}/milestone-drafts/${id}`, {
       method: "PUT", headers: authHeaders(), body: JSON.stringify(data)
-    }).then(res => { if (!res.ok) throw new Error("Failed to update milestone"); return res.json(); }),
+    }).then(async res => { 
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || errJson.error || "Failed to update milestone");
+      }
+      return res.json();
+    }),
   delete: (id) =>
     fetch(`${API_BASE}/milestone-drafts/${id}`, {
       method: "DELETE", headers: authHeaders()
@@ -65,11 +77,23 @@ const taskApi = {
   create: (data) =>
     fetch(`${API_BASE}/task-drafts`, {
       method: "POST", headers: authHeaders(), body: JSON.stringify(data)
-    }).then(res => { if (!res.ok) throw new Error("Failed to create task"); return res.json(); }),
+    }).then(async res => { 
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || errJson.error || "Failed to create task");
+      }
+      return res.json();
+    }),
   update: (id, data) =>
     fetch(`${API_BASE}/task-drafts/${id}`, {
       method: "PUT", headers: authHeaders(), body: JSON.stringify(data)
-    }).then(res => { if (!res.ok) throw new Error("Failed to update task"); return res.json(); }),
+    }).then(async res => { 
+      if (!res.ok) {
+        const errJson = await res.json().catch(() => ({}));
+        throw new Error(errJson.message || errJson.error || "Failed to update task");
+      }
+      return res.json();
+    }),
   delete: (id) =>
     fetch(`${API_BASE}/task-drafts/${id}`, {
       method: "DELETE", headers: authHeaders()
@@ -1002,27 +1026,34 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         }
       }
 
+      const parseEmpId = (val) => {
+        if (!val) return null;
+        if (typeof val === 'number') return isNaN(val) ? null : val;
+        const parsed = parseInt(val, 10);
+        return isNaN(parsed) ? null : parsed;
+      };
+
       const taskPayload = {
         drftMId: selectedTask.drft_m_id || milestone.drft_m_id,
         taskCd: selectedTask.task_cd,
         taskNm: selectedTask.task_nm || "",
         taskDesc: selectedTask.task_desc || "",
         taskTyp: selectedTask.task_typ || "INTERNAL",
-        empId: selectedTask.task_typ === "INTERNAL" ? (selectedTask.emp_id ? parseInt(selectedTask.emp_id) : null) : null,
-        extEmpId: selectedTask.task_typ === "EXTERNAL" ? (selectedTask.ext_emp_id ? parseInt(selectedTask.ext_emp_id) : null) : null,
+        empId: selectedTask.task_typ === "INTERNAL" ? parseEmpId(selectedTask.emp_id) : null,
+        extEmpId: selectedTask.task_typ === "EXTERNAL" ? parseEmpId(selectedTask.ext_emp_id) : null,
         taskDepFlg: selectedTask.task_dep_flg || false,
         taskDepTyp: selectedTask.task_dep_typ || "INDEPENDENT",
         depTaskId: depTaskIdVal,
-        noOfDays: parseInt(selectedTask.no_of_days) || 0,
+        noOfDays: parseInt(selectedTask.no_of_days, 10) || 0,
         chkFlg: (selectedTask.checklist && selectedTask.checklist.length > 0) || false,
         chkId: null,
         filePath: "",
         noteTxt: selectedTask.note_txt || "",
-        tentStDt: selectedTask.tent_st_dt || "",
-        tentEndDt: selectedTask.tent_end_dt || "",
+        tentStDt: selectedTask.tent_st_dt ? selectedTask.tent_st_dt : null,
+        tentEndDt: selectedTask.tent_end_dt ? selectedTask.tent_end_dt : null,
         prcsFlg: selectedTask.process?.enabled || false,
         prcsYesActn: selectedTask.process?.enabled ? "YES" : "",
-        taskSts: selectedTask.task_sts || "DRAFT",
+        taskSts: (selectedTask.task_sts && typeof selectedTask.task_sts === 'number') ? selectedTask.task_sts : 1,
         addlRem: selectedTask.addl_rem || "",
         sts: selectedTask.sts !== undefined ? selectedTask.sts : true
       };
@@ -1272,6 +1303,14 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         setMilestoneList(prev => [...prev, newDraft]);
       }
 
+      // Helper to parse integer safely or return null
+      const parseEmpId = (val) => {
+        if (!val) return null;
+        if (typeof val === 'number') return isNaN(val) ? null : val;
+        const parsed = parseInt(val, 10);
+        return isNaN(parsed) ? null : parsed;
+      };
+
       // First pass: create/update tasks without dependencies
       const taskIdMap = {};
       for (let i = 0; i < tasks.length; i++) {
@@ -1282,21 +1321,21 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           taskNm: task.task_nm || "",
           taskDesc: task.task_desc || "",
           taskTyp: task.task_typ || "INTERNAL",
-          empId: task.task_typ === "INTERNAL" ? (task.emp_id ? parseInt(task.emp_id) : null) : null,
-          extEmpId: task.task_typ === "EXTERNAL" ? (task.ext_emp_id ? parseInt(task.ext_emp_id) : null) : null,
+          empId: task.task_typ === "INTERNAL" ? parseEmpId(task.emp_id) : null,
+          extEmpId: task.task_typ === "EXTERNAL" ? parseEmpId(task.ext_emp_id) : null,
           taskDepFlg: task.task_dep_flg || false,
           taskDepTyp: task.task_dep_typ || "INDEPENDENT",
           depTaskId: null,
-          noOfDays: parseInt(task.no_of_days) || 0,
+          noOfDays: parseInt(task.no_of_days, 10) || 0,
           chkFlg: (task.checklist && task.checklist.length > 0) || false,
           chkId: null,
           filePath: "",
           noteTxt: task.note_txt || "",
-          tentStDt: task.tent_st_dt || "",
-          tentEndDt: task.tent_end_dt || "",
+          tentStDt: task.tent_st_dt ? task.tent_st_dt : null,
+          tentEndDt: task.tent_end_dt ? task.tent_end_dt : null,
           prcsFlg: task.process?.enabled || false,
           prcsYesActn: task.process?.enabled ? "YES" : "",
-          taskSts: "DRAFT",
+          taskSts: 1,
           addlRem: task.addl_rem || "",
           sts: true
         };
@@ -1320,7 +1359,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
 
         let depTaskIdVal = null;
         if (task.task_dep_flg && task.dep_task_id) {
-          depTaskIdVal = taskIdMap[task.dep_task_id] || null;
+          depTaskIdVal = taskIdMap[task.dep_task_id] || parseEmpId(task.dep_task_id) || null;
         }
 
         const updatePayload = {
@@ -1329,21 +1368,21 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           taskNm: task.task_nm || "",
           taskDesc: task.task_desc || "",
           taskTyp: task.task_typ || "INTERNAL",
-          empId: task.task_typ === "INTERNAL" ? (task.emp_id ? parseInt(task.emp_id) : null) : null,
-          extEmpId: task.task_typ === "EXTERNAL" ? (task.ext_emp_id ? parseInt(task.ext_emp_id) : null) : null,
+          empId: task.task_typ === "INTERNAL" ? parseEmpId(task.emp_id) : null,
+          extEmpId: task.task_typ === "EXTERNAL" ? parseEmpId(task.ext_emp_id) : null,
           taskDepFlg: task.task_dep_flg || false,
           taskDepTyp: task.task_dep_typ || "INDEPENDENT",
           depTaskId: depTaskIdVal,
-          noOfDays: parseInt(task.no_of_days) || 0,
+          noOfDays: parseInt(task.no_of_days, 10) || 0,
           chkFlg: (task.checklist && task.checklist.length > 0) || false,
           chkId: null,
           filePath: "",
           noteTxt: task.note_txt || "",
-          tentStDt: task.tent_st_dt || "",
-          tentEndDt: task.tent_end_dt || "",
+          tentStDt: task.tent_st_dt ? task.tent_st_dt : null,
+          tentEndDt: task.tent_end_dt ? task.tent_end_dt : null,
           prcsFlg: task.process?.enabled || false,
           prcsYesActn: task.process?.enabled ? "YES" : "",
-          taskSts: "DRAFT",
+          taskSts: 1,
           addlRem: task.addl_rem || "",
           sts: true
         };

@@ -332,7 +332,8 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
               final reviewer = t['reviewer']?.toString();
               final approver = t['approver']?.toString();
               final noteTxt = (t['noteTxt'] ?? t['note_txt'] ?? '').toString();
-              final isTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(strEmpId);
+              final hasTeamMemberInTeamMembers = (t['teamMembers'] is List) && (t['teamMembers'] as List).any((tm) => tm['empId']?.toString() == strEmpId || tm['emp_id']?.toString() == strEmpId);
+              final isTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(strEmpId) || hasTeamMemberInTeamMembers;
               
               if (doerId == strEmpId || reviewer == strEmpId || approver == strEmpId || isTeamMember) {
                 filteredMilestoneTasks.add(t);
@@ -2259,7 +2260,7 @@ class _DashboardScreenState extends State<DashboardScreen> with WidgetsBindingOb
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 if (!task.isCompleted && task.processIcon != null) ...[
-                                  task.isReassigned
+                                  (task.isReassigned || task.processIcon == Icons.undo_rounded)
                                       ? ReassignIcon(size: 11, color: task.processIconColor ?? task.progressStatusColor)
                                       : Icon(task.processIcon, size: 11, color: task.processIconColor ?? task.progressStatusColor),
                                   const SizedBox(width: 3),

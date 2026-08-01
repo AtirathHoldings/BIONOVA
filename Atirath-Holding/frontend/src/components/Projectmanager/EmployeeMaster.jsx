@@ -246,7 +246,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     code: "",
     name: "",
     description: "",
-    status: "Active"
+    status: ""
   });
 
   // Designation Modal State
@@ -318,6 +318,21 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       });
     }
     return `DESG-${String(maxNum + 1).padStart(3, '0')}`;
+  };
+
+  const generateDepartmentCode = (dList = departments) => {
+    let maxNum = 0;
+    if (Array.isArray(dList)) {
+      dList.forEach(d => {
+        const code = d.deptCd || d.code || d.deptCode || "";
+        const match = code.match(/^DEPT-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+    }
+    return `DEPT-${String(maxNum + 1).padStart(3, '0')}`;
   };
 
   const fetchAllData = async () => {
@@ -437,6 +452,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
         error = "Email is required.";
       } else if (!emailVal.includes("@")) {
         error = "Email must contain @.";
+      } else if (!emailVal.toLowerCase().endsWith(".com")) {
+        error = "Email must end with .com.";
       }
     } else if (name === "password") {
       if (!value) {
@@ -478,6 +495,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
     // Check if user clicked "+ Create Department"
     if (name === "department" && value === "CREATE_NEW") {
+      setDeptForm({ code: generateDepartmentCode(departments), name: "", description: "", status: "" });
       setShowDeptModal(true);
       setForm((prev) => ({ ...prev, department: "" }));
       return;
@@ -669,8 +687,21 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
 
+    const trimmedCode = desigForm.code.trim().toUpperCase();
+    const codeExists = designations.some(d => {
+      const dCode = (d.desigCd || d.code || d.designationCode || "").trim().toUpperCase();
+      const dId = d.desigId || d.id;
+      if (isEditingDesig && String(dId) === String(editingDesigId)) return false;
+      return dCode === trimmedCode;
+    });
+
+    if (codeExists) {
+      triggerAlert("error", "Already Exists", "Designation code already exists.");
+      return;
+    }
+
     const payload = {
-      desigCd: desigForm.code.trim().toUpperCase(),
+      desigCd: trimmedCode,
       desigNm: desigForm.name.trim(),
       desigDesc: desigForm.description.trim()
     };
@@ -696,7 +727,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
         }
         setForm((prev) => ({ ...prev, designation: newDesig.desigNm }));
       } else {
-        triggerAlert("error", "Error", "Failed to save designation.");
+        triggerAlert("error", "Error", "Designation code already exists.");
       }
     } catch (err) {
       console.error("Error saving designation:", err);
@@ -715,7 +746,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       deptCode: deptForm.code.trim().toUpperCase(),
       deptNm: deptForm.name.trim(),
       descr: deptForm.description.trim(),
-      sts: deptForm.status === "Active"
+      sts: deptForm.status === "Inactive" ? false : true
     };
 
     try {
@@ -728,7 +759,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       if (response.ok) {
         const newDept = await response.json();
         triggerAlert("success", "Success", "Department created successfully!");
-        setDeptForm({ code: "", name: "", description: "", status: "Active" });
+        setDeptForm({ code: "", name: "", description: "", status: "" });
         setShowDeptModal(false);
         const deptRes = await fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() });
         if (deptRes.ok) {
@@ -836,6 +867,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Date of Birth is required.");
       return;
     }
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (form.dateOfBirth > todayStr) {
+      triggerAlert("error", "Validation Error", "Date of Birth cannot be in the future.");
+      return;
+    }
 
     // 6. Employee Email check
     if (!form.email.trim()) {
@@ -847,8 +883,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
     const emailVal = form.email.trim();
-    if (!emailVal.includes("@")) {
-      triggerAlert("error", "Validation Error", "Please enter a valid Employee Email address (must contain @).");
+    if (!emailVal.includes("@") || !emailVal.toLowerCase().endsWith(".com")) {
+      triggerAlert("error", "Validation Error", "Please enter a valid Employee Email address (must contain @ and end with .com).");
       return;
     }
 
@@ -882,6 +918,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     // 10. Joining Date check
     if (!form.joiningDate) {
       triggerAlert("error", "Validation Error", "Joining Date is required.");
+      return;
+    }
+    if (form.joiningDate < todayStr) {
+      triggerAlert("error", "Validation Error", "Joining Date cannot be in the past.");
       return;
     }
 
@@ -1471,6 +1511,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             }}
                             dateFormat="dd/MM/yyyy"
                             placeholderText="DD/MM/YYYY"
+                            maxDate={new Date()}
                             customInput={<MaskedDateInput />}
                             showMonthDropdown
                             showYearDropdown
@@ -1579,6 +1620,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             }}
                             dateFormat="dd/MM/yyyy"
                             placeholderText="DD/MM/YYYY"
+                            minDate={new Date()}
                             customInput={<MaskedDateInput />}
                             showMonthDropdown
                             showYearDropdown
@@ -1620,17 +1662,16 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Employee Type <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
-                          <SearchableSelect
+                          <select
                             name="employmentType"
                             value={form.employmentType}
-                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
-                            placeholder="Select employment type"
-                            options={[
-                              { value: "Retainer", label: "Retainer" },
-                              { value: "Full Time Employee (FTE)", label: "Full Time Employee (FTE)" },
-                              { value: "Contract Employee", label: "Contract Employee" }
-                            ]}
-                          />
+                            onChange={handleChange}
+                          >
+                            <option value="">Select employment type</option>
+                            <option value="Retainer">Retainer</option>
+                            <option value="Full Time Employee (FTE)">Full Time Employee (FTE)</option>
+                            <option value="Contract Employee">Contract Employee</option>
+                          </select>
                         </div>
                       </div>
                       <div className="emp-form-item">
@@ -2010,6 +2051,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                     <label>Status</label>
                     <div className="emp-input-icon-wrap">
                       <select name="status" value={deptForm.status} onChange={handleDeptChange}>
+                        <option value="">Select status</option>
                         <option value="Active">Active</option>
                         <option value="Inactive">Inactive</option>
                       </select>

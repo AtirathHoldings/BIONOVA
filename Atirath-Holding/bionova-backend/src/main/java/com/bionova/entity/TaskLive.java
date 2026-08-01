@@ -127,6 +127,9 @@ public class TaskLive {
     @Transient
     private String approverNm;
 
+    @Transient
+    private java.util.List<TeamMember> teamMembers;
+
     public ProcessStatus getProcessStatus() {
         if (subStatus == null || subStatus.isEmpty()) {
             return ProcessStatus.NONE;

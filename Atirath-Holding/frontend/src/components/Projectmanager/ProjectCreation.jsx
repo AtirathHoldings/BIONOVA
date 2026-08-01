@@ -16,7 +16,8 @@ import {
   ChevronLeft,
   Search,
   Image as ImageIcon,
-  Calendar
+  Calendar,
+  Copy
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "../Sidebar.jsx";
@@ -47,6 +48,16 @@ const getLoggedInUser = () => {
     return namePart.split(/[._]/).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
   }
   return "Admin";
+};
+
+const formatListDate = (dateString) => {
+  if (!dateString) return "N/A";
+  const d = new Date(dateString);
+  if (isNaN(d.getTime())) return dateString;
+  const day = String(d.getDate()).padStart(2, '0');
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const year = d.getFullYear();
+  return `${day}/${month}/${year}`;
 };
 
 // ========== Searchable Select (unchanged) ==========
@@ -203,13 +214,15 @@ const DatePicker = ({ value, onChange, placeholder, name }) => {
   const isSelected = (date) => {
     if (!value) return false;
     const parts = value.split('-');
-    if (parts.length !== 3) return false;
-    const year = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1;
-    const day = parseInt(parts[2], 10);
-    return date.getFullYear() === year &&
-           date.getMonth() === month &&
-           date.getDate() === day;
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      return date.getFullYear() === year &&
+             date.getMonth() === month &&
+             date.getDate() === day;
+    }
+    return false;
   };
 
   const changeMonth = (delta) => {
@@ -348,10 +361,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
       setCompanies(coyData);
       setPlants(pltData);
       setDepartments(deptData);
-      const promotedDraftIds = new Set(live.map(l => l.drftPrjId).filter(Boolean));
-      const mappedDrafts = drafts
-        .filter(d => !promotedDraftIds.has(d.drftPrjId))
-        .map(d => ({
+      const mappedDrafts = drafts.map(d => ({
           id: d.drftPrjId,
           _type: "draft",
           projectCode: d.prjCd || "",
@@ -534,14 +544,16 @@ const ProjectCreation = ({ userRole, onLogout }) => {
 
       if ((name === 'startDate' || name === 'totalProjectDays') && nextForm.startDate && nextForm.totalProjectDays) {
         const parts = nextForm.startDate.split('-');
-        const days = parseInt(nextForm.totalProjectDays, 10);
-        if (parts.length === 3 && !isNaN(days) && days > 0) {
+        if (parts.length === 3) {
           const start = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          start.setDate(start.getDate() + days - 1);
-          const endY = start.getFullYear();
-          const endM = String(start.getMonth() + 1).padStart(2, '0');
-          const endD = String(start.getDate()).padStart(2, '0');
-          nextForm.endDate = `${endY}-${endM}-${endD}`;
+          const days = parseInt(nextForm.totalProjectDays, 10);
+          if (!isNaN(days) && days > 0) {
+            start.setDate(start.getDate() + days - 1);
+            const ey = start.getFullYear();
+            const em = String(start.getMonth() + 1).padStart(2, '0');
+            const ed = String(start.getDate()).padStart(2, '0');
+            nextForm.endDate = `${ey}-${em}-${ed}`;
+          }
         }
       }
 
@@ -551,7 +563,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         if (startParts.length === 3 && endParts.length === 3) {
           const start = new Date(parseInt(startParts[0], 10), parseInt(startParts[1], 10) - 1, parseInt(startParts[2], 10));
           const end = new Date(parseInt(endParts[0], 10), parseInt(endParts[1], 10) - 1, parseInt(endParts[2], 10));
-          const diffTime = end.getTime() - start.getTime();
+          const diffTime = end - start;
           if (diffTime >= 0) {
             const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
             nextForm.totalProjectDays = diffDays >= 0 ? String(diffDays) : "0";
@@ -697,7 +709,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     try {
       const isLive = form.status === "Live" || form.status === "LIVE";
       const projectCodeVal = (form.projectCode || generateNextProjectCode(projects)).trim();
-      const userEmpId = sessionStorage.getItem("empId") || localStorage.getItem("empId");
       const payload = {
         prjCd: projectCodeVal,
         prjNm: (form.projectName || "").trim(),
@@ -712,7 +723,6 @@ const ProjectCreation = ({ userRole, onLogout }) => {
         tentEndDt: form.endDate,
         noOfDays: parseInt(form.totalProjectDays) || 0,
         creBy: form.createdBy || "System",
-        createdBy: userEmpId ? parseInt(userEmpId) : null,
         logo: imagePreview || null,
         addlRem: (form.remarks || "").trim() || null
       };
@@ -826,6 +836,49 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
     const mainEl = document.querySelector(".main-content") || document.querySelector(".layout-content") || document.documentElement;
     if (mainEl) mainEl.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDuplicate = async (project) => {
+    setActiveDropdown(null);
+    setLoading(true);
+    try {
+      const res = await fetch(`${apiBaseUrl}/api/project-drafts/${project.id}/duplicate`, {
+        method: "POST",
+        headers: getAuthHeaders()
+      });
+      if (res.ok) {
+        const newDraft = await res.json();
+        triggerAlert("success", "Project Duplicated", "Project draft copied successfully with all its milestones and tasks!");
+        await fetchAllData();
+        handleEdit({
+          id: newDraft.drftPrjId,
+          _type: "draft",
+          projectCode: newDraft.prjCd || "",
+          projectName: newDraft.prjNm || "",
+          projectDescription: newDraft.prjDesc || "",
+          projectObjective: newDraft.prjObjtv || "",
+          expectedDeliverables: newDraft.expDlvbls || "",
+          priority: newDraft.prjPrty || "MEDIUM",
+          status: "DRAFT",
+          startDate: newDraft.tentStDt || "",
+          endDate: newDraft.tentEndDt || "",
+          totalProjectDays: newDraft.noOfDays || "",
+          companyId: newDraft.coyId || "",
+          plantId: newDraft.pltId || "",
+          departmentId: newDraft.deptId || "",
+          remarks: newDraft.addlRem || "",
+          logo: newDraft.logo || null
+        });
+      } else {
+        const errText = await res.text();
+        triggerAlert("error", "Error", errText || "Failed to duplicate project draft.");
+      }
+    } catch (err) {
+      console.error("Error duplicating project draft:", err);
+      triggerAlert("error", "Error", `Duplicate failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleDropdown = (id) => {
@@ -1605,7 +1658,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       <tbody>
                         {currentItems.length > 0 ? (
                           currentItems.map((project, index) => (
-                            <tr key={project.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <tr key={`${project._type}-${project.id}`} style={{ borderBottom: '1px solid #f1f5f9' }}>
                               <td data-label="S.NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstItem + index + 1}</td>
                               <td data-label="LOGO" style={{ padding: '14px 20px' }}>
                                 {project.logo ? (
@@ -1675,8 +1728,8 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                   {project.priority}
                                 </span>
                               </td>
-                              <td data-label="START DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.startDate || "N/A"}</td>
-                              <td data-label="END DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.endDate || "N/A"}</td>
+                              <td data-label="START DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{formatListDate(project.startDate)}</td>
+                              <td data-label="END DATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{formatListDate(project.endDate)}</td>
                               <td data-label="TOTAL DAYS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{project.totalProjectDays || "N/A"}</td>
                               <td data-label="REMARKS" style={{ 
                                 padding: '14px 20px', 
@@ -1754,29 +1807,29 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                 <button
                                   type="button"
                                   style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
-                                  onClick={() => toggleDropdown(project.id)}
+                                  onClick={() => toggleDropdown(`${project._type}-${project.id}`)}
                                   onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
                                   onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
                                 >
                                   <MoreVertical size={18} />
                                 </button>
 
-                                {activeDropdown === project.id && (
+                                {activeDropdown === `${project._type}-${project.id}` && (
                                   <>
                                     <div
                                       className="proj-actions-dropdown-backdrop"
                                       onClick={() => setActiveDropdown(null)}
                                       style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }}
                                     />
-                                    <div className="proj-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
+                                    <div className="proj-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '170px' }}>
                                       <button
                                         type="button"
                                         style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
                                         onClick={() => {
                                           if (project._type === 'live') {
-                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'live', projectType: 'live' } });
+                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'live' } });
                                           } else {
-                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'milestones_only', projectType: 'draft' } });
+                                            navigate(`/project-details/${project.id}`, { state: { viewMode: 'milestones_only' } });
                                           }
                                           setActiveDropdown(null);
                                         }}
@@ -1787,6 +1840,15 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                                       </button>
                                       {project._type !== 'live' && (
                                         <>
+                                          <button
+                                            type="button"
+                                            style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#2563eb', borderRadius: '4px', margin: '2px 4px' }}
+                                            onClick={() => handleDuplicate(project)}
+                                            onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#eff6ff'}
+                                            onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                          >
+                                            <Copy size={15} /> Duplicate (Template)
+                                          </button>
                                           <button
                                             type="button"
                                             style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}

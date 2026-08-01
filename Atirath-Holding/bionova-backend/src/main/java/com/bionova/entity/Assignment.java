@@ -96,6 +96,9 @@ public class Assignment {
     @Transient
     private String assignedByNm;
 
+    @Transient
+    private java.util.List<TeamMember> teamMembers;
+
     public TaskPriorityMaster getPriority() {
         if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
             return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(stDt, endDt, null, taskSts, null);
