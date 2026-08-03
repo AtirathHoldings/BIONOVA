@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import '../../styles/PlantMaster.css';
 import AlertModal from "../AlertModal.jsx";
+import { getScreenPermission } from "../../utils/permissions";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
@@ -107,6 +108,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
 };
 
 const PlantCreation = ({ userRole, onLogout }) => {
+  const screenPerm = getScreenPermission('PLANT_CREATION');
   const navigate = useNavigate();
 
   const [alertConfig, setAlertConfig] = useState({
@@ -1468,17 +1470,19 @@ const PlantCreation = ({ userRole, onLogout }) => {
                         style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
                       />
                     </div>
-                    <button
-                      type="button"
-                      className="pc-btn-add-new"
-                      onClick={() => {
-                        handleResetForm();
-                        setIsEditing(false);
-                        setView("form");
-                      }}
-                    >
-                      <Plus size={16} /> Add New Plant
-                    </button>
+                    {screenPerm.canCreate && (
+                      <button
+                        type="button"
+                        className="pc-btn-add-new"
+                        onClick={() => {
+                          handleResetForm();
+                          setIsEditing(false);
+                          setView("form");
+                        }}
+                      >
+                        <Plus size={16} /> Add New Plant
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1604,24 +1608,28 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                     >
                                       <Eye size={15} /> View
                                     </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleEdit(plant)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Edit size={15} /> Edit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleDelete(plant.pltId)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Trash2 size={15} /> Delete
-                                    </button>
+                                    {screenPerm.canEdit && (
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => handleEdit(plant)}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Edit size={15} /> Edit
+                                      </button>
+                                    )}
+                                    {screenPerm.canDelete && (
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => handleDelete(plant.pltId)}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Trash2 size={15} /> Delete
+                                      </button>
+                                    )}
                                   </div>
                                 </>
                               )}

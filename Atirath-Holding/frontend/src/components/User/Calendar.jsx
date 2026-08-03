@@ -14,6 +14,7 @@ import {
   Menu
 } from "lucide-react";
 import { apiGet } from "../../utils/api";
+import { getScreenPermission } from "../../utils/permissions";
 
 const EVENT_COLORS = {
   task: "#10b981",       
@@ -24,6 +25,7 @@ const EVENT_COLORS = {
 };
 
 const Calendar = ({ userRole, onLogout }) => {
+  const screenPerm = getScreenPermission('CALENDAR');
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState("month"); // 'month', 'week', 'day'
   const [showMonthPicker, setShowMonthPicker] = useState(false);

@@ -29,6 +29,7 @@ import {
 } from "lucide-react";
 import '../../styles/LandMaster.css';
 import AlertModal from "../AlertModal.jsx";
+import { getScreenPermission } from "../../utils/permissions";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -169,6 +170,7 @@ const MaskedDateInput = React.forwardRef(({ value, onClick, onChange, placeholde
 MaskedDateInput.displayName = 'MaskedDateInput';
 
 const AgriLandAllocation = ({ userRole, onLogout }) => {
+  const screenPerm = getScreenPermission('LAND_CREATION');
   const navigate = useNavigate();
 
   const [alertConfig, setAlertConfig] = useState({
@@ -276,9 +278,10 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
             mandal: land.mdl || "",
             village: land.vlg || "",
             pincode: land.pin || "",
-            leaseStartDate: land.leaseDt ? land.leaseDt.split('T')[0] : "",
-            leaseEndDate: land.leaseEndDt ? land.leaseEndDt.split('T')[0] : "",
-            leaseDuration: calculateDuration(land.leaseDt, land.leaseEndDt)
+            landType: land.ownershipType && land.ownershipType !== "null" ? land.ownershipType : "",
+            leaseStartDate: land.leaseDt && land.leaseDt !== "null" ? land.leaseDt.split('T')[0] : "",
+            leaseEndDate: land.leaseEndDt && land.leaseEndDt !== "null" ? land.leaseEndDt.split('T')[0] : "",
+            leaseDuration: calculateDuration(land.leaseDt && land.leaseDt !== "null" ? land.leaseDt : null, land.leaseEndDt && land.leaseEndDt !== "null" ? land.leaseEndDt : null)
           };
         });
         setAllocations(enriched);
@@ -372,6 +375,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     longitude: '',
     status: 'Active',
     logo: null,
+    landType: '',
     leaseStartDate: '',
     leaseEndDate: '',
     leaseDuration: ''
@@ -600,6 +604,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       longitude: '',
       status: 'Active',
       logo: null,
+      landType: '',
       leaseStartDate: '',
       leaseEndDate: '',
       leaseDuration: ''
@@ -659,17 +664,24 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       return;
     }
 
-    if (!form.leaseStartDate) {
-      triggerAlert("error", "Validation Error", "Lease Start Date is required.");
+    if (!form.landType) {
+      triggerAlert("error", "Validation Error", "Ownership Type is required.");
       return;
     }
-    if (!form.leaseEndDate) {
-      triggerAlert("error", "Validation Error", "Lease End Date is required.");
-      return;
-    }
-    if (new Date(form.leaseEndDate) < new Date(form.leaseStartDate)) {
-      triggerAlert("error", "Validation Error", "Lease End Date cannot be earlier than Lease Start Date.");
-      return;
+
+    if (form.landType === 'Lease') {
+      if (!form.leaseStartDate) {
+        triggerAlert("error", "Validation Error", "Lease Start Date is required.");
+        return;
+      }
+      if (!form.leaseEndDate) {
+        triggerAlert("error", "Validation Error", "Lease End Date is required.");
+        return;
+      }
+      if (new Date(form.leaseEndDate) < new Date(form.leaseStartDate)) {
+        triggerAlert("error", "Validation Error", "Lease End Date cannot be earlier than Lease Start Date.");
+        return;
+      }
     }
 
     // 7. State check
@@ -813,8 +825,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       pin: form.pincode.trim(),
       lat: form.latitude.trim(),
       longt: form.longitude.trim(),
-      leaseDt: form.leaseStartDate || null,
-      leaseEndDt: form.leaseEndDate || null,
+      ownershipType: form.landType,
+      leaseDt: form.landType === 'Lease' ? (form.leaseStartDate || null) : null,
+      leaseEndDt: form.landType === 'Lease' ? (form.leaseEndDate || null) : null,
       logo: finalLogoUrl || null,
       sts: form.status === "Active"
     };
@@ -1327,17 +1340,25 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.pincode || '-'}</span>
                             </div>
                             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
-                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease Start Date :</span>
-                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseStartDate ? form.leaseStartDate.split('-').reverse().join('/') : '-'}</span>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Ownership Type :</span>
+                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.landType || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
-                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease End Date :</span>
-                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseEndDate ? form.leaseEndDate.split('-').reverse().join('/') : '-'}</span>
-                            </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
-                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Duration :</span>
-                              <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseDuration || '-'}</span>
-                            </div>
+                            {form.landType === 'Lease' && (
+                              <>
+                                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease Start Date :</span>
+                                  <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseStartDate ? form.leaseStartDate.split('-').reverse().join('/') : '-'}</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease End Date :</span>
+                                  <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseEndDate ? form.leaseEndDate.split('-').reverse().join('/') : '-'}</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                                  <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Duration :</span>
+                                  <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseDuration || '-'}</span>
+                                </div>
+                              </>
+                            )}
                             <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Latitude :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.latitude || '-'}</span>
@@ -1506,9 +1527,24 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                 <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.mobileNo}</span>
                               )}
                             </label>
-                          </div>
-                          <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
+                            
                             <label className="al-field-item">
+                              <span>Ownership Type <b style={{ color: '#ef4444' }}>*</b></span>
+                              <select 
+                                name="landType" 
+                                value={form.landType || ''} 
+                                onChange={handleChange} 
+                                style={{ width: '100%', padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', height: '40px', backgroundColor: 'white' }}
+                              >
+                                <option value="" disabled>Select Ownership Type</option>
+                                <option value="Lease">Lease</option>
+                                <option value="Owner">Owner</option>
+                              </select>
+                            </label>
+                          </div>
+                          {form.landType === 'Lease' && (
+                            <div className="al-form-layout-row columns-4" style={{ marginTop: '20px' }}>
+                              <label className="al-field-item">
                               <span>Lease Start Date <b style={{ color: '#ef4444' }}>*</b></span>
                               <DatePicker
                                 selected={form.leaseStartDate ? new Date(form.leaseStartDate) : null}
@@ -1574,11 +1610,12 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                 }
                               />
                             </label>
-                            <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
-                              <span>Lease Duration</span>
-                              <input type="text" name="leaseDuration" value={form.leaseDuration || ""} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-calculated" />
-                            </label>
-                          </div>
+                              <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
+                                <span>Lease Duration</span>
+                                <input type="text" name="leaseDuration" value={form.leaseDuration || ""} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-calculated" />
+                              </label>
+                            </div>
+                          )}
                         </section>
 
                         {/* 4. Location Information */}
@@ -1737,17 +1774,19 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
                       />
                     </div>
-                    <button
-                      type="button"
-                      className="al-btn-add-new"
-                      onClick={() => {
-                        handleResetForm();
-                        setIsEditing(false);
-                        setView("form");
-                      }}
-                    >
-                      <Plus size={16} /> Add New Land
-                    </button>
+                    {screenPerm.canCreate && (
+                      <button
+                        type="button"
+                        className="al-btn-add-new"
+                        onClick={() => {
+                          handleResetForm();
+                          setIsEditing(false);
+                          setView("form");
+                        }}
+                      >
+                        <Plus size={16} /> Add New Land
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1765,6 +1804,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                           PLANT
                         </th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OWNER NAME</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OWNERSHIP TYPE</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MOBILE NO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SURVEY NO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
@@ -1789,7 +1829,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="20" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                               <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
                               Loading land records...
@@ -1819,6 +1859,11 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                             </td>
                             <td data-label="OWNER NAME" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               {Array.isArray(land.landOwnerName) ? land.landOwnerName.join(', ') : land.landOwnerName}
+                            </td>
+                            <td data-label="OWNERSHIP TYPE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                              <span style={{ backgroundColor: land.landType === 'Owner' ? '#f0fdf4' : (land.landType === 'Lease' ? '#eff6ff' : '#f1f5f9'), color: land.landType === 'Owner' ? '#166534' : (land.landType === 'Lease' ? '#1e40af' : '#64748b'), padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600', border: land.landType === 'Owner' ? '1px solid #bbf7d0' : (land.landType === 'Lease' ? '1px solid #bfdbfe' : '1px solid #e2e8f0') }}>
+                                {land.landType || "N/A"}
+                              </span>
                             </td>
                             <td data-label="MOBILE NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.mobileNo}</td>
                             <td data-label="SURVEY NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{Array.isArray(land.surveyNo) ? land.surveyNo.join(', ') : land.surveyNo}</td>
@@ -1887,24 +1932,28 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                     >
                                       <Eye size={15} /> View
                                     </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleEdit(land)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Edit size={15} /> Edit
-                                    </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleDelete(land.id)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Trash2 size={15} /> Delete
-                                    </button>
+                                    {screenPerm.canEdit && (
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => handleEdit(land)}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Edit size={15} /> Edit
+                                      </button>
+                                    )}
+                                    {screenPerm.canDelete && (
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => handleDelete(land.id)}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Trash2 size={15} /> Delete
+                                      </button>
+                                    )}
                                   </div>
                                 </>
                               )}

@@ -7,6 +7,7 @@ import {
 import Sidebar from '../Sidebar.jsx';
 import Header from '../Header.jsx';
 import { apiGet } from '../../utils/api';
+import { getScreenPermission } from '../../utils/permissions';
 import '../../styles/user-task-board.css';
 
 // Helper for auth headers (used if apiGet doesn't already handle auth)

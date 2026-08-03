@@ -23,6 +23,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
 import AlertModal from "../AlertModal.jsx";
+import { getScreenPermission } from "../../utils/permissions";
 import GoLiveCalendar from "./GoLiveCalendar.jsx";
 import "../../styles/projectCreation.css";
 
@@ -336,6 +337,7 @@ const DatePicker = ({ value, onChange, placeholder, name }) => {
 
 // ========== Main Component ==========
 const ProjectCreation = ({ userRole, onLogout }) => {
+  const screenPerm = getScreenPermission('PROJECT_CREATION');
   const navigate = useNavigate();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);

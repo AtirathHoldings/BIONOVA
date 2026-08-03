@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from "react";
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
 import { safeFetch, apiPatch, apiPost, apiPut, apiDelete } from "../../utils/api";
+import { getScreenPermission } from "../../utils/permissions";
 import {
   Calendar as CalendarIcon,
   Search,
@@ -245,6 +246,7 @@ const mapBackendTask = (t, projects, milestones, employees) => {
 
 // ─── Main Component ────────────────────────────────────────────────────────
 const TaskBoard = ({ userRole, onLogout }) => {
+  const screenPerm = getScreenPermission('TASK_BOARD');
   const [tasks, setTasks] = useState([]);
   const [allTasks, setAllTasks] = useState([]);
   const [apiLoaded, setApiLoaded] = useState(false);

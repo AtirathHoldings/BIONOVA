@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import "../../styles/CompanyMaster.css";
 import AlertModal from "../AlertModal.jsx";
+import { getScreenPermission } from "../../utils/permissions";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
@@ -53,15 +54,15 @@ const getAuthHeaders = () => ({
 });
 
 const formatDate = (dateStr) => {
-  if (!dateStr || dateStr === 'N/A') return 'N/A';
-  if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+  if (!dateStr) return "-";
   try {
-    const cleanStr = dateStr.split('T')[0];
+    const cleanStr = String(dateStr).split('T')[0];
     if (cleanStr.includes('-')) {
       const parts = cleanStr.split('-');
       if (parts[0].length === 4) {
         return `${parts[2]}/${parts[1]}/${parts[0]}`;
-      } else {
+      }
+      if (parts[2].length === 4) {
         return `${parts[0]}/${parts[1]}/${parts[2]}`;
       }
     }
@@ -208,6 +209,7 @@ const MaskedDateInput = React.forwardRef(({ value, onClick, onChange, placeholde
 MaskedDateInput.displayName = 'MaskedDateInput';
 
 const CompanyCreation = ({ onLogout, userRole }) => {
+  const screenPerm = getScreenPermission('COMPANY_CREATION');
   const navigate = useNavigate();
 
     const [companies, setCompanies] = useState([]);
@@ -1919,17 +1921,19 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
                       />
                     </div>
-                    <button
-                      type="button"
-                      className="cc-btn-add-new"
-                      onClick={() => {
-                        handleResetForm();
-                        setIsEditing(false);
-                        setView("form");
-                      }}
-                    >
-                      <Plus size={16} /> Add New Company
-                    </button>
+                    {screenPerm.canCreate && (
+                      <button
+                        type="button"
+                        className="cc-btn-add-new"
+                        onClick={() => {
+                          handleResetForm();
+                          setIsEditing(false);
+                          setView("form");
+                        }}
+                      >
+                        <Plus size={16} /> Add New Company
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -2057,25 +2061,28 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                     >
                                       <Eye size={15} /> View
                                     </button>
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleEdit(company)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Edit size={15} /> Edit
-                                    </button>
-
-                                    <button
-                                      type="button"
-                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
-                                      onClick={() => handleDelete(company.coyId)}
-                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
-                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                                    >
-                                      <Trash2 size={15} /> Delete
-                                    </button>
+                                    {screenPerm.canEdit && (
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => handleEdit(company)}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Edit size={15} /> Edit
+                                      </button>
+                                    )}
+                                    {screenPerm.canDelete && (
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => handleDelete(company.coyId)}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Trash2 size={15} /> Delete
+                                      </button>
+                                    )}
                                   </div>
                                 </>
                               )}

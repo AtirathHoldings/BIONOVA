@@ -51,6 +51,7 @@ const Sidebar = ({ onLogout }) => {
         });
         if (permsRes.ok) {
           const permissions = await permsRes.json();
+          sessionStorage.setItem("userPermissions", JSON.stringify(permissions));
 
           // If user is Admin, show all screens.
           // If user is non-Admin and hasRbac is true, filter by viewFlg.

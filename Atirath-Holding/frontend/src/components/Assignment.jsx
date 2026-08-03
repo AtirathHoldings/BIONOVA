@@ -9,6 +9,7 @@ import {
 import '../styles/Assignment.css';
 import '../styles/CompanyMaster.css';
 import AlertModal from './AlertModal';
+import { getScreenPermission } from '../utils/permissions';
 import GoLiveCalendar from './Projectmanager/GoLiveCalendar';
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -301,6 +302,7 @@ const calcEndDate = (startStr, workingDays, skipSat, skipSun, publicHolidayDates
 // Main Assignment component
 // ============================================================
 const Assignment = ({ userRole, onLogout }) => {
+  const screenPerm = getScreenPermission('INDIVIDUAL_TASK');
   // --- Form state ---
   const [taskCode, setTaskCode] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
@@ -1262,9 +1264,11 @@ const Assignment = ({ userRole, onLogout }) => {
                       onChange={(e) => setSearchQuery(e.target.value)}
                       style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', minWidth: '220px' }}
                     />
-                    <button className="cit-btn-create" style={{ background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: '500' }} onClick={async () => { await handleResetForm(); setView("form"); }}>
-                      <Plus size={16} /> Assign New Task
-                    </button>
+                    {screenPerm.canCreate && (
+                      <button className="cit-btn-create" style={{ background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: '500' }} onClick={async () => { await handleResetForm(); setView("form"); }}>
+                        <Plus size={16} /> Assign New Task
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -1347,12 +1351,16 @@ const Assignment = ({ userRole, onLogout }) => {
                               </button>
                               {assignmentView === "assignedByMe" && !isClosedTask && (
                                 <>
-                                  <button className="cit-action-btn edit" title="Edit" style={{ color: '#3b82f6', marginRight: 8 }} onClick={() => handleEdit(task)}>
-                                    <Edit3 size={16} />
-                                  </button>
-                                  <button className="cit-action-btn delete" title="Delete" style={{ color: '#ef4444' }} onClick={() => handleDelete(task.empTaskId || task.id)}>
-                                    <Trash2 size={16} />
-                                  </button>
+                                  {screenPerm.canEdit && (
+                                    <button className="cit-action-btn edit" title="Edit" style={{ color: '#3b82f6', marginRight: 8 }} onClick={() => handleEdit(task)}>
+                                      <Edit3 size={16} />
+                                    </button>
+                                  )}
+                                  {screenPerm.canDelete && (
+                                    <button className="cit-action-btn delete" title="Delete" style={{ color: '#ef4444' }} onClick={() => handleDelete(task.empTaskId || task.id)}>
+                                      <Trash2 size={16} />
+                                    </button>
+                                  )}
                                 </>
                               )}
                             </td>

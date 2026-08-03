@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
 import AlertModal from "../AlertModal.jsx";
+import { getScreenPermission } from "../../utils/permissions";
 import {
   Search,
   ArrowLeft,
@@ -116,6 +117,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
 };
 
 const DepartmentMapping = ({ onLogout, userRole }) => {
+  const screenPerm = getScreenPermission('DEPARTMENT_MAPPING');
   const navigate = useNavigate();
 
   // Data states
@@ -684,19 +686,21 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                       style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
                     />
                   </div>
-                  <button
-                    type="button"
-                    className="cc-btn-add-new"
-                    onClick={() => {
-                      handleResetForm();
-                      setIsEditing(false);
-                      setIsViewing(false);
-                      setView("form");
-                    }}
-                    style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 20px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
-                  >
-                    <Plus size={16} /> Add Department Mapping
-                  </button>
+                  {screenPerm.canCreate && (
+                    <button
+                      type="button"
+                      className="cc-btn-add-new"
+                      onClick={() => {
+                        handleResetForm();
+                        setIsEditing(false);
+                        setIsViewing(false);
+                        setView("form");
+                      }}
+                      style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 20px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
+                    >
+                      <Plus size={16} /> Add Department Mapping
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -750,20 +754,24 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                                   >
                                     <Eye size={15} /> View
                                   </button>
-                                  <button
-                                    type="button"
-                                    style={{ padding: "10px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#334155", borderRadius: "4px", margin: "2px 4px" }}
-                                    onClick={() => handleEdit(item)}
-                                  >
-                                    <Edit size={15} /> Edit
-                                  </button>
-                                  <button
-                                    type="button"
-                                    style={{ padding: "10px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#ef4444", borderRadius: "4px", margin: "2px 4px" }}
-                                    onClick={() => handleDelete(item.mapId)}
-                                  >
-                                    <Trash2 size={15} /> Delete
-                                  </button>
+                                  {screenPerm.canEdit && (
+                                    <button
+                                      type="button"
+                                      style={{ padding: "10px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#334155", borderRadius: "4px", margin: "2px 4px" }}
+                                      onClick={() => handleEdit(item)}
+                                    >
+                                      <Edit size={15} /> Edit
+                                    </button>
+                                  )}
+                                  {screenPerm.canDelete && (
+                                    <button
+                                      type="button"
+                                      style={{ padding: "10px 16px", textAlign: "left", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: "10px", fontSize: "14px", color: "#ef4444", borderRadius: "4px", margin: "2px 4px" }}
+                                      onClick={() => handleDelete(item.mapId)}
+                                    >
+                                      <Trash2 size={15} /> Delete
+                                    </button>
+                                  )}
                                 </div>
                             )}
                           </td>

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
+import { getScreenPermission } from "../../utils/permissions";
 import "../../styles/milestoneCreation.css";
 
 // ============================================================
@@ -208,6 +209,7 @@ const externalEmployeeApi = {
 // MAIN COMPONENT
 // ============================================================
 const MilestoneCreation = ({ onLogout, userRole }) => {
+  const screenPerm = getScreenPermission('MILESTONE_CREATION');
   const STEPS = [
     { id: 1, name: "Milestone Details", icon: Settings, description: "Basic milestone information" },
     { id: 2, name: "Tasks", icon: Users, description: "Add and manage tasks with checklist, attachments, process & gantt" }

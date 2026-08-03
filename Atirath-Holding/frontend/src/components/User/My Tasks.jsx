@@ -3,6 +3,7 @@ import { useLocation } from "react-router-dom";
 import Sidebar from "../Sidebar";
 import Header from "../Header";
 import AlertModal from "../AlertModal";
+import { getScreenPermission } from "../../utils/permissions";
 import {
   Calendar as CalendarIcon,
   Search,
@@ -432,6 +433,7 @@ const getPriorityBadge = (priority) => {
 // MAIN COMPONENT
 // ============================================
 const MyTasks = ({ userRole, onLogout }) => {
+  const screenPerm = getScreenPermission('MY_TASK');
   const [tasks, setTasks] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [currentUserEmpId, setCurrentUserEmpId] = useState(null);

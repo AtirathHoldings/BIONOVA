@@ -6,6 +6,7 @@ import AlertModal from "../AlertModal.jsx";
 import { useNavigate } from 'react-router-dom';
 import '../../styles/PublicHoliday.css';
 import { apiGet, apiPost, apiPut, apiDelete } from "../../utils/api";
+import { getScreenPermission } from "../../utils/permissions";
 
 const formatDateDisplay = (dateStr) => {
   if (!dateStr) return "";
@@ -61,6 +62,7 @@ const mapBackendHoliday = (h, employees = [], companies = [], plants = []) => {
 };
 
 const PublicHoliday = ({ userRole, onLogout }) => {
+  const screenPerm = getScreenPermission('PUBLIC_HOLIDAYS');
   const [holidays, setHolidays] = useState([]);
   const [employees, setEmployees] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -294,13 +296,15 @@ const PublicHoliday = ({ userRole, onLogout }) => {
         <main className="ph-main" style={{ padding: '24px', overflowY: 'auto', flex: 1 }}>
           <div className="ph-container">
             {/* Header Actions */}
-            <div className="ph-header-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
-              <div className="ph-header-actions">
-                <button className="ph-btn-primary" onClick={openAddDrawer}>
-                  <Plus size={16} /> Add Holiday
-                </button>
+            {screenPerm.canCreate && (
+              <div className="ph-header-row" style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: '16px' }}>
+                <div className="ph-header-actions">
+                  <button className="ph-btn-primary" onClick={openAddDrawer}>
+                    <Plus size={16} /> Add Holiday
+                  </button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Main Card */}
             <div className="ph-card" style={{ marginTop: '0' }}>
@@ -370,8 +374,14 @@ const PublicHoliday = ({ userRole, onLogout }) => {
                         </td>
                         <td>
                           <div className="ph-actions">
-                            <button className="ph-action-btn edit" onClick={() => openEditDrawer(h)}><Edit2 size={14} /></button>
-                            <button className="ph-action-btn delete" onClick={() => handleDelete(h.id)}><Trash2 size={14} /></button>
+                            {screenPerm.canEdit ? (
+                              <button className="ph-action-btn edit" onClick={() => openEditDrawer(h)}><Edit2 size={14} /></button>
+                            ) : (
+                              <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>View Only</span>
+                            )}
+                            {screenPerm.canDelete && (
+                              <button className="ph-action-btn delete" onClick={() => handleDelete(h.id)}><Trash2 size={14} /></button>
+                            )}
                           </div>
                         </td>
                       </tr>
