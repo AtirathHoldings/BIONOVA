@@ -12,6 +12,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+
 import java.util.List;
 
 @Service
@@ -29,13 +32,58 @@ public class ProjectStatusCascadeService {
     @Autowired
     private ProjectLeadLagService projectLeadLagService;
 
+    @EventListener(ApplicationReadyEvent.class)
+    @Transactional
+    public void syncAllStatusesOnStartup() {
+        try {
+            List<MilestoneLive> allMilestones = milestoneLiveRepository.findAll();
+            for (MilestoneLive ms : allMilestones) {
+                List<TaskLive> milestoneTasks = taskLiveRepository.findByMilestoneId(ms.getMId());
+                if (!milestoneTasks.isEmpty()) {
+                    boolean allClosed = true;
+                    for (TaskLive t : milestoneTasks) {
+                        String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "";
+                        if (!"Closed".equalsIgnoreCase(sts) && !"Completed".equalsIgnoreCase(sts)) {
+                            allClosed = false;
+                            break;
+                        }
+                    }
+                    if (allClosed && !"CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
+                        ms.setMlstnSts("CLOSED");
+                        milestoneLiveRepository.save(ms);
+                    }
+                }
+            }
+
+            List<ProjectLive> allProjects = projectLiveRepository.findAll();
+            for (ProjectLive prj : allProjects) {
+                List<MilestoneLive> prjMilestones = milestoneLiveRepository.findByPrjId(prj.getPrjId());
+                if (!prjMilestones.isEmpty()) {
+                    boolean allMsClosed = true;
+                    for (MilestoneLive ms : prjMilestones) {
+                        if (!"CLOSED".equalsIgnoreCase(ms.getMlstnSts())) {
+                            allMsClosed = false;
+                            break;
+                        }
+                    }
+                    if (allMsClosed && !"CLOSED".equalsIgnoreCase(prj.getPrjSts())) {
+                        prj.setPrjSts("CLOSED");
+                        projectLiveRepository.save(prj);
+                    }
+                }
+            }
+        } catch (Exception e) {
+            // Log warning gracefully
+        }
+    }
+
     @Transactional(propagation = Propagation.REQUIRED)
     public void cascadeStatusFromTask(Long taskId) {
         TaskLive task = taskLiveRepository.findById(taskId).orElse(null);
         if (task == null) return;
 
         // Release downstream sequential tasks if this task is completed
-        if (task.getTaskSts() != null && "Closed".equalsIgnoreCase(task.getTaskSts().getStatusNm())) {
+        if (task.getTaskSts() != null && ("Closed".equalsIgnoreCase(task.getTaskSts().getStatusNm()) || "Completed".equalsIgnoreCase(task.getTaskSts().getStatusNm()))) {
             List<TaskLive> downstreamTasks = taskLiveRepository.findByDepTaskId(taskId);
             for (TaskLive dt : downstreamTasks) {
                 String dtSts = dt.getTaskSts() != null ? dt.getTaskSts().getStatusNm() : "";
@@ -59,10 +107,10 @@ public class ProjectStatusCascadeService {
 
         for (TaskLive t : milestoneTasks) {
             String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "Open";
-            if (!"Closed".equalsIgnoreCase(sts)) {
+            if (!"Closed".equalsIgnoreCase(sts) && !"Completed".equalsIgnoreCase(sts)) {
                 allCompleted = false;
             }
-            if ("WIP".equalsIgnoreCase(sts) || "Closed".equalsIgnoreCase(sts)) {
+            if ("WIP".equalsIgnoreCase(sts) || "Closed".equalsIgnoreCase(sts) || "Completed".equalsIgnoreCase(sts)) {
                 anyStarted = true;
             }
         }
