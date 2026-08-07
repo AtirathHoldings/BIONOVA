@@ -48,6 +48,10 @@ public class AuthService {
             return new LoginResponse(false, "User Not Found", null, null, null);
         }
 
+        if (Boolean.FALSE.equals(employee.getStatus())) {
+            return new LoginResponse(false, "Account Inactive. Please contact Admin.", null, null, null);
+        }
+
         String rawPassword    = request.getPassword();
         String storedPassword = employee.getPassword();
 

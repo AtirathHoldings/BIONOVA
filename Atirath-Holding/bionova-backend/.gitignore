@@ -31,3 +31,14 @@ build/
 
 ### VS Code ###
 .vscode/
+
+### Secrets & Scratch Scripts ###
+.env
+.env.*
+*.ps1
+*.sql
+*.json
+!pom.xml
+!package.json
+!package-lock.json
+

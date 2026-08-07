@@ -109,6 +109,7 @@ public class LandmasterController {
         land.setMobNum(details.getMobNum());
         land.setLandSize(details.getLandSize());
         land.setAllotedFor(details.getAllotedFor());
+        land.setOwnershipType(details.getOwnershipType());
 
         land.setLeaseDt(details.getLeaseDt());
         land.setLeaseEndDt(details.getLeaseEndDt());

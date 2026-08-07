@@ -25,7 +25,7 @@ public class ActivityLogController {
             @PathVariable String entityTyp,
             @PathVariable Long entityId) {
         String normalizedType = entityTyp.toUpperCase();
-        if (!List.of("PROJECT", "MILESTONE", "TASK").contains(normalizedType)) {
+        if (!List.of("PROJECT", "MILESTONE", "TASK", "PROJECT_ACCESS").contains(normalizedType)) {
             return ResponseEntity.badRequest().build();
         }
         return ResponseEntity.ok(activityLogService.getLogsForEntity(normalizedType, entityId));

@@ -12,6 +12,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import com.bionova.service.ActivityLogService;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 import java.util.Map;
 
@@ -41,6 +48,9 @@ public class TeamMemberController {
 
     @Autowired
     private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private ActivityLogService activityLogService;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Helper
@@ -113,8 +123,9 @@ public class TeamMemberController {
         tm.setEmpId(dto.getEmpId());
         tm.setAsgnRmk(dto.getAsgnRmk());
 
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(teamMemberRepository.save(tm));
+        TeamMember saved = teamMemberRepository.save(tm);
+        activityLogService.logActivity("TASK", dto.getTaskId(), "NONE", "EMP_" + dto.getEmpId());
+        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -146,7 +157,9 @@ public class TeamMemberController {
                     tm.setTaskId(taskId);
                     tm.setEmpId(dto.getEmpId());
                     tm.setAsgnRmk(dto.getAsgnRmk());
-                    return teamMemberRepository.save(tm);
+                    TeamMember res = teamMemberRepository.save(tm);
+                    activityLogService.logActivity("TASK", taskId, "NONE", "EMP_" + dto.getEmpId());
+                    return res;
                 })
                 .toList();
 
@@ -180,11 +193,13 @@ public class TeamMemberController {
 
     @DeleteMapping("/{tmId}")
     public ResponseEntity<?> deleteOne(@PathVariable Integer tmId) {
-        if (!teamMemberRepository.existsById(tmId)) {
+        TeamMember tm = teamMemberRepository.findById(tmId).orElse(null);
+        if (tm == null) {
             return ResponseEntity.status(HttpStatus.NOT_FOUND)
                     .body(Map.of("message", "TeamMember not found: " + tmId));
         }
         teamMemberRepository.deleteById(tmId);
+        activityLogService.logActivity("TASK", tm.getTaskId(), "EMP_" + tm.getEmpId(), "REMOVED");
         return ResponseEntity.ok(Map.of("message", "Removed successfully."));
     }
 
@@ -195,6 +210,7 @@ public class TeamMemberController {
     @DeleteMapping("/by-task/{taskId}")
     public ResponseEntity<?> deleteAllByTask(@PathVariable Long taskId) {
         teamMemberRepository.deleteByTaskId(taskId);
+        activityLogService.logActivity("TASK", taskId, "MEMBERS", "REMOVED_ALL");
         return ResponseEntity.ok(Map.of("message", "All members removed from task " + taskId));
     }
 }

@@ -8,6 +8,8 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import com.bionova.service.EmailService;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController
 @RequestMapping("/api")
@@ -27,6 +29,12 @@ public class EmployeeController {
 
     @Autowired
     private com.bionova.repository.DepartmentRepository departmentRepository;
+
+    @Autowired
+    private EmailService emailService;
+
+    @Value("${app.base-url:http://localhost:5173}")
+    private String websiteUrl;
 
     private void populateDesignation(Employee employee) {
         if (employee.getDesigId() != null) {
@@ -246,16 +254,26 @@ public class EmployeeController {
             employee.setDesigId(desig.getDesigId());
         }
 
-        if (employee.getPassword() != null && !employee.getPassword().isEmpty()) {
+        String rawPassword = employee.getPassword();
+        if (rawPassword != null && !rawPassword.isEmpty()) {
             employee.setPassword(
                     new org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder()
-                            .encode(employee.getPassword())
+                            .encode(rawPassword)
             );
         }
 
         Employee saved = employeeRepository.save(employee);
         populateDesignation(saved);
         populateCompanyAndPlant(saved);
+        
+        // Send welcome email with login credentials
+        if (saved.getEmail() != null && !saved.getEmail().trim().isEmpty() && rawPassword != null && !rawPassword.isEmpty()) {
+            // Run asynchronously so it doesn't block the API response
+            new Thread(() -> {
+                emailService.sendWelcomeEmail(saved.getEmail(), rawPassword, websiteUrl);
+            }).start();
+        }
+        
         return ResponseEntity.ok(saved);
     }
     @PutMapping("/employees/{id}")

@@ -64,6 +64,9 @@ public class Landmaster {
     @Column(name = "longt", length = 20)
     private String longt;
 
+    @Column(name = "ownership_type", length = 20)
+    private String ownershipType;
+
     @Column(name = "photo_url", length = 255)
     private String logo;
 

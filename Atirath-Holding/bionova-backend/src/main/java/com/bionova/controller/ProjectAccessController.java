@@ -19,6 +19,7 @@ import com.bionova.repository.ReviewerMasterRepository;
 import com.bionova.repository.ExternalEmployeeRepository;
 import com.bionova.repository.CompanyRepository;
 import com.bionova.repository.PlantRepository;
+import com.bionova.service.ActivityLogService;
 import com.bionova.service.ProjectLeadLagService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -41,6 +42,9 @@ public class ProjectAccessController {
 
     @Autowired
     private EmployeeRepository employeeRepository;
+
+    @Autowired
+    private ActivityLogService activityLogService;
 
     @Autowired
     private MilestoneLiveRepository milestoneLiveRepository;
@@ -604,6 +608,10 @@ public class ProjectAccessController {
                 Long empId = Long.valueOf(obj.toString());
                 Optional<ProjectAccess> accessOpt = projectAccessRepository.findByPrjIdAndEmpId(prjId, empId);
 
+                String oldStatus = (accessOpt.isPresent() && Boolean.TRUE.equals(accessOpt.get().getSts()))
+                        ? (accessOpt.get().getAccessType() != null ? accessOpt.get().getAccessType() : "NONE")
+                        : "NONE";
+
                 ProjectAccess access;
                 if (accessOpt.isPresent()) {
                     access = accessOpt.get();
@@ -619,6 +627,8 @@ public class ProjectAccessController {
                 access.setGrantedAt(LocalDateTime.now());
 
                 projectAccessRepository.save(access);
+
+                activityLogService.logActivity("PROJECT_ACCESS", prjId, oldStatus, accessType);
             }
 
             return ResponseEntity.ok(Map.of("message", "Access granted successfully"));
@@ -637,6 +647,11 @@ public class ProjectAccessController {
             String remarks = (String) body.get("remarks");
 
             Optional<ProjectAccess> accessOpt = projectAccessRepository.findByPrjIdAndEmpId(prjId, empId);
+
+            String oldStatus = (accessOpt.isPresent() && Boolean.TRUE.equals(accessOpt.get().getSts()))
+                    ? (accessOpt.get().getAccessType() != null ? accessOpt.get().getAccessType() : "NONE")
+                    : "NONE";
+
             ProjectAccess access;
             if (accessOpt.isPresent()) {
                 access = accessOpt.get();
@@ -652,6 +667,9 @@ public class ProjectAccessController {
             access.setGrantedAt(LocalDateTime.now());
 
             projectAccessRepository.save(access);
+
+            activityLogService.logActivity("PROJECT_ACCESS", prjId, oldStatus, accessType);
+
             return ResponseEntity.ok(Map.of("message", "Access updated successfully"));
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body(Map.of("error", e.getMessage()));
@@ -665,12 +683,17 @@ public class ProjectAccessController {
             Optional<ProjectAccess> accessOpt = projectAccessRepository.findByPrjIdAndEmpId(prjId, empId);
             if (accessOpt.isPresent()) {
                 ProjectAccess access = accessOpt.get();
+                String oldStatus = (access.getAccessType() != null && Boolean.TRUE.equals(access.getSts()))
+                        ? access.getAccessType() : "ACTIVE";
                 access.setSts(false);
                 if (body != null) {
                     access.setPerformedBy((String) body.get("performedBy"));
                     access.setRemarks((String) body.get("remarks"));
                 }
                 projectAccessRepository.save(access);
+
+                activityLogService.logActivity("PROJECT_ACCESS", prjId, oldStatus, "REVOKED");
+
                 return ResponseEntity.ok(Map.of("message", "Access revoked successfully"));
             } else {
                 return ResponseEntity.status(404).body(Map.of("error", "Access mapping not found"));
@@ -707,8 +730,13 @@ public class ProjectAccessController {
                     .orElseThrow(() -> new RuntimeException("Task not found: " + taskId));
 
             if ("assignee".equalsIgnoreCase(roleType)) {
+                Long oldEmpId = task.getEmpId();
+                String oldStatus = (oldEmpId != null) ? "EMP_" + oldEmpId : "UNASSIGNED";
                 task.setEmpId(empId);
                 taskLiveRepository.save(task);
+
+                String newStatus = (empId != null) ? "EMP_" + empId : "UNASSIGNED";
+                activityLogService.logActivity("TASK", taskId, oldStatus, newStatus);
             } else if ("reviewer".equalsIgnoreCase(roleType) || "approver".equalsIgnoreCase(roleType)) {
                 int ordrId = "reviewer".equalsIgnoreCase(roleType) ? 1 : 2;
                 List<ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(taskId, true);
@@ -719,6 +747,9 @@ public class ProjectAccessController {
                         break;
                     }
                 }
+
+                String oldStatus = (targetConfig != null && targetConfig.getEmpId() != null)
+                        ? "EMP_" + targetConfig.getEmpId() : "UNASSIGNED";
 
                 if (empId == null) {
                     if (targetConfig != null) {
@@ -745,6 +776,9 @@ public class ProjectAccessController {
                     targetConfig.setEmpId(empId);
                     processConfigRepository.save(targetConfig);
                 }
+
+                String newStatus = (empId != null) ? "EMP_" + empId : "UNASSIGNED";
+                activityLogService.logActivity("TASK", taskId, oldStatus, newStatus);
 
                 // Auto-update prcs_flg in task_live_master based on active process configs
                 List<ProcessConfig> remainingConfigs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(taskId, true);

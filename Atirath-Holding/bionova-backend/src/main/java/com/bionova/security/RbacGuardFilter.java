@@ -216,14 +216,36 @@ public class RbacGuardFilter extends OncePerRequestFilter {
             return;
         }
 
-        // 6. Check viewFlg across ALL role mappings for this employee (OR logic)
+        // 6. Check permissions according to HTTP method across ALL role mappings for this employee (OR logic)
         boolean allowed = false;
+        String httpMethod = method != null ? method.toUpperCase() : "GET";
+
         for (RoleBasedEmployeeMapping mapping : mappings) {
             List<RoleBasedAccessControl> rbacList = rbacRepository.findByRoleId(mapping.getRoleId());
             for (RoleBasedAccessControl rbac : rbacList) {
-                if (allowedScreenIds.contains(rbac.getScreenId()) && Boolean.TRUE.equals(rbac.getViewFlg())) {
-                    allowed = true;
-                    break;
+                if (allowedScreenIds.contains(rbac.getScreenId())) {
+                    if ("GET".equals(httpMethod) || "HEAD".equals(httpMethod) || "OPTIONS".equals(httpMethod)) {
+                        if (Boolean.TRUE.equals(rbac.getViewFlg())) {
+                            allowed = true;
+                            break;
+                        }
+                    } else if ("POST".equals(httpMethod)) {
+                        // Allow if user has addFlg OR viewFlg (some endpoints use POST for queries)
+                        if (Boolean.TRUE.equals(rbac.getAddFlg()) || Boolean.TRUE.equals(rbac.getViewFlg())) {
+                            allowed = true;
+                            break;
+                        }
+                    } else if ("PUT".equals(httpMethod) || "PATCH".equals(httpMethod)) {
+                        if (Boolean.TRUE.equals(rbac.getEditFlg())) {
+                            allowed = true;
+                            break;
+                        }
+                    } else if ("DELETE".equals(httpMethod)) {
+                        if (Boolean.TRUE.equals(rbac.getDeleteFlg())) {
+                            allowed = true;
+                            break;
+                        }
+                    }
                 }
             }
             if (allowed) break;
@@ -236,7 +258,10 @@ public class RbacGuardFilter extends OncePerRequestFilter {
             Map<String, Object> body = new LinkedHashMap<>();
             body.put("status", 403);
             body.put("error", "Access Denied");
-            body.put("message", "You do not have permission to access this module.");
+            String actionName = ("PUT".equals(httpMethod) || "PATCH".equals(httpMethod)) ? "edit" 
+                              : "DELETE".equals(httpMethod) ? "delete" 
+                              : "POST".equals(httpMethod) ? "create" : "access";
+            body.put("message", "You do not have " + actionName + " permission for this module.");
             body.put("screens", screenCodes);
             response.getWriter().write(objectMapper.writeValueAsString(body));
             return;

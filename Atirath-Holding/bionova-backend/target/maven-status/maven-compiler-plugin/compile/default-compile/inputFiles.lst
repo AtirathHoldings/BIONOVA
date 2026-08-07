@@ -148,6 +148,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\service\ActivityLogService.j
 D:\sample\bionova-backend\src\main\java\com\bionova\service\AdminDashboardService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\AuthService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\CalendarService.java
+D:\sample\bionova-backend\src\main\java\com\bionova\service\EmailService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\EmployeeSettingsService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\NotificationService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\PasswordResetService.java
