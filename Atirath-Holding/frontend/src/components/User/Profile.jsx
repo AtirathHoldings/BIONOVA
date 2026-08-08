@@ -276,6 +276,8 @@ const Profile = ({ userRole, onLogout }) => {
       if (res.ok) {
         const matchedProfile = await res.json();
         setProfile(matchedProfile);
+        const isInactive = matchedProfile.sts === false || matchedProfile.sts === "INACTIVE" || matchedProfile.sts === 0 || matchedProfile.sts === "false" || matchedProfile.status === "Inactive" || matchedProfile.status === false;
+        sessionStorage.setItem("userAccountStatus", isInactive ? "Inactive" : "Active");
         if (matchedProfile.photoUrl) {
           setProfilePhoto(matchedProfile.photoUrl);
         }
@@ -328,11 +330,23 @@ const Profile = ({ userRole, onLogout }) => {
     return p ? p.pltNm : `Plant ID: ${id}`;
   };
 
+  const formatGender = (g) => {
+    if (!g) return "N/A";
+    const str = String(g).toUpperCase();
+    if (str === "MALE") return "Male";
+    if (str === "FEMALE") return "Female";
+    if (str === "OTHER" || str === "OTHERS") return "Others";
+    return String(g).charAt(0).toUpperCase() + String(g).slice(1).toLowerCase();
+  };
+
   const profileDetails = profile ? {
     employeeCode: profile.empCode || "N/A",
     employeeName: `${profile.fstNm || ""} ${profile.lstNm || ""}`.trim() || "N/A",
+    gender: formatGender(profile.gndr || profile.gender),
+    dateOfBirth: profile.dob || "N/A",
     email: profile.email || "N/A",
     mobileNumber: profile.mobNum || "N/A",
+    address: profile.add || profile.address || "N/A",
     // Show plant name if plant exists, else company name
     companyName: profile.pltId 
       ? getPlantName(profile.pltId) 
@@ -354,8 +368,11 @@ const Profile = ({ userRole, onLogout }) => {
   } : {
     employeeCode: "Loading...",
     employeeName: "Loading...",
+    gender: "Loading...",
+    dateOfBirth: "Loading...",
     email: "Loading...",
     mobileNumber: "Loading...",
+    address: "Loading...",
     companyName: "Loading...",
     department: "Loading...",
     employeeType: "Loading...",
@@ -453,6 +470,18 @@ const Profile = ({ userRole, onLogout }) => {
                   </div>
 
                   <div className="pf-detail-row">
+                    <div className="pf-detail-label"><User size={16} />Gender</div>
+                    <span className="pf-detail-separator">:</span>
+                    <div className="pf-detail-value">{profileDetails.gender}</div>
+                  </div>
+
+                  <div className="pf-detail-row">
+                    <div className="pf-detail-label"><Calendar size={16} />Date of Birth</div>
+                    <span className="pf-detail-separator">:</span>
+                    <div className="pf-detail-value">{profileDetails.dateOfBirth !== "N/A" && profileDetails.dateOfBirth !== "Loading..." ? formatDate(profileDetails.dateOfBirth) : profileDetails.dateOfBirth}</div>
+                  </div>
+
+                  <div className="pf-detail-row">
                     <div className="pf-detail-label"><Mail size={16} />Email</div>
                     <span className="pf-detail-separator">:</span>
                     <div className="pf-detail-value">{profileDetails.email}</div>
@@ -462,6 +491,12 @@ const Profile = ({ userRole, onLogout }) => {
                     <div className="pf-detail-label"><Phone size={16} />Mobile Number</div>
                     <span className="pf-detail-separator">:</span>
                     <div className="pf-detail-value">{profileDetails.mobileNumber}</div>
+                  </div>
+
+                  <div className="pf-detail-row">
+                    <div className="pf-detail-label"><MapPin size={16} />Address</div>
+                    <span className="pf-detail-separator">:</span>
+                    <div className="pf-detail-value">{profileDetails.address}</div>
                   </div>
 
                   {/* ─── Dynamic label for Company/Plant ─── */}
@@ -517,7 +552,7 @@ const Profile = ({ userRole, onLogout }) => {
                     <div className="pf-detail-label"><Clock size={16} />Status</div>
                     <span className="pf-detail-separator">:</span>
                     <div className="pf-detail-value">
-                      <span className="pf-status-badge">
+                      <span className={`pf-status-badge ${profileDetails.status === 'Inactive' ? 'inactive' : 'active'}`}>
                         <span className="pf-status-dot"></span>
                         {profileDetails.status}
                       </span>

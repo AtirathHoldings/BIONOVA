@@ -3,7 +3,7 @@ import { Download, Filter, Search, ChevronDown, ChevronLeft, ChevronRight, ZoomI
 import "../../styles/AllProjectGanttChart.css";
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL) + "/api";
 const getAuthToken = () => sessionStorage.getItem("authToken") || "";
@@ -24,6 +24,7 @@ const ROW_H_BASELINE = 72;
 
 export default function AllProjectGanttChart({ userRole, onLogout }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const [zoom, setZoom] = useState(100);
   const [activeTab, setActiveTab] = useState("Gantt Chart");
   const [baseline, setBaseline] = useState(false);
@@ -34,7 +35,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All Status");
-  const [projectFilter, setProjectFilter] = useState("All Projects");
+  const [projectFilter, setProjectFilter] = useState(location.state?.projectFilter || "All Projects");
   const [startDateFilter, setStartDateFilter] = useState("");
   const [endDateFilter, setEndDateFilter] = useState("");
   const [departmentsList, setDepartmentsList] = useState([]);
@@ -62,6 +63,17 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
   useEffect(() => {
     setTableWidth(baseline ? 360 : 300);
   }, [baseline]);
+
+  useEffect(() => {
+    if (projectFilter !== "All Projects" && ganttRows.length > 0 && !singleProjectView) {
+      const projRow = ganttRows.find(r => r.type === 'project' && String(r.id) === String(projectFilter));
+      if (projRow) {
+        setSingleProjectView(projRow);
+        setTableCollapsed(true);
+        setExpandedProjects(prev => new Set([...prev, projRow.id]));
+      }
+    }
+  }, [ganttRows, projectFilter, singleProjectView]);
 
   const handleDragStart = (e) => {
     dragState.current = { isDragging: true, startX: e.clientX, startW: tableWidth };
@@ -551,93 +563,97 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                 </div>
               )}
 
-            <div className="gantt-chart-container" ref={timelineRef} style={{ flexGrow: 1, overflow: 'auto', display: 'flex' }}>
+            <div className="gantt-chart-container" ref={timelineRef} style={{ flexGrow: 1, overflow: 'auto', display: 'flex', minHeight: 0 }}>
               
+              {(() => {
+                const totalTimelineHeight = 60 + visibleRows.length * ROW_H;
+                return (
+                  <>
                   {/* Left Table Section with Collapse */}
-              {!tableCollapsed && (
-                <div className="gantt-table-section" style={{ width: tableWidth, flexShrink: 0, position: 'sticky', left: 0, zIndex: 40, background: '#fff' }}>
-                  <div className="gantt-thead" style={{ position: 'sticky', top: 0, zIndex: 11, background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
-                    <div className="gantt-th" style={{ flex: 1, minWidth: '180px' }}>Project / Task / Status</div>
-
-                    {baseline && <div className="gantt-th" style={{ width: '60px' }}>Act%</div>}
-                  </div>
-                  <div style={{ overflowY: 'hidden' }}>
-                    {visibleRows.map((row, i) => (
-                      <div 
-                        key={row.id} 
-                        className="gantt-row" 
-                        style={{ height: ROW_H, cursor: 'pointer', background: activeRow === row.id ? '#f1f5f9' : 'transparent' }}
-                        onClick={() => {
-                          setActiveRow(row.id);
-                          if (row.type === 'project') toggleProjectExpand(row.id);
-                          if (row.type === 'milestone') toggleMilestoneExpand(row.id);
-                        }}
-                      >
-                        <div className="gantt-td" style={{ flex: 1, minWidth: '200px', fontWeight: row.type !== 'task' ? '600' : '400', paddingLeft: row.type === 'milestone' ? '24px' : (row.type === 'task' ? '48px' : '12px'), display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
-                          {row.type === 'project' && (
-                            <span style={{ cursor: 'pointer', paddingRight: 4 }}>
-                              {expandedProjects.has(row.id) ? <ChevronDown size={14} color="#64748b"/> : <span style={{display:'inline-block', transform:'rotate(-90deg)'}}><ChevronDown size={14} color="#64748b"/></span>}
-                            </span>
-                          )}
-                          {row.type === 'milestone' && (
-                            <span style={{ cursor: 'pointer', paddingRight: 4 }}>
-                              {expandedMilestones.has(row.id) ? <ChevronDown size={14} color="#64748b"/> : <span style={{display:'inline-block', transform:'rotate(-90deg)'}}><ChevronDown size={14} color="#64748b"/></span>}
-                            </span>
-                          )}
-                          {row.type !== 'task' && <span style={{width: 8, height: 8, borderRadius: '50%', background: SC[row.status]?.bar || '#94a3b8', flexShrink: 0}}></span>}
-                          
-                          <span 
-                            style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: row.type !== 'task' ? 'pointer' : 'default', padding: '4px 0' }} 
-                            title={row.name}
-                          >
-                            {row.displayId ? `${row.displayId}. ` : ''}{row.name}
-                          </span>
-                          <span style={{ padding: '2px 7px', borderRadius: '10px', fontWeight: 600, fontSize: '10px', background: SC[row.status]?.bg || '#f1f5f9', color: SC[row.status]?.bar || '#64748b', whiteSpace: 'nowrap', marginLeft: '8px', flexShrink: 0 }}>
-                            {row.status || '-'}
-                          </span>
-                        </div>
-
-                        {baseline && <div className="gantt-td" style={{ width: '60px', fontWeight: 600, color: '#64748b' }}>{row.aProg}%</div>}
+                  {!tableCollapsed && (
+                    <div className="gantt-table-section" style={{ width: tableWidth, flexShrink: 0, position: 'sticky', left: 0, zIndex: 40, background: '#fff', minHeight: totalTimelineHeight }}>
+                      <div className="gantt-thead" style={{ position: 'sticky', top: 0, zIndex: 50, background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex' }}>
+                        <div className="gantt-th" style={{ flex: 1, minWidth: '180px' }}>Project / Task / Status</div>
+                        {baseline && <div className="gantt-th" style={{ width: '60px' }}>Act%</div>}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
+                      <div style={{ overflowY: 'hidden' }}>
+                        {visibleRows.map((row, i) => (
+                          <div 
+                            key={row.id} 
+                            className="gantt-row" 
+                            style={{ height: ROW_H, cursor: 'pointer', background: activeRow === row.id ? '#f1f5f9' : 'transparent' }}
+                            onClick={() => {
+                              setActiveRow(row.id);
+                              if (row.type === 'project') toggleProjectExpand(row.id);
+                              if (row.type === 'milestone') toggleMilestoneExpand(row.id);
+                            }}
+                          >
+                            <div className="gantt-td" style={{ flex: 1, minWidth: '200px', fontWeight: row.type !== 'task' ? '600' : '400', paddingLeft: row.type === 'milestone' ? '24px' : (row.type === 'task' ? '48px' : '12px'), display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
+                              {row.type === 'project' && (
+                                <span style={{ cursor: 'pointer', paddingRight: 4 }}>
+                                  {expandedProjects.has(row.id) ? <ChevronDown size={14} color="#64748b"/> : <span style={{display:'inline-block', transform:'rotate(-90deg)'}}><ChevronDown size={14} color="#64748b"/></span>}
+                                </span>
+                              )}
+                              {row.type === 'milestone' && (
+                                <span style={{ cursor: 'pointer', paddingRight: 4 }}>
+                                  {expandedMilestones.has(row.id) ? <ChevronDown size={14} color="#64748b"/> : <span style={{display:'inline-block', transform:'rotate(-90deg)'}}><ChevronDown size={14} color="#64748b"/></span>}
+                                </span>
+                              )}
+                              {row.type !== 'task' && <span style={{width: 8, height: 8, borderRadius: '50%', background: SC[row.status]?.bar || '#94a3b8', flexShrink: 0}}></span>}
+                              
+                              <span 
+                                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: row.type !== 'task' ? 'pointer' : 'default', padding: '4px 0' }} 
+                                title={row.name}
+                              >
+                                {row.displayId ? `${row.displayId}. ` : ''}{row.name}
+                              </span>
+                              <span style={{ padding: '2px 7px', borderRadius: '10px', fontWeight: 600, fontSize: '10px', background: SC[row.status]?.bg || '#f1f5f9', color: SC[row.status]?.bar || '#64748b', whiteSpace: 'nowrap', marginLeft: '8px', flexShrink: 0 }}>
+                                {row.status || '-'}
+                              </span>
+                            </div>
 
-                {/* Expand button when table collapsed */}
-                {tableCollapsed && (
-                  <div style={{ flexShrink: 0, position: 'sticky', left: 0, width: 32, zIndex: 40, background: 'white', borderRight: '1px solid #e2e8f0' }}>
-                    <button
-                      onClick={() => setTableCollapsed(false)}
-                      title="Expand table"
-                      style={{ position: 'absolute', top: 12, right: 0, width: 24, height: 28, borderRadius: '14px 0 0 14px', background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '-2px 2px 4px rgba(0,0,0,0.1)' }}
-                    >
-                      <PanelLeftOpen size={16} />
-                    </button>
-                  </div>
-                )}
+                            {baseline && <div className="gantt-td" style={{ width: '60px', fontWeight: 600, color: '#64748b' }}>{row.aProg}%</div>}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
 
-                {/* Resizer Handle - only when table visible */}
-                {!tableCollapsed && (
-                  <div 
-                    onMouseDown={handleDragStart}
-                    style={{
-                      width: 6,
-                      cursor: 'col-resize',
-                      background: '#e2e8f0',
-                      zIndex: 41,
-                      position: 'sticky',
-                      left: tableWidth,
-                      flexShrink: 0
-                    }}
-                    title="Drag to resize table"
-                  >
+                    {/* Expand button when table collapsed */}
+                    {tableCollapsed && (
+                      <div style={{ flexShrink: 0, position: 'sticky', left: 0, width: 32, zIndex: 40, background: 'white', borderRight: '1px solid #e2e8f0', minHeight: totalTimelineHeight }}>
+                        <button
+                          onClick={() => setTableCollapsed(false)}
+                          title="Expand table"
+                          style={{ position: 'sticky', top: 18, marginLeft: '4px', width: 24, height: 28, borderRadius: '14px 0 0 14px', background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '-2px 2px 4px rgba(0,0,0,0.1)' }}
+                        >
+                          <PanelLeftOpen size={16} />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Resizer Handle - only when table visible */}
+                    {!tableCollapsed && (
+                      <div 
+                        onMouseDown={handleDragStart}
+                        style={{
+                          width: 6,
+                          cursor: 'col-resize',
+                          background: '#e2e8f0',
+                          zIndex: 41,
+                          position: 'sticky',
+                          left: tableWidth,
+                          flexShrink: 0,
+                          minHeight: totalTimelineHeight
+                        }}
+                        title="Drag to resize table"
+                      >
                     {/* Collapse button */}
                     <button
                       onMouseDown={(e) => e.stopPropagation()} 
                       onClick={() => setTableCollapsed(true)}
                       title="Collapse table"
-                      style={{ position: 'absolute', top: 8, left: -24, zIndex: 31, width: 24, height: 24, borderRadius: '50%', background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}
+                      style={{ position: 'sticky', top: 18, left: -24, zIndex: 31, width: 24, height: 24, borderRadius: '50%', background: '#3b82f6', color: 'white', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0, boxShadow: '0 2px 6px rgba(0,0,0,0.2)' }}
                     >
                       <PanelLeftClose size={16} />
                     </button>
@@ -648,6 +664,9 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                     </div>
                   </div>
                 )}
+                  </>
+                );
+              })()}
 
                 {/* Right Timeline Section */}
                 <div className="gantt-timeline-section" onClick={(e) => {

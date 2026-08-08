@@ -770,7 +770,7 @@ const UserDashboard = ({ userRole, onLogout }) => {
 
   const handleTaskClick = (task) => {
     const taskId = task?.taskId || task?.rawTask?.taskId || task?.rawTask?.empTaskId || task?.id || task?.code;
-    navigate('/my-tasks', { state: { selectedTaskId: taskId } });
+    navigate('/my-tasks', { state: { selectedTaskId: taskId, selectedStatus: "All Tasks" } });
   };
 
   const handleProjectClick = (project) => {
@@ -1269,7 +1269,10 @@ const UserDashboard = ({ userRole, onLogout }) => {
               <div className="ud-upcoming-list">
                 {displayedUpcoming && displayedUpcoming.length > 0 ? (
                   displayedUpcoming.map((task, index) => (
-                    <div className="ud-upcoming-item" key={task.id || index} onClick={() => navigate("/my-tasks", { state: { selectedStatus: "Upcoming" } })} style={{ cursor: 'pointer' }}>
+                    <div className="ud-upcoming-item" key={task.id || index} onClick={() => {
+                      const taskId = task?.taskId || task?.rawTask?.taskId || task?.rawTask?.empTaskId || task?.id || task?.code;
+                      navigate("/my-tasks", { state: { selectedStatus: "Upcoming", selectedTaskId: taskId } });
+                    }} style={{ cursor: 'pointer' }}>
                       <div className="ud-upcoming-date">
                         <span className="ud-upcoming-day">
                           {task.startDate ? new Date(task.startDate).getDate() : '--'}

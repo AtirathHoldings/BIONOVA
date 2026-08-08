@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import '../styles/login.css';
 
 // Import background image
@@ -15,10 +15,24 @@ const Login = ({ onLogin }) => {
     password: ''
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const [resetEmail, setResetEmail] = useState('');
+
+  useEffect(() => {
+    const savedEmail = localStorage.getItem('rememberedEmail');
+    const savedPassword = localStorage.getItem('rememberedPassword');
+    
+    if (savedEmail && savedPassword) {
+      setFormData({
+        email: savedEmail,
+        password: savedPassword
+      });
+      setRememberMe(true);
+    }
+  }, []);
   const [successMsg, setSuccessMsg] = useState('');
 
   const handleChange = (e) => {
@@ -81,6 +95,14 @@ const Login = ({ onLogin }) => {
         sessionStorage.setItem("userName", formattedName);
         localStorage.setItem("userName", formattedName);
         
+        if (rememberMe) {
+          localStorage.setItem('rememberedEmail', formData.email.trim());
+          localStorage.setItem('rememberedPassword', formData.password);
+        } else {
+          localStorage.removeItem('rememberedEmail');
+          localStorage.removeItem('rememberedPassword');
+        }
+
         onLogin(true, data.role || "full_access");
       } else {
         setError(data.message || "Invalid Email or Password");
@@ -217,10 +239,21 @@ const Login = ({ onLogin }) => {
                     </div>
                   </div>
 
-                  <div className="forgot-link-wrapper">
-                    <span className="forgot-link" onClick={() => switchView('forgot')}>
-                      Forgot Password?
-                    </span>
+                  <div className="login-options-wrapper" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                    <label className="remember-me-label" style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', fontSize: '14px', color: '#64748b', fontWeight: '500' }}>
+                      <input 
+                        type="checkbox" 
+                        checked={rememberMe} 
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        style={{ accentColor: '#2563eb', width: '16px', height: '16px', cursor: 'pointer' }}
+                      />
+                      Remember Me
+                    </label>
+                    <div className="forgot-link-wrapper" style={{ margin: 0, textAlign: 'right' }}>
+                      <span className="forgot-link" onClick={() => switchView('forgot')}>
+                        Forgot Password?
+                      </span>
+                    </div>
                   </div>
 
                   <button type="submit" className="login-btn" disabled={loading}>

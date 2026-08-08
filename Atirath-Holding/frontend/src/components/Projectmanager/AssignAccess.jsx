@@ -848,10 +848,13 @@ const AssignAccess = ({ userRole, onLogout }) => {
   };
 
   // ── Permission Toggle ──
-  const togglePermission = (groupId, screenId, permissionType, isEditMode = false, isCreateMode = false) => {
+  const togglePermission = (groupId, screenId, permissionType, isEditMode = false, isCreateMode = false, isTemplateEditMode = false) => {
     let groups, setGroups;
     
-    if (isCreateMode) {
+    if (isTemplateEditMode) {
+      groups = templateEditGroups;
+      setGroups = setTemplateEditGroups;
+    } else if (isCreateMode) {
       groups = createTemplateGroups;
       setGroups = setCreateTemplateGroups;
     } else if (isEditMode) {
@@ -881,6 +884,14 @@ const AssignAccess = ({ userRole, onLogout }) => {
     if (currentState === PERMISSION_STATES.EMPTY) {
       if (isCreateMode) {
         newState = PERMISSION_STATES.GREEN;
+      } else if (isTemplateEditMode) {
+        const origPerm = templateEditOriginalTemplate?.permissions?.[screenId];
+        const hasPermission = origPerm && origPerm[permissionType] === true;
+        if (hasPermission) {
+          newState = PERMISSION_STATES.BLUE;
+        } else {
+          newState = PERMISSION_STATES.GREEN;
+        }
       } else if (selectedTemplate && selectedTemplate.permissions && selectedTemplate.permissions[screenId]) {
         const templatePerm = selectedTemplate.permissions[screenId];
         const hasPermission = templatePerm[permissionType] === true;
@@ -897,7 +908,15 @@ const AssignAccess = ({ userRole, onLogout }) => {
     } else if (currentState === PERMISSION_STATES.BLUE) {
       newState = PERMISSION_STATES.RED;
     } else if (currentState === PERMISSION_STATES.RED) {
-      if (selectedTemplate && selectedTemplate.permissions && selectedTemplate.permissions[screenId]) {
+      if (isTemplateEditMode) {
+        const origPerm = templateEditOriginalTemplate?.permissions?.[screenId];
+        const hasPermission = origPerm && origPerm[permissionType] === true;
+        if (hasPermission) {
+          newState = PERMISSION_STATES.BLUE;
+        } else {
+          newState = PERMISSION_STATES.EMPTY;
+        }
+      } else if (selectedTemplate && selectedTemplate.permissions && selectedTemplate.permissions[screenId]) {
         const templatePerm = selectedTemplate.permissions[screenId];
         const hasPermission = templatePerm[permissionType] === true;
         if (hasPermission) {
@@ -936,10 +955,10 @@ const AssignAccess = ({ userRole, onLogout }) => {
     }
 
     const group = newGroups[groupIndex];
-    group.view = group.screens.some(s => s.view !== PERMISSION_STATES.EMPTY) ? PERMISSION_STATES.BLUE : PERMISSION_STATES.EMPTY;
-    group.create = group.screens.some(s => s.create !== PERMISSION_STATES.EMPTY) ? PERMISSION_STATES.BLUE : PERMISSION_STATES.EMPTY;
-    group.edit = group.screens.some(s => s.edit !== PERMISSION_STATES.EMPTY) ? PERMISSION_STATES.BLUE : PERMISSION_STATES.EMPTY;
-    group.delete = group.screens.some(s => s.delete !== PERMISSION_STATES.EMPTY) ? PERMISSION_STATES.BLUE : PERMISSION_STATES.EMPTY;
+    group.view = group.screens.some(s => s.view !== PERMISSION_STATES.EMPTY && s.view !== PERMISSION_STATES.RED) ? PERMISSION_STATES.BLUE : (group.screens.some(s => s.view === PERMISSION_STATES.RED) ? PERMISSION_STATES.RED : PERMISSION_STATES.EMPTY);
+    group.create = group.screens.some(s => s.create !== PERMISSION_STATES.EMPTY && s.create !== PERMISSION_STATES.RED) ? PERMISSION_STATES.BLUE : (group.screens.some(s => s.create === PERMISSION_STATES.RED) ? PERMISSION_STATES.RED : PERMISSION_STATES.EMPTY);
+    group.edit = group.screens.some(s => s.edit !== PERMISSION_STATES.EMPTY && s.edit !== PERMISSION_STATES.RED) ? PERMISSION_STATES.BLUE : (group.screens.some(s => s.edit === PERMISSION_STATES.RED) ? PERMISSION_STATES.RED : PERMISSION_STATES.EMPTY);
+    group.delete = group.screens.some(s => s.delete !== PERMISSION_STATES.EMPTY && s.delete !== PERMISSION_STATES.RED) ? PERMISSION_STATES.BLUE : (group.screens.some(s => s.delete === PERMISSION_STATES.RED) ? PERMISSION_STATES.RED : PERMISSION_STATES.EMPTY);
     
     const groupHasBlue = group.screens.some(s => 
       PERMISSION_TYPES.some(p => s[p] === PERMISSION_STATES.BLUE)
@@ -971,10 +990,13 @@ const AssignAccess = ({ userRole, onLogout }) => {
     setGroups(newGroups);
   };
 
-  const toggleGroupPermission = (groupId, permissionType, isEditMode = false, isCreateMode = false) => {
+  const toggleGroupPermission = (groupId, permissionType, isEditMode = false, isCreateMode = false, isTemplateEditMode = false) => {
     let groups, setGroups;
     
-    if (isCreateMode) {
+    if (isTemplateEditMode) {
+      groups = templateEditGroups;
+      setGroups = setTemplateEditGroups;
+    } else if (isCreateMode) {
       groups = createTemplateGroups;
       setGroups = setCreateTemplateGroups;
     } else if (isEditMode) {
@@ -995,30 +1017,45 @@ const AssignAccess = ({ userRole, onLogout }) => {
 
     const group = newGroups[groupIndex];
     
-    const hasAny = group.screens.some(s => s[permissionType] !== PERMISSION_STATES.EMPTY);
-    
-    let targetState;
-    if (hasAny) {
-      targetState = PERMISSION_STATES.EMPTY;
-    } else {
-      if (isCreateMode) {
-        targetState = PERMISSION_STATES.GREEN;
-      } else if (selectedTemplate && selectedTemplate.permissions) {
-        const hasTemplatePerm = group.screens.some(screen => {
-          const perms = selectedTemplate.permissions[screen.id];
-          return perms && perms[permissionType] === true;
-        });
-        targetState = hasTemplatePerm ? PERMISSION_STATES.BLUE : PERMISSION_STATES.GREEN;
-      } else {
-        targetState = PERMISSION_STATES.GREEN;
-      }
-    }
+    const hasAnyActive = group.screens.some(s => s[permissionType] === PERMISSION_STATES.BLUE || s[permissionType] === PERMISSION_STATES.GREEN);
 
     group.screens = group.screens.map(screen => {
-      const updatedScreen = {
-        ...screen,
-        [permissionType]: targetState
-      };
+      const updatedScreen = { ...screen };
+      let targetState;
+
+      if (hasAnyActive) {
+        if (isTemplateEditMode) {
+          const origPerm = templateEditOriginalTemplate?.permissions?.[screen.id];
+          if (origPerm && origPerm[permissionType] === true) {
+            targetState = PERMISSION_STATES.RED;
+          } else {
+            targetState = PERMISSION_STATES.EMPTY;
+          }
+        } else if (selectedTemplate && selectedTemplate.permissions && selectedTemplate.permissions[screen.id] && selectedTemplate.permissions[screen.id][permissionType]) {
+          targetState = PERMISSION_STATES.RED;
+        } else {
+          targetState = PERMISSION_STATES.EMPTY;
+        }
+      } else {
+        if (isTemplateEditMode) {
+          const origPerm = templateEditOriginalTemplate?.permissions?.[screen.id];
+          if (origPerm && origPerm[permissionType] === true) {
+            targetState = PERMISSION_STATES.BLUE;
+          } else {
+            targetState = PERMISSION_STATES.GREEN;
+          }
+        } else if (isCreateMode) {
+          targetState = PERMISSION_STATES.GREEN;
+        } else if (selectedTemplate && selectedTemplate.permissions) {
+          const perms = selectedTemplate.permissions[screen.id];
+          const hasTemplatePerm = perms && perms[permissionType] === true;
+          targetState = hasTemplatePerm ? PERMISSION_STATES.BLUE : PERMISSION_STATES.GREEN;
+        } else {
+          targetState = PERMISSION_STATES.GREEN;
+        }
+      }
+
+      updatedScreen[permissionType] = targetState;
       
       const hasBlue = PERMISSION_TYPES.some(p => updatedScreen[p] === PERMISSION_STATES.BLUE);
       const hasGreen = PERMISSION_TYPES.some(p => updatedScreen[p] === PERMISSION_STATES.GREEN);
@@ -1044,8 +1081,11 @@ const AssignAccess = ({ userRole, onLogout }) => {
       return updatedScreen;
     });
 
-    group[permissionType] = targetState;
-    
+    group.view = group.screens.some(s => s.view !== PERMISSION_STATES.EMPTY && s.view !== PERMISSION_STATES.RED) ? PERMISSION_STATES.BLUE : (group.screens.some(s => s.view === PERMISSION_STATES.RED) ? PERMISSION_STATES.RED : PERMISSION_STATES.EMPTY);
+    group.create = group.screens.some(s => s.create !== PERMISSION_STATES.EMPTY && s.create !== PERMISSION_STATES.RED) ? PERMISSION_STATES.BLUE : (group.screens.some(s => s.create === PERMISSION_STATES.RED) ? PERMISSION_STATES.RED : PERMISSION_STATES.EMPTY);
+    group.edit = group.screens.some(s => s.edit !== PERMISSION_STATES.EMPTY && s.edit !== PERMISSION_STATES.RED) ? PERMISSION_STATES.BLUE : (group.screens.some(s => s.edit === PERMISSION_STATES.RED) ? PERMISSION_STATES.RED : PERMISSION_STATES.EMPTY);
+    group.delete = group.screens.some(s => s.delete !== PERMISSION_STATES.EMPTY && s.delete !== PERMISSION_STATES.RED) ? PERMISSION_STATES.BLUE : (group.screens.some(s => s.delete === PERMISSION_STATES.RED) ? PERMISSION_STATES.RED : PERMISSION_STATES.EMPTY);
+
     const groupHasBlue = group.screens.some(s => 
       PERMISSION_TYPES.some(p => s[p] === PERMISSION_STATES.BLUE)
     );
@@ -1076,8 +1116,13 @@ const AssignAccess = ({ userRole, onLogout }) => {
     setGroups(newGroups);
   };
 
-  const toggleGroup = (groupId, isEditMode = false, isCreateMode = false) => {
-    if (isCreateMode) {
+  const toggleGroup = (groupId, isEditMode = false, isCreateMode = false, isTemplateEditMode = false) => {
+    if (isTemplateEditMode) {
+      setTemplateEditExpandedGroups(prev => ({
+        ...prev,
+        [groupId]: !prev[groupId]
+      }));
+    } else if (isCreateMode) {
       setCreateTemplateExpandedGroups(prev => ({
         ...prev,
         [groupId]: !prev[groupId]
@@ -1096,15 +1141,15 @@ const AssignAccess = ({ userRole, onLogout }) => {
   };
 
   // ── Render Checkbox ──
-  const renderCheckbox = (state, groupId, screenId, permissionType, isEditMode = false, isCreateMode = false) => {
+  const renderCheckbox = (state, groupId, screenId, permissionType, isEditMode = false, isCreateMode = false, isTemplateEditMode = false) => {
     const handleClick = (e) => {
       e.stopPropagation();
       e.preventDefault();
       
       if (screenId) {
-        togglePermission(groupId, screenId, permissionType, isEditMode, isCreateMode);
+        togglePermission(groupId, screenId, permissionType, isEditMode, isCreateMode, isTemplateEditMode);
       } else {
-        toggleGroupPermission(groupId, permissionType, isEditMode, isCreateMode);
+        toggleGroupPermission(groupId, permissionType, isEditMode, isCreateMode, isTemplateEditMode);
       }
     };
 
@@ -2344,7 +2389,7 @@ const AssignAccess = ({ userRole, onLogout }) => {
                   <React.Fragment key={group.id}>
                     <tr 
                       className={`aa-group-row ${isExpanded ? 'expanded' : ''}`}
-                      onClick={() => toggleGroup(group.id, true)}
+                      onClick={() => toggleGroup(group.id, false, false, true)}
                       style={{ cursor: 'pointer' }}
                     >
                       <td>
@@ -2357,16 +2402,16 @@ const AssignAccess = ({ userRole, onLogout }) => {
                       </td>
                       <td style={{ textAlign: 'center' }}>{group.screens.length}</td>
                       <td style={{ textAlign: 'center' }}>
-                        {renderCheckbox(group.view, group.id, null, 'view', true)}
+                        {renderCheckbox(group.view, group.id, null, 'view', false, false, true)}
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        {renderCheckbox(group.create, group.id, null, 'create', true)}
+                        {renderCheckbox(group.create, group.id, null, 'create', false, false, true)}
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        {renderCheckbox(group.edit, group.id, null, 'edit', true)}
+                        {renderCheckbox(group.edit, group.id, null, 'edit', false, false, true)}
                       </td>
                       <td style={{ textAlign: 'center' }}>
-                        {renderCheckbox(group.delete, group.id, null, 'delete', true)}
+                        {renderCheckbox(group.delete, group.id, null, 'delete', false, false, true)}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <span className={`aa-badge aa-badge-${group.badge}`}>
@@ -2385,16 +2430,16 @@ const AssignAccess = ({ userRole, onLogout }) => {
                         </td>
                         <td></td>
                         <td style={{ textAlign: 'center' }}>
-                          {renderCheckbox(screen.view, group.id, screen.id, 'view', true)}
+                          {renderCheckbox(screen.view, group.id, screen.id, 'view', false, false, true)}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          {renderCheckbox(screen.create, group.id, screen.id, 'create', true)}
+                          {renderCheckbox(screen.create, group.id, screen.id, 'create', false, false, true)}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          {renderCheckbox(screen.edit, group.id, screen.id, 'edit', true)}
+                          {renderCheckbox(screen.edit, group.id, screen.id, 'edit', false, false, true)}
                         </td>
                         <td style={{ textAlign: 'center' }}>
-                          {renderCheckbox(screen.delete, group.id, screen.id, 'delete', true)}
+                          {renderCheckbox(screen.delete, group.id, screen.id, 'delete', false, false, true)}
                         </td>
                         <td style={{ textAlign: 'center' }}>
                           <span className={`aa-badge aa-badge-${screen.badge}`}>
@@ -2549,7 +2594,7 @@ const AssignAccess = ({ userRole, onLogout }) => {
                   
                   return (
                     <React.Fragment key={group.id}>
-                      <tr className="aa-group-row" onClick={() => toggleGroup(group.id, true)} style={{ cursor: 'pointer' }}>
+                      <tr className="aa-group-row" onClick={() => toggleGroup(group.id, false, false, true)} style={{ cursor: 'pointer' }}>
                         <td>
                           <div className="aa-group-name">
                             {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}

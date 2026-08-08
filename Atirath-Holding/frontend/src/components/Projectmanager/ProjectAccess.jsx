@@ -1425,7 +1425,7 @@ const ProjectAccess = ({ userRole, onLogout }) => {
           <span className="pac-legend-item"><span className="pac-dot pac-dot-red"></span> Revoked</span>
           <span className="pac-legend-item"><span className="pac-dot pac-dot-empty"></span> No Access</span>
           <span className="pac-legend-item">
-            <User size={14} className="pac-legend-icon" /> Assignee
+            <User size={14} className="pac-legend-icon" /> Executor
           </span>
           <span className="pac-legend-item">
             <UserCog size={14} className="pac-legend-icon" /> Reviewer
@@ -1443,7 +1443,7 @@ const ProjectAccess = ({ userRole, onLogout }) => {
               <tr>
                 <th style={{ width: '120px' }}>Task Code</th>
                 <th style={{ width: '180px' }}>Task / Activity Name</th>
-                <th style={{ width: '150px' }}>Assignee</th>
+                <th style={{ width: '150px' }}>Executor</th>
                 <th style={{ width: '150px' }}>Reviewer</th>
                 <th style={{ width: '150px' }}>Approver</th>
                 <th style={{ width: '100px' }}>Status</th>

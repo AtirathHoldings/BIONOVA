@@ -1559,8 +1559,7 @@ const Assignment = ({ userRole, onLogout }) => {
                                       options={employees
                                         .filter(emp => {
                                           const id = String(emp.empId || emp.id);
-                                          const currentUserId = currentUser ? String(currentUser.empId || currentUser.id) : null;
-                                          if (currentUserId && id === currentUserId) return false;
+                                          if (assignedEmployee && id === String(assignedEmployee)) return false;
                                           return !approver.includes(id) && (!reviewer.includes(id) || reviewer[index] === id);
                                         })
                                         .map(emp => ({ value: emp.empId || emp.id, label: emp.displayLabel || `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` }))}
@@ -1613,8 +1612,7 @@ const Assignment = ({ userRole, onLogout }) => {
                                       options={employees
                                         .filter(emp => {
                                           const id = String(emp.empId || emp.id);
-                                          const currentUserId = currentUser ? String(currentUser.empId || currentUser.id) : null;
-                                          if (currentUserId && id === currentUserId) return false;
+                                          if (assignedEmployee && id === String(assignedEmployee)) return false;
                                           return !reviewer.includes(id) && (!approver.includes(id) || approver[index] === id);
                                         })
                                         .map(emp => ({ value: emp.empId || emp.id, label: emp.displayLabel || `${emp.fstNm || emp.firstName} ${emp.lstNm || emp.lastName}` }))}
@@ -1896,11 +1894,15 @@ const Assignment = ({ userRole, onLogout }) => {
                         </div>
                         <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
                           <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Start Date</span>
-                          <span style={{ color: '#0f172a' }}>{startDate || "-"}</span>
+                          <span style={{ color: '#0f172a' }}>
+                            {startDate ? startDate.split("-").reverse().join("-") : "-"}
+                          </span>
                         </div>
                         <div style={{ display: 'flex', borderBottom: '1px solid #e2e8f0', padding: '8px 0' }}>
                           <span style={{ fontWeight: '600', color: '#475569', width: '140px', flexShrink: 0 }}>Due Date</span>
-                          <span style={{ color: '#0f172a' }}>{dueDate || "-"}</span>
+                          <span style={{ color: '#0f172a' }}>
+                            {dueDate ? dueDate.split("-").reverse().join("-") : "-"}
+                          </span>
                         </div>
                       </div>
 

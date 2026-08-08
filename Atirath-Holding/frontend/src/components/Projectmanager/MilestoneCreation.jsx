@@ -56,7 +56,7 @@ const milestoneApi = {
     }).then(async res => { 
       if (!res.ok) {
         const errJson = await res.json().catch(() => ({}));
-        throw new Error(errJson.message || errJson.error || "Failed to update milestone");
+        throw new Error(errJson.message || errJson.error || "Failed to update milestone and task");
       }
       return res.json();
     }),
@@ -237,7 +237,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState(new Set());
 
-  const [alertConfig, setAlertConfig] = useState({ isOpen: false, type: "info", title: "", message: "" });
+  const [alertConfig, setAlertConfig] = useState({ isOpen: false, type: "info", title: "", message: "", onClose: null });
 
   const [milestone, setMilestone] = useState({
     drft_m_id: null, drft_prj_id: "", mlstm_cd: "", mlstm_ttl: "", mlstm_desc: "",
@@ -312,6 +312,29 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     const mm = String(date.getMonth() + 1).padStart(2, '0');
     const dd = String(date.getDate()).padStart(2, '0');
     return `${yyyy}-${mm}-${dd}`;
+  };
+
+  const formatDisplayDate = (dateStr) => {
+    if (!dateStr) return "";
+    if (/^\d{2}\/\d{2}\/\d{4}$/.test(dateStr)) return dateStr;
+    let year, month, day;
+    if (/^\d{4}-\d{2}-\d{2}/.test(dateStr)) {
+      const parts = dateStr.split("T")[0].split("-");
+      year = parts[0];
+      month = parts[1];
+      day = parts[2];
+      return `${day}/${month}/${year}`;
+    } else if (/^\d{2}-\d{2}-\d{4}/.test(dateStr)) {
+      const parts = dateStr.split("-");
+      return `${parts[0]}/${parts[1]}/${parts[2]}`;
+    } else {
+      const d = new Date(dateStr);
+      if (isNaN(d.getTime())) return dateStr;
+      day = String(d.getDate()).padStart(2, '0');
+      month = String(d.getMonth() + 1).padStart(2, '0');
+      year = d.getFullYear();
+      return `${day}/${month}/${year}`;
+    }
   };
 
   const addDays = (dateStr, days) => {
@@ -552,14 +575,20 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   const location = useLocation();
 
   useEffect(() => {
-    if (location.state?.projectId) {
-      const pId = String(location.state.projectId);
-      setMilestone(prev => ({
-        ...prev,
-        drft_prj_id: pId,
-        mlstm_cd: generateMilestoneCode(milestoneList)
-      }));
+    if (location.state?.createMode || location.state?.projectId || location.state?.taskMode) {
+      if (location.state?.projectId) {
+        const pId = String(location.state.projectId);
+        setMilestone(prev => ({
+          ...prev,
+          drft_prj_id: pId,
+          mlstm_cd: generateMilestoneCode(milestoneList)
+        }));
+      }
       setView("form");
+      if (location.state?.taskMode || location.state?.step === 2) {
+        setCurrentStep(2);
+        setCompletedSteps(new Set([1]));
+      }
       if (location.state?.showSuccessAlert) {
         triggerAlert(
           "success",
@@ -572,8 +601,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   }, [location.state, milestoneList]);
 
   // ── Alert ────────────────────────────────────────────────────
-  const triggerAlert = (type, title, message) => {
-    setAlertConfig({ isOpen: true, type, title, message });
+  const triggerAlert = (type, title, message, onClose = null) => {
+    setAlertConfig({ isOpen: true, type, title, message, onClose });
   };
 
   // ── Data Loading (Draft + Live) ─────────────────────────────
@@ -764,9 +793,22 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           }
         }
       }
-      if (!milestone.tent_st_dt) { errors.tent_st_dt = "Start date is required"; isValid = false; }
-      const today = getTodayDate();
-      if (milestone.tent_st_dt && milestone.tent_st_dt < today) { errors.tent_st_dt = "Start date cannot be in the past"; isValid = false; }
+      if (!milestone.tent_st_dt) {
+        errors.tent_st_dt = "Start date is required";
+        isValid = false;
+      } else if (!isEditing) {
+        const selectedProjectObj = projects.find(p => String(p.prj_id || p.id || p.drftPrjId || p.prjId || p.drft_prj_id) === String(milestone.drft_prj_id || milestone.prj_id));
+        const pStDtVal = selectedProjectObj ? (selectedProjectObj.startDate || selectedProjectObj.stDt || selectedProjectObj.tentStDt || selectedProjectObj.st_dt || selectedProjectObj.start_date) : null;
+        const pEndDtVal = selectedProjectObj ? (selectedProjectObj.endDate || selectedProjectObj.endDt || selectedProjectObj.tentEndDt || selectedProjectObj.end_date || selectedProjectObj.end_dt) : null;
+
+        if (pStDtVal && milestone.tent_st_dt < pStDtVal) {
+          errors.tent_st_dt = `Start date cannot be before project start date (${pStDtVal})`;
+          isValid = false;
+        } else if (pEndDtVal && milestone.tent_st_dt > pEndDtVal) {
+          errors.tent_st_dt = `Start date cannot be after project end date (${pEndDtVal})`;
+          isValid = false;
+        }
+      }
       if (milestone.mlstm_dep_flg && !milestone.mlstm_dep_m_id) { errors.mlstm_dep_m_id = "Dependent milestone is required"; isValid = false; }
     } else if (stepNum === 2) {
       if (selectedTask) {
@@ -960,7 +1002,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     if (task.task_typ === "EXTERNAL" && !task.ext_emp_id) errors.ext_assignee = "External executor is required";
     if (!task.no_of_days || parseInt(task.no_of_days) <= 0) {
       errors.duration = "Valid duration is required";
-    } else if (task.tent_end_dt && milestone.tent_end_dt) {
+    } else if (task.tent_end_dt && milestone.tent_end_dt && !isEditing) {
       const tEnd = new Date(task.tent_end_dt);
       const mEnd = new Date(milestone.tent_end_dt);
       if (tEnd > mEnd) {
@@ -1350,14 +1392,14 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         }
 
         const savedTask = savedTaskResult.data || savedTaskResult;
-        const taskId = savedTask.drftTaskId || savedTask.drft_task_id || savedTask.id;
+        const taskId = savedTask.drftTaskId || savedTask.drft_task_id || savedTask.id || task.drft_task_id;
         taskIdMap[task.task_cd] = taskId;
         tasks[i].drft_task_id = taskId;
       }
 
       // Second pass: save dependencies, checklists, attachments, and process configs
       for (const task of tasks) {
-        const taskId = taskIdMap[task.task_cd];
+        const taskId = taskIdMap[task.task_cd] || task.drft_task_id;
 
         let depTaskIdVal = null;
         if (task.task_dep_flg && task.dep_task_id) {
@@ -1389,7 +1431,13 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           sts: true
         };
 
-        await taskApi.update(taskId, updatePayload);
+        if (taskId) {
+          try {
+            await taskApi.update(taskId, updatePayload);
+          } catch (e) {
+            console.error("Failed to update task payload for task:", taskId, e);
+          }
+        }
 
         // Checklist persistence
         let existingChecklist = [];
@@ -1541,15 +1589,18 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       const successMsg = isEditing 
         ? "You have updated milestone and task"
         : (status === "DRAFT" ? "Milestone saved as draft!" : "You have created milestone and task");
-      triggerAlert("success", "Success", successMsg);
 
-      // Refresh draft list
-      await loadAllData();
-      setTimeout(() => { 
+      // Refresh draft list and immediately return to list view
+      try {
+        await loadAllData();
+      } catch (e) {
+        console.error("Failed to refresh list after update:", e);
+      }
+      setIsSubmitting(false);
+      triggerAlert("success", "Success", successMsg, () => {
         setView("list"); 
-        resetMilestoneForm(); 
-        setIsSubmitting(false);
-      }, 1500);
+        resetMilestoneForm();
+      });
     } catch (err) {
       console.error("Submit error:", err);
       setIsSubmitting(false);
@@ -1808,27 +1859,58 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       triggerAlert("info", "Read-only", "Live milestones cannot be edited.");
       return;
     }
+    // Switch to edit mode and open milestone creation form immediately
+    setIsEditing(true);
+    setEditingId(m.id);
+    setView("form");
+    setCurrentStep(1);
+    setCompletedSteps(new Set());
     setLoading(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    // Immediate initial population from existing record
+    setMilestone({
+      drft_m_id: m.drftMId || m.drft_m_id || m.id,
+      drft_prj_id: m.drftPrjId || m.drft_prj_id || m.projectId || "",
+      mlstm_cd: m.mlstnCd || m.mlstm_cd || m.code || "",
+      mlstm_ttl: m.mlstnTtl || m.mlstm_ttl || m.title || "",
+      mlstm_desc: m.mlstnDesc || m.mlstm_desc || "",
+      mlstm_days: m.mlstnDays || m.mlstm_days || m.duration || "",
+      mlstm_dep_flg: m.mlstnDepFlg || m.mlstm_dep_flg || false,
+      mlstm_dep_typ: m.mlstnDepTyp || m.mlstm_dep_typ || "INDEPENDENT",
+      mlstm_dep_m_id: m.mlstnDepMId || m.mlstm_dep_m_id || "",
+      tent_st_dt: m.tentStDt || m.tent_st_dt || m.startDate || "",
+      tent_end_dt: m.tentEndDt || m.tent_end_dt || m.endDate || "",
+      chk_id: m.chkId || m.chk_id || null,
+      file_url: m.fileUrl || m.file_url || "",
+      addl_rem: m.addlRem || m.addl_rem || "",
+      mlstm_sts: m.mlstnSts || m.mlstm_sts || m.status || "DRAFT",
+      sts: m.sts !== undefined ? m.sts : true
+    });
+
     try {
       const milestoneData = await milestoneApi.getById(m.id);
-      setMilestone({
-        drft_m_id: milestoneData.drftMId || milestoneData.drft_m_id,
-        drft_prj_id: milestoneData.drftPrjId || milestoneData.drft_prj_id || "",
-        mlstm_cd: milestoneData.mlstnCd || milestoneData.mlstm_cd || "",
-        mlstm_ttl: milestoneData.mlstnTtl || milestoneData.mlstm_ttl || "",
-        mlstm_desc: milestoneData.mlstnDesc || milestoneData.mlstm_desc || "",
-        mlstm_days: milestoneData.mlstnDays || milestoneData.mlstm_days || "",
-        mlstm_dep_flg: milestoneData.mlstnDepFlg || milestoneData.mlstm_dep_flg || false,
-        mlstm_dep_typ: milestoneData.mlstnDepTyp || milestoneData.mlstm_dep_typ || "INDEPENDENT",
-        mlstm_dep_m_id: milestoneData.mlstnDepMId || milestoneData.mlstm_dep_m_id || "",
-        tent_st_dt: milestoneData.tentStDt || milestoneData.tent_st_dt || "",
-        tent_end_dt: milestoneData.tentEndDt || milestoneData.tent_end_dt || "",
-        chk_id: milestoneData.chkId || milestoneData.chk_id || null,
-        file_url: milestoneData.fileUrl || milestoneData.file_url || "",
-        addl_rem: milestoneData.addlRem || milestoneData.addl_rem || "",
-        mlstm_sts: milestoneData.mlstnSts || milestoneData.mlstm_sts || "DRAFT",
-        sts: milestoneData.sts !== undefined ? milestoneData.sts : true
-      });
+      if (milestoneData) {
+        setMilestone({
+          drft_m_id: milestoneData.drftMId || milestoneData.drft_m_id || m.id,
+          drft_prj_id: milestoneData.drftPrjId || milestoneData.drft_prj_id || m.projectId || "",
+          mlstm_cd: milestoneData.mlstnCd || milestoneData.mlstm_cd || m.code || "",
+          mlstm_ttl: milestoneData.mlstnTtl || milestoneData.mlstm_ttl || m.title || "",
+          mlstm_desc: milestoneData.mlstnDesc || milestoneData.mlstm_desc || "",
+          mlstm_days: milestoneData.mlstnDays || milestoneData.mlstm_days || m.duration || "",
+          mlstm_dep_flg: milestoneData.mlstnDepFlg || milestoneData.mlstm_dep_flg || false,
+          mlstm_dep_typ: milestoneData.mlstnDepTyp || milestoneData.mlstm_dep_typ || "INDEPENDENT",
+          mlstm_dep_m_id: milestoneData.mlstnDepMId || milestoneData.mlstm_dep_m_id || "",
+          tent_st_dt: milestoneData.tentStDt || milestoneData.tent_st_dt || m.startDate || "",
+          tent_end_dt: milestoneData.tentEndDt || milestoneData.tent_end_dt || m.endDate || "",
+          chk_id: milestoneData.chkId || milestoneData.chk_id || null,
+          file_url: milestoneData.fileUrl || milestoneData.file_url || "",
+          addl_rem: milestoneData.addlRem || milestoneData.addl_rem || "",
+          mlstm_sts: milestoneData.mlstnSts || milestoneData.mlstm_sts || m.status || "DRAFT",
+          sts: milestoneData.sts !== undefined ? milestoneData.sts : true
+        });
+      }
+
       const tasksData = await taskApi.getByMilestone(m.id);
       const sortedTasksData = [...(tasksData || [])].sort((a, b) => {
         const idA = a.drftTaskId || a.drft_task_id || 0;
@@ -1935,11 +2017,6 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         };
       }));
       setTasks(mappedTasks);
-      setIsEditing(true);
-      setEditingId(m.id);
-      setView("form");
-      setCurrentStep(1);
-      setCompletedSteps(new Set());
     } catch (err) {
       console.error("Error loading milestone:", err);
       triggerAlert("error", "Load Error", "Failed to load milestone details.");
@@ -2187,12 +2264,49 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
             <input type="number" value={selectedTask.no_of_days || ""} onChange={(e) => { const v = e.target.value; updateTask("no_of_days", v); const updated = { ...selectedTask, no_of_days: v }; const calculated = autoCalculateTaskDates(updated); const ut = [...tasks]; ut[editingTaskIndex] = calculated; setTasks(ut); }} placeholder="Enter duration" min="1" className={getTaskError(editingTaskIndex, "duration") ? "mc-error" : ""} />
             {getTaskError(editingTaskIndex, "duration") && <small className="mc-error-text">{getTaskError(editingTaskIndex, "duration")}</small>}
           </label>
-          <label className="mc-field"><span>Start Date</span><input type="date" value={selectedTask.tent_st_dt || ""} onChange={(e) => { const v = e.target.value; updateTask("tent_st_dt", v); const updated = { ...selectedTask, tent_st_dt: v }; const ut = [...tasks]; ut[editingTaskIndex] = updated; setTasks(ut); }} /></label>
-          <label className="mc-field"><span>End Date</span><input type="date" value={selectedTask.tent_end_dt || ""} readOnly className="mc-disabled" /><small className="mc-hint">Auto-calculated</small></label>
+          <label className="mc-field"><span>Start Date</span>
+            <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+              <input
+                type="text"
+                value={formatDisplayDate(selectedTask.tent_st_dt)}
+                placeholder="dd/mm/yyyy"
+                readOnly
+                onClick={() => {
+                  const el = document.getElementById(`taskStartDatePicker_${editingTaskIndex}`);
+                  if (el) {
+                    if (typeof el.showPicker === "function") el.showPicker();
+                    else el.click();
+                  }
+                }}
+                style={{ cursor: 'pointer', paddingRight: '36px' }}
+              />
+              <Calendar
+                size={16}
+                onClick={() => {
+                  const el = document.getElementById(`taskStartDatePicker_${editingTaskIndex}`);
+                  if (el) {
+                    if (typeof el.showPicker === "function") el.showPicker();
+                    else el.click();
+                  }
+                }}
+                style={{ position: 'absolute', right: '12px', cursor: 'pointer', color: '#64748b' }}
+              />
+              <input
+                id={`taskStartDatePicker_${editingTaskIndex}`}
+                type="date"
+                value={selectedTask.tent_st_dt || ""}
+                min={isEditing ? undefined : (milestone.tent_st_dt || (projects.find(p => String(p.prj_id || p.id || p.drftPrjId || p.prjId) === String(milestone.drft_prj_id))?.startDate || projects.find(p => String(p.prj_id || p.id || p.drftPrjId || p.prjId) === String(milestone.drft_prj_id))?.stDt || projects.find(p => String(p.prj_id || p.id || p.drftPrjId || p.prjId) === String(milestone.drft_prj_id))?.tentStDt || undefined))}
+                max={milestone.tent_end_dt || (projects.find(p => String(p.prj_id || p.id || p.drftPrjId || p.prjId) === String(milestone.drft_prj_id))?.endDate || projects.find(p => String(p.prj_id || p.id || p.drftPrjId || p.prjId) === String(milestone.drft_prj_id))?.endDt || projects.find(p => String(p.prj_id || p.id || p.drftPrjId || p.prjId) === String(milestone.drft_prj_id))?.tentEndDt || undefined)}
+                onChange={(e) => { const v = e.target.value; updateTask("tent_st_dt", v); const updated = { ...selectedTask, tent_st_dt: v }; const ut = [...tasks]; ut[editingTaskIndex] = updated; setTasks(ut); }}
+                style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+              />
+            </div>
+          </label>
+          <label className="mc-field"><span>End Date</span><input type="text" value={formatDisplayDate(selectedTask.tent_end_dt)} placeholder="dd/mm/yyyy" readOnly className="mc-disabled" /><small className="mc-hint">Auto-calculated</small></label>
         </div>
         <div className="mc-auto-dates">
-          <div className="mc-auto-date-item"><span className="mc-auto-date-label">Auto-calculated Start:</span><span className="mc-auto-date-value">{selectedTask.tent_st_dt || "Not calculated"}</span></div>
-          <div className="mc-auto-date-item"><span className="mc-auto-date-label">Auto-calculated End:</span><span className="mc-auto-date-value">{selectedTask.tent_end_dt || "Not calculated"}</span></div>
+          <div className="mc-auto-date-item"><span className="mc-auto-date-label">Auto-calculated Start:</span><span className="mc-auto-date-value">{formatDisplayDate(selectedTask.tent_st_dt) || "dd/mm/yyyy"}</span></div>
+          <div className="mc-auto-date-item"><span className="mc-auto-date-label">Auto-calculated End:</span><span className="mc-auto-date-value">{formatDisplayDate(selectedTask.tent_end_dt) || "dd/mm/yyyy"}</span></div>
         </div>
         {/* Task Dependency */}
         <div className="mc-task-dependency-section">
@@ -2394,8 +2508,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                   <td>{task.task_typ || "-"}</td>
                   <td><div className="mc-assigned-to">{assignedTo.map((p, idx) => <span key={idx} className={`mc-assignee-tag ${p.role.toLowerCase()}`}>{p.name}<span className="mc-assignee-role">{p.role}</span></span>)}</div></td>
                   <td>{task.no_of_days || "-"}d</td>
-                  <td>{task.tent_st_dt || "-"}</td>
-                  <td>{task.tent_end_dt || "-"}</td>
+                  <td>{formatDisplayDate(task.tent_st_dt) || "-"}</td>
+                  <td>{formatDisplayDate(task.tent_end_dt) || "-"}</td>
                   <td>{task.task_dep_flg && task.dep_task_id ? <span className={`mc-dep-label ${task.task_dep_typ?.toLowerCase() || 'independent'}`}>{task.task_dep_typ} ({task.dep_task_id})</span> : "Independent"}</td>
                   <td>{hasChecklist ? <span className="mc-badge success">{task.checklist.length} items</span> : <span className="mc-badge">None</span>}</td>
                   <td>{hasAttachments ? <span className="mc-badge success">{task.attachments.length} files</span> : <span className="mc-badge">None</span>}</td>
@@ -2434,7 +2548,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     const hasExceedingTasks = milestoneEnd && tasks.some(task => task.tent_end_dt && parseLocalDate(task.tent_end_dt) > milestoneEnd);
     return (
       <div className="mc-step-content">
-        <div className="mc-step-header"><h2><Users size={20} /> Tasks Management</h2><p>Add and manage tasks with checklist, attachments, process workflow & gantt chart</p>{milestone.tent_st_dt && milestone.tent_end_dt && <div className="mc-task-range-info"><CalendarDays size={14} /><span>Milestone Date Range: {milestone.tent_st_dt} to {milestone.tent_end_dt}</span></div>}</div>
+        <div className="mc-step-header"><h2><Users size={20} /> Tasks Management</h2><p>Add and manage tasks with checklist, attachments, process workflow & gantt chart</p>{milestone.tent_st_dt && milestone.tent_end_dt && <div className="mc-task-range-info"><CalendarDays size={14} /><span>Milestone Date Range: {formatDisplayDate(milestone.tent_st_dt)} to {formatDisplayDate(milestone.tent_end_dt)}</span></div>}</div>
         <div className="mc-tasks-section">
           <div className="mc-section-header"><h3><Plus size={18} /> Task Creation</h3><button type="button" onClick={addTask} className="mc-add-btn"><Plus size={15} /> Add New Task</button></div>
           {errors.tasks && <div className="mc-error-banner"><AlertCircle size={16} /><span>{errors.tasks}</span></div>}
@@ -2453,6 +2567,9 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   // ── Step 1: Milestone Details ───────────────────────────────
   const renderMilestoneDetails = () => {
     const errors = stepValidation[1] || {}, today = getTodayDate();
+    const selectedProjectObj = projects.find(p => String(p.prj_id || p.id || p.drftPrjId || p.prjId || p.drft_prj_id) === String(milestone.drft_prj_id || milestone.prj_id));
+    const pStDtVal = selectedProjectObj ? (selectedProjectObj.startDate || selectedProjectObj.stDt || selectedProjectObj.tentStDt || selectedProjectObj.st_dt || selectedProjectObj.start_date) : "";
+    const pEndDtVal = selectedProjectObj ? (selectedProjectObj.endDate || selectedProjectObj.endDt || selectedProjectObj.tentEndDt || selectedProjectObj.end_date || selectedProjectObj.end_dt) : "";
     return (
       <div className="mc-step-content">
         <div className="mc-step-header"><h2><Settings size={20} /> Milestone Details</h2><p>Fill in the basic information for this milestone</p></div>
@@ -2478,11 +2595,47 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
               {errors.mlstm_days && <div className="mc-error-banner" style={{ marginTop: '8px', padding: '10px 12px' }}><AlertCircle size={16} /><span>{errors.mlstm_days}</span></div>}
             </label>
             <label className="mc-field"><span>Tentative Start Date <b>*</b></span>
-              <input type="date" value={milestone.tent_st_dt || ""} onChange={(e) => updateMilestone("tent_st_dt", e.target.value)} className={errors.tent_st_dt ? "mc-error" : ""} />
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+                <input
+                  type="text"
+                  value={formatDisplayDate(milestone.tent_st_dt)}
+                  placeholder="dd/mm/yyyy"
+                  readOnly
+                  onClick={() => {
+                    const el = document.getElementById("milestoneStartDatePicker");
+                    if (el) {
+                      if (typeof el.showPicker === "function") el.showPicker();
+                      else el.click();
+                    }
+                  }}
+                  className={errors.tent_st_dt ? "mc-error" : ""}
+                  style={{ cursor: 'pointer', paddingRight: '36px' }}
+                />
+                <Calendar
+                  size={16}
+                  onClick={() => {
+                    const el = document.getElementById("milestoneStartDatePicker");
+                    if (el) {
+                      if (typeof el.showPicker === "function") el.showPicker();
+                      else el.click();
+                    }
+                  }}
+                  style={{ position: 'absolute', right: '12px', cursor: 'pointer', color: '#64748b' }}
+                />
+                <input
+                  id="milestoneStartDatePicker"
+                  type="date"
+                  value={milestone.tent_st_dt || ""}
+                  min={isEditing ? undefined : (pStDtVal || undefined)}
+                  max={pEndDtVal || undefined}
+                  onChange={(e) => updateMilestone("tent_st_dt", e.target.value)}
+                  style={{ position: 'absolute', opacity: 0, width: 0, height: 0, pointerEvents: 'none' }}
+                />
+              </div>
               {errors.tent_st_dt && <small className="mc-error-text">{errors.tent_st_dt}</small>}
             </label>
             <label className="mc-field"><span>Tentative End Date <b>*</b></span>
-              <input type="date" value={milestone.tent_end_dt || ""} readOnly className="mc-disabled" />
+              <input type="text" value={formatDisplayDate(milestone.tent_end_dt)} placeholder="dd/mm/yyyy" readOnly className="mc-disabled" />
               <small className="mc-hint">Auto-calculated</small>
             </label>
           </div>
@@ -2592,8 +2745,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       <div className="mc-nav-right">
         {currentStep < STEPS.length ? <button type="button" className="mc-btn primary" onClick={goToNextStep}>Next Step <ArrowRight size={16} /></button> :
           <div className="mc-submit-group">
-            <button type="button" className="mc-btn primary" onClick={() => handleSubmit("SUBMITTED")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? (isEditing ? "Updating..." : "Submitting...") : (isEditing ? "Update Milestone" : "Submit Milestone")}</button>
-            <button type="button" className="mc-btn tertiary" onClick={() => handleSubmit("DRAFT")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update Draft" : "Save Draft")}</button>
+            <button type="button" className="mc-btn primary" onClick={() => handleSubmit("SUBMITTED")} disabled={isSubmitting}><Save size={16} /> {isSubmitting ? (isEditing ? "Updating..." : "Submitting...") : (isEditing ? "Update Milestone and task" : "Submit Milestone and Task")}</button>
           </div>
         }
       </div>
@@ -2669,8 +2821,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                     </div>
                   </td>
                   <td>{task.no_of_days || "-"}d</td>
-                  <td>{task.tent_st_dt || "-"}</td>
-                  <td>{task.tent_end_dt || "-"}</td>
+                  <td>{formatDisplayDate(task.tent_st_dt) || "-"}</td>
+                  <td>{formatDisplayDate(task.tent_end_dt) || "-"}</td>
                   <td>{task.task_dep_flg && task.dep_task_id ? <span className={`mc-dep-label ${task.task_dep_typ?.toLowerCase() || 'independent'}`}>{task.task_dep_typ} ({task.dep_task_id})</span> : "Independent"}</td>
                   <td>{hasChecklist ? <span className="mc-badge success">{task.checklist.length} items</span> : <span className="mc-badge">None</span>}</td>
                   <td>{hasAttachments ? <span className="mc-badge success">{task.attachments.length} files</span> : <span className="mc-badge">None</span>}</td>
@@ -2727,11 +2879,11 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
               </div>
               <div className="mc-details-item">
                 <span className="mc-details-label">Tentative Start Date</span>
-                <span className="mc-details-val">{milestone.tent_st_dt}</span>
+                <span className="mc-details-val">{formatDisplayDate(milestone.tent_st_dt)}</span>
               </div>
               <div className="mc-details-item">
                 <span className="mc-details-val">Tentative End Date</span>
-                <span className="mc-details-label">{milestone.tent_end_dt}</span>
+                <span className="mc-details-label">{formatDisplayDate(milestone.tent_end_dt)}</span>
               </div>
               <div className="mc-details-item">
                 <span className="mc-details-label">Status</span>
@@ -2827,7 +2979,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         <div className="mc-table-panel">
           <div className="mc-table-header">
             <div><h2>Milestone & Tasks</h2><p>View and manage all milestone records (Draft + Live)</p></div>
-            <button type="button" className="mc-add-btn" onClick={() => { resetMilestoneForm(); setView("form"); }}><Plus size={16} /> New Milestone</button>
+            <button type="button" className="mc-add-btn" onClick={() => { resetMilestoneForm(); setView("form"); window.scrollTo({ top: 0, behavior: "smooth" }); }}><Plus size={16} /> New Milestone</button>
           </div>
           <div className="mc-table-filters">
             <div className="mc-filter-group">
@@ -2852,8 +3004,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                         <td><strong>{m.title}</strong></td>
                         <td>{project ? project.prj_cd : m.projectCd || "-"}</td>
                         <td>{m.duration} days</td>
-                        <td>{m.startDate}</td>
-                        <td>{m.endDate}</td>
+                        <td>{formatDisplayDate(m.startDate || m.tent_st_dt)}</td>
+                        <td>{formatDisplayDate(m.endDate || m.tent_end_dt)}</td>
                         <td><span className="mc-badge">{m.taskCount || 0} Tasks</span></td>
                         <td><span className={`mc-status ${m.status === "DRAFT" || m.status === "draft" ? "draft" : m.status === "SUBMITTED" || m.status === "submitted" ? "submitted" : "live"}`}>{m.status}</span></td>
                         <td>
@@ -2942,11 +3094,23 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         </div>
       )}
       {alertConfig.isOpen && (
-        <div className="mc-modal-overlay" onClick={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}>
+        <div className="mc-modal-overlay" onClick={() => {
+          const cb = alertConfig.onClose;
+          setAlertConfig(prev => ({ ...prev, isOpen: false, onClose: null }));
+          if (cb) cb();
+        }}>
           <div className="mc-modal mc-alert-modal" onClick={(e) => e.stopPropagation()}>
-            <div className="mc-modal-header"><h3>{alertConfig.type === "success" ? <CheckCircle size={18} style={{ color: '#16a34a' }} /> : <AlertCircle size={18} style={{ color: '#ef4444' }} />} {alertConfig.title}</h3><button className="mc-modal-close" onClick={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}><X size={18} /></button></div>
+            <div className="mc-modal-header"><h3>{alertConfig.type === "success" ? <CheckCircle size={18} style={{ color: '#16a34a' }} /> : <AlertCircle size={18} style={{ color: '#ef4444' }} />} {alertConfig.title}</h3><button className="mc-modal-close" onClick={() => {
+              const cb = alertConfig.onClose;
+              setAlertConfig(prev => ({ ...prev, isOpen: false, onClose: null }));
+              if (cb) cb();
+            }}><X size={18} /></button></div>
             <div className="mc-modal-body"><p>{alertConfig.message}</p></div>
-            <div className="mc-modal-footer"><button className="mc-btn primary" onClick={() => setAlertConfig(prev => ({ ...prev, isOpen: false }))}>OK</button></div>
+            <div className="mc-modal-footer"><button className="mc-btn primary" onClick={() => {
+              const cb = alertConfig.onClose;
+              setAlertConfig(prev => ({ ...prev, isOpen: false, onClose: null }));
+              if (cb) cb();
+            }}>OK</button></div>
           </div>
         </div>
       )}

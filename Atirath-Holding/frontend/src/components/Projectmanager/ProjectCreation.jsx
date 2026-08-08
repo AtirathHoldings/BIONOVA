@@ -19,7 +19,7 @@ import {
   Calendar,
   Copy
 } from "lucide-react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
 import AlertModal from "../AlertModal.jsx";
@@ -339,6 +339,7 @@ const DatePicker = ({ value, onChange, placeholder, name }) => {
 const ProjectCreation = ({ userRole, onLogout }) => {
   const screenPerm = getScreenPermission('PROJECT_CREATION');
   const navigate = useNavigate();
+  const location = useLocation();
   const [projects, setProjects] = useState([]);
   const [loading, setLoading] = useState(false);
   const [companies, setCompanies] = useState([]);
@@ -695,6 +696,15 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     });
     setImagePreview(null);
   };
+
+  useEffect(() => {
+    if (location.state?.createMode) {
+      setView("form");
+      setIsEditing(false);
+      handleResetForm();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+  }, [location.state]);
 
   const handleSave = async () => {
     // Validate based on organization type
@@ -1260,7 +1270,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                       <div className="proj-form-layout-row columns-4">
                         <label className="proj-field-item">
                           <span>Project Code <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="projectCode" value={form.projectCode} onChange={handleChange} placeholder="Enter project code" maxLength={10} />
+                          <input type="text" name="projectCode" value={form.projectCode} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-generated code" />
                           <small style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Must be unique.</small>
                         </label>
                         <label className="proj-field-item">
@@ -1609,7 +1619,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                   </button>
                 </div>
 
-                <div className="proj-table-container" style={{ overflowX: 'auto', paddingBottom: '140px' }}>
+                <div className="proj-table-container" style={{ overflowX: 'auto' }}>
                   {/* ─── Loading Spinner ─────────────────────────────── */}
                   {loading ? (
                     <div style={{ textAlign: 'center', padding: '60px 20px', color: '#64748b' }}>

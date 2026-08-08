@@ -169,12 +169,29 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
   // Sorting & Search
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [tableSearchQuery, setTableSearchQuery] = useState("");
+  const [formErrors, setFormErrors] = useState({});
+
+  const validateField = (name, value) => {
+    let error = "";
+    if (name === "code") {
+      if (!value || !value.trim()) {
+        error = "Department Code is required.";
+      } else if (/\s/.test(value)) {
+        error = "Spaces are not allowed in Department Code.";
+      } else if (value.length > 10) {
+        error = "Department Code cannot exceed 10 characters.";
+      }
+    }
+    setFormErrors((prev) => ({ ...prev, [name]: error }));
+    return error;
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     let newValue = value;
     if (name === "code") {
       newValue = value.slice(0, 10);
+      validateField("code", newValue);
     } else if (name === "name") {
       newValue = value.slice(0, 100);
     } else if (name === "description") {
@@ -190,6 +207,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
 
   const handleReset = (dList = departments) => {
     setForm({ code: generateDepartmentCode(dList), name: "", description: "", status: "Active" });
+    setFormErrors({});
     setIsViewing(false);
   };
 
@@ -247,6 +265,10 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     // 1. Department Code check
     if (!form.code.trim()) {
       triggerAlert("error", "Validation Error", "Department Code is required.");
+      return;
+    }
+    if (/\s/.test(form.code)) {
+      triggerAlert("error", "Validation Error", "Spaces are not allowed in Department Code.");
       return;
     }
     if (form.code.trim().length > 10) {
@@ -432,7 +454,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
   const toggleDropdown = (e, id) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
-    const dropdownHeight = 150; // approximate height of the dropdown
+    const dropdownHeight = 220; // threshold height (220px) so lower rows open upside
     const spaceBelow = window.innerHeight - rect.bottom;
     const spaceAbove = rect.top;
 
@@ -690,9 +712,13 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                             <label>Department Code <span className="dept-req-star">*</span></label>
                             <div className="dept-input-icon-wrap">
                               <span className="dept-input-prefix-icon"><Calendar size={16} /></span>
-                              <input type="text" name="code" value={form.code} onChange={handleChange} placeholder="Enter department code" maxLength="10" required />
+                              <input type="text" name="code" value={form.code} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-generated code" required />
                             </div>
-                            <div className="dept-input-helper-text" style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Department code must be unique.</div>
+                            {formErrors.code ? (
+                              <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.code}</span>
+                            ) : (
+                              <div className="dept-input-helper-text" style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Department code must be unique.</div>
+                            )}
                           </div>
 
                           {/* Department Name Input */}

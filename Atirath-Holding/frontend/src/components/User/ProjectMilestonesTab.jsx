@@ -396,7 +396,17 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                   const mId = getMilestoneId(m);
                   const isActive = String(selectedMilestone) === String(mId);
                   const mTasks = getTasksForMilestone(mId);
-                  const st = (m.mlstnSts || m.mlstn_sts || m.mlstmSts || m.mlstm_sts || 'DRAFT').toUpperCase();
+                  const rawSt = (m.mlstnSts || m.mlstn_sts || m.mlstmSts || m.mlstm_sts || 'DRAFT').toUpperCase();
+                  let st = rawSt;
+                  if (mTasks.length > 0) {
+                    const closedMTasks = mTasks.filter(t => {
+                      const s = getTaskStatusStr(t);
+                      return s === 'COMPLETED' || s === 'CLOSED' || s === 'DONE' || s === 'COMPLETE';
+                    }).length;
+                    if (closedMTasks === mTasks.length) {
+                      st = 'CLOSED';
+                    }
+                  }
                   const mDur = m.mlstnDays || m.mlstn_days || m.mlstm_days || m.mlstmDays || 0;
                   const sDt = formatDate(m.stDt || m.st_dt || m.tent_st_dt || m.tentStDt);
                   const eDt = formatDate(m.endDt || m.end_dt || m.tent_end_dt || m.tentEndDt);

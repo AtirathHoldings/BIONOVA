@@ -86,11 +86,32 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
   const DW = 14 * (zoom / 100);
   const ROW_H = baseline ? ROW_H_BASELINE : ROW_H_NORMAL;
 
+  const parseLocalDate = (dateStr) => {
+    if (!dateStr) return null;
+    if (dateStr instanceof Date) return new Date(dateStr.getFullYear(), dateStr.getMonth(), dateStr.getDate(), 12, 0, 0);
+    const s = String(dateStr).trim();
+    if (!s) return null;
+
+    const isoMatch = s.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+    if (isoMatch) {
+      return new Date(Number(isoMatch[1]), Number(isoMatch[2]) - 1, Number(isoMatch[3]), 12, 0, 0);
+    }
+
+    const dmyMatch = s.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+    if (dmyMatch) {
+      return new Date(Number(dmyMatch[3]), Number(dmyMatch[2]) - 1, Number(dmyMatch[1]), 12, 0, 0);
+    }
+
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return null;
+    return new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0);
+  };
+
   /* Helper to format Date string to DD-MMM-YY */
   const formatDateString = (dateStr) => {
     if (!dateStr) return 'N/A';
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
+    const d = parseLocalDate(dateStr);
+    if (!d) return dateStr;
     const day = String(d.getDate()).padStart(2, '0');
     const month = d.toLocaleDateString('en-GB', { month: 'short' });
     const year = String(d.getFullYear()).slice(-2);
@@ -100,25 +121,21 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
   /* Helper to calculate day difference */
   const getDayOffset = (dateStr, tStart) => {
     if (!dateStr || !tStart) return 0;
-    const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return 0;
-    // Set both to midnight to avoid DST hour mismatch issues
-    const dStart = new Date(tStart.getFullYear(), tStart.getMonth(), tStart.getDate());
-    const dTarget = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+    const dTarget = parseLocalDate(dateStr);
+    if (!dTarget) return 0;
+    const dStart = new Date(tStart.getFullYear(), tStart.getMonth(), tStart.getDate(), 12, 0, 0);
     const diffTime = dTarget - dStart;
-    const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
     return diffDays >= 0 ? diffDays : 0;
   };
 
   const getDurationDays = (startStr, endStr) => {
     if (!startStr || !endStr) return 1;
-    const s = new Date(startStr);
-    const e = new Date(endStr);
-    if (isNaN(s.getTime()) || isNaN(e.getTime())) return 1;
-    const sMid = new Date(s.getFullYear(), s.getMonth(), s.getDate());
-    const eMid = new Date(e.getFullYear(), e.getMonth(), e.getDate());
+    const sMid = parseLocalDate(startStr);
+    const eMid = parseLocalDate(endStr);
+    if (!sMid || !eMid) return 1;
     const diffTime = eMid - sMid;
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24)) + 1;
     return diffDays >= 1 ? diffDays : 1;
   };
 
@@ -139,24 +156,19 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
     items.forEach(item => {
       if (item.startDate) {
-        const start = new Date(item.startDate);
-        if (!isNaN(start.getTime())) {
-          if (!minDate || start < minDate) minDate = start;
-        }
+        const start = parseLocalDate(item.startDate);
+        if (start && (!minDate || start < minDate)) minDate = start;
       }
       if (item.endDate) {
-        const end = new Date(item.endDate);
-        if (!isNaN(end.getTime())) {
-          if (!maxDate || end > maxDate) maxDate = end;
-        }
+        const end = parseLocalDate(item.endDate);
+        if (end && (!maxDate || end > maxDate)) maxDate = end;
       }
     });
 
     if (!minDate) minDate = new Date();
     if (!maxDate) maxDate = new Date(minDate.getTime() + 180 * 24 * 60 * 60 * 1000);
 
-    // Start timeline on the first of minDate's month
-    const tStart = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+    const tStart = new Date(minDate.getFullYear(), minDate.getMonth(), 1, 12, 0, 0);
 
     let monthCount = (maxDate.getFullYear() - tStart.getFullYear()) * 12 + (maxDate.getMonth() - tStart.getMonth()) + 2;
     if (monthCount < 6) monthCount = 6;
@@ -473,6 +485,11 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         const mappedRows = mapItemsToGanttRows(rawItems, tStart);
         setGanttRows(mappedRows);
 
+        const allProjectIds = mappedRows.filter(r => r.type === 'project').map(r => r.id);
+        const allMilestoneIds = mappedRows.filter(r => r.type === 'milestone').map(r => r.id);
+        setExpandedProjects(new Set(allProjectIds));
+        setExpandedMilestones(new Set(allMilestoneIds));
+
         const deps = [];
         rawItems.forEach(item => {
           if (item.dependencies) {
@@ -530,16 +547,15 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
   }
 
   // Filter based on expansion state — in compact mode show all rows directly
-  if (!compact) {
+  const isFiltering = viewMode !== 'All' || filterSt !== 'All' || groupBy !== 'Milestone';
+  if (!isFiltering) {
     rows = rows.filter(r => {
-      if (r.type === 'project') return true;
+      if (r.type === 'project') return compact ? false : true;
       if (r.type === 'milestone') return r.parentPrj === 'unknown' || expandedProjects.has(r.parentPrj);
       if (r.type === 'task') return (r.parentPrj === 'unknown' || expandedProjects.has(r.parentPrj)) && expandedMilestones.has(r.parentMs);
       return true;
     });
-  }
-
-  if (compact) {
+  } else if (compact) {
     rows = rows.filter(r => r.type !== 'project');
   }
 

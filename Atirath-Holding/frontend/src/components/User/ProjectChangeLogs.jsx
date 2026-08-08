@@ -12,6 +12,19 @@ const authHeaders = () => ({
   "Authorization": `Bearer ${getAuthToken()}`
 });
 
+const formatDateToDDMMYYYY = (dateStr) => {
+  if (!dateStr || dateStr === "N/A" || dateStr === "Not Specified") return "N/A";
+  const parts = dateStr.split('-');
+  if (parts.length >= 3 && parts[0].length === 4) {
+    return `${parts[2].substring(0, 2)}-${parts[1]}-${parts[0]}`;
+  }
+  const d = new Date(dateStr);
+  if (!isNaN(d.getTime())) {
+    return `${String(d.getDate()).padStart(2, '0')}-${String(d.getMonth() + 1).padStart(2, '0')}-${d.getFullYear()}`;
+  }
+  return dateStr;
+};
+
 export default function ProjectChangeLogs({ project, progressData }) {
   const [selectedRecord, setSelectedRecord] = useState(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -60,7 +73,7 @@ export default function ProjectChangeLogs({ project, progressData }) {
           const logDate = new Date(log.logDt);
           const dateStr = isNaN(logDate.getTime()) 
             ? 'N/A' 
-            : logDate.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).replace(/ /g, '-');
+            : `${String(logDate.getDate()).padStart(2, '0')}-${String(logDate.getMonth() + 1).padStart(2, '0')}-${logDate.getFullYear()}`;
           
           let hours = logDate.getHours();
           const ampm = hours >= 12 ? 'PM' : 'AM';
@@ -257,11 +270,11 @@ export default function ProjectChangeLogs({ project, progressData }) {
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Start Date</span>
-          <span style={{ fontSize: '14px', color: '#1e293b', fontWeight: '600' }}>{project?.startDate || 'N/A'}</span>
+          <span style={{ fontSize: '14px', color: '#1e293b', fontWeight: '600' }}>{formatDateToDDMMYYYY(project?.startDate)}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
           <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>End Date</span>
-          <span style={{ fontSize: '14px', color: '#1e293b', fontWeight: '600' }}>{project?.endDate || 'N/A'}</span>
+          <span style={{ fontSize: '14px', color: '#1e293b', fontWeight: '600' }}>{formatDateToDDMMYYYY(project?.endDate)}</span>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', minWidth: '150px', flex: 1 }}>
           <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Progress</span>

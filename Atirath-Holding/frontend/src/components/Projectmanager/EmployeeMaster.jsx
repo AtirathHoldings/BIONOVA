@@ -200,6 +200,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   const screenPerm = getScreenPermission('EMPLOYEE_CREATION');
   // API States
   const [employees, setEmployees] = useState([]);
+  const [externalEmployees, setExternalEmployees] = useState([]);
+  const [activeEmployeeTab, setActiveEmployeeTab] = useState("INTERNAL"); // INTERNAL, EXTERNAL
   const [departments, setDepartments] = useState([]);
   const [companies, setCompanies] = useState([]);
   const [plants, setPlants] = useState([]);
@@ -228,7 +230,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [activeActionsMenu, setActiveActionsMenu] = useState(null);
+  const [dropdownPos, setDropdownPos] = useState({ isTop: false });
   const [formErrors, setFormErrors] = useState({});
+  const [extFormErrors, setExtFormErrors] = useState({});
+  const [showExtModal, setShowExtModal] = useState(false);
   const [tableSearchQuery, setTableSearchQuery] = useState("");
 
   const [alertConfig, setAlertConfig] = useState({
@@ -292,6 +297,37 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     role: "user"
   });
 
+  const [extForm, setExtForm] = useState({
+    extEmpCode: "",
+    extEmpNm: "",
+    email: "",
+    mobNum: "",
+    companyNm: "",
+    photoPath: "",
+    repEmpId: "",
+    sts: true
+  });
+  const [isExtEditing, setIsExtEditing] = useState(false);
+  const [isExtViewing, setIsExtViewing] = useState(false);
+  const [extEditId, setExtEditId] = useState(null);
+
+  const handleExtReset = () => {
+    setExtForm({
+      extEmpCode: generateExtEmployeeCode(),
+      extEmpNm: "",
+      email: "",
+      mobNum: "",
+      companyNm: "",
+      photoPath: "",
+      repEmpId: "",
+      sts: true
+    });
+    setExtFormErrors({});
+    setIsExtEditing(false);
+    setIsExtViewing(false);
+    setExtEditId(null);
+  };
+
   const generateEmployeeCode = (empList = employees) => {
     let maxNum = 0;
     if (Array.isArray(empList)) {
@@ -305,6 +341,21 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       });
     }
     return `EMP-${String(maxNum + 1).padStart(3, '0')}`;
+  };
+
+  const generateExtEmployeeCode = (empList = externalEmployees) => {
+    let maxNum = 0;
+    if (Array.isArray(empList)) {
+      empList.forEach(e => {
+        const code = e.extEmpCode || "";
+        const match = code.match(/^EXT-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) maxNum = num;
+        }
+      });
+    }
+    return `EXT-${String(maxNum + 1).padStart(3, '0')}`;
   };
 
   const generateDesignationCode = (dList = designations) => {
@@ -340,13 +391,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   const fetchAllData = async () => {
     setLoading(true);
     try {
-      const [empRes, coyRes, pltRes, deptRes, desigRes, mapRes] = await Promise.all([
+      const [empRes, coyRes, pltRes, deptRes, desigRes, mapRes, extEmpRes] = await Promise.all([
         fetch(`${apiBaseUrl}/api/employees`, { headers: getAuthHeaders() }),
         fetch(`${apiBaseUrl}/api/companies`, { headers: getAuthHeaders() }),
         fetch(`${apiBaseUrl}/api/plants`, { headers: getAuthHeaders() }),
         fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() }),
         fetch(`${apiBaseUrl}/api/designations`, { headers: getAuthHeaders() }),
-        fetch(`${apiBaseUrl}/api/dept-coy-plt-maps`, { headers: getAuthHeaders() })
+        fetch(`${apiBaseUrl}/api/dept-coy-plt-maps`, { headers: getAuthHeaders() }),
+        fetch(`${apiBaseUrl}/api/external-employees`, { headers: getAuthHeaders() })
       ]);
 
       const coyData = coyRes.ok ? await coyRes.json() : [];
@@ -403,7 +455,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
             firstName: resolvedFirstName,
             lastName: resolvedLastName,
             employeeName: `${resolvedFirstName} ${resolvedLastName}`.trim(),
-            gender: displayGender,
+            gender: displayGender || emp.gender || "",
             dateOfBirth: emp.dob || emp.dateOfBirth || "",
             mobile: emp.mobNum || emp.mobile || "",
             bloodGroup: emp.bldGrp || emp.bloodGroup || "",
@@ -429,6 +481,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
         });
       }
 
+      if (extEmpRes && extEmpRes.ok) {
+        const extData = await extEmpRes.json();
+        setExternalEmployees(extData || []);
+      }
+
       setCompanies(coyData);
       setPlants(pltData);
       setDepartments(deptData);
@@ -452,10 +509,8 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       const emailVal = value.trim();
       if (!emailVal) {
         error = "Email is required.";
-      } else if (!emailVal.includes("@")) {
-        error = "Email must contain @.";
-      } else if (!emailVal.toLowerCase().endsWith(".com")) {
-        error = "Email must end with .com.";
+      } else if (!emailVal.toLowerCase().endsWith("@gmail.com")) {
+        error = "Email must end with @gmail.com.";
       }
     } else if (name === "password") {
       if (!value) {
@@ -482,6 +537,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
         error = "Mobile Number must start with 6, 7, 8, or 9.";
       } else if (mobileVal.length > 0 && mobileVal.length < 10) {
         error = "Mobile Number must be exactly 10 digits.";
+      }
+    } else if (name === "employeeCode") {
+      if (/\s/.test(value)) {
+        error = "Spaces are not allowed in Employee Code.";
       }
     } else if (name === "firstName" || name === "lastName") {
       if (/[^a-zA-Z\s]/.test(value)) {
@@ -626,6 +685,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     } catch (err) {
       console.error("Employee photo upload error:", err);
     }
+  };
+
+  const handleDeletePhoto = () => {
+    setPhoto(null);
+    setForm((prev) => ({ ...prev, photoPath: "" }));
+    const fileInput = document.getElementById("empPhotoUpload");
+    if (fileInput) fileInput.value = "";
   };
 
   // Handle New Department Modal Input Change
@@ -821,6 +887,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Employee Code is required.");
       return;
     }
+    if (/\s/.test(form.employeeCode)) {
+      triggerAlert("error", "Validation Error", "Spaces are not allowed in Employee Code.");
+      return;
+    }
     if (form.employeeCode.length > 10) {
       triggerAlert("error", "Validation Error", "Employee Code cannot exceed 10 characters.");
       return;
@@ -920,10 +990,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     // 10. Joining Date check
     if (!form.joiningDate) {
       triggerAlert("error", "Validation Error", "Joining Date is required.");
-      return;
-    }
-    if (form.joiningDate < todayStr) {
-      triggerAlert("error", "Validation Error", "Joining Date cannot be in the past.");
       return;
     }
 
@@ -1026,13 +1092,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
 
-    let genderVal = "MALE";
-    if (form.gender.toUpperCase() === "FEMALE") {
-      genderVal = "FEMALE";
-    } else if (form.gender.toUpperCase() === "OTHERS" || form.gender.toUpperCase() === "OTHER") {
-      genderVal = "OTHER";
-    }
-
     let empTypVal = "FTE";
     if (form.employmentType === "Retainer") {
       empTypVal = "RET";
@@ -1042,6 +1101,15 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       empTypVal = "FTE";
     } else {
       empTypVal = form.employmentType;
+    }
+
+    let genderVal = "MALE";
+    if (form.gender && form.gender.toUpperCase() === "FEMALE") {
+      genderVal = "FEMALE";
+    } else if (form.gender && (form.gender.toUpperCase() === "OTHERS" || form.gender.toUpperCase() === "OTHER")) {
+      genderVal = "OTHER";
+    } else if (form.gender) {
+      genderVal = form.gender.toUpperCase();
     }
 
     const payload = {
@@ -1088,7 +1156,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       });
 
       if (response.ok) {
-        triggerAlert("success", "Success", isEditing ? "Employee updated successfully!" : "Employee created successfully!");
+        const successMsg = isEditing 
+          ? "Employee updated successfully!" 
+          : "Employee created successfully! An email with login credentials (URL, User ID, Password) has been sent.";
+        triggerAlert("success", "Success", successMsg);
         setIsEditing(false);
         setEditId(null);
         handleReset();
@@ -1123,7 +1194,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       employeeCode: emp.empCode || emp.employeeCode || "",
       firstName: emp.firstName || "",
       lastName: emp.lastName || "",
-      gender: emp.gender ? (emp.gender.charAt(0) + emp.gender.slice(1).toLowerCase()) : "",
+      gender: emp.gender ? (function(g) {
+        const u = g.toUpperCase();
+        if (u === "MALE") return "Male";
+        if (u === "FEMALE") return "Female";
+        if (u === "OTHER" || u === "OTHERS") return "Others";
+        return g.charAt(0).toUpperCase() + g.slice(1).toLowerCase();
+      })(emp.gender) : "",
       dateOfBirth: emp.dob || emp.dateOfBirth || "",
       email: emp.email || "",
       mobile: emp.mobNum || emp.mobile || "",
@@ -1161,7 +1238,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       employeeCode: emp.empCode || emp.employeeCode || "",
       firstName: emp.firstName || "",
       lastName: emp.lastName || "",
-      gender: emp.gender ? (emp.gender.charAt(0) + emp.gender.slice(1).toLowerCase()) : "",
+      gender: emp.gender ? (function(g) {
+        const u = g.toUpperCase();
+        if (u === "MALE") return "Male";
+        if (u === "FEMALE") return "Female";
+        if (u === "OTHER" || u === "OTHERS") return "Others";
+        return g.charAt(0).toUpperCase() + g.slice(1).toLowerCase();
+      })(emp.gender) : "",
       dateOfBirth: emp.dob || emp.dateOfBirth || "",
       email: emp.email || "",
       mobile: emp.mobNum || emp.mobile || "",
@@ -1242,13 +1325,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     if (!emp) return;
 
     const nextStatus = emp.status === "Active" ? false : true;
-    let genderVal = "MALE";
-    if (emp.gender) {
-      const g = emp.gender.toUpperCase();
-      if (g === "FEMALE") genderVal = "FEMALE";
-      else if (g === "OTHERS" || g === "OTHER") genderVal = "OTHER";
-    }
-
     let empTypVal = "FTE";
     if (emp.employmentType === "Retainer") {
       empTypVal = "RET";
@@ -1265,7 +1341,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       empCode: emp.empCode || emp.employeeCode,
       fstNm: emp.firstName || "",
       lstNm: emp.lastName || "",
-      gender: genderVal,
+      gender: emp.gender || "",
       dob: emp.dob || emp.dateOfBirth,
       email: emp.email,
       mobNum: emp.mobNum || emp.mobile,
@@ -1297,12 +1373,161 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       } else {
         triggerAlert("error", "Error", "Failed to toggle employee status.");
       }
-    } catch (err) {
+} catch (err) {
       console.error("Error toggling employee status:", err);
       triggerAlert("error", "Error", "Server error occurred while toggling status.");
     }
     setActiveActionsMenu(null);
   };
+
+  const handleExtChange = (e) => {
+    const { name, value } = e.target;
+    setExtForm(prev => ({ ...prev, [name]: value }));
+    const fieldNameForValidation = name === "mobNum" ? "mobile" : name;
+    const error = validateField(fieldNameForValidation, value, extForm);
+    if (error) {
+      setExtFormErrors(prev => ({ ...prev, [name]: error }));
+    } else {
+      setExtFormErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[name];
+        return newErrors;
+      });
+    }
+  };
+
+  const viewExternalEmployee = (emp) => {
+    setIsExtEditing(false);
+    setIsExtViewing(true);
+    setExtForm({
+      extEmpCode: emp.extEmpCode || "",
+      extEmpNm: emp.extEmpNm || "",
+      email: emp.email || "",
+      mobNum: emp.mobNum || "",
+      companyNm: emp.companyNm || "",
+      photoPath: emp.photoPath || "",
+      repEmpId: emp.repEmpId || "",
+      sts: emp.sts !== undefined ? emp.sts : true
+    });
+    setExtEditId(emp.extEmpId || emp.id);
+    setExtFormErrors({});
+    setView("extForm");
+    setActiveActionsMenu(null);
+  };
+
+  const editExternalEmployee = (emp) => {
+    setIsExtEditing(true);
+    setIsExtViewing(false);
+    setExtForm({
+      extEmpCode: emp.extEmpCode || "",
+      extEmpNm: emp.extEmpNm || "",
+      email: emp.email || "",
+      mobNum: emp.mobNum || "",
+      companyNm: emp.companyNm || "",
+      photoPath: emp.photoPath || "",
+      repEmpId: emp.repEmpId || "",
+      sts: emp.sts !== undefined ? emp.sts : true
+    });
+    setExtEditId(emp.extEmpId || emp.id);
+    setExtFormErrors({});
+    setView("extForm");
+    setActiveActionsMenu(null);
+  };
+
+  const deleteExternalEmployee = (id) => {
+    setAlertConfig({
+      isOpen: true,
+      type: "warning",
+      title: "Confirm Delete",
+      message: "Are you sure you want to delete this external employee? This action cannot be undone.",
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      onConfirm: async () => {
+        try {
+          const res = await fetch(`${apiBaseUrl}/api/external-employees/${id}`, {
+            method: "DELETE",
+            headers: getAuthHeaders()
+          });
+          if (res.ok) {
+            triggerAlert("success", "Success", "External employee deleted successfully!");
+            fetchAllData();
+          } else {
+            triggerAlert("error", "Error", "Failed to delete external employee.");
+          }
+        } catch (err) {
+          console.error(err);
+          triggerAlert("error", "Error", "Server error while deleting.");
+        }
+      }
+    });
+    setActiveActionsMenu(null);
+  };
+
+  const toggleDropdown = (e, id) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    const dropdownHeight = 220; // threshold height (220px) so lower rows open upside
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const spaceAbove = rect.top;
+
+    setDropdownPos({
+      isTop: spaceBelow < dropdownHeight && spaceAbove > dropdownHeight
+    });
+    setActiveActionsMenu((prev) => (prev === id ? null : id));
+  };
+
+  const saveExternalEmployee = async () => {
+    const emailError = validateField("email", extForm.email, extForm);
+    const mobileError = validateField("mobile", extForm.mobNum, extForm);
+    const newErrors = {};
+    if (emailError) newErrors.email = emailError;
+    if (mobileError) newErrors.mobNum = mobileError;
+
+    if (Object.keys(newErrors).length > 0) {
+      setExtFormErrors(newErrors);
+      triggerAlert("error", "Validation Error", "Please fix the errors before submitting.");
+      return;
+    }
+
+    if (!extForm.extEmpNm || !extForm.email || !extForm.mobNum || !extForm.companyNm) {
+      triggerAlert("error", "Validation Error", "Please fill all required fields");
+      return;
+    }
+    
+    try {
+      const endpoint = isExtEditing && extEditId 
+        ? `${apiBaseUrl}/api/external-employees/${extEditId}`
+        : `${apiBaseUrl}/api/external-employees`;
+      const method = isExtEditing && extEditId ? "PUT" : "POST";
+
+      const res = await fetch(endpoint, {
+        method,
+        headers: getAuthHeaders(),
+        body: JSON.stringify({
+          extEmpCode: extForm.extEmpCode || generateExtEmployeeCode(),
+          extEmpNm: extForm.extEmpNm,
+          email: extForm.email,
+          mobNum: extForm.mobNum,
+          companyNm: extForm.companyNm,
+          photoPath: extForm.photoPath,
+          repEmpId: extForm.repEmpId ? parseInt(extForm.repEmpId) : null,
+          sts: extForm.sts
+        })
+      });
+      if (res.ok) {
+        triggerAlert("success", "Success", `External employee ${isExtEditing ? "updated" : "created"}!`);
+        setView("list");
+        handleExtReset();
+        fetchAllData();
+      } else {
+        triggerAlert("error", "Error", `Failed to ${isExtEditing ? "update" : "create"} external employee`);
+      }
+    } catch(err) {
+      console.error(err);
+      triggerAlert("error", "Error", "Server error");
+    }
+  };
+
   const filteredEmployees = (tableSearchQuery
     ? employees.filter(emp =>
       (emp.employeeCode && emp.employeeCode.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
@@ -1311,6 +1536,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       (emp.designation && emp.designation.toLowerCase().includes(tableSearchQuery.toLowerCase()))
     )
     : employees).slice().sort((a, b) => (a.employeeCode || '').localeCompare(b.employeeCode || '', undefined, {numeric: true, sensitivity: 'base'}));
+
+  const filteredExternalEmployees = (tableSearchQuery
+    ? externalEmployees.filter(emp =>
+      (emp.extEmpCode && emp.extEmpCode.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
+      (emp.extEmpNm && emp.extEmpNm.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
+      (emp.email && emp.email.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
+      (emp.companyNm && emp.companyNm.toLowerCase().includes(tableSearchQuery.toLowerCase()))
+    ) : externalEmployees) || [];
 
   return (
     <div className="emp-shell-container">
@@ -1345,6 +1578,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 </div>
 
                 <div style={{ padding: '24px' }}>
+                {/* Dummy inputs to trap browser autofill engines */}
+                <input type="text" name="fake_user_name_autofill" style={{ display: 'none', position: 'absolute', opacity: 0, pointerEvents: 'none' }} tabIndex={-1} readOnly autoComplete="off" />
+                <input type="password" name="fake_pass_word_autofill" style={{ display: 'none', position: 'absolute', opacity: 0, pointerEvents: 'none' }} tabIndex={-1} readOnly autoComplete="new-password" />
+                
                 {isViewing ? (
                   <div style={{ display: 'flex', flexDirection: 'column' }}>
                     {/* Photo Row & Header */}
@@ -1448,8 +1685,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Employee Code <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><User size={16} /></span>
-                          <input type="text" name="employeeCode" value={form.employeeCode} onChange={handleChange} placeholder="Enter employee code" maxLength="10" required />
+                          <input type="text" name="employeeCode" value={form.employeeCode} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-generated code" required />
                         </div>
+                        {formErrors.employeeCode && (
+                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                            {formErrors.employeeCode}
+                          </div>
+                        )}
                       </div>
                       <div className="emp-form-item">
                         <label>First Name <span className="emp-req-star">*</span></label>
@@ -1525,7 +1767,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Email <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Mail size={16} /></span>
-                          <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="Enter email id" maxLength="50" required />
+                          <input type="email" name="email" value={form.email} onChange={handleChange} placeholder="Enter email id" maxLength="50" required autoComplete="off" />
                         </div>
                         {formErrors.email && (
                           <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
@@ -1580,12 +1822,42 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                       </div>
                       <div className="emp-form-item">
                         <label>Upload Image</label>
-                        {/* PHOTO SECTION – upload button on left, preview on right with equal height to Address textarea and correct alignment */}
+                        {/* PHOTO SECTION – upload button and delete button on left, preview on right */}
                         <div style={{ display: 'flex', alignItems: 'flex-start', gap: '16px', height: '96px' }}>
-                          <input id="empPhotoUpload" type="file" accept="image/*" onChange={handlePhotoChange} hidden />
-                          <button type="button" className="emp-photo-row-upload-btn" onClick={() => document.getElementById("empPhotoUpload").click()} style={{ padding: '0 16px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#334155', flexShrink: 0, height: '38px' }}>
-                            <Upload size={14} /> Upload File instead
-                          </button>
+                          <input id="empPhotoUpload" type="file" accept="image/*" onChange={handlePhotoChange} disabled={isViewing} hidden />
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                            {!isViewing && (
+                              <>
+                                <button type="button" className="emp-photo-row-upload-btn" onClick={() => document.getElementById("empPhotoUpload").click()} style={{ padding: '0 16px', background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px', cursor: 'pointer', fontSize: '13px', display: 'inline-flex', alignItems: 'center', gap: '6px', color: '#334155', flexShrink: 0, height: '38px', whiteSpace: 'nowrap' }}>
+                                  <Upload size={14} /> Upload Image
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={handleDeletePhoto}
+                                  disabled={!form.photoPath && !photo}
+                                  style={{
+                                    padding: '0 16px',
+                                    background: (form.photoPath || photo) ? '#fef2f2' : '#f8fafc',
+                                    border: (form.photoPath || photo) ? '1px solid #fca5a5' : '1px solid #e2e8f0',
+                                    borderRadius: '6px',
+                                    cursor: (form.photoPath || photo) ? 'pointer' : 'not-allowed',
+                                    fontSize: '13px',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: '6px',
+                                    color: (form.photoPath || photo) ? '#dc2626' : '#94a3b8',
+                                    flexShrink: 0,
+                                    height: '38px',
+                                    whiteSpace: 'nowrap',
+                                    opacity: (form.photoPath || photo) ? 1 : 0.6
+                                  }}
+                                  title="Delete Image"
+                                >
+                                  <Trash2 size={14} /> Delete
+                                </button>
+                              </>
+                            )}
+                          </div>
                           <div className="emp-photo-row-preview" style={{ flex: 1, height: '96px', borderRadius: '8px', overflow: 'hidden', border: '1px solid #e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#f8fafc' }}>
                             {form.photoPath || photo ? (
                               <img src={form.photoPath || photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1801,7 +2073,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                         <label>Username (Email) <span className="emp-req-star">*</span></label>
                         <div className="emp-input-icon-wrap">
                           <span className="emp-input-prefix-icon"><Mail size={16} /></span>
-                          <input type="email" name="username" value={form.username} onChange={handleChange} placeholder="Enter email id" maxLength="50" required />
+                          <input type="email" name="username" value={form.username} onChange={handleChange} placeholder="Enter email id" maxLength="50" required autoComplete="off" />
                         </div>
                         {formErrors.email && (
                           <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
@@ -1821,6 +2093,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             placeholder="Enter Password"
                             maxLength="50"
                             required={!isEditing}
+                            disabled={isEditing}
+                            autoComplete="new-password"
+                            style={isEditing ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed' } : {}}
                           />
                           <button type="button" className="emp-input-suffix-btn" onClick={() => setShowPassword(!showPassword)}>
                             {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1844,6 +2119,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             placeholder="Confirm password"
                             maxLength="50"
                             required={!isEditing}
+                            disabled={isEditing}
+                            autoComplete="new-password"
+                            style={isEditing ? { backgroundColor: '#f1f5f9', cursor: 'not-allowed' } : {}}
                           />
                           <button type="button" className="emp-input-suffix-btn" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
                             {showConfirmPassword ? <EyeOff size={16} /> : <Eye size={16} />}
@@ -1894,6 +2172,98 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 )}
               </div>
             </div>
+          ) : view === "extForm" ? (
+            /* ================= VIEW: ADD NEW EXTERNAL EMPLOYEE FORM ================= */
+            <div className="emp-content" style={{ paddingBottom: '80px', maxWidth: '1280px', margin: '0 auto' }}>
+              <div className="emp-form-card" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
+                  <div>
+                    <h2 style={{ fontSize: '20px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
+                      {isExtViewing ? "View External Employee" : isExtEditing ? "Edit External Employee" : "Add New External Employee"}
+                    </h2>
+                    <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>
+                      {isExtViewing ? "Viewing external employee details" : "Enter external employee details in the form below"}
+                    </p>
+                  </div>
+                  <button type="button" className="emp-nav-view-btn" onClick={() => {
+                    setView("list"); handleExtReset();
+                  }}>
+                    <ArrowLeft size={15} /> Back to Employee List
+                  </button>
+                </div>
+                <div style={{ padding: '24px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                  <div className="emp-form-row-3">
+                    <div className="emp-form-item">
+                      <label>Employee Code</label>
+                      <div className="emp-input-icon-wrap">
+                        <span className="emp-input-prefix-icon"><User size={16} /></span>
+                        <input type="text" name="extEmpCode" value={extForm.extEmpCode || generateExtEmployeeCode()} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-generated" />
+                      </div>
+                    </div>
+                    <div className="emp-form-item">
+                      <label>Employee Name <span className="emp-req-star">*</span></label>
+                      <div className="emp-input-icon-wrap">
+                        <span className="emp-input-prefix-icon"><User size={16} /></span>
+                        <input type="text" name="extEmpNm" value={extForm.extEmpNm} onChange={handleExtChange} placeholder="Enter name" required disabled={isExtViewing} />
+                      </div>
+                    </div>
+                    <div className="emp-form-item">
+                      <label>Company Name <span className="emp-req-star">*</span></label>
+                      <div className="emp-input-icon-wrap">
+                        <span className="emp-input-prefix-icon"><Building size={16} /></span>
+                        <input type="text" name="companyNm" value={extForm.companyNm} onChange={handleExtChange} placeholder="Enter company name" required disabled={isExtViewing} />
+                      </div>
+                    </div>
+                  </div>
+                  <div className="emp-form-row-3">
+                    <div className="emp-form-item">
+                      <label>Email <span className="emp-req-star">*</span></label>
+                      <div className="emp-input-icon-wrap">
+                        <span className="emp-input-prefix-icon"><Mail size={16} /></span>
+                        <input type="email" name="email" value={extForm.email} onChange={handleExtChange} placeholder="Enter email" required disabled={isExtViewing} />
+                      </div>
+                      {extFormErrors.email && (
+                        <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                          {extFormErrors.email}
+                        </div>
+                      )}
+                    </div>
+                    <div className="emp-form-item">
+                      <label>Mobile Number <span className="emp-req-star">*</span></label>
+                      <div className="emp-input-icon-wrap">
+                        <span className="emp-input-prefix-icon"><Phone size={16} /></span>
+                        <input type="tel" name="mobNum" value={extForm.mobNum} onChange={handleExtChange} placeholder="Enter mobile" required maxLength="10" disabled={isExtViewing} />
+                      </div>
+                      {extFormErrors.mobNum && (
+                        <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
+                          {extFormErrors.mobNum}
+                        </div>
+                      )}
+                    </div>
+                    <div className="emp-form-item">
+                      <label>Reporting To</label>
+                      <div className="emp-input-icon-wrap">
+                        <span className="emp-input-prefix-icon"><User size={16} /></span>
+                        <select name="repEmpId" value={extForm.repEmpId} onChange={handleExtChange} style={{ width: '100%', padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', backgroundColor: '#f8fafc' }} disabled={isExtViewing}>
+                          <option value="">Select Manager</option>
+                          {employees.map(e => <option key={e.id} value={e.id}>{e.employeeName}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="emp-form-footer" style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', padding: '16px 24px', backgroundColor: '#fafbfc', borderTop: '1px solid #e2e8f0' }}>
+                  {!isExtViewing && (
+                    <button type="button" className="emp-btn primary" onClick={saveExternalEmployee}>
+                      <Save size={14} /> {isExtEditing ? "Update Employee" : "Save Employee"}
+                    </button>
+                  )}
+                  <button type="button" className="emp-btn secondary" onClick={() => { setView("list"); handleExtReset(); }}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
           ) : (
             /* ================= VIEW: EMPLOYEE LIST ================= */
             <div className="emp-content" style={{ maxWidth: '1280px', margin: '0 auto' }}>
@@ -1902,27 +2272,51 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>Employee List</h2>
                     <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>View and manage all employees</p>
+                    <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                      <button 
+                        onClick={() => setActiveEmployeeTab("INTERNAL")}
+                        style={{ padding: '6px 12px', border: 'none', background: activeEmployeeTab === "INTERNAL" ? '#2563eb' : 'transparent', color: activeEmployeeTab === "INTERNAL" ? 'white' : '#64748b', borderRadius: '4px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
+                      >
+                        Internal Employees
+                      </button>
+                      <button 
+                        onClick={() => setActiveEmployeeTab("EXTERNAL")}
+                        style={{ padding: '6px 12px', border: 'none', background: activeEmployeeTab === "EXTERNAL" ? '#2563eb' : 'transparent', color: activeEmployeeTab === "EXTERNAL" ? 'white' : '#64748b', borderRadius: '4px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
+                      >
+                        External Employees
+                      </button>
+                    </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', alignSelf: 'flex-start' }}>
                     <div style={{ position: 'relative' }}>
                       <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                       <input
                         type="text"
-                        placeholder="Search employees..."
+                        placeholder={activeEmployeeTab === "INTERNAL" ? "Search employees..." : "Search external..."}
                         value={tableSearchQuery}
                         onChange={(e) => setTableSearchQuery(e.target.value)}
                         style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
                       />
                     </div>
                     {screenPerm.canCreate && (
-                      <button type="button" className="emp-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setView("form"); }}>
-                        <Plus size={16} /> Add New Employee
+                      <button type="button" className="emp-btn-add-new" onClick={() => { 
+                          handleReset(); 
+                          setIsEditing(false); 
+                          if (activeEmployeeTab === "EXTERNAL") {
+                            handleExtReset();
+                            setView("extForm");
+                          } else {
+                            setView("form");
+                          }
+                      }}>
+                        <Plus size={16} /> Add New {activeEmployeeTab === "EXTERNAL" ? "External " : ""}Employee
                       </button>
                     )}
                   </div>
                 </div>
 
-                <div className="emp-table-container" style={{ overflowX: 'auto', paddingBottom: '140px' }}>
+                {activeEmployeeTab === "INTERNAL" ? (
+                <div className="emp-table-container" style={{ overflowX: 'auto' }}>
                   <table className="emp-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
@@ -1993,13 +2387,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                               <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: emp.status === 'Active' ? '#dcfce7' : '#fee2e2', color: emp.status === 'Active' ? '#166534' : '#991b1b' }}>{emp.status}</span>
                             </td>
                             <td style={{ position: "relative", padding: '14px 16px', textAlign: 'center' }}>
-                              <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={() => setActiveActionsMenu(activeActionsMenu === emp.id ? null : emp.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                              <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={(e) => toggleDropdown(e, emp.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                 <MoreVertical size={18} />
                               </button>
                               {activeActionsMenu === emp.id && (
                                 <>
                                   <div className="emp-actions-dropdown-backdrop" onClick={() => setActiveActionsMenu(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }} />
-                                  <div className="emp-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: '8px', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
+                                  <div className="emp-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: dropdownPos.isTop ? 'auto' : '8px', bottom: dropdownPos.isTop ? '100%' : 'auto', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
                                     <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleView(emp)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Eye size={15} /> View </button>
                                     {screenPerm.canEdit && (
                                       <button type="button" style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }} onClick={() => handleEdit(emp)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}> <Edit size={15} /> Edit </button>
@@ -2017,6 +2411,66 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                     </tbody>
                   </table>
                 </div>
+                ) : (
+                <div className="emp-table-container" style={{ overflowX: 'auto' }}>
+                  <table className="emp-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1000px' }}>
+                    <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                      <tr>
+                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>S.NO</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Ext Code</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Name</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Company</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Email</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Mobile</th>
+                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase' }}>Status</th>
+                        <th style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr><td colSpan="8" style={{ textAlign: "center", padding: "60px 20px" }}>Loading...</td></tr>
+                      ) : filteredExternalEmployees.length === 0 ? (
+                        <tr><td colSpan="8" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b' }}>No external employees found.</td></tr>
+                      ) : (
+                        filteredExternalEmployees.map((emp, index) => (
+                          <tr key={emp.extEmpId || index} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>{index + 1}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', fontSize: '13px' }}>{emp.extEmpCode || "-"}</span></td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px' }}><strong>{emp.extEmpNm}</strong></td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.companyNm}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.email || "-"}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.mobNum || "-"}</td>
+                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>
+                              <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: emp.sts ? '#dcfce7' : '#fee2e2', color: emp.sts ? '#166534' : '#991b1b' }}>{emp.sts ? "Active" : "Inactive"}</span>
+                            </td>
+                            <td style={{ padding: '14px 16px', textAlign: 'center', position: 'relative' }}>
+                              <button type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={(e) => toggleDropdown(e, `ext-${emp.extEmpId || index}`)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                <MoreVertical size={18} />
+                              </button>
+                              {activeActionsMenu === `ext-${emp.extEmpId || index}` && (
+                                <>
+                                  <div className="emp-actions-dropdown-backdrop" onClick={() => setActiveActionsMenu(null)} style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 9 }} />
+                                  <div className="emp-actions-dropdown-menu" style={{ position: 'absolute', right: '30px', top: dropdownPos.isTop ? 'auto' : '8px', bottom: dropdownPos.isTop ? '100%' : 'auto', backgroundColor: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', boxShadow: '0 4px 12px rgba(0,0,0,0.15)', zIndex: 10, display: 'flex', flexDirection: 'column', padding: '4px 0', minWidth: '140px' }}>
+                                    <button onClick={() => viewExternalEmployee(emp)} style={{ background: 'none', border: 'none', padding: '8px 16px', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontSize: '13px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                      <Eye size={14} /> View
+                                    </button>
+                                    <button onClick={() => editExternalEmployee(emp)} style={{ background: 'none', border: 'none', padding: '8px 16px', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#475569', fontSize: '13px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                      <Edit size={14} /> Edit
+                                    </button>
+                                    <button onClick={() => deleteExternalEmployee(emp.extEmpId || emp.id)} style={{ background: 'none', border: 'none', padding: '8px 16px', textAlign: 'left', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '8px', color: '#ef4444', fontSize: '13px' }} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#fef2f2'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
+                                      <Trash2 size={14} /> Delete
+                                    </button>
+                                  </div>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+                )}
 
               </div>
             </div>
@@ -2038,7 +2492,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                     <label>Department Code <span className="emp-req-star">*</span></label>
                     <div className="emp-input-icon-wrap">
                       <span className="emp-input-prefix-icon"><Calendar size={16} /></span>
-                      <input type="text" name="code" value={deptForm.code} onChange={handleDeptChange} placeholder="Enter department code" required />
+                      <input type="text" name="code" value={deptForm.code} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-generated code" required />
                     </div>
                   </div>
                   <div className="emp-form-item">
@@ -2095,7 +2549,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                     <label>Designation Code <span className="emp-req-star">*</span></label>
                     <div className="emp-input-icon-wrap">
                       <span className="emp-input-prefix-icon"><Briefcase size={16} /></span>
-                      <input type="text" name="code" value={desigForm.code} onChange={handleDesigChange} placeholder="Enter designation code" required />
+                      <input type="text" name="code" value={desigForm.code} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-generated code" required />
                     </div>
                   </div>
                   <div className="emp-form-item">

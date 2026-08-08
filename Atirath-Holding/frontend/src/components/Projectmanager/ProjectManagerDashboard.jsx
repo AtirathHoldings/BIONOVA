@@ -231,10 +231,19 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
   const handleProjectChange = (val) => setCurrentProject(val);
 
   const handleActionClick = (actionName) => {
-    if (actionName === 'Create Project') navigate('/project-creation');
-    else if (actionName === 'Add Milestone') navigate('/milestone-creation');
-    else if (actionName === 'Create Task') navigate('/task-board');
-    else if (actionName === 'Open Gantt Chart') navigate('/all-project-gantt-chart');
+    if (actionName === 'Create Project') navigate('/project-creation', { state: { createMode: true } });
+    else if (actionName === 'Add Milestone') navigate('/milestone-creation', { state: { createMode: true } });
+    else if (actionName === 'Create Task') navigate('/milestone-creation', { state: { createMode: true, taskMode: true, step: 2 } });
+    else if (actionName === 'Open Gantt Chart') {
+      if (currentProject && currentProject !== "All Projects") {
+        const projectId = getProjectIdFromDisplay(currentProject);
+        if (projectId) {
+          navigate('/all-project-gantt-chart', { state: { projectFilter: `PRJ-${projectId}` } });
+          return;
+        }
+      }
+      navigate('/all-project-gantt-chart');
+    }
     else if (actionName === 'Run Forecast') navigate('/project-list');
     else alert(`${actionName} functionality will be implemented here.`);
   };
@@ -1570,9 +1579,6 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
               </button>
               <button className="pm-action-btn pm-action-teal" onClick={() => handleActionClick("Open Gantt Chart")}>
                 <BarChart2 size={18} /> Open Gantt Chart
-              </button>
-              <button className="pm-action-btn pm-action-orange" onClick={() => handleActionClick("Run Forecast")}>
-                <TrendingUp size={18} /> Run Forecast
               </button>
             </div>
           </div>

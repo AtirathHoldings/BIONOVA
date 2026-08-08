@@ -110,12 +110,29 @@ const DesignationCreation = ({ userRole, onLogout }) => {
   // Sorting & Search
   const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
   const [tableSearchQuery, setTableSearchQuery] = useState("");
+  const [formErrors, setFormErrors] = useState({});
+
+  const validateField = (name, value) => {
+    let error = "";
+    if (name === "code") {
+      if (!value || !value.trim()) {
+        error = "Designation Code is required.";
+      } else if (/\s/.test(value)) {
+        error = "Spaces are not allowed in Designation Code.";
+      } else if (value.length > 50) {
+        error = "Designation Code cannot exceed 50 characters.";
+      }
+    }
+    setFormErrors((prev) => ({ ...prev, [name]: error }));
+    return error;
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     let newValue = value;
     if (name === "code") {
       newValue = value.slice(0, 50);
+      validateField("code", newValue);
     } else if (name === "name") {
       newValue = value.slice(0, 100);
     } else if (name === "description") {
@@ -126,6 +143,7 @@ const DesignationCreation = ({ userRole, onLogout }) => {
 
   const handleReset = (dList = designations) => {
     setForm({ code: generateDesignationCode(dList), name: "", description: "" });
+    setFormErrors({});
     setIsViewing(false);
   };
 
@@ -183,6 +201,10 @@ const DesignationCreation = ({ userRole, onLogout }) => {
     // 1. Designation Code check
     if (!form.code.trim()) {
       triggerAlert("error", "Validation Error", "Designation Code is required.");
+      return;
+    }
+    if (/\s/.test(form.code)) {
+      triggerAlert("error", "Validation Error", "Spaces are not allowed in Designation Code.");
       return;
     }
     if (form.code.trim().length > 50) {
@@ -323,13 +345,22 @@ const DesignationCreation = ({ userRole, onLogout }) => {
 
   const toggleDropdown = (e, id) => {
     e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    const dropdownHeight = 150;
-    const spaceBelow = window.innerHeight - rect.bottom;
-    const spaceAbove = rect.top;
+    const btn = e.currentTarget;
+    const rect = btn.getBoundingClientRect();
+    const container = btn.closest('.desig-table-container') || btn.closest('table')?.parentElement;
+    
+    let spaceBelow = window.innerHeight - rect.bottom;
+    let spaceAbove = rect.top;
+    
+    if (container) {
+      const containerRect = container.getBoundingClientRect();
+      spaceBelow = containerRect.bottom - rect.bottom;
+      spaceAbove = rect.top - containerRect.top;
+    }
 
+    const dropdownHeight = 150;
     setDropdownPos({
-      isTop: spaceBelow < dropdownHeight && spaceAbove > dropdownHeight
+      isTop: spaceBelow < dropdownHeight && spaceAbove > spaceBelow
     });
     setActiveDropdown((prev) => (prev === id ? null : id));
   };
@@ -427,9 +458,13 @@ const DesignationCreation = ({ userRole, onLogout }) => {
                             <label>Designation Code <span className="desig-req-star">*</span></label>
                             <div className="desig-input-icon-wrap">
                               <span className="desig-input-prefix-icon"><Calendar size={16} /></span>
-                              <input type="text" name="code" value={form.code} onChange={handleChange} placeholder="Enter designation code" maxLength="50" required />
+                              <input type="text" name="code" value={form.code} readOnly style={{ backgroundColor: '#f1f5f9', cursor: 'not-allowed', color: '#64748b' }} placeholder="Auto-generated code" required />
                             </div>
-                            <div className="desig-input-helper-text" style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Designation code must be unique.</div>
+                            {formErrors.code ? (
+                              <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.code}</span>
+                            ) : (
+                              <div className="desig-input-helper-text" style={{ color: '#64748b', fontSize: '12px', marginTop: '4px' }}>Designation code must be unique.</div>
+                            )}
                           </div>
 
                           {/* Designation Name Input */}

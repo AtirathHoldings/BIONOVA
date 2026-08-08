@@ -41,6 +41,7 @@ const ProjectOverview = ({ project }) => {
           console.log(JSON.stringify(allTasks[0], null, 2));
         }
         const empData = empRes.ok ? await empRes.json() : [];
+        setEmployees(empData);
 
         const getMilestoneId = (obj) => {
           if (!obj) return null;
@@ -209,6 +210,71 @@ const ProjectOverview = ({ project }) => {
     { label: "Closed Tasks", value: String(completedTasks), subtitle: totalTasks > 0 ? `${((completedTasks / totalTasks) * 100).toFixed(1)}%` : "0.0%", icon: <CheckCircle size={20} color="#10b981" />, bg: "rgba(16, 185, 129, 0.1)" },
   ];
 
+  const [employees, setEmployees] = useState([]);
+
+  const teamMemberPerformance = () => {
+    if (!tasks || tasks.length === 0) return [];
+    const nowMs = new Date().getTime();
+    const empMap = {};
+
+    const empIdToNameMap = {};
+    (employees || []).forEach(e => {
+      const name = `${e.fstNm || ''} ${e.lstNm || ''}`.trim();
+      if (name) empIdToNameMap[String(e.empId)] = name;
+    });
+
+    tasks.forEach(t => {
+      const tEmpId = t.empId ?? t.emp_id;
+      let empName = null;
+      if (tEmpId && empIdToNameMap[String(tEmpId)]) {
+        empName = empIdToNameMap[String(tEmpId)];
+      } else {
+        empName = t.assignee || t.executorNm || t.assignedByNm || t.createdByName;
+      }
+      if (!empName || empName.trim() === "" || empName === "—") empName = "Unassigned / Team";
+
+      if (!empMap[empName]) {
+        empMap[empName] = {
+          name: empName,
+          total: 0,
+          done: 0,
+          overdue: 0,
+          onTime: 0
+        };
+      }
+      empMap[empName].total += 1;
+      const s = (t.status || "").toUpperCase();
+      if (s === "COMPLETED" || s === "CLOSED" || s === "DONE") {
+        empMap[empName].done += 1;
+      } else {
+        if (t.end && new Date(t.end).setHours(23, 59, 59, 999) < nowMs) {
+          empMap[empName].overdue += 1;
+        } else {
+          empMap[empName].onTime += 1;
+        }
+      }
+    });
+
+    return Object.values(empMap).map(e => {
+      let label = "On Schedule";
+      let badgeColor = "#2563eb";
+      let badgeBg = "#eff6ff";
+
+      if (e.overdue > 0) {
+        label = `Lagging (${e.overdue} Overdue)`;
+        badgeColor = "#dc2626";
+        badgeBg = "#fef2f2";
+      } else if (e.done > 0 && e.overdue === 0) {
+        label = "Ahead of Schedule (Lead)";
+        badgeColor = "#16a34a";
+        badgeBg = "#f0fdf4";
+      }
+      return { ...e, label, badgeColor, badgeBg };
+    }).sort((a, b) => b.overdue - a.overdue);
+  };
+
+  const memberPerfList = teamMemberPerformance();
+
   return (
     <div className="pd-overview-container">
       {/* Stats Cards */}
@@ -294,7 +360,98 @@ const ProjectOverview = ({ project }) => {
         </div>
       </div>
 
-      {/* Recent Tasks Section */}
+      {/* Team Member Performance & Bottlenecks Section */}
+
+      {/* Team Member Performance & Bottlenecks Section */}
+      <div className="pd-section-card" style={{ overflow: 'hidden', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 4px 15px -3px rgba(0,0,0,0.05)' }}>
+        <div className="pd-section-header" style={{
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
+          background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
+          padding: '16px 20px',
+          borderBottom: '1px solid #e2e8f0'
+        }}>
+          <div>
+            <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>Team Performance & Schedule Health (Lead / Lag)</h3>
+            <span style={{ fontSize: '12px', color: '#64748b', marginTop: '2px', display: 'block' }}>Monitor individual contribution, velocity, and task delay bottlenecks</span>
+          </div>
+          <span style={{ fontSize: '11px', fontWeight: '600', padding: '4px 12px', borderRadius: '20px', background: '#eff6ff', color: '#2563eb', border: '1px solid #bfdbfe' }}>
+            {memberPerfList.length} Team Members Active
+          </span>
+        </div>
+        <div style={{ padding: '20px', display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '16px', background: '#ffffff' }}>
+          {memberPerfList.length > 0 ? memberPerfList.map((m, idx) => {
+            const completionRate = Math.round((m.done / (m.total || 1)) * 100);
+            return (
+              <div
+                key={idx}
+                style={{
+                  background: '#ffffff',
+                  border: m.overdue > 0 ? '1px solid #fecaca' : '1px solid #e2e8f0',
+                  borderRadius: '12px',
+                  padding: '16px',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: '12px',
+                  transition: 'all 0.25s ease',
+                  boxShadow: m.overdue > 0 ? '0 4px 12px rgba(220, 38, 38, 0.06)' : '0 2px 8px rgba(0,0,0,0.03)'
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.08)'; }}
+                onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = m.overdue > 0 ? '0 4px 12px rgba(220, 38, 38, 0.06)' : '0 2px 8px rgba(0,0,0,0.03)'; }}
+              >
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                    <div style={{
+                      width: '38px',
+                      height: '38px',
+                      borderRadius: '50%',
+                      background: m.overdue > 0 ? 'linear-gradient(135deg, #ef4444, #b91c1c)' : 'linear-gradient(135deg, #3b82f6, #1d4ed8)',
+                      color: '#fff',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: '15px',
+                      fontWeight: '700',
+                      boxShadow: '0 2px 6px rgba(0,0,0,0.15)'
+                    }}>
+                      {m.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <strong style={{ fontSize: '14px', color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{m.name}</strong>
+                      <span style={{ fontSize: '11px', color: '#64748b' }}>Assigned Executor</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: m.badgeBg, padding: '6px 12px', borderRadius: '8px' }}>
+                  <span style={{ fontSize: '11px', fontWeight: '700', color: m.badgeColor }}>{m.label}</span>
+                  <span style={{ fontSize: '11px', fontWeight: '800', color: '#0f172a' }}>{completionRate}% Done</span>
+                </div>
+
+                {/* Progress Bar */}
+                <div style={{ width: '100%', height: '6px', background: '#e2e8f0', borderRadius: '3px', overflow: 'hidden' }}>
+                  <div style={{
+                    width: `${completionRate}%`,
+                    height: '100%',
+                    background: m.overdue > 0 ? '#ef4444' : '#10b981',
+                    borderRadius: '3px',
+                    transition: 'width 0.4s ease'
+                  }}></div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px', color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: '10px' }}>
+                  <span>Tasks: <strong style={{ color: '#0f172a' }}>{m.total}</strong></span>
+                  <span>Done: <strong style={{ color: '#16a34a' }}>{m.done}</strong></span>
+                  <span>Lagging: <strong style={{ color: m.overdue > 0 ? '#dc2626' : '#64748b' }}>{m.overdue}</strong></span>
+                </div>
+              </div>
+            );
+          }) : (
+            <div style={{ color: '#64748b', fontSize: '13px', padding: '16px' }}>No team performance data available for this project.</div>
+          )}
+        </div>
+      </div>
       <div className="pd-section-card">
         <div className="pd-section-header">
           <h3>Recent Tasks</h3>

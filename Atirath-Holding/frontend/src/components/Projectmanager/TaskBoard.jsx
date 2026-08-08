@@ -172,6 +172,45 @@ const mapPriorityFromApi = (prty) => {
   return "Medium";
 };
 
+const getScheduleStatusInfo = (task) => {
+  if (!task) return { status: 'On time', bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' };
+
+  const refDate = task.actCmpDt || task.actcmpdt || task.completedOn || task.submittedOn || task.rawTask?.actCmpDt || task.rawTask?.actcmpdt || task.rawTask?.tentEndDt;
+  const due = task.dueDate || task.due || task.rawTask?.tentEndDt || task.rawTask?.endDt || task.rawTask?.end_dt;
+
+  let status = 'On time';
+
+  if (refDate && due) {
+    const refStr = String(refDate).split('T')[0].split(' ')[0];
+    const dueStr = String(due).split('T')[0].split(' ')[0];
+    if (refStr < dueStr) status = 'Lead';
+    else if (refStr > dueStr) status = 'Lag';
+    else status = 'On time';
+  } else if (due) {
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dueStr = String(due).split('T')[0].split(' ')[0];
+    if (todayStr > dueStr) status = 'Lag';
+    else status = 'On time';
+  }
+
+  if (status === 'Lead') {
+    return { status: 'Lead', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+  } else if (status === 'Lag') {
+    return { status: 'Lag', bg: '#fef2f2', color: '#dc2626', border: '#fecaca' };
+  }
+  return { status: 'On time', bg: '#eff6ff', color: '#2563eb', border: '#bfdbfe' };
+};
+
+const getPriorityBadgeInfo = (priorityStr) => {
+  const p = String(priorityStr || 'Medium').toLowerCase().trim();
+  if (p === 'critical') return { label: 'Critical', bg: '#fef2f2', color: '#dc2626', border: '#fca5a5' };
+  if (p === 'high') return { label: 'High', bg: '#fee2e2', color: '#ef4444', border: '#fca5a5' };
+  if (p === 'medium') return { label: 'Medium', bg: '#fff7ed', color: '#f97316', border: '#ffedd5' };
+  if (p === 'normal') return { label: 'Normal', bg: '#f0f9ff', color: '#0284c7', border: '#bae6fd' };
+  if (p === 'low') return { label: 'Low', bg: '#f0fdf4', color: '#16a34a', border: '#bbf7d0' };
+  return { label: priorityStr || 'Medium', bg: '#fff7ed', color: '#f97316', border: '#ffedd5' };
+};
+
 const mapBackendTask = (t, projects, milestones, employees) => {
   const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id);
   const milestone = (milestones || []).find(m => (m.mId || m.mid || m.id) && String(m.mId || m.mid || m.id) === tMId);
@@ -1014,7 +1053,23 @@ const TaskBoard = ({ userRole, onLogout }) => {
                     >
                       <div className="tb-card-header">
                         <span className="tb-card-id completed">{task.id}</span>
-                        <span className="tb-card-prio completed">CLOSED</span>
+                        {(() => {
+                          const info = getScheduleStatusInfo(task);
+                          return (
+                            <span className="tb-card-prio" style={{
+                              backgroundColor: info.bg,
+                              color: info.color,
+                              border: `1px solid ${info.border}`,
+                              fontWeight: '700',
+                              padding: '2px 8px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              textTransform: 'none'
+                            }}>
+                              {info.status}
+                            </span>
+                          );
+                        })()}
                       </div>
                       <h4 className="tb-card-title">{task.title}</h4>
                       <p className="tb-card-subtitle">{task.milestone}</p>
@@ -1202,10 +1257,51 @@ const TaskBoard = ({ userRole, onLogout }) => {
               </div>
 
               <div className="tb-form-row">
-                <div className="tb-modal-detail-row">
-                  <span className="tb-modal-detail-label">Priority</span>
-                  <span className="tb-modal-detail-value">{selectedTask.priority}</span>
-                </div>
+                {selectedTask.status === "Closed" || selectedTask.status === "Completed" ? (
+                  <div className="tb-modal-detail-row">
+                    <span className="tb-modal-detail-label">Schedule Status</span>
+                    {(() => {
+                      const info = getScheduleStatusInfo(selectedTask);
+                      return (
+                        <span className="tb-modal-detail-value" style={{
+                          backgroundColor: info.bg,
+                          color: info.color,
+                          border: `1px solid ${info.border}`,
+                          fontWeight: '700',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          display: 'inline-block',
+                          width: 'fit-content'
+                        }}>
+                          {info.status}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                ) : (
+                  <div className="tb-modal-detail-row">
+                    <span className="tb-modal-detail-label">Priority</span>
+                    {(() => {
+                      const prioInfo = getPriorityBadgeInfo(selectedTask.priority);
+                      return (
+                        <span className="tb-modal-detail-value" style={{
+                          backgroundColor: prioInfo.bg,
+                          color: prioInfo.color,
+                          border: `1px solid ${prioInfo.border}`,
+                          fontWeight: '700',
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          fontSize: '12px',
+                          display: 'inline-block',
+                          width: 'fit-content'
+                        }}>
+                          {prioInfo.label}
+                        </span>
+                      );
+                    })()}
+                  </div>
+                )}
                 <div className="tb-modal-detail-row">
                   <span className="tb-modal-detail-label">Type</span>
                   <span className="tb-modal-detail-value">{selectedTask.taskType}</span>
