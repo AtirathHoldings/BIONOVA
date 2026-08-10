@@ -21,9 +21,11 @@ public class MilestoneLive {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "m_id")
+    @com.fasterxml.jackson.annotation.JsonProperty("mId")
     private Long mId;
 
     @Column(name = "drft_m_id")
+    @com.fasterxml.jackson.annotation.JsonProperty("drftMId")
     private Long drftMId;
 
     @Column(name = "prj_id", nullable = false)

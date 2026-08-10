@@ -26,12 +26,15 @@ public class TaskLive {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "task_id")
+    @com.fasterxml.jackson.annotation.JsonProperty("taskId")
     private Long taskId;
 
     @Column(name = "drft_task_id")
+    @com.fasterxml.jackson.annotation.JsonProperty("drftTaskId")
     private Long drftTaskId;
 
     @Column(name = "m_id", nullable = false)
+    @com.fasterxml.jackson.annotation.JsonProperty("mId")
     private Long mId;
 
     @Column(name = "task_cd", unique = true, length = 10)
@@ -126,6 +129,18 @@ public class TaskLive {
 
     @Transient
     private String approverNm;
+
+    @Transient
+    private Long prjId;
+
+    @Transient
+    private String prjNm;
+
+    @Transient
+    private String mlstnCd;
+
+    @Transient
+    private String mlstnTtl;
 
     @Transient
     private java.util.List<TeamMember> teamMembers;

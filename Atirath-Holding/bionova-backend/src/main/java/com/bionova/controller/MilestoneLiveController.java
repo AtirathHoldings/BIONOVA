@@ -104,13 +104,7 @@ public class MilestoneLiveController {
     public List<MilestoneLive> getAll() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return employeeRepository.findByEmail(email)
-                .map(employee -> {
-                    if (hasProjectModuleAccess(employee)) {
-                        return milestoneLiveRepository.findAll();
-                    } else {
-                        return milestoneLiveRepository.findMilestonesByEmpId(employee.getEmpId());
-                    }
-                })
+                .map(employee -> milestoneLiveRepository.findAll())
                 .orElse(List.of());
     }
 
@@ -139,7 +133,19 @@ public class MilestoneLiveController {
 
     @GetMapping("/by-project/{prjId}")
     public List<MilestoneLive> getByProject(@PathVariable Long prjId) {
-        return milestoneLiveRepository.findByPrjId(prjId);
+        List<MilestoneLive> list = new java.util.ArrayList<>(milestoneLiveRepository.findByPrjId(prjId));
+        list.sort((m1, m2) -> {
+            if (m1.getMlstnCd() != null && m2.getMlstnCd() != null) {
+                int cmp = m1.getMlstnCd().compareToIgnoreCase(m2.getMlstnCd());
+                if (cmp != 0) return cmp;
+            }
+            if (m1.getStDt() != null && m2.getStDt() != null) {
+                int cmp = m1.getStDt().compareTo(m2.getStDt());
+                if (cmp != 0) return cmp;
+            }
+            return Long.compare(m1.getMId() != null ? m1.getMId() : 0L, m2.getMId() != null ? m2.getMId() : 0L);
+        });
+        return list;
     }
 
     @PostMapping

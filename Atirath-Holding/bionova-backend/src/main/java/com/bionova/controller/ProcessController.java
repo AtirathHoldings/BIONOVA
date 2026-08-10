@@ -328,11 +328,12 @@ public class ProcessController {
                 String rejectionType = getString(body, "rejectionType", "REASSIGN").toUpperCase();
                 targetSubStatus = "REWORK".equals(rejectionType) ? "Rework" : "Reassign";
 
-                if (body.get("targetMId") != null) {
-                    task.setMId(Long.valueOf(body.get("targetMId").toString()));
-                }
-                if (body.get("targetEmpId") != null) {
-                    task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
+                if ("REASSIGN".equals(rejectionType)) {
+                    if (body.get("targetEmpId") != null) {
+                        try {
+                            task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
+                        } catch (Exception ignored) {}
+                    }
                 }
             }
 
@@ -361,8 +362,15 @@ public class ProcessController {
 
             if ("NO".equals(decision) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
                 if ("Rework".equals(targetSubStatus)) {
-                    Long targetMId = body.get("targetMId") != null ? Long.valueOf(body.get("targetMId").toString()) : null;
-                    projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId);
+                    Long targetMId = null;
+                    if (body.get("targetMId") != null && !body.get("targetMId").toString().isBlank()) {
+                        try { targetMId = Long.valueOf(body.get("targetMId").toString()); } catch (Exception ignored) {}
+                    }
+                    Long targetTaskId = null;
+                    if (body.get("targetTaskId") != null && !body.get("targetTaskId").toString().isBlank()) {
+                        try { targetTaskId = Long.valueOf(body.get("targetTaskId").toString()); } catch (Exception ignored) {}
+                    }
+                    projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId, targetTaskId);
                 }
                 projectStatusCascadeService.cascadeReworkDownstream(taskId);
             }
@@ -467,11 +475,12 @@ public class ProcessController {
                 String rejectionType = getString(body, "rejectionType", "REASSIGN").toUpperCase();
                 targetSubStatus = "REWORK".equals(rejectionType) ? "Rework" : "Reassign";
 
-                if (body.get("targetMId") != null) {
-                    task.setMId(Long.valueOf(body.get("targetMId").toString()));
-                }
-                if (body.get("targetEmpId") != null) {
-                    task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
+                if ("REASSIGN".equals(rejectionType)) {
+                    if (body.get("targetEmpId") != null) {
+                        try {
+                            task.setEmpId(Long.valueOf(body.get("targetEmpId").toString()));
+                        } catch (Exception ignored) {}
+                    }
                 }
             }
 
@@ -520,8 +529,15 @@ public class ProcessController {
 
             if (TaskStatusMaster.WIP.equals(targetStatus) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
                 if ("Rework".equals(targetSubStatus)) {
-                    Long targetMId = body.get("targetMId") != null ? Long.valueOf(body.get("targetMId").toString()) : null;
-                    projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId);
+                    Long targetMId = null;
+                    if (body.get("targetMId") != null && !body.get("targetMId").toString().isBlank()) {
+                        try { targetMId = Long.valueOf(body.get("targetMId").toString()); } catch (Exception ignored) {}
+                    }
+                    Long targetTaskId = null;
+                    if (body.get("targetTaskId") != null && !body.get("targetTaskId").toString().isBlank()) {
+                        try { targetTaskId = Long.valueOf(body.get("targetTaskId").toString()); } catch (Exception ignored) {}
+                    }
+                    projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId, targetTaskId);
                 }
                 projectStatusCascadeService.cascadeReworkDownstream(taskId);
             }

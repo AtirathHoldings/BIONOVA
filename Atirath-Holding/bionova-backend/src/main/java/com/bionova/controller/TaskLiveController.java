@@ -126,8 +126,57 @@ public class TaskLiveController {
         return false;
     }
 
+    private void populateMilestoneAndProjectDetails(TaskLive task) {
+        if (task == null || task.getMId() == null) return;
+        milestoneLiveRepository.findById(task.getMId()).ifPresent(m -> {
+            task.setMlstnCd(m.getMlstnCd());
+            task.setMlstnTtl(m.getMlstnTtl());
+            task.setPrjId(m.getPrjId());
+            if (m.getPrjId() != null) {
+                projectLiveRepository.findById(m.getPrjId()).ifPresent(p -> {
+                    task.setPrjNm(p.getPrjNm());
+                });
+            }
+        });
+    }
+
+    private void populateMilestoneAndProjectDetails(List<TaskLive> tasks) {
+        if (tasks == null || tasks.isEmpty()) return;
+        java.util.Set<Long> mIds = tasks.stream()
+                .map(TaskLive::getMId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        if (mIds.isEmpty()) return;
+
+        java.util.List<MilestoneLive> milestones = milestoneLiveRepository.findAllById(mIds);
+        java.util.Map<Long, MilestoneLive> milestoneMap = milestones.stream()
+                .collect(java.util.stream.Collectors.toMap(MilestoneLive::getMId, m -> m, (v1, v2) -> v1));
+
+        java.util.Set<Long> prjIds = milestones.stream()
+                .map(MilestoneLive::getPrjId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+
+        java.util.Map<Long, ProjectLive> projectMap = prjIds.isEmpty() ? java.util.Collections.emptyMap() :
+                projectLiveRepository.findAllById(prjIds).stream()
+                .collect(java.util.stream.Collectors.toMap(ProjectLive::getPrjId, p -> p, (v1, v2) -> v1));
+
+        for (TaskLive task : tasks) {
+            if (task.getMId() != null && milestoneMap.containsKey(task.getMId())) {
+                MilestoneLive m = milestoneMap.get(task.getMId());
+                task.setMlstnCd(m.getMlstnCd());
+                task.setMlstnTtl(m.getMlstnTtl());
+                task.setPrjId(m.getPrjId());
+                if (m.getPrjId() != null && projectMap.containsKey(m.getPrjId())) {
+                    task.setPrjNm(projectMap.get(m.getPrjId()).getPrjNm());
+                }
+            }
+        }
+    }
+
     private void populateReviewerAndApprover(TaskLive task) {
         if (task == null) return;
+        populateMilestoneAndProjectDetails(task);
         List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
         for (com.bionova.entity.ProcessConfig pc : configs) {
             if (pc.getOrdrId() == 1) {
@@ -153,6 +202,7 @@ public class TaskLiveController {
 
     private void populateReviewerAndApprover(List<TaskLive> tasks) {
         if (tasks == null || tasks.isEmpty()) return;
+        populateMilestoneAndProjectDetails(tasks);
 
         java.util.Set<Long> empIds = new java.util.HashSet<>();
         java.util.List<Long> taskIds = new java.util.ArrayList<>();
@@ -253,12 +303,31 @@ public class TaskLiveController {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         List<TaskLive> tasks = employeeRepository.findByEmail(email)
                 .map(employee -> {
-                    if (hasProjectModuleAccess(employee)) {
-                        return taskLiveRepository.findByMilestoneId(mId);
-                    } else {
-                        return taskLiveRepository.findByMilestoneIdAndEmployeeOrReviewer(mId, employee.getEmpId());
+                    List<TaskLive> list = new java.util.ArrayList<>(taskLiveRepository.findByMilestoneId(mId));
+                    if (list.isEmpty()) {
+                        milestoneLiveRepository.findById(mId).ifPresent(m -> {
+                            if (m.getDrftMId() != null) {
+                                list.addAll(taskLiveRepository.findByMilestoneId(m.getDrftMId()));
+                            }
+                        });
                     }
+                    if (list.isEmpty()) {
+                        milestoneLiveRepository.findByDrftMId(mId).ifPresent(m -> {
+                            list.addAll(taskLiveRepository.findByMilestoneId(m.getMId()));
+                        });
+                    }
+                    return list;
                 })
+                .orElse(List.of());
+        populateReviewerAndApprover(tasks);
+        return tasks;
+    }
+
+    @GetMapping("/by-project/{prjId}")
+    public List<TaskLive> getByProject(@PathVariable Long prjId) {
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        List<TaskLive> tasks = employeeRepository.findByEmail(email)
+                .map(employee -> taskLiveRepository.findByProjectId(prjId))
                 .orElse(List.of());
         populateReviewerAndApprover(tasks);
         return tasks;

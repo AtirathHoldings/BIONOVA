@@ -35,7 +35,6 @@ import {
   Clock as ClockIcon,
   AlertTriangle,
   ArrowLeft,
-  UserCheck,
   UserX,
   UserPlus,
   Briefcase,
@@ -54,14 +53,14 @@ const apiBaseUrl = import.meta.env.VITE_API_BASE_URL || "";
 // CONSTANTS - COLORS & STATUS
 // ============================================
 
-const ReassignIcon = ({ size = 16, color = "#4F46E5", className = "", style = {} }) => (
+const ReassignIcon = ({ size = 16, color = "#4F46E5", className = "", style = {}, strokeWidth = 2.5 }) => (
   <svg
     width={size}
     height={size}
     viewBox="0 0 24 24"
     fill="none"
     stroke={color}
-    strokeWidth="2.5"
+    strokeWidth={strokeWidth}
     strokeLinecap="round"
     strokeLinejoin="round"
     className={className}
@@ -453,7 +452,12 @@ const MyTasks = ({ userRole, onLogout }) => {
   const [processHistory, setProcessHistory] = useState([]);
   const [showDenyForm, setShowDenyForm] = useState(false);
   const [isRaiseRequest, setIsRaiseRequest] = useState(false);
-  const [denyData, setDenyData] = useState({ type: "", reason: "", milestone: "", deliverable: "", impact: "Medium", attachments: [] });
+  const [denyData, setDenyData] = useState({ type: "", reason: "", milestone: "", deliverable: "", targetTaskId: "", targetEmpId: "", impact: "Medium", attachments: [] });
+  const [reworkMilestones, setReworkMilestones] = useState([]);
+  const [reworkTasks, setReworkTasks] = useState([]);
+  const [reworkProjectTasks, setReworkProjectTasks] = useState([]);
+  const [loadingReworkMilestones, setLoadingReworkMilestones] = useState(false);
+  const [loadingReworkTasks, setLoadingReworkTasks] = useState(false);
 
   const [allProjectTasks, setAllProjectTasks] = useState([]);
   const [taskTeamMembers, setTaskTeamMembers] = useState([]);
@@ -471,6 +475,176 @@ const MyTasks = ({ userRole, onLogout }) => {
       }, 80);
     }
   }, [showDenyForm]);
+
+  // Load project-specific milestones & all project tasks when showDenyForm is opened
+  useEffect(() => {
+    if (!showDenyForm || !selectedTask) {
+      setReworkMilestones([]);
+      setReworkTasks([]);
+      setReworkProjectTasks([]);
+      return;
+    }
+
+    const loadProjectMilestones = async () => {
+      const rawT = selectedTask.rawTask || selectedTask || {};
+      let projId = rawT.prjId || rawT.projectId || rawT.prj_id || selectedTask.projectId || selectedTask.prjId;
+      const mId = rawT.mId || rawT.mid || rawT.milestoneId || selectedTask.milestoneId;
+
+      if (!projId && mId && Array.isArray(milestonesList)) {
+        const foundM = milestonesList.find(m => String(m.mId || m.id || m.mid || "") === String(mId));
+        if (foundM) projId = foundM.prjId || foundM.projectId || foundM.prj_id;
+      }
+
+      if (!projId) return;
+
+      try {
+        setLoadingReworkMilestones(true);
+        const [milesRes, tasksRes] = await Promise.allSettled([
+          apiGet(`/api/milestone-live/by-project/${projId}`),
+          apiGet(`/api/task-live/by-project/${projId}`)
+        ]);
+
+        let pMiles = milesRes.status === 'fulfilled' && Array.isArray(milesRes.value) ? milesRes.value : [];
+        if (pMiles.length === 0 && Array.isArray(milestonesList)) {
+          pMiles = milestonesList.filter(m => String(m.prjId || m.projectId || m.prj_id) === String(projId));
+        }
+
+        let pTasks = tasksRes.status === 'fulfilled' && Array.isArray(tasksRes.value) ? tasksRes.value : [];
+        setReworkProjectTasks(pTasks);
+
+        pMiles.sort((a, b) => {
+          const cdA = String(a.mlstnCd || a.code || a.id || "").trim();
+          const cdB = String(b.mlstnCd || b.code || b.id || "").trim();
+          if (cdA && cdB) {
+            const cmp = cdA.localeCompare(cdB, undefined, { numeric: true, sensitivity: 'base' });
+            if (cmp !== 0) return cmp;
+          }
+          if (a.stDt && b.stDt) {
+            const cmp = String(a.stDt).localeCompare(String(b.stDt));
+            if (cmp !== 0) return cmp;
+          }
+          return Number(a.mId || a.mid || a.id || 0) - Number(b.mId || b.mid || b.id || 0);
+        });
+
+        setReworkMilestones(pMiles);
+
+        // Find available previous milestones for current task
+        const mCode = String(rawT.mlstnCd || selectedTask?.mlstnCd || "").toUpperCase().trim();
+        const mCodeMatch = mCode.match(/MLS-0*([0-9]+)/i);
+        const extractedMNum = mCodeMatch ? parseInt(mCodeMatch[1], 10) : 0;
+
+        let curIndex = pMiles.findIndex(m => {
+          const id = String(m.mId || m.mid || m.id || m.drftMId || "").trim();
+          const cd = String(m.mlstnCd || "").trim().toUpperCase();
+          if (mId && id && String(mId) === id) return true;
+          if (mCode && cd && mCode === cd) return true;
+          return false;
+        });
+
+        const curNum = extractedMNum > 0 ? extractedMNum : (curIndex >= 0 ? curIndex + 1 : 1);
+        let prevMiles = [];
+        if (curIndex > 0) {
+          prevMiles = pMiles.slice(0, curIndex);
+        } else {
+          prevMiles = pMiles.filter(m => {
+            const cd = String(m.mlstnCd || "").toUpperCase().trim();
+            const match = cd.match(/MLS-0*([0-9]+)/i);
+            const num = match ? parseInt(match[1], 10) : 0;
+            return num > 0 && num < curNum;
+          });
+        }
+        if (prevMiles.length === 0 && pMiles.length > 0) {
+          prevMiles = pMiles.filter(m => String(m.mlstnCd || "").toUpperCase().trim() !== mCode);
+        }
+
+        // Auto-select the first previous milestone and immediately load its tasks
+        if (prevMiles.length > 0) {
+          const firstTargetM = prevMiles[0];
+          const targetMId = String(firstTargetM.mId || firstTargetM.mid || firstTargetM.id || firstTargetM.drftMId || "");
+          setDenyData(prev => ({
+            ...prev,
+            type: "REWORK",
+            milestone: targetMId,
+            deliverable: "",
+            targetTaskId: "",
+            targetEmpId: ""
+          }));
+
+          // Filter tasks belonging to target milestone
+          const targetMTasks = pTasks.filter(t => {
+            const r = t.rawTask || t;
+            const tmId = String(r.mId || r.mid || r.milestoneId || t.milestoneId || r.drftMId || "").trim();
+            if (tmId === targetMId) return true;
+            if (firstTargetM.drftMId && String(firstTargetM.drftMId) === tmId) return true;
+            const tCd = String(r.mlstnCd || t.mlstnCd || "").toUpperCase().trim();
+            const mCd = String(firstTargetM.mlstnCd || "").toUpperCase().trim();
+            if (mCd && tCd && mCd === tCd) return true;
+            return false;
+          });
+
+          if (targetMTasks.length > 0) {
+            setReworkTasks(targetMTasks);
+          } else {
+            try {
+              setLoadingReworkTasks(true);
+              const tasksRes = await apiGet(`/api/task-live/by-milestone/${targetMId}`);
+              if (Array.isArray(tasksRes) && tasksRes.length > 0) {
+                setReworkTasks(tasksRes);
+              }
+            } catch (tErr) {
+              console.error("Failed to load target milestone tasks", tErr);
+            } finally {
+              setLoadingReworkTasks(false);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load project milestones for rework", err);
+      } finally {
+        setLoadingReworkMilestones(false);
+      }
+    };
+
+    loadProjectMilestones();
+  }, [showDenyForm, selectedTask?.id, selectedTask?.taskId]);
+
+  // Load tasks dynamically when a target milestone is changed in deny form
+  useEffect(() => {
+    if (!denyData.milestone) {
+      setReworkTasks([]);
+      return;
+    }
+
+    // If already loaded in reworkProjectTasks, pick from there
+    if (reworkProjectTasks && reworkProjectTasks.length > 0) {
+      const selMidStr = String(denyData.milestone).trim();
+      const filtered = reworkProjectTasks.filter(t => {
+        const r = t.rawTask || t;
+        const tmId = String(r.mId || r.mid || r.milestoneId || t.milestoneId || r.drftMId || "").trim();
+        return tmId === selMidStr;
+      });
+      if (filtered.length > 0) {
+        setReworkTasks(filtered);
+        return;
+      }
+    }
+
+    const loadMilestoneTasks = async () => {
+      try {
+        setLoadingReworkTasks(true);
+        const res = await apiGet(`/api/task-live/by-milestone/${denyData.milestone}`);
+        const mTasks = Array.isArray(res) ? res : [];
+        setReworkTasks(mTasks);
+      } catch (err) {
+        console.error("Failed to load tasks for rework milestone", err);
+        setReworkTasks([]);
+      } finally {
+        setLoadingReworkTasks(false);
+      }
+    };
+
+    loadMilestoneTasks();
+  }, [denyData.milestone]);
 
   // ============================================
   // FETCH TASKS
@@ -916,13 +1090,23 @@ const MyTasks = ({ userRole, onLogout }) => {
       } catch (e) { }
     }
 
+    const mlstnCode = milestoneObj?.mlstnCd || t.mlstnCd || "";
+    const prjIdVal = targetPrjId || t.prjId;
+    const mIdVal = targetMId || t.mId;
+
     return {
       id: taskCodeFormatted,
       taskCode: taskCodeFormatted,
       taskId: t.taskId || t.task_id || t.id,
       title: t.taskNm || t.taskName || t.name || "Untitled Task",
       project: projectName,
+      projectId: prjIdVal,
+      prjId: prjIdVal,
       milestone: milestoneName,
+      milestoneId: mIdVal,
+      mId: mIdVal,
+      mlstnCd: mlstnCode,
+      mlstnTtl: milestoneName,
       priority: calculatedPriority,
       dueDate: endDt ? endDt.split('T')[0] : "",
       status: status,
@@ -930,6 +1114,12 @@ const MyTasks = ({ userRole, onLogout }) => {
       rawStatus: taskSts,
       rawTask: {
         ...t,
+        projectId: prjIdVal,
+        prjId: prjIdVal,
+        milestoneId: mIdVal,
+        mId: mIdVal,
+        mlstnCd: mlstnCode,
+        mlstnTtl: milestoneName,
         empId: t.empId || t.assignedTo || t.executorId,
         assignedBy: t.assignedBy || t.assigned_by || t.createdBy || t.creBy,
         assignedByName: t.assignedByNm || t.assignedByName || t.createdByName,
@@ -1666,10 +1856,16 @@ const MyTasks = ({ userRole, onLogout }) => {
           finalRemarks += "\n\n||ATTACHMENTS: " + JSON.stringify(uploadedUrls) + "||";
         }
       }
+      const targetMilestoneObj = reworkMilestones.find(m => String(m.mId || m.mid || m.id || m.drftMId) === String(denyData.milestone));
+      const poolTasks = (reworkProjectTasks && reworkProjectTasks.length > 0) ? reworkProjectTasks : reworkTasks;
+      const targetTaskObj = poolTasks.find(t => String(t.taskId || t.id) === String(denyData.targetTaskId || denyData.deliverable));
+
       // Include selected target milestone and task details in remarks if present
       let targetDetails = [];
-      if (denyData.milestone) targetDetails.push(`Target Milestone: ${denyData.milestone}`);
-      if (denyData.deliverable) targetDetails.push(`Target Task: ${denyData.deliverable}`);
+      const mDisplayTitle = targetMilestoneObj ? `${targetMilestoneObj.mlstnCd || ''} ${targetMilestoneObj.mlstnTtl || targetMilestoneObj.title || ''}`.trim() : denyData.milestone;
+      const tDisplayTitle = targetTaskObj ? `${targetTaskObj.taskCd || ''} ${targetTaskObj.taskNm || targetTaskObj.title || ''}`.trim() : denyData.deliverable;
+      if (mDisplayTitle) targetDetails.push(`Target Milestone: ${mDisplayTitle}`);
+      if (tDisplayTitle) targetDetails.push(`Target Task: ${tDisplayTitle}`);
       if (targetDetails.length > 0) {
         finalRemarks = `[${targetDetails.join(" | ")}]\n${finalRemarks}`;
       }
@@ -1683,8 +1879,11 @@ const MyTasks = ({ userRole, onLogout }) => {
         empId: currentUserEmpId,
         remarks: finalRemarks,
         isIndividual: selectedTask.isIndividual,
-        targetMilestone: denyData.milestone,
-        targetDeliverable: denyData.deliverable,
+        targetMId: denyData.milestone ? Number(denyData.milestone) : null,
+        targetTaskId: denyData.targetTaskId ? Number(denyData.targetTaskId) : (targetTaskObj ? Number(targetTaskObj.taskId || targetTaskObj.id) : null),
+        targetEmpId: denyData.targetEmpId ? Number(denyData.targetEmpId) : (targetTaskObj ? Number(targetTaskObj.empId || targetTaskObj.assignedTo) : null),
+        targetMilestone: mDisplayTitle || denyData.milestone,
+        targetDeliverable: tDisplayTitle || denyData.deliverable,
         impact: denyData.impact || "Medium"
       };
 
@@ -1712,17 +1911,9 @@ const MyTasks = ({ userRole, onLogout }) => {
       }
 
       // If a Target Deliverable / Task was selected (e.g. TSK-001 in Milestone 1), append remark to target task as well
-      const targetDeliverableId = denyData.deliverable;
-      if (targetDeliverableId && String(targetDeliverableId) !== String(taskId)) {
-        const allTasksSource = (tasks && tasks.length > 0) ? tasks : allProjectTasks;
-        const targetTaskObj = (allTasksSource || []).find(t => {
-          const r = t.rawTask || t;
-          const id = String(t.id || t.taskId || r.taskId || r.id || t.taskCode || r.taskCd || "");
-          return id && (id === String(targetDeliverableId) || String(t.taskCode) === String(targetDeliverableId));
-        });
-
+      const realTargetId = denyData.targetTaskId || (targetTaskObj ? (targetTaskObj.taskId || targetTaskObj.id) : null);
+      if (realTargetId && String(realTargetId) !== String(taskId)) {
         const targetRaw = targetTaskObj ? (targetTaskObj.rawTask || targetTaskObj) : null;
-        const realTargetId = targetRaw ? (targetRaw.taskId || targetRaw.id || targetRaw.empTaskId) : targetDeliverableId;
         const isTargetInd = targetTaskObj ? (targetTaskObj.isIndividual || targetRaw?.taskSource === "INDIVIDUAL") : false;
 
         const targetRemHeader = `[Rework - ${senderName}]: ${finalRemarks}`;
@@ -1770,7 +1961,8 @@ const MyTasks = ({ userRole, onLogout }) => {
         const executorId = denyData.targetEmpId || originalTask.empId || originalTask.assignedTo;
         await sendNotification(executorId, `Task reassigned to you: ${selectedTask.id}`, selectedTask);
       } else {
-        await sendNotification(originalTask.empId || originalTask.assignedTo, `Task rejected, needs rework: ${selectedTask.id}`, selectedTask);
+        const reworkExecutorId = denyData.targetEmpId || targetTaskObj?.empId || originalTask.empId || originalTask.assignedTo;
+        await sendNotification(reworkExecutorId, `Task rejected, needs rework: ${selectedTask.id}`, selectedTask);
       }
 
       await fetchTasks();
@@ -2053,7 +2245,36 @@ const MyTasks = ({ userRole, onLogout }) => {
     setUpdateRemarks("");
     setUpdateAttachments([]);
     setShowDenyForm(false);
-    setDenyData({ type: "", reason: "", milestone: "", deliverable: "", impact: "Medium" });
+    setDenyData({ type: "REWORK", reason: "", milestone: "", deliverable: "", targetTaskId: "", targetEmpId: "", impact: "Medium" });
+
+    // Pre-load project milestones for rework
+    const rawT = task.rawTask || task;
+    let pId = task.projectId || task.prjId || rawT.prjId || rawT.projectId;
+    const mId = task.milestoneId || task.mId || rawT.mId || rawT.mid;
+    if (!pId && mId && Array.isArray(milestonesList)) {
+      const foundM = milestonesList.find(m => String(m.mId || m.id || m.mid || "") === String(mId));
+      if (foundM) pId = foundM.prjId || foundM.projectId || foundM.prj_id;
+    }
+    if (pId) {
+      apiGet(`/api/milestone-live/by-project/${pId}`).then(pMiles => {
+        if (Array.isArray(pMiles) && pMiles.length > 0) {
+          pMiles.sort((a, b) => {
+            const cdA = String(a.mlstnCd || a.code || a.id || "").trim();
+            const cdB = String(b.mlstnCd || b.code || b.id || "").trim();
+            if (cdA && cdB) {
+              const cmp = cdA.localeCompare(cdB, undefined, { numeric: true, sensitivity: 'base' });
+              if (cmp !== 0) return cmp;
+            }
+            if (a.stDt && b.stDt) {
+              const cmp = String(a.stDt).localeCompare(String(b.stDt));
+              if (cmp !== 0) return cmp;
+            }
+            return Number(a.mId || a.id || 0) - Number(b.mId || b.id || 0);
+          });
+          setReworkMilestones(pMiles);
+        }
+      }).catch(() => {});
+    }
 
     try {
       const taskId = task.taskId || task.id;
@@ -2713,7 +2934,7 @@ const MyTasks = ({ userRole, onLogout }) => {
               onClick={() => {
                 setShowDenyForm(true);
                 setIsRaiseRequest(true);
-                setDenyData({ type: "", reason: "", milestone: "", deliverable: "", impact: "Medium", attachments: [] });
+                setDenyData({ type: "REWORK", reason: "", milestone: "", deliverable: "", targetTaskId: "", targetEmpId: "", impact: "Medium", attachments: [] });
               }}
               style={{ borderRadius: "6px", backgroundColor: "#ef4444", color: "white", border: "none", width: "100%" }}
             >
@@ -2742,7 +2963,7 @@ const MyTasks = ({ userRole, onLogout }) => {
               onClick={() => {
                 setShowDenyForm(true);
                 setIsRaiseRequest(true);
-                setDenyData({ type: "", reason: "", milestone: "", deliverable: "", impact: "Medium", attachments: [] });
+                setDenyData({ type: "REWORK", reason: "", milestone: "", deliverable: "", targetTaskId: "", targetEmpId: "", impact: "Medium", attachments: [] });
               }}
               style={{ borderRadius: "6px", backgroundColor: "#ef4444", color: "white", border: "none", width: "100%" }}
             >
@@ -3104,7 +3325,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                     {rawTask.prcsYesActn === "PENDING_REVIEWER" && "⏳ Under Review (Reviewer)"}
                     {rawTask.prcsYesActn === "PENDING_APPROVER" && "⏳ Under Review (Approver)"}
                     {rawTask.prcsYesActn === "REWORK" && <><RefreshCw size={16} color="#F97316" style={{ display: "inline", marginRight: "6px" }} /><span style={{ color: "#F97316" }}>Rework Required</span></>}
-                    {rawTask.prcsYesActn === "REASSIGN" && <><UserCheck size={16} color="#4F46E5" style={{ display: "inline", marginRight: "6px" }} /><span style={{ color: "#4F46E5" }}>Reassigned</span></>}
+                    {rawTask.prcsYesActn === "REASSIGN" && <><ReassignIcon size={16} color="#4F46E5" style={{ display: "inline", marginRight: "6px" }} /><span style={{ color: "#4F46E5" }}>Reassigned</span></>}
 
                     {(() => {
                       const parsed = parseRemarksHistory(rawTask.addlRem || rawTask.remarks, task, employeesList);
@@ -3112,7 +3333,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                       if (isPrevReassigned && rawTask.prcsYesActn !== "REASSIGN") {
                         return (
                           <span style={{ backgroundColor: "#EEF2FF", color: "#4F46E5", fontSize: "11px", padding: "2px 6px", borderRadius: "4px", display: "flex", alignItems: "center", gap: "4px" }}>
-                            <UserCheck size={12} color="#4F46E5" /> Reassigned Task
+                            <ReassignIcon size={12} color="#4F46E5" /> Reassigned Task
                           </span>
                         );
                       }
@@ -3955,65 +4176,117 @@ const MyTasks = ({ userRole, onLogout }) => {
               const currentRawT = selectedTask?.rawTask || selectedTask || {};
               const isIndividualTask = selectedTask?.isIndividual === true || currentRawT.taskSource === "INDIVIDUAL";
 
-              // Check if task belongs to the 1st milestone of the project
-              const isFirstMilestone = (() => {
-                if (isIndividualTask) return false;
+              // 1. Resolve project ID and milestone ID for the current task
+              let currentProjId = String(currentRawT.prjId || currentRawT.projectId || currentRawT.prj_id || selectedTask?.projectId || selectedTask?.prjId || "").trim();
+              const currentMId = String(currentRawT.mId || currentRawT.m_id || currentRawT.drftMId || currentRawT.milestoneId || currentRawT.mid || selectedTask?.milestoneId || "").trim();
 
-                const taskTitle = String(selectedTask?.title || currentRawT.title || currentRawT.taskNm || "").toLowerCase();
-                const milestoneName = String(selectedTask?.milestone || currentRawT.mlstnTtl || currentRawT.milestoneName || "").toLowerCase();
-                const combinedText = `${taskTitle} ${milestoneName}`;
-
-                // 1. Explicit m2, m3, m4 or Milestone 2, 3, 4 in task title or milestone name -> NOT first milestone
-                if (/\b(m|milestone)\s*[2-9]\b/i.test(combinedText) || combinedText.includes("(m2)") || combinedText.includes("(m3)") || combinedText.includes("(m4)")) {
-                  return false;
+              if (!currentProjId && currentMId && Array.isArray(milestonesList)) {
+                const mMatch = milestonesList.find(m => String(m.mId || m.id || m.m_id || m.milestoneId || m.drftMId || "") === currentMId);
+                if (mMatch) {
+                  currentProjId = String(mMatch.prjId || mMatch.projectId || mMatch.prj_id || "").trim();
                 }
+              }
 
-                // 2. Explicit m1 or Milestone 1 in task title or milestone name -> IS first milestone
-                if (/\b(m|milestone)\s*1\b/i.test(combinedText) || combinedText.includes("(m1)")) {
-                  return true;
+              // 2. Fetch project-specific milestones sorted strictly in sequence (MLS-001, MLS-002, ...)
+              const rawProjMilestones = (reworkMilestones && reworkMilestones.length > 0)
+                ? reworkMilestones
+                : (milestonesList || []).filter(m => String(m.prjId || m.projectId || m.prj_id || "").trim() === currentProjId);
+
+              const sortedProjMilestones = [...rawProjMilestones].sort((a, b) => {
+                const cdA = String(a.mlstnCd || a.code || "").trim();
+                const cdB = String(b.mlstnCd || b.code || "").trim();
+                if (cdA && cdB) {
+                  const cmp = cdA.localeCompare(cdB, undefined, { numeric: true, sensitivity: 'base' });
+                  if (cmp !== 0) return cmp;
                 }
-
-                // 3. Match against milestonesList for this project
-                const currentProjId = currentRawT.prjId || currentRawT.projectId || selectedTask?.projectId || selectedTask?.prjId;
-                const taskMId = String(currentRawT.mId || currentRawT.mid || currentRawT.milestoneId || selectedTask?.milestoneId || "").trim();
-
-                const projectMilestones = (milestonesList || [])
-                  .filter(m => {
-                    const mPrjId = m.prjId || m.projectId || m.prj_id;
-                    return !currentProjId || !mPrjId || String(mPrjId) === String(currentProjId);
-                  })
-                  .sort((a, b) => {
-                    const seqA = Number(a.seq || a.mlstnSeq || a.mSeq || a.sortOrder || a.mId || 0);
-                    const seqB = Number(b.seq || b.mlstnSeq || b.mSeq || b.sortOrder || b.mId || 0);
-                    return seqA - seqB;
-                  });
-
-                if (projectMilestones.length > 0) {
-                  // Find index of current task's milestone in sorted project milestones
-                  const milestoneIndex = projectMilestones.findIndex(m => {
-                    const mId = String(m.mId || m.mid || m.id || m._id || m.mlstnCd || "").trim();
-                    const mName = String(m.mlstnTtl || m.mlstn_ttl || m.name || m.title || "").toLowerCase();
-                    if (taskMId && mId && taskMId === mId) return true;
-                    if (milestoneName && milestoneName !== "-" && mName && (milestoneName === mName)) return true;
-                    return false;
-                  });
-
-                  if (milestoneIndex === 0) return true; // 1st milestone
-                  if (milestoneIndex > 0) return false;  // 2nd+ milestone
+                if (a.stDt && b.stDt) {
+                  const cmp = String(a.stDt).localeCompare(String(b.stDt));
+                  if (cmp !== 0) return cmp;
                 }
+                return Number(a.mId || a.id || 0) - Number(b.mId || b.id || 0);
+              });
 
-                // 4. Check explicit milestone sequence numbers on raw task
-                const mSeq = Number(currentRawT.mlstnSeq || currentRawT.milestoneSeq || currentRawT.mSeq || 0);
-                if (mSeq > 1) return false;
-                if (mSeq === 1) return true;
+              // 3. Find current milestone index & code pattern (MLS-001, MLS-002, ...)
+              const mCode = String(currentRawT.mlstnCd || selectedTask?.mlstnCd || "").toUpperCase().trim();
+              const mCodeMatch = mCode.match(/MLS-0*([0-9]+)/i);
+              const extractedMNum = mCodeMatch ? parseInt(mCodeMatch[1], 10) : 0;
 
-                // Failsafe default: if we can't prove it's milestone 1, allow Rework
+              let currentMIndex = sortedProjMilestones.findIndex(m => {
+                const id = String(m.mId || m.id || m.mid || m.milestoneId || "").trim();
+                const cd = String(m.mlstnCd || "").trim().toUpperCase();
+                if (currentMId && id && currentMId === id) return true;
+                if (mCode && cd && mCode === cd) return true;
                 return false;
-              })();
+              });
 
-              // Rework is NOT allowed for Individual Assignments or 1st Milestone tasks
-              const canRework = !isIndividualTask && !isFirstMilestone;
-              const isReassignMode = !canRework || (denyData.type ? denyData.type === "REASSIGN" : false);
+              if (currentMIndex === -1 && sortedProjMilestones.length > 0) {
+                const currentMName = String(selectedTask?.milestone || currentRawT.mlstnTtl || currentRawT.milestoneName || "").toLowerCase().trim();
+                currentMIndex = sortedProjMilestones.findIndex(m => {
+                  const mName = String(m.mlstnTtl || m.mlstn_ttl || m.name || m.title || "").toLowerCase().trim();
+                  return currentMName && mName && (currentMName === mName || mName.includes(currentMName) || currentMName.includes(mName));
+                });
+              }
+
+              const mNumber = extractedMNum > 0 ? extractedMNum : (currentMIndex >= 0 ? currentMIndex + 1 : 1);
+
+              // 4. Milestone 1 (MLS-001) cannot rework to previous milestone; 2nd+ milestones (MLS-002, etc.) can rework
+              const isFirstMilestone = isIndividualTask || mNumber === 1 || (currentMIndex === 0 && mNumber <= 1);
+              const canRework = !isIndividualTask && !isFirstMilestone && (mNumber > 1 || currentMIndex > 0);
+              const isReassignMode = !canRework || (denyData.type === "REASSIGN");
+
+              // 5. Only previous milestones belonging to the SAME project
+              let availableMilestones = [];
+              if (canRework) {
+                if (currentMIndex > 0) {
+                  availableMilestones = sortedProjMilestones.slice(0, currentMIndex);
+                } else {
+                  availableMilestones = sortedProjMilestones.filter(m => {
+                    const cd = String(m.mlstnCd || "").toUpperCase().trim();
+                    const match = cd.match(/MLS-0*([0-9]+)/i);
+                    const num = match ? parseInt(match[1], 10) : 0;
+                    return num > 0 && num < mNumber;
+                  });
+                }
+
+                if (availableMilestones.length === 0 && sortedProjMilestones.length > 0) {
+                  availableMilestones = sortedProjMilestones.filter(m => {
+                    const cd = String(m.mlstnCd || "").toUpperCase().trim();
+                    return cd !== mCode;
+                  });
+                }
+              }
+
+              // 6. Tasks for selected target milestone
+              const effectiveMId = String(denyData.milestone || (availableMilestones.length > 0 ? (availableMilestones[0].mId || availableMilestones[0].mid || availableMilestones[0].id || availableMilestones[0].drftMId) : "")).trim();
+
+              const displayedReworkTasks = (() => {
+                if (!effectiveMId) return [];
+                const selMObj = availableMilestones.find(m => String(m.mId || m.mid || m.id || m.drftMId) === effectiveMId);
+                const selCd = selMObj ? String(selMObj.mlstnCd || "").toUpperCase().trim() : "";
+                const selTtl = selMObj ? String(selMObj.mlstnTtl || selMObj.title || selMObj.name || "").toLowerCase().trim() : "";
+
+                const pool = (reworkProjectTasks && reworkProjectTasks.length > 0)
+                  ? reworkProjectTasks
+                  : (reworkTasks && reworkTasks.length > 0)
+                    ? reworkTasks
+                    : (allProjectTasks || []);
+
+                return pool.filter(t => {
+                  const r = t.rawTask || t;
+                  const tmId = String(r.mId || r.mid || r.milestoneId || t.milestoneId || r.drftMId || "").trim();
+                  if (tmId && effectiveMId && tmId === effectiveMId) return true;
+
+                  if (selMObj?.drftMId && String(selMObj.drftMId) === tmId) return true;
+
+                  const tCd = String(r.mlstnCd || t.mlstnCd || "").toUpperCase().trim();
+                  if (selCd && tCd && selCd === tCd) return true;
+
+                  const tTtl = String(t.milestone || r.mlstnTtl || r.milestoneName || "").toLowerCase().trim();
+                  if (selTtl && tTtl && (selTtl === tTtl || tTtl.includes(selTtl) || selTtl.includes(tTtl))) return true;
+
+                  return false;
+                }).map(t => t.rawTask || t);
+              })();
 
               return (
                 <>
@@ -4067,7 +4340,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                           gap: "8px"
                         }}
                       >
-                        <UserCheck size={16} color={denyData.type === "REASSIGN" ? "white" : "#4f46e5"} /> Reassign Request
+                        <ReassignIcon size={16} color={denyData.type === "REASSIGN" ? "white" : "#4f46e5"} /> Reassign Request
                       </button>
                     </div>
                   )}
@@ -4155,144 +4428,71 @@ const MyTasks = ({ userRole, onLogout }) => {
                       }
 
                       // 2. REWORK MODE FOR PROJECT TASKS (Milestone 2+) -> Dynamic Milestones & Tasks Dropdown
-                      const currentMId = String(currentRawT.mId || currentRawT.m_id || currentRawT.drftMId || currentRawT.milestoneId || currentRawT.mid || selectedTask?.milestoneId || "").trim();
-                      const currentMTitle = String(selectedTask?.milestone || currentRawT.mlstnTtl || currentRawT.milestoneName || currentRawT.title || selectedTask?.title || "").trim().toLowerCase();
-
-                      // Resolve current project ID strictly
-                      let currentProjId = String(currentRawT.prjId || currentRawT.projectId || currentRawT.prj_id || selectedTask?.projectId || selectedTask?.prjId || "").trim();
-
-                      // If project ID is missing on task, look it up from milestonesList using currentMId
-                      if (!currentProjId && currentMId && Array.isArray(milestonesList)) {
-                        const mMatch = milestonesList.find(m => String(m.mId || m.id || m.m_id || m.milestoneId || m.drftMId || "") === currentMId);
-                        if (mMatch) {
-                          currentProjId = String(mMatch.prjId || mMatch.projectId || mMatch.prj_id || "").trim();
-                        }
-                      }
-
-                      // If project ID is still missing, search for task in allProjectTasks / tasks to find its prjId
-                      const allTasksSource = (tasks && tasks.length > 0) ? tasks : allProjectTasks;
-                      if (!currentProjId && Array.isArray(allTasksSource)) {
-                        const taskIdStr = String(currentRawT.taskId || currentRawT.id || selectedTask?.id || selectedTask?.taskId || "");
-                        const tMatch = allTasksSource.find(t => {
-                          const r = t.rawTask || t;
-                          const id = String(t.id || t.taskId || r.taskId || r.id || "");
-                          return taskIdStr && id && taskIdStr === id;
-                        });
-                        if (tMatch) {
-                          const r = tMatch.rawTask || tMatch;
-                          currentProjId = String(r.prjId || r.projectId || r.prj_id || tMatch.projectId || tMatch.prjId || "").trim();
-                        }
-                      }
-
-                      // Gather milestones belonging STRICTLY to currentProjId
-                      const milestoneMap = new Map();
-
-                      if (currentProjId && Array.isArray(milestonesList)) {
-                        milestonesList.forEach(m => {
-                          const mPrjId = String(m.prjId || m.projectId || m.prj_id || "").trim();
-                          if (mPrjId === currentProjId) {
-                            const id = String(m.mId || m.mid || m.id || m._id || m.mlstnCd || m.mlstn_cd || "").trim();
-                            const title = m.mlstnTtl || m.mlstn_ttl || m.name || m.title || m.milestoneTitle || (id ? `Milestone ${id}` : null);
-                            const seq = Number(m.seq || m.mlstnSeq || m.mSeq || m.sortOrder || id || 0);
-                            if (id && title) {
-                              milestoneMap.set(id, { id, title, seq, raw: m });
-                            }
-                          }
-                        });
-                      }
-
-                      // Fallback: If milestoneMap is empty, filter by project title / milestone title containing "postman"
-                      if (milestoneMap.size === 0 && Array.isArray(milestonesList)) {
-                        milestonesList.forEach(m => {
-                          const title = String(m.mlstnTtl || m.mlstn_ttl || m.name || m.title || "").trim();
-                          const prjName = String(m.projectName || m.prjNm || m.prj_nm || "").trim().toLowerCase();
-                          if (title.toLowerCase().includes("postman") || prjName.includes("postman")) {
-                            const id = String(m.mId || m.mid || m.id || m._id || m.mlstnCd || m.mlstn_cd || "").trim();
-                            const seq = Number(m.seq || m.mlstnSeq || m.mSeq || m.sortOrder || id || 0);
-                            if (id && title) {
-                              milestoneMap.set(id, { id, title, seq, raw: m });
-                            }
-                          }
-                        });
-                      }
-
-                      const sortedProjMilestones = Array.from(milestoneMap.values()).sort((a, b) => a.seq - b.seq);
-
-                      // Filter out current milestone (Milestone 2 / m2) so ONLY previous milestone (Milestone 1) is shown
-                      let availableMilestones = sortedProjMilestones.filter(m => {
-                        const titleLower = m.title.toLowerCase();
-                        const isCurrentM = (currentMId && m.id && currentMId === m.id) ||
-                          titleLower.includes("milestone 2") ||
-                          titleLower.includes("(m2)") ||
-                          (titleLower.endsWith("m2") && !titleLower.includes("m1"));
-                        return !isCurrentM;
-                      });
-
-                      if (availableMilestones.length === 0 && sortedProjMilestones.length > 0) {
-                        availableMilestones = sortedProjMilestones.slice(0, sortedProjMilestones.length - 1);
-                      }
-
-                      if (availableMilestones.length === 0) {
-                        availableMilestones = [{ id: "M1", title: "Postman Test Milestone 1" }];
-                      }
-
-                      // Filter tasks for selected target milestone ONLY
-                      const selectedM = denyData.milestone;
-                      let availableTasksForSelectedMilestone = [];
-
-                      if (selectedM) {
-                        const selMObj = availableMilestones.find(m => m.id === selectedM || m.title === selectedM);
-                        const targetMId = selMObj ? selMObj.id : selectedM;
-                        const targetMTitle = (selMObj ? selMObj.title : selectedM).toLowerCase();
-
-                        availableTasksForSelectedMilestone = (allTasksSource || []).filter(t => {
-                          const r = t.rawTask || t;
-                          const tPrjId = String(r.prjId || r.projectId || r.prj_id || t.projectId || "").trim();
-                          if (currentProjId && tPrjId && tPrjId !== currentProjId) return false;
-
-                          const tMId = String(r.mId || r.mid || r.milestoneId || t.milestoneId || r.drftMId || r.drft_m_id || "").trim();
-                          const tMTitle = String(t.milestone || r.mlstnTtl || r.milestoneName || t.title || r.title || "").trim().toLowerCase();
-
-                          if (targetMId && tMId && targetMId === tMId) return true;
-                          if (targetMTitle && tMTitle && (targetMTitle === tMTitle || tMTitle.includes(targetMTitle) || targetMTitle.includes(tMTitle))) return true;
-                          return false;
-                        });
-
-                        // Fallback: Show tasks of current project that are not in milestone 2
-                        if (availableTasksForSelectedMilestone.length === 0) {
-                          availableTasksForSelectedMilestone = (allTasksSource || []).filter(t => {
-                            const r = t.rawTask || t;
-                            const tPrjId = String(r.prjId || r.projectId || r.prj_id || t.projectId || "").trim();
-                            if (currentProjId && tPrjId && tPrjId !== currentProjId) return false;
-                            const titleLower = String(t.title || t.taskTtl || "").toLowerCase();
-                            return !titleLower.includes("(m2)") && !titleLower.includes("task2(m2)");
-                          });
-                        }
-                      }
+                      const effectiveMilestone = String(denyData.milestone || (availableMilestones.length > 0 ? (availableMilestones[0].mId || availableMilestones[0].mid || availableMilestones[0].id || availableMilestones[0].drftMId) : "")).trim();
 
                       return (
                         <div key="rework-mode-form">
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "20px" }}>
                             <div className="myt-form-group">
-                              <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Select Target Milestone</label>
-                              <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                                value={denyData.milestone || ""} onChange={e => setDenyData({ ...denyData, milestone: e.target.value, deliverable: "" })}>
-                                <option value="">Select Milestone</option>
-                                {availableMilestones.map(m => (
-                                  <option key={m.id} value={m.id}>{m.title}</option>
-                                ))}
+                              <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>
+                                Select Target Milestone (Same Project)
+                              </label>
+                              <select
+                                className="myt-input"
+                                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                                value={effectiveMilestone}
+                                onChange={e => setDenyData({ ...denyData, milestone: e.target.value, deliverable: "", targetTaskId: "", targetEmpId: "" })}
+                                disabled={loadingReworkMilestones}
+                              >
+                                {availableMilestones.length === 0 && (
+                                  <option value="">{loadingReworkMilestones ? "Loading Milestones..." : "No Previous Milestones"}</option>
+                                )}
+                                {availableMilestones.map(m => {
+                                  const mId = String(m.mId || m.mid || m.id || m.drftMId || "");
+                                  const mCd = m.mlstnCd ? `[${m.mlstnCd}] ` : '';
+                                  const mTtl = m.mlstnTtl || m.name || m.title || `Milestone ${mId}`;
+                                  return (
+                                    <option key={mId} value={mId}>
+                                      {mCd}{mTtl}
+                                    </option>
+                                  );
+                                })}
                               </select>
                             </div>
                             <div className="myt-form-group">
-                              <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Select Target Task / Deliverable</label>
-                              <select className="myt-input" style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
-                                value={denyData.deliverable || ""} onChange={e => setDenyData({ ...denyData, deliverable: e.target.value })} disabled={!denyData.milestone}>
-                                <option value="">{denyData.milestone ? "Select Task" : "Select Milestone First"}</option>
-                                {availableTasksForSelectedMilestone.map((t, idx) => {
-                                  const taskTitle = t.title || t.taskTtl || t.rawTask?.title || t.rawTask?.taskTtl || `Task ${t.id || t.taskId}`;
+                              <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>
+                                Select Target Task / Deliverable
+                              </label>
+                              <select
+                                className="myt-input"
+                                style={{ width: "100%", padding: "10px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "14px" }}
+                                value={denyData.targetTaskId || ""}
+                                onChange={e => {
+                                  const selTaskId = e.target.value;
+                                  const selTaskObj = displayedReworkTasks.find(t => String(t.taskId || t.id || t.empTaskId) === String(selTaskId));
+                                  setDenyData({
+                                    ...denyData,
+                                    milestone: effectiveMilestone,
+                                    targetTaskId: selTaskId,
+                                    deliverable: selTaskObj ? (selTaskObj.taskNm || selTaskObj.title || selTaskObj.taskCd) : "",
+                                    targetEmpId: selTaskObj ? (selTaskObj.empId || selTaskObj.assignedTo || selTaskObj.executorId) : ""
+                                  });
+                                }}
+                                disabled={!effectiveMilestone || loadingReworkTasks}
+                              >
+                                <option value="">
+                                  {!effectiveMilestone ? "Select Milestone First" : loadingReworkTasks ? "Loading Tasks..." : (displayedReworkTasks.length === 0 ? "No Tasks in this Milestone" : "Select Task")}
+                                </option>
+                                {displayedReworkTasks.map(t => {
+                                  const tId = t.taskId || t.id || t.empTaskId;
+                                  const tCode = t.taskCd || t.taskCode || (tId ? formatTaskCode(t.taskCd, tId, false) : "");
+                                  const tCd = tCode ? `[${tCode}] ` : '';
+                                  const tNm = t.taskNm || t.title || t.name || `Task ${tId}`;
+                                  const executorEmpId = t.empId || t.assignedTo || t.executorId;
+                                  const executorName = getEmployeeName(executorEmpId, employeesList);
                                   return (
-                                    <option key={t.id || t.taskId || idx} value={taskTitle}>
-                                      {taskTitle}
+                                    <option key={tId} value={String(tId)}>
+                                      {tCd}{tNm}{executorName ? ` — (${executorName})` : ''}
                                     </option>
                                   );
                                 })}
@@ -4959,7 +5159,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                                     <div style={{ display: "flex", gap: "6px" }}>
                                       {processIcon && <div className="myt-custom-tooltip-wrap" title={processIcon.title} style={{ color: processIcon.color, display: "flex", alignItems: "center", cursor: "help" }}><processIcon.icon size={18} strokeWidth={2.5} /></div>}
                                       {wasReassigned && task.rawTask?.prcsYesActn !== "REASSIGN" && (
-                                        <div className="myt-custom-tooltip-wrap" title="Previously Reassigned" style={{ color: "#4F46E5", display: "flex", alignItems: "center", cursor: "help" }}><UserCheck size={18} color="#4F46E5" strokeWidth={2.5} /></div>
+                                        <div className="myt-custom-tooltip-wrap" title="Previously Reassigned" style={{ color: "#4F46E5", display: "flex", alignItems: "center", cursor: "help" }}><ReassignIcon size={18} color="#4F46E5" strokeWidth={2.5} /></div>
                                       )}
                                     </div>
                                   )}

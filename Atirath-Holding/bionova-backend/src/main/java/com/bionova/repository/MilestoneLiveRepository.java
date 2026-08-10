@@ -11,6 +11,7 @@ import java.util.List;
 @Repository
 public interface MilestoneLiveRepository extends JpaRepository<MilestoneLive, Long> {
     List<MilestoneLive> findByPrjId(Long prjId);
+    java.util.Optional<MilestoneLive> findByDrftMId(Long drftMId);
     boolean existsByMlstnCdAndPrjId(String mlstnCd, Long prjId);
 
     @Query("SELECT COUNT(m) > 0 FROM MilestoneLive m WHERE m.mlstnCd = :mlstnCd AND m.prjId = :prjId AND m.mId <> :mId")
