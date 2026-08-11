@@ -34,6 +34,7 @@ public class ProjectPromotionService {
     @Autowired private ProcessConfigRepository      processConfigRepository;
     @Autowired private CalendarService              calendarService;
     @Autowired private AppNotificationRepository    appNotificationRepository;
+    @Autowired private ExternalTaskAccessService    externalTaskAccessService;
 
     /**
      * Promote a draft project to Live.
@@ -205,6 +206,15 @@ public class ProjectPromotionService {
                 TaskLive savedTask = taskLiveRepository.save(tl);
                 draftToLiveTaskIdMap.put(td.getDrftTaskId(), savedTask.getTaskId());
                 totalTasks++;
+
+                // Generate and email magic link for external employee assignment
+                if ("EXTERNAL".equalsIgnoreCase(savedTask.getTaskAsgnTo()) && savedTask.getExtEmpId() != null) {
+                    try {
+                        externalTaskAccessService.generateOrRefreshToken(savedTask.getTaskId(), savedTask.getExtEmpId());
+                    } catch (Exception ex) {
+                        System.err.println("Failed to dispatch external task token during promotion for Task ID " + savedTask.getTaskId() + ": " + ex.getMessage());
+                    }
+                }
 
                 // ── 5. Clone Checklists for this task ──────────────────────
                 List<ChecklistMaster> draftChecklists =

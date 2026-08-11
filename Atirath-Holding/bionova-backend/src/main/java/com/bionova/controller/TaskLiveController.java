@@ -68,6 +68,9 @@ public class TaskLiveController {
     @Autowired
     private TeamMemberRepository teamMemberRepository;
 
+    @Autowired
+    private com.bionova.service.ExternalTaskAccessService externalTaskAccessService;
+
     /**
      * Determines if the employee has access to the Project module.
      * Rules:
@@ -376,6 +379,15 @@ public class TaskLiveController {
 
         TaskLive saved = taskLiveRepository.save(task);
 
+        // Generate and email magic link for external employee assignment
+        if ("EXTERNAL".equalsIgnoreCase(saved.getTaskAsgnTo()) && saved.getExtEmpId() != null) {
+            try {
+                externalTaskAccessService.generateOrRefreshToken(saved.getTaskId(), saved.getExtEmpId());
+            } catch (Exception ex) {
+                System.err.println("Failed to dispatch external task token in create: " + ex.getMessage());
+            }
+        }
+
         // Validate limits (Milestone & Project)
         String warning = null;
         if (saved.getStDt() != null && saved.getEndDt() != null) {
@@ -469,6 +481,15 @@ public class TaskLiveController {
             projectStatusCascadeService.cascadeStatusFromTask(id);
         }
 
+        // Generate and email magic link for external employee assignment
+        if ("EXTERNAL".equalsIgnoreCase(saved.getTaskAsgnTo()) && saved.getExtEmpId() != null) {
+            try {
+                externalTaskAccessService.generateOrRefreshToken(saved.getTaskId(), saved.getExtEmpId());
+            } catch (Exception ex) {
+                System.err.println("Failed to dispatch external task token in update: " + ex.getMessage());
+            }
+        }
+
         MilestoneLive milestone = milestoneLiveRepository.findById(saved.getMId())
                 .orElseThrow(() -> new RuntimeException("Milestone not found with ID: " + saved.getMId()));
 
@@ -498,6 +519,55 @@ public class TaskLiveController {
             response.put("warning", warning);
         }
         return ResponseEntity.ok(response);
+    }
+
+    @PostMapping("/{id}/resend-external-link")
+    public ResponseEntity<?> resendExternalLink(@PathVariable Long id) {
+        TaskLive task = taskLiveRepository.findById(id).orElse(null);
+        if (task == null) {
+            return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", "Task not found: " + id));
+        }
+        if (!"EXTERNAL".equalsIgnoreCase(task.getTaskAsgnTo()) || task.getExtEmpId() == null) {
+            return ResponseEntity.badRequest().body(Map.of("message", "This task is not assigned to an external employee"));
+        }
+        var token = externalTaskAccessService.generateOrRefreshToken(task.getTaskId(), task.getExtEmpId());
+        return ResponseEntity.ok(Map.of(
+                "message", "External task access link has been sent to employee successfully",
+                "token", token != null ? token.getToken() : "",
+                "expiryDt", token != null ? token.getExpiryDt() : ""
+        ));
+    }
+
+    @PostMapping("/{id}/extend-external-link")
+    public ResponseEntity<?> extendExternalLink(
+            @PathVariable Long id,
+            @RequestBody Map<String, Object> body) {
+        try {
+            int extendDays = 3;
+            if (body.get("extendDays") != null) {
+                extendDays = Integer.parseInt(body.get("extendDays").toString());
+            }
+            String remarks = body.get("remarks") != null ? body.get("remarks").toString() : null;
+
+            var token = externalTaskAccessService.extendTaskToken(id, extendDays, remarks);
+            return ResponseEntity.ok(Map.of(
+                    "message", "Access link extended successfully by " + extendDays + " day(s)",
+                    "token", token != null ? token.getToken() : "",
+                    "expiryDt", token != null ? token.getExpiryDt().toString() : ""
+            ));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/{id}/external-token-status")
+    public ResponseEntity<?> getExternalTokenStatus(@PathVariable Long id) {
+        try {
+            var info = externalTaskAccessService.getTokenInfoByTaskId(id);
+            return ResponseEntity.ok(info);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));
+        }
     }
 
     @Transactional

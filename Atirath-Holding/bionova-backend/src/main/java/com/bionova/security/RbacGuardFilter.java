@@ -111,6 +111,7 @@ public class RbacGuardFilter extends OncePerRequestFilter {
      */
     private static final Set<String> PUBLIC_PATHS = new HashSet<>(Arrays.asList(
             "auth",                     // /api/auth/**
+            "external-tasks",           // /api/external-tasks/** (External guest task access)
             "notifications",            // /api/notifications
             "attachments",              // /api/attachments
             "activity-logs",            // /api/activity-logs

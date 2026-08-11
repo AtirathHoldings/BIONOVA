@@ -27,6 +27,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\controller\DesignationContro
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\EmployeeController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\EmployeeSettingsController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\ExternalEmployeeController.java
+D:\sample\bionova-backend\src\main\java\com\bionova\controller\ExternalTaskController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\GanttChartController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\LandmasterController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\MilestoneDraftController.java
@@ -53,6 +54,8 @@ D:\sample\bionova-backend\src\main\java\com\bionova\dto\AssignmentRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\CalendarEventDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\EmployeePermissionsDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\EmployeeSettingsResponseDto.java
+D:\sample\bionova-backend\src\main\java\com\bionova\dto\ExternalTaskUpdateDto.java
+D:\sample\bionova-backend\src\main\java\com\bionova\dto\ExternalTaskViewDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\ForgotPasswordRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\GanttTaskDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\LoginRequest.java
@@ -94,6 +97,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\entity\ProcessMaster.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\ProjectAccess.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\ProjectDraft.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\ProjectLive.java
+D:\sample\bionova-backend\src\main\java\com\bionova\entity\ProjectTaskExternalToken.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\ReviewerMaster.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\RoleBasedAccessControl.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\RoleBasedAccessControlId.java
@@ -131,6 +135,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\repository\ProcessMasterRepo
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\ProjectAccessRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\ProjectDraftRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\ProjectLiveRepository.java
+D:\sample\bionova-backend\src\main\java\com\bionova\repository\ProjectTaskExternalTokenRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\ReviewerMasterRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\RoleBasedAccessControlRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\RoleBasedEmployeeMappingRepository.java
@@ -150,6 +155,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\service\AuthService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\CalendarService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\EmailService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\EmployeeSettingsService.java
+D:\sample\bionova-backend\src\main\java\com\bionova\service\ExternalTaskAccessService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\NotificationService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\PasswordResetService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\ProjectAccessControlService.java

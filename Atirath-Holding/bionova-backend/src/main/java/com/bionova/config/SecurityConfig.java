@@ -48,6 +48,7 @@ public class SecurityConfig {
                 // Public endpoints – no token needed
                 .requestMatchers(
                     "/api/auth/**",
+                    "/api/external-tasks/**",
                     "/api/storage/view",
                     "/api/storage/download",
                     // Swagger UI

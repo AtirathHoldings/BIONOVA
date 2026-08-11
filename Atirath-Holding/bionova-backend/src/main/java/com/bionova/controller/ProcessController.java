@@ -360,6 +360,18 @@ public class ProcessController {
             event.setRemarks(eventRemarks);
             processRepo.save(event);
 
+            if ("NO".equals(decision)) {
+                // Reopen all checklists for this task so executor must do them again
+                List<ChecklistMaster> checklists = checklistRepo.findByTaskIdAndIsLive(taskId, true);
+                if (checklists != null && !checklists.isEmpty()) {
+                    for (ChecklistMaster item : checklists) {
+                        item.setChkSts(false);
+                        item.setCompletedTs(null);
+                    }
+                    checklistRepo.saveAll(checklists);
+                }
+            }
+
             if ("NO".equals(decision) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
                 if ("Rework".equals(targetSubStatus)) {
                     Long targetMId = null;
@@ -430,6 +442,17 @@ public class ProcessController {
             ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "REVIEWER", decision);
             event.setRemarks(eventRemarks);
             processRepo.save(event);
+
+            if ("NO".equals(decision)) {
+                List<ChecklistMaster> checklists = checklistRepo.findByTaskIdAndIsLive(taskId, false);
+                if (checklists != null && !checklists.isEmpty()) {
+                    for (ChecklistMaster item : checklists) {
+                        item.setChkSts(false);
+                        item.setCompletedTs(null);
+                    }
+                    checklistRepo.saveAll(checklists);
+                }
+            }
 
             String message = "YES".equals(decision)
                     ? "Reviewer approved. Task moved to Under Review."
@@ -527,6 +550,18 @@ public class ProcessController {
             applyCountsFromHistory(taskId, event, decision);
             processRepo.save(event);
 
+            if ("NO".equals(decision)) {
+                // Reopen all checklists for this task so executor must do them again
+                List<ChecklistMaster> checklists = checklistRepo.findByTaskIdAndIsLive(taskId, true);
+                if (checklists != null && !checklists.isEmpty()) {
+                    for (ChecklistMaster item : checklists) {
+                        item.setChkSts(false);
+                        item.setCompletedTs(null);
+                    }
+                    checklistRepo.saveAll(checklists);
+                }
+            }
+
             if (TaskStatusMaster.WIP.equals(targetStatus) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
                 if ("Rework".equals(targetSubStatus)) {
                     Long targetMId = null;
@@ -615,6 +650,17 @@ public class ProcessController {
 
             applyCountsFromHistoryForIndividual(taskId, event, decision);
             processRepo.save(event);
+
+            if ("NO".equals(decision)) {
+                List<ChecklistMaster> checklists = checklistRepo.findByTaskIdAndIsLive(taskId, false);
+                if (checklists != null && !checklists.isEmpty()) {
+                    for (ChecklistMaster item : checklists) {
+                        item.setChkSts(false);
+                        item.setCompletedTs(null);
+                    }
+                    checklistRepo.saveAll(checklists);
+                }
+            }
 
             String message = "YES".equals(decision)
                     ? "Approver approved. Task CLOSED! 🎉"
