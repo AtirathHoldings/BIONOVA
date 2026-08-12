@@ -23,9 +23,32 @@ public class ExternalEmployeeController {
 
     @PostMapping("/external-employees")
     public ResponseEntity<?> saveExternalEmployee(@RequestBody ExternalEmployee employee) {
-        if (employee.getExtEmpCode() != null && !employee.getExtEmpCode().trim().isEmpty() &&
-                externalEmployeeRepository.existsByExtEmpCode(employee.getExtEmpCode())) {
-            return ResponseEntity.badRequest().body(Map.of("message", "External employee code already exists."));
+        if (employee.getMobNum() != null && employee.getMobNum().trim().isEmpty()) {
+            employee.setMobNum(null);
+        }
+        if (employee.getEmail() != null && employee.getEmail().trim().isEmpty()) {
+            employee.setEmail(null);
+        }
+        if (employee.getPhotoPath() != null && employee.getPhotoPath().trim().isEmpty()) {
+            employee.setPhotoPath(null);
+        }
+
+        if (employee.getExtEmpCode() == null || employee.getExtEmpCode().trim().isEmpty()) {
+            List<ExternalEmployee> all = externalEmployeeRepository.findAll();
+            int max = 0;
+            for (ExternalEmployee e : all) {
+                if (e.getExtEmpCode() != null && e.getExtEmpCode().matches("(?i)EXT-\\d+")) {
+                    try {
+                        int n = Integer.parseInt(e.getExtEmpCode().replaceAll("[^0-9]", ""));
+                        if (n > max) max = n;
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+            employee.setExtEmpCode(String.format("EXT-%03d", max + 1));
+        }
+
+        if (externalEmployeeRepository.existsByExtEmpCode(employee.getExtEmpCode())) {
+            return ResponseEntity.badRequest().body(Map.of("message", "External employee code already exists (" + employee.getExtEmpCode() + ")."));
         }
         if (employee.getEmail() != null && !employee.getEmail().trim().isEmpty() &&
                 externalEmployeeRepository.existsByEmail(employee.getEmail())) {
@@ -38,8 +61,12 @@ public class ExternalEmployeeController {
 
         ExternalSecurityHelper.checkDefaultStatus(employee);
 
-        ExternalEmployee saved = externalEmployeeRepository.save(employee);
-        return ResponseEntity.ok(saved);
+        try {
+            ExternalEmployee saved = externalEmployeeRepository.save(employee);
+            return ResponseEntity.ok(saved);
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("message", "Failed to save external employee: " + e.getMessage()));
+        }
     }
 
     @PutMapping("/external-employees/{id}")

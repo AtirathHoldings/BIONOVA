@@ -345,20 +345,52 @@ public class ProcessController {
                 task.setPrcsYesActn("PENDING_APPROVER");
             }
             String eventRemarks = getString(body, "remarks", "");
-            if ("NO".equals(decision)) {
-                String prefix = "Rework".equals(targetSubStatus) ? "[Rejected - Reviewer]" : "[Reassigned - Reviewer]";
-                String existingRem = task.getAddlRem();
+
+            TaskLive targetTask = null;
+            if ("NO".equals(decision) && "Rework".equals(targetSubStatus)) {
+                Long targetMId = null;
+                if (body.get("targetMId") != null && !body.get("targetMId").toString().isBlank()) {
+                    try { targetMId = Long.valueOf(body.get("targetMId").toString()); } catch (Exception ignored) {}
+                }
+                Long targetTaskId = null;
+                if (body.get("targetTaskId") != null && !body.get("targetTaskId").toString().isBlank()) {
+                    try { targetTaskId = Long.valueOf(body.get("targetTaskId").toString()); } catch (Exception ignored) {}
+                }
+                targetTask = projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId, targetTaskId);
+            }
+
+            boolean isCrossTaskRework = (targetTask != null && !targetTask.getTaskId().equals(taskId));
+
+            if (!isCrossTaskRework) {
+                if ("NO".equals(decision)) {
+                    String prefix = "Rework".equals(targetSubStatus) ? "[Rejected - Reviewer]" : "[Reassigned - Reviewer]";
+                    String existingRem = task.getAddlRem();
+                    String newRem = prefix + ": " + eventRemarks;
+                    if (existingRem != null && !existingRem.trim().isEmpty()) {
+                        newRem = existingRem + "\n---\n" + newRem;
+                    }
+                    task.setAddlRem(newRem);
+                }
+                taskLiveRepo.save(task);
+
+                ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", decision);
+                event.setRemarks(eventRemarks);
+                processRepo.save(event);
+            } else {
+                // For cross-task rework, only targetTask gets the remarks and ProcessMaster event
+                String prefix = "[Rejected - Reviewer]";
+                String existingRem = targetTask.getAddlRem();
                 String newRem = prefix + ": " + eventRemarks;
                 if (existingRem != null && !existingRem.trim().isEmpty()) {
                     newRem = existingRem + "\n---\n" + newRem;
                 }
-                task.setAddlRem(newRem);
-            }
-            taskLiveRepo.save(task);
+                targetTask.setAddlRem(newRem);
+                taskLiveRepo.save(targetTask);
 
-            ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "REVIEWER", decision);
-            event.setRemarks(eventRemarks);
-            processRepo.save(event);
+                ProcessMaster targetEvent = buildEvent(targetTask.getTaskId(), nextOrder(targetTask.getTaskId()), body, "REVIEWER", decision);
+                targetEvent.setRemarks(eventRemarks);
+                processRepo.save(targetEvent);
+            }
 
             if ("NO".equals(decision)) {
                 // Reopen all checklists for this task so executor must do them again
@@ -373,17 +405,6 @@ public class ProcessController {
             }
 
             if ("NO".equals(decision) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
-                if ("Rework".equals(targetSubStatus)) {
-                    Long targetMId = null;
-                    if (body.get("targetMId") != null && !body.get("targetMId").toString().isBlank()) {
-                        try { targetMId = Long.valueOf(body.get("targetMId").toString()); } catch (Exception ignored) {}
-                    }
-                    Long targetTaskId = null;
-                    if (body.get("targetTaskId") != null && !body.get("targetTaskId").toString().isBlank()) {
-                        try { targetTaskId = Long.valueOf(body.get("targetTaskId").toString()); } catch (Exception ignored) {}
-                    }
-                    projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId, targetTaskId);
-                }
                 projectStatusCascadeService.cascadeReworkDownstream(taskId);
             }
             projectStatusCascadeService.cascadeStatusFromTask(taskId);
@@ -520,35 +541,81 @@ public class ProcessController {
             }
             
             String eventRemarks = getString(body, "remarks", "");
-            if ("NO".equals(decision)) {
-                String prefix = "Rework".equals(targetSubStatus) ? "[Rejected - Approver]" : "[Reassigned - Approver]";
-                String existingRem = task.getAddlRem();
+
+            TaskLive targetTask = null;
+            if ("NO".equals(decision) && "Rework".equals(targetSubStatus)) {
+                Long targetMId = null;
+                if (body.get("targetMId") != null && !body.get("targetMId").toString().isBlank()) {
+                    try { targetMId = Long.valueOf(body.get("targetMId").toString()); } catch (Exception ignored) {}
+                }
+                Long targetTaskId = null;
+                if (body.get("targetTaskId") != null && !body.get("targetTaskId").toString().isBlank()) {
+                    try { targetTaskId = Long.valueOf(body.get("targetTaskId").toString()); } catch (Exception ignored) {}
+                }
+                targetTask = projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId, targetTaskId);
+            }
+
+            boolean isCrossTaskRework = (targetTask != null && !targetTask.getTaskId().equals(taskId));
+
+            if (!isCrossTaskRework) {
+                if ("NO".equals(decision)) {
+                    String prefix = "Rework".equals(targetSubStatus) ? "[Rejected - Approver]" : "[Reassigned - Approver]";
+                    String existingRem = task.getAddlRem();
+                    String newRem = prefix + ": " + eventRemarks;
+                    if (existingRem != null && !existingRem.trim().isEmpty()) {
+                        newRem = existingRem + "\n---\n" + newRem;
+                    }
+                    task.setAddlRem(newRem);
+                }
+                taskLiveRepo.save(task);
+
+                Integer rId = body.get("rId") != null
+                        ? Integer.valueOf(body.get("rId").toString()) : null;
+                if (rId == null) {
+                    rId = getRoleIdForRole("APPROVER");
+                }
+                Long empId = body.get("empId") != null
+                        ? Long.valueOf(body.get("empId").toString()) : null;
+
+                ProcessMaster event = new ProcessMaster();
+                event.setTaskId(taskId);
+                event.setOrdrId(nextOrder(taskId));
+                event.setEmpId(empId);
+                event.setRId(rId);
+                event.setPrcsSts(decision);
+                event.setRemarks(eventRemarks);
+
+                applyCountsFromHistory(taskId, event, decision);
+                processRepo.save(event);
+            } else {
+                // For cross-task rework, only targetTask gets the remarks and ProcessMaster event
+                String prefix = "[Rejected - Approver]";
+                String existingRem = targetTask.getAddlRem();
                 String newRem = prefix + ": " + eventRemarks;
                 if (existingRem != null && !existingRem.trim().isEmpty()) {
                     newRem = existingRem + "\n---\n" + newRem;
                 }
-                task.setAddlRem(newRem);
+                targetTask.setAddlRem(newRem);
+                taskLiveRepo.save(targetTask);
+
+                Integer targetRId = body.get("rId") != null
+                        ? Integer.valueOf(body.get("rId").toString()) : null;
+                if (targetRId == null) {
+                    targetRId = getRoleIdForRole("APPROVER");
+                }
+                Long targetEmpId = body.get("empId") != null
+                        ? Long.valueOf(body.get("empId").toString()) : null;
+
+                ProcessMaster targetEvent = new ProcessMaster();
+                targetEvent.setTaskId(targetTask.getTaskId());
+                targetEvent.setOrdrId(nextOrder(targetTask.getTaskId()));
+                targetEvent.setEmpId(targetEmpId);
+                targetEvent.setRId(targetRId);
+                targetEvent.setPrcsSts(decision);
+                targetEvent.setRemarks(eventRemarks);
+                applyCountsFromHistory(targetTask.getTaskId(), targetEvent, decision);
+                processRepo.save(targetEvent);
             }
-            taskLiveRepo.save(task);
-
-            Integer rId = body.get("rId") != null
-                    ? Integer.valueOf(body.get("rId").toString()) : null;
-            if (rId == null) {
-                rId = getRoleIdForRole("APPROVER");
-            }
-            Long empId = body.get("empId") != null
-                    ? Long.valueOf(body.get("empId").toString()) : null;
-
-            ProcessMaster event = new ProcessMaster();
-            event.setTaskId(taskId);
-            event.setOrdrId(nextOrder(taskId));
-            event.setEmpId(empId);
-            event.setRId(rId);
-            event.setPrcsSts(decision);
-            event.setRemarks(eventRemarks);
-
-            applyCountsFromHistory(taskId, event, decision);
-            processRepo.save(event);
 
             if ("NO".equals(decision)) {
                 // Reopen all checklists for this task so executor must do them again
@@ -563,17 +630,6 @@ public class ProcessController {
             }
 
             if (TaskStatusMaster.WIP.equals(targetStatus) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
-                if ("Rework".equals(targetSubStatus)) {
-                    Long targetMId = null;
-                    if (body.get("targetMId") != null && !body.get("targetMId").toString().isBlank()) {
-                        try { targetMId = Long.valueOf(body.get("targetMId").toString()); } catch (Exception ignored) {}
-                    }
-                    Long targetTaskId = null;
-                    if (body.get("targetTaskId") != null && !body.get("targetTaskId").toString().isBlank()) {
-                        try { targetTaskId = Long.valueOf(body.get("targetTaskId").toString()); } catch (Exception ignored) {}
-                    }
-                    projectStatusCascadeService.routeReworkToPreviousMilestoneTask(taskId, targetMId, targetTaskId);
-                }
                 projectStatusCascadeService.cascadeReworkDownstream(taskId);
             }
             projectStatusCascadeService.cascadeStatusFromTask(taskId);

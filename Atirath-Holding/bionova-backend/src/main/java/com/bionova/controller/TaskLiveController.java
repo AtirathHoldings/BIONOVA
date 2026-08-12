@@ -475,6 +475,15 @@ public class TaskLiveController {
         TaskLive saved;
         if ("REWORK".equalsIgnoreCase(details.getPrcsYesActn()) || "Rework".equalsIgnoreCase(details.getSubStatus())) {
             TaskLive reworkTarget = projectStatusCascadeService.routeReworkToPreviousMilestoneTask(id, details.getMId());
+            if (reworkTarget != null && !reworkTarget.getTaskId().equals(id) && details.getAddlRem() != null && !details.getAddlRem().isBlank()) {
+                String existingRem = reworkTarget.getAddlRem();
+                String newRem = details.getAddlRem();
+                if (existingRem != null && !existingRem.trim().isEmpty()) {
+                    newRem = existingRem + "\n---\n" + newRem;
+                }
+                reworkTarget.setAddlRem(newRem);
+                taskLiveRepository.save(reworkTarget);
+            }
             saved = reworkTarget != null ? reworkTarget : taskLiveRepository.save(task);
         } else {
             saved = taskLiveRepository.save(task);

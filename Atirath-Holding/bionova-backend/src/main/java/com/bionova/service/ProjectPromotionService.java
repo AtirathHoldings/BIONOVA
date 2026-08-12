@@ -85,6 +85,12 @@ public class ProjectPromotionService {
         Integer pltId = pltHolidays  ? draft.getPltId() : null;
 
         // ── 2. Create ProjectLive ──────────────────────────────────────────
+        java.time.LocalDate prjAdjustedStartDt = calendarService.getNextWorkingDate(
+                draft.getTentStDt(), excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+        java.time.LocalDate prjAdjustedEndDt = calendarService.calculateEndDate(
+                prjAdjustedStartDt, draft.getNoOfDays() != null ? draft.getNoOfDays() : 0,
+                excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+
         ProjectLive live = new ProjectLive();
         live.setDrftPrjId(drftPrjId);
         live.setPrjCd(draft.getPrjCd());
@@ -94,13 +100,10 @@ public class ProjectPromotionService {
         live.setPrjPrty(draft.getPrjPrty());
         live.setPrjSts("LIVE");
         live.setCreatedBy(draft.getCreatedBy());
-        live.setStDt(draft.getTentStDt());
-        java.time.LocalDate prjAdjustedEndDt = calendarService.calculateEndDate(
-                draft.getTentStDt(), draft.getNoOfDays() != null ? draft.getNoOfDays() : 0,
-                excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+        live.setStDt(prjAdjustedStartDt != null ? prjAdjustedStartDt : draft.getTentStDt());
         live.setEndDt(prjAdjustedEndDt);
-        if (draft.getTentStDt() != null && prjAdjustedEndDt != null) {
-            live.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(draft.getTentStDt(), prjAdjustedEndDt) + 1);
+        if (live.getStDt() != null && prjAdjustedEndDt != null) {
+            live.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(live.getStDt(), prjAdjustedEndDt) + 1);
         } else {
             live.setNoOfDays(draft.getNoOfDays());
         }
@@ -113,7 +116,7 @@ public class ProjectPromotionService {
 
         // Compute working days for the project range
         int prjWrkDays = calendarService.countWorkingDaysWithExternal(
-                draft.getTentStDt(), prjAdjustedEndDt,
+                live.getStDt(), prjAdjustedEndDt,
                 excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
         live.setWrkDays(prjWrkDays);
 
@@ -121,53 +124,139 @@ public class ProjectPromotionService {
 
         // ── 3. Promote Milestones ──────────────────────────────────────────
         List<MilestoneDraft> milestones = milestoneDraftRepository.findByDrftPrjId(drftPrjId);
+        milestones.sort((a, b) -> {
+            String cdA = a.getMlstnCd() != null ? a.getMlstnCd() : "";
+            String cdB = b.getMlstnCd() != null ? b.getMlstnCd() : "";
+            if (!cdA.isEmpty() && !cdB.isEmpty()) {
+                int cmp = cdA.compareToIgnoreCase(cdB);
+                if (cmp != 0) return cmp;
+            }
+            if (a.getTentStDt() != null && b.getTentStDt() != null) {
+                int cmp = a.getTentStDt().compareTo(b.getTentStDt());
+                if (cmp != 0) return cmp;
+            }
+            return Long.compare(a.getDrftMId() != null ? a.getDrftMId() : 0L, b.getDrftMId() != null ? b.getDrftMId() : 0L);
+        });
+
+        Map<Long, MilestoneLive> milestoneLiveMap = new HashMap<>();
+        Map<Long, TaskLive> taskLiveMap = new HashMap<>();
+
         int totalMilestones      = 0;
         int totalTasks           = 0;
         int totalChecklists      = 0;
         int totalAttachments     = 0;
         int totalProcessConfigs  = 0;
 
+        java.time.LocalDate minProjectStart = null;
+        java.time.LocalDate maxProjectEnd = null;
+
         for (MilestoneDraft md : milestones) {
-            MilestoneLive ml = new MilestoneLive();
-            ml.setDrftMId(md.getDrftMId());
-            ml.setPrjId(savedProject.getPrjId());
-            ml.setMlstnCd(md.getMlstnCd());
-            ml.setMlstnTtl(md.getMlstnTtl());
-            ml.setMlstnDesc(md.getMlstnDesc());
-            ml.setMlstnDepFlg(md.getMlstnDepFlg());
-            ml.setMlstnDepTyp(md.getMlstnDepTyp());
-            ml.setMlstnDepMId(md.getMlstnDepMId());
-            ml.setStDt(md.getTentStDt());
-            java.time.LocalDate msAdjustedEndDt = calendarService.calculateEndDate(
-                    md.getTentStDt(), md.getMlstnDays() != null ? md.getMlstnDays() : 0,
-                    excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
-            ml.setEndDt(msAdjustedEndDt);
-            if (md.getTentStDt() != null && msAdjustedEndDt != null) {
-                ml.setMlstnDays((int) java.time.temporal.ChronoUnit.DAYS.between(md.getTentStDt(), msAdjustedEndDt) + 1);
+            java.time.LocalDate mStart = md.getTentStDt();
+            int mDays = md.getMlstnDays() != null ? md.getMlstnDays() : 1;
+
+            java.time.LocalDate rawMStart = mStart != null ? mStart : savedProject.getStDt();
+
+            // Check explicit dependency
+            if (Boolean.TRUE.equals(md.getMlstnDepFlg()) && md.getMlstnDepMId() != null && milestoneLiveMap.containsKey(md.getMlstnDepMId())) {
+                MilestoneLive depM = milestoneLiveMap.get(md.getMlstnDepMId());
+                if ("PARALLEL".equalsIgnoreCase(md.getMlstnDepTyp())) {
+                    rawMStart = depM.getStDt();
+                } else {
+                    rawMStart = depM.getEndDt() != null ? depM.getEndDt().plusDays(1) : rawMStart;
+                }
             } else {
-                ml.setMlstnDays(md.getMlstnDays());
+                // Check if sequential based on previous milestones
+                java.time.LocalDate maxPrevEnd = null;
+                for (MilestoneLive prevML : milestoneLiveMap.values()) {
+                    if (prevML.getEndDt() != null) {
+                        MilestoneDraft prevMD = milestones.stream().filter(m -> m.getDrftMId().equals(prevML.getDrftMId())).findFirst().orElse(null);
+                        if (prevMD != null && prevMD.getTentEndDt() != null && mStart != null && !prevMD.getTentEndDt().isAfter(mStart)) {
+                            if (maxPrevEnd == null || prevML.getEndDt().isAfter(maxPrevEnd)) {
+                                maxPrevEnd = prevML.getEndDt();
+                            }
+                        }
+                    }
+                }
+                if (maxPrevEnd != null) {
+                    java.time.LocalDate nextDay = maxPrevEnd.plusDays(1);
+                    if (mStart == null || nextDay.isAfter(rawMStart)) {
+                        rawMStart = nextDay;
+                    }
+                }
             }
-            ml.setAddlRem(md.getAddlRem());
-            ml.setMlstnSts("LIVE");
-            ml.setSts(true);
 
-            // Compute milestone working days
-            if (md.getTentStDt() != null && msAdjustedEndDt != null) {
-                int msWrkDays = calendarService.countWorkingDaysWithExternal(
-                        md.getTentStDt(), msAdjustedEndDt,
-                        excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
-                ml.setWrkDays(msWrkDays);
-            }
-
-            MilestoneLive savedMs = milestoneLiveRepository.save(ml);
-            totalMilestones++;
+            java.time.LocalDate msAdjustedStartDt = calendarService.getNextWorkingDate(
+                    rawMStart, excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+            java.time.LocalDate msAdjustedEndDt = calendarService.calculateEndDate(
+                    msAdjustedStartDt, mDays, excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
 
             // ── 4. Promote Tasks for this milestone ────────────────────────
             List<TaskDraft> tasks = taskDraftRepository.findByDrftMId(md.getDrftMId());
+            tasks.sort((a, b) -> {
+                String cdA = a.getTaskCd() != null ? a.getTaskCd() : "";
+                String cdB = b.getTaskCd() != null ? b.getTaskCd() : "";
+                if (!cdA.isEmpty() && !cdB.isEmpty()) {
+                    int cmp = cdA.compareToIgnoreCase(cdB);
+                    if (cmp != 0) return cmp;
+                }
+                if (a.getTentStDt() != null && b.getTentStDt() != null) {
+                    int cmp = a.getTentStDt().compareTo(b.getTentStDt());
+                    if (cmp != 0) return cmp;
+                }
+                return Long.compare(a.getDrftTaskId() != null ? a.getDrftTaskId() : 0L, b.getDrftTaskId() != null ? b.getDrftTaskId() : 0L);
+            });
+
+            List<TaskLive> preparedTasksForThisMs = new java.util.ArrayList<>();
+
             for (TaskDraft td : tasks) {
+                java.time.LocalDate tStart = td.getTentStDt();
+                int tDays = td.getNoOfDays() != null ? td.getNoOfDays() : 1;
+
+                java.time.LocalDate rawTStart = tStart != null ? tStart : msAdjustedStartDt;
+                Long depTaskId = td.getDepTaskId();
+
+                if (Boolean.TRUE.equals(td.getTaskDepFlg()) && depTaskId != null && taskLiveMap.containsKey(depTaskId)) {
+                    TaskLive depT = taskLiveMap.get(depTaskId);
+                    if ("PARALLEL".equalsIgnoreCase(td.getTaskDepTyp())) {
+                        rawTStart = depT.getStDt();
+                    } else {
+                        rawTStart = depT.getEndDt() != null ? depT.getEndDt().plusDays(1) : rawTStart;
+                    }
+                } else if (tStart != null) {
+                    java.time.LocalDate maxPrevTaskEnd = null;
+                    for (TaskLive prevTL : preparedTasksForThisMs) {
+                        TaskDraft prevTD = tasks.stream().filter(t -> t.getDrftTaskId().equals(prevTL.getDrftTaskId())).findFirst().orElse(null);
+                        if (prevTD != null && prevTD.getTentEndDt() != null && !prevTD.getTentEndDt().isAfter(tStart)) {
+                            if (maxPrevTaskEnd == null || prevTL.getEndDt().isAfter(maxPrevTaskEnd)) {
+                                maxPrevTaskEnd = prevTL.getEndDt();
+                            }
+                        }
+                    }
+                    if (maxPrevTaskEnd != null) {
+                        java.time.LocalDate nextDay = maxPrevTaskEnd.plusDays(1);
+                        if (nextDay.isAfter(rawTStart)) {
+                            rawTStart = nextDay;
+                        }
+                    } else if (mStart != null && tStart.isAfter(mStart)) {
+                        long offset = java.time.temporal.ChronoUnit.DAYS.between(mStart, tStart);
+                        java.time.LocalDate candidate = msAdjustedStartDt.plusDays(offset);
+                        if (candidate.isAfter(rawTStart)) {
+                            rawTStart = candidate;
+                        }
+                    }
+                }
+
+                if (msAdjustedStartDt != null && (rawTStart == null || rawTStart.isBefore(msAdjustedStartDt))) {
+                    rawTStart = msAdjustedStartDt;
+                }
+
+                java.time.LocalDate taskAdjustedStartDt = calendarService.getNextWorkingDate(
+                        rawTStart, excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+                java.time.LocalDate taskAdjustedEndDt = calendarService.calculateEndDate(
+                        taskAdjustedStartDt, tDays, excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+
                 TaskLive tl = new TaskLive();
                 tl.setDrftTaskId(td.getDrftTaskId());
-                tl.setMId(savedMs.getMId());
                 tl.setTaskCd(td.getTaskCd());
                 tl.setTaskNm(td.getTaskNm());
                 tl.setTaskDesc(td.getTaskDesc());
@@ -179,13 +268,10 @@ public class ProjectPromotionService {
                 tl.setDepTaskId(td.getDepTaskId());
                 tl.setChkFlg(td.getChkFlg());
                 tl.setNoteTxt(td.getNoteTxt());
-                tl.setStDt(td.getTentStDt());
-                java.time.LocalDate taskAdjustedEndDt = calendarService.calculateEndDate(
-                        td.getTentStDt(), td.getNoOfDays() != null ? td.getNoOfDays() : 0,
-                        excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+                tl.setStDt(taskAdjustedStartDt);
                 tl.setEndDt(taskAdjustedEndDt);
-                if (td.getTentStDt() != null && taskAdjustedEndDt != null) {
-                    tl.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(td.getTentStDt(), taskAdjustedEndDt) + 1);
+                if (taskAdjustedStartDt != null && taskAdjustedEndDt != null) {
+                    tl.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(taskAdjustedStartDt, taskAdjustedEndDt) + 1);
                 } else {
                     tl.setNoOfDays(td.getNoOfDays());
                 }
@@ -196,15 +282,69 @@ public class ProjectPromotionService {
                 tl.setAddlRem(td.getAddlRem());
 
                 // Compute task working days
-                if (td.getTentStDt() != null && taskAdjustedEndDt != null) {
+                if (taskAdjustedStartDt != null && taskAdjustedEndDt != null) {
                     int taskWrkDays = calendarService.countWorkingDaysWithExternal(
-                            td.getTentStDt(), taskAdjustedEndDt,
+                            taskAdjustedStartDt, taskAdjustedEndDt,
                             excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
                     tl.setWrkDays(taskWrkDays);
                 }
 
+                preparedTasksForThisMs.add(tl);
+            }
+
+            // Derive milestone actual start and end dates from child tasks if present
+            if (!preparedTasksForThisMs.isEmpty()) {
+                java.time.LocalDate minTaskStart = preparedTasksForThisMs.stream().map(TaskLive::getStDt).filter(java.util.Objects::nonNull).min(java.time.LocalDate::compareTo).orElse(msAdjustedStartDt);
+                java.time.LocalDate maxTaskEnd = preparedTasksForThisMs.stream().map(TaskLive::getEndDt).filter(java.util.Objects::nonNull).max(java.time.LocalDate::compareTo).orElse(msAdjustedEndDt);
+                msAdjustedStartDt = minTaskStart;
+                msAdjustedEndDt = maxTaskEnd;
+            }
+
+            MilestoneLive ml = new MilestoneLive();
+            ml.setDrftMId(md.getDrftMId());
+            ml.setPrjId(savedProject.getPrjId());
+            ml.setMlstnCd(md.getMlstnCd());
+            ml.setMlstnTtl(md.getMlstnTtl());
+            ml.setMlstnDesc(md.getMlstnDesc());
+            ml.setMlstnDepFlg(md.getMlstnDepFlg());
+            ml.setMlstnDepTyp(md.getMlstnDepTyp());
+            ml.setMlstnDepMId(md.getMlstnDepMId());
+            ml.setStDt(msAdjustedStartDt);
+            ml.setEndDt(msAdjustedEndDt);
+            if (msAdjustedStartDt != null && msAdjustedEndDt != null) {
+                ml.setMlstnDays((int) java.time.temporal.ChronoUnit.DAYS.between(msAdjustedStartDt, msAdjustedEndDt) + 1);
+            } else {
+                ml.setMlstnDays(md.getMlstnDays());
+            }
+            ml.setAddlRem(md.getAddlRem());
+            ml.setMlstnSts("LIVE");
+            ml.setSts(true);
+
+            // Compute milestone working days
+            if (msAdjustedStartDt != null && msAdjustedEndDt != null) {
+                int msWrkDays = calendarService.countWorkingDaysWithExternal(
+                        msAdjustedStartDt, msAdjustedEndDt,
+                        excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+                ml.setWrkDays(msWrkDays);
+            }
+
+            MilestoneLive savedMs = milestoneLiveRepository.save(ml);
+            milestoneLiveMap.put(md.getDrftMId(), savedMs);
+            totalMilestones++;
+
+            if (minProjectStart == null || (msAdjustedStartDt != null && msAdjustedStartDt.isBefore(minProjectStart))) {
+                minProjectStart = msAdjustedStartDt;
+            }
+            if (maxProjectEnd == null || (msAdjustedEndDt != null && msAdjustedEndDt.isAfter(maxProjectEnd))) {
+                maxProjectEnd = msAdjustedEndDt;
+            }
+
+            // Save tasks with mId set
+            for (TaskLive tl : preparedTasksForThisMs) {
+                tl.setMId(savedMs.getMId());
                 TaskLive savedTask = taskLiveRepository.save(tl);
-                draftToLiveTaskIdMap.put(td.getDrftTaskId(), savedTask.getTaskId());
+                taskLiveMap.put(tl.getDrftTaskId(), savedTask);
+                draftToLiveTaskIdMap.put(tl.getDrftTaskId(), savedTask.getTaskId());
                 totalTasks++;
 
                 // Generate and email magic link for external employee assignment
@@ -218,7 +358,7 @@ public class ProjectPromotionService {
 
                 // ── 5. Clone Checklists for this task ──────────────────────
                 List<ChecklistMaster> draftChecklists =
-                        checklistMasterRepository.findByTaskIdAndIsLive(td.getDrftTaskId(), false);
+                        checklistMasterRepository.findByTaskIdAndIsLive(tl.getDrftTaskId(), false);
                 for (ChecklistMaster dc : draftChecklists) {
                     ChecklistMaster lc = new ChecklistMaster();
                     lc.setTaskId(savedTask.getTaskId());
@@ -235,10 +375,8 @@ public class ProjectPromotionService {
                 }
 
                 // ── 6. Clone Attachments for this task ─────────────────────
-                // Draft attachments (reference docs, specs) are linked to the
-                // live task so employees can view them during execution.
                 List<AttachmentMaster> draftAttachments =
-                        attachmentMasterRepository.findByTIdAndIsLive(td.getDrftTaskId(), false);
+                        attachmentMasterRepository.findByTIdAndIsLive(tl.getDrftTaskId(), false);
                 for (AttachmentMaster da : draftAttachments) {
                     AttachmentMaster la = new AttachmentMaster();
                     la.setTId(savedTask.getTaskId());
@@ -246,16 +384,13 @@ public class ProjectPromotionService {
                     la.setAtPath(da.getAtPath());
                     la.setFileNm(da.getFileNm());
                     la.setAtType(da.getAtType());
-                    // dateTimestamp is auto-set by @PrePersist
                     attachmentMasterRepository.save(la);
                     totalAttachments++;
                 }
 
                 // ── 7. Clone Process Config steps for this task ──────────────
-                // Who is the checker and who is the reviewer — defined in draft,
-                // cloned to live so ProcessController can reference them.
                 List<ProcessConfig> draftConfigs =
-                        processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(td.getDrftTaskId(), false);
+                        processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(tl.getDrftTaskId(), false);
                 for (ProcessConfig dc : draftConfigs) {
                     ProcessConfig lc = new ProcessConfig();
                     lc.setTaskId(savedTask.getTaskId());
@@ -278,6 +413,22 @@ public class ProjectPromotionService {
                     }
                 }
             }
+        }
+
+        // Update ProjectLive with final adjusted start and end dates if milestones exist
+        if (minProjectStart != null) {
+            savedProject.setStDt(minProjectStart);
+        }
+        if (maxProjectEnd != null && (savedProject.getEndDt() == null || maxProjectEnd.isAfter(savedProject.getEndDt()))) {
+            savedProject.setEndDt(maxProjectEnd);
+        }
+        if (savedProject.getStDt() != null && savedProject.getEndDt() != null) {
+            savedProject.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(savedProject.getStDt(), savedProject.getEndDt()) + 1);
+            int updatedWrkDays = calendarService.countWorkingDaysWithExternal(
+                    savedProject.getStDt(), savedProject.getEndDt(),
+                    excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+            savedProject.setWrkDays(updatedWrkDays);
+            savedProject = projectLiveRepository.save(savedProject);
         }
 
         // ── 7.5. Map depTaskId to Live Task IDs and set status to DRAFT if there is a dependency ──

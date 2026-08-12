@@ -150,6 +150,48 @@ public class CalendarService {
     }
 
     /**
+     * Finds the next working date starting on or after startDate,
+     * skipping weekends (Saturdays/Sundays) and holidays according to the configured rules.
+     */
+    public LocalDate getNextWorkingDate(
+            LocalDate startDate,
+            boolean excludeSat,
+            boolean excludeSun,
+            boolean includeMandatory,
+            Integer coyId,
+            Integer pltId,
+            boolean includeExternal) {
+
+        if (startDate == null) {
+            return null;
+        }
+
+        LocalDate estimatedMaxEnd = startDate.plusDays(90);
+        List<CalendarMaster> allHolidays = new ArrayList<>();
+
+        if (includeMandatory) {
+            allHolidays.addAll(calendarMasterRepository.findByCalDtBetween(startDate, estimatedMaxEnd));
+        }
+
+        Set<LocalDate> holidayDates = allHolidays.stream()
+                .map(CalendarMaster::getCalDt)
+                .collect(Collectors.toSet());
+
+        LocalDate current = startDate;
+        while (true) {
+            DayOfWeek dow = current.getDayOfWeek();
+            boolean isWeekendHoliday = (excludeSat && dow == DayOfWeek.SATURDAY)
+                                    || (excludeSun && dow == DayOfWeek.SUNDAY);
+            boolean isCalendarHoliday = holidayDates.contains(current);
+
+            if (!isWeekendHoliday && !isCalendarHoliday) {
+                return current;
+            }
+            current = current.plusDays(1);
+        }
+    }
+
+    /**
      * Calculates the end date by adding a given number of working days to the start date,
      * skipping weekends (Saturdays/Sundays) and holidays according to the configured rules.
      */
@@ -163,15 +205,21 @@ public class CalendarService {
             Integer pltId,
             boolean includeExternal) {
 
-        if (startDate == null || workingDays <= 0) {
+        if (startDate == null) {
+            return null;
+        }
+        if (workingDays <= 0) {
             return startDate;
         }
 
-        LocalDate estimatedMaxEnd = startDate.plusDays(workingDays * 3L + 60);
+        LocalDate validStart = getNextWorkingDate(
+                startDate, excludeSat, excludeSun, includeMandatory, coyId, pltId, includeExternal);
+
+        LocalDate estimatedMaxEnd = validStart.plusDays(workingDays * 3L + 60);
         List<CalendarMaster> allHolidays = new ArrayList<>();
 
         if (includeMandatory) {
-            allHolidays.addAll(calendarMasterRepository.findByCalDtBetween(startDate, estimatedMaxEnd));
+            allHolidays.addAll(calendarMasterRepository.findByCalDtBetween(validStart, estimatedMaxEnd));
         }
 
         Set<LocalDate> holidayDates = allHolidays.stream()
@@ -179,7 +227,7 @@ public class CalendarService {
                 .collect(Collectors.toSet());
 
         int count = 0;
-        LocalDate current = startDate;
+        LocalDate current = validStart;
         while (true) {
             DayOfWeek dow = current.getDayOfWeek();
             boolean isWeekendHoliday = (excludeSat && dow == DayOfWeek.SATURDAY)
