@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import {
   Bell, Search, X, Menu, ChevronRight, RefreshCcw, Save, Edit, Trash2, Eye,
   Plus, MoreVertical, ChevronLeft, Settings, Users, Link, CalendarDays, Clock,
@@ -331,6 +331,7 @@ const SearchableSelect = ({ options, value, onChange, placeholder, style, disabl
 // MAIN COMPONENT
 // ============================================================
 const MilestoneCreation = ({ onLogout, userRole }) => {
+  const navigate = useNavigate();
   const screenPerm = getScreenPermission('MILESTONE_CREATION');
   const STEPS = [
     { id: 1, name: "Milestone Details", icon: Settings, description: "Basic milestone information" },
@@ -354,7 +355,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   const [milestoneToDelete, setMilestoneToDelete] = useState(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [filterType, setFilterType] = useState("ALL"); // ALL, DRAFT, LIVE
+  const [filterType, setFilterType] = useState("ALL"); // ALL, DRAFT, LIVE, CLOSED, HOLD
 
   const [currentStep, setCurrentStep] = useState(1);
   const [completedSteps, setCompletedSteps] = useState(new Set());
@@ -722,15 +723,12 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         setCompletedSteps(new Set([1]));
       }
       if (location.state?.showSuccessAlert) {
-        triggerAlert(
-          "success",
-          "Success",
-          location.state.message || "Project created successfully! Please configure milestones and tasks."
-        );
+        const alertMsg = location.state.message || "Project created successfully! Please configure milestones and tasks.";
+        navigate(location.pathname, { replace: true, state: {} });
+        triggerAlert("success", "Success", alertMsg);
       }
-      window.history.replaceState({}, document.title);
     }
-  }, [location.state, milestoneList]);
+  }, [location.state]);
 
   // ── Alert ────────────────────────────────────────────────────
   const triggerAlert = (type, title, message, onClose = null) => {
@@ -1742,27 +1740,32 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
 
   // ── Load Milestone for View ──────────────────────────────────
   const loadMilestoneForView = async (m) => {
+    setView("view");
     setLoading(true);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    setMilestone({
+      drft_m_id: m.id,
+      drft_prj_id: m.projectId || "",
+      mlstm_cd: m.code || "",
+      mlstm_ttl: m.title || "",
+      mlstm_desc: m.original?.mlstnDesc || m.original?.mlstm_desc || "",
+      mlstm_days: m.duration || "",
+      mlstm_dep_flg: m.original?.mlstnDepFlg || m.original?.mlstm_dep_flg || false,
+      mlstm_dep_typ: m.original?.mlstnDepTyp || m.original?.mlstm_dep_typ || "INDEPENDENT",
+      mlstm_dep_m_id: m.original?.mlstnDepMId || m.original?.mlstm_dep_m_id || "",
+      tent_st_dt: m.startDate || "",
+      tent_end_dt: m.endDate || "",
+      chk_id: m.original?.chkId || m.original?.chk_id || null,
+      file_url: m.original?.fileUrl || m.original?.file_url || "",
+      addl_rem: m.original?.addlRem || m.original?.addl_rem || "",
+      mlstm_sts: m.status || (m.type === 'live' ? "LIVE" : "DRAFT"),
+      sts: true
+    });
+    setTasks([]);
+
     try {
       if (m.type === 'live') {
-        setMilestone({
-          drft_m_id: m.id,
-          drft_prj_id: m.projectId || "",
-          mlstm_cd: m.code || "",
-          mlstm_ttl: m.title || "",
-          mlstm_desc: m.original?.mlstnDesc || m.original?.mlstm_desc || "",
-          mlstm_days: m.duration || "",
-          mlstm_dep_flg: m.original?.mlstnDepFlg || m.original?.mlstm_dep_flg || false,
-          mlstm_dep_typ: m.original?.mlstnDepTyp || m.original?.mlstm_dep_typ || "INDEPENDENT",
-          mlstm_dep_m_id: m.original?.mlstnDepMId || m.original?.mlstm_dep_m_id || "",
-          tent_st_dt: m.startDate || "",
-          tent_end_dt: m.endDate || "",
-          chk_id: m.original?.chkId || m.original?.chk_id || null,
-          file_url: m.original?.fileUrl || m.original?.file_url || "",
-          addl_rem: m.original?.addlRem || m.original?.addl_rem || "",
-          mlstm_sts: m.status || "LIVE",
-          sts: true
-        });
         let tasksData = [];
         try {
           tasksData = await liveTaskApi.getByMilestone(m.id);
@@ -1976,7 +1979,6 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         }));
         setTasks(mappedTasks);
       }
-      setView("view");
     } catch (err) {
       console.error("Error loading milestone for view:", err);
       triggerAlert("error", "Load Error", "Failed to load milestone details.");
@@ -3002,6 +3004,22 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
 
   // ── Render Detail View (Read-Only) ───────────────────────────
   const renderDetailView = () => {
+    if (loading) {
+      return (
+        <div className="mc-content">
+          <div className="mc-form-card" style={{ padding: "60px 20px", textAlign: "center" }}>
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: "16px" }}>
+              <div className="spinner-border text-primary" role="status" style={{ width: "3rem", height: "3rem" }}>
+                <span className="visually-hidden">Loading...</span>
+              </div>
+              <h3 style={{ margin: 0, color: "#1e293b", fontSize: "18px", fontWeight: "600" }}>Loading Task Details...</h3>
+              <p style={{ margin: 0, color: "#64748b", fontSize: "14px" }}>Please wait while we fetch the milestone and task details.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     const project = projects.find(p => p.prj_id === parseInt(milestone.drft_prj_id));
     const isLive = milestone.mlstm_sts !== "DRAFT" && milestone.mlstm_sts !== "draft";
     const dependentMilestone = milestoneList.find(m => m.id === parseInt(milestone.mlstm_dep_m_id) && m.type === (isLive ? 'live' : 'draft'));
@@ -3127,9 +3145,31 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
   };
 
   const renderListView = () => {
+    const isClosedStatus = (m) => {
+      const s = String(m.status || m.mlstnSts || m.mlstm_sts || m.original?.status || m.original?.mlstnSts || m.original?.mlstmSts || "").toUpperCase();
+      return s === "CLOSED" || s === "COMPLETED" || s === "DONE";
+    };
+
+    const isHoldStatus = (m) => {
+      const s = String(m.status || m.mlstnSts || m.mlstm_sts || m.original?.status || m.original?.mlstnSts || m.original?.mlstmSts || "").toUpperCase();
+      return s === "HOLD" || s === "ON_HOLD" || s === "ON HOLD" || s === "HOLDING" || s === "PAUSED";
+    };
+
     const filtered = milestoneList.filter(m => {
       if (filterType === "ALL") return true;
-      return m.type === filterType.toLowerCase();
+      if (filterType === "CLOSED") {
+        return isClosedStatus(m);
+      }
+      if (filterType === "HOLD") {
+        return isHoldStatus(m);
+      }
+      if (filterType === "DRAFT") {
+        return m.type === 'draft' && !isClosedStatus(m) && !isHoldStatus(m);
+      }
+      if (filterType === "LIVE") {
+        return m.type === 'live' && !isClosedStatus(m) && !isHoldStatus(m);
+      }
+      return true;
     });
     const searched = filtered.filter(m =>
       m.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -3149,6 +3189,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
               <button className={`mc-filter-btn ${filterType === "ALL" ? "active" : ""}`} onClick={() => setFilterType("ALL")}>All</button>
               <button className={`mc-filter-btn ${filterType === "DRAFT" ? "active" : ""}`} onClick={() => setFilterType("DRAFT")}>Draft</button>
               <button className={`mc-filter-btn ${filterType === "LIVE" ? "active" : ""}`} onClick={() => setFilterType("LIVE")}>Live</button>
+              <button className={`mc-filter-btn ${filterType === "CLOSED" ? "active" : ""}`} onClick={() => setFilterType("CLOSED")}>Closed</button>
+              <button className={`mc-filter-btn ${filterType === "HOLD" ? "active" : ""}`} onClick={() => setFilterType("HOLD")}>Hold</button>
             </div>
             <div className="mc-search-box"><Search size={14} /><input type="text" placeholder="Search milestones..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /></div>
           </div>
@@ -3160,6 +3202,8 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                   searched.map((m, index) => {
                     const project = projects.find(p => p.prj_id === m.projectId);
                     const isDraft = m.type === 'draft';
+                    const statusUpper = String(m.status || "").toUpperCase();
+                    const statusClass = (statusUpper === "CLOSED" || statusUpper === "COMPLETED" || statusUpper === "DONE") ? "closed" : (statusUpper === "HOLD" || statusUpper === "ON_HOLD" || statusUpper === "ON HOLD" || statusUpper === "HOLDING" || statusUpper === "PAUSED") ? "hold" : statusUpper === "DRAFT" ? "draft" : statusUpper === "SUBMITTED" ? "submitted" : "live";
                     return (
                       <tr key={`${m.type}-${m.id}`}>
                         <td>{index + 1}</td>
@@ -3170,7 +3214,7 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                         <td>{formatDisplayDate(m.startDate || m.tent_st_dt)}</td>
                         <td>{formatDisplayDate(m.endDate || m.tent_end_dt)}</td>
                         <td><span className="mc-badge">{m.taskCount || 0} Tasks</span></td>
-                        <td><span className={`mc-status ${m.status === "DRAFT" || m.status === "draft" ? "draft" : m.status === "SUBMITTED" || m.status === "submitted" ? "submitted" : "live"}`}>{m.status}</span></td>
+                        <td><span className={`mc-status ${statusClass}`}>{m.status}</span></td>
                         <td>
                           <div className="mc-actions" style={{ justifyContent: "center" }}>
                             {isDraft ? (

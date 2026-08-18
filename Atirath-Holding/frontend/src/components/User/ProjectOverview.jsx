@@ -11,11 +11,73 @@ const getAuthHeaders = () => ({
 const ProjectOverview = ({ project }) => {
   const [milestones, setMilestones] = useState([]);
   const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const [employees, setEmployees] = useState([]);
+  const [extEmployees, setExtEmployees] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const getAssigneeName = (t, empList, extEmpList) => {
+    if (!t) return 'Unassigned';
+    const raw = t.rawTask || t;
+    const isExt = (raw.taskAsgnTo || raw.task_asgn_to || raw.task_typ || '').toUpperCase() === 'EXTERNAL' || raw.extEmpId != null || raw.ext_emp_id != null;
+
+    if (isExt) {
+      const extId = raw.extEmpId ?? raw.ext_emp_id ?? raw.empId ?? raw.emp_id;
+      if (extId != null && extEmpList && extEmpList.length > 0) {
+        const extMatch = extEmpList.find(e => String(e.extEmpId ?? e.ext_emp_id ?? e.id) === String(extId));
+        if (extMatch) {
+          const name = extMatch.extEmpNm || extMatch.ext_emp_nm || extMatch.companyNm || extMatch.company_nm;
+          if (name && name.trim()) return name.trim();
+        }
+      }
+
+      const extDirectName = raw.extEmpNm || raw.ext_emp_nm || raw.extEmpName || raw.ext_emp_name || raw.executorNm || raw.executorName;
+      if (extDirectName && extDirectName.trim() && extDirectName.toUpperCase() !== 'EXTERNAL') {
+        return extDirectName.trim();
+      }
+
+      if (extId != null && empList && empList.length > 0) {
+        const empMatch = empList.find(e => String(e.empId) === String(extId));
+        if (empMatch) {
+          const name = `${empMatch.fstNm || ''} ${empMatch.lstNm || ''}`.trim();
+          if (name) return name;
+        }
+      }
+
+      if (t.assignee && typeof t.assignee === 'string' && t.assignee.toUpperCase() !== 'EXTERNAL' && t.assignee.trim()) {
+        return t.assignee.trim();
+      }
+
+      return 'External Associate';
+    } else {
+      const empId = raw.empId ?? raw.emp_id;
+      if (empId != null && empList && empList.length > 0) {
+        const empMatch = empList.find(e => String(e.empId) === String(empId));
+        if (empMatch) {
+          const name = `${empMatch.fstNm || ''} ${empMatch.lstNm || ''}`.trim();
+          if (name) return name;
+        }
+      }
+
+      const internalDirectName = raw.executorNm || raw.executorName || raw.empNm || raw.empName || raw.assignedByNm || raw.createdByName;
+      if (internalDirectName && internalDirectName.trim() && internalDirectName.toUpperCase() !== 'EXTERNAL') {
+        return internalDirectName.trim();
+      }
+
+      if (t.assignee && typeof t.assignee === 'string' && t.assignee.toUpperCase() !== 'EXTERNAL' && t.assignee.trim()) {
+        return t.assignee.trim();
+      }
+
+      return (raw.taskAsgnTo && raw.taskAsgnTo.toUpperCase() !== 'EXTERNAL') ? raw.taskAsgnTo : 'Unassigned';
+    }
+  };
 
   useEffect(() => {
     const fetchData = async () => {
-      if (!project?.id) return;
+      if (!project?.id) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
       try {
         const isDraft = project._type === "draft" || project.status === "DRAFT" || project.status === "Draft";
         const milestonesUrl = isDraft
@@ -26,10 +88,11 @@ const ProjectOverview = ({ project }) => {
           ? `${API_BASE}/task-drafts`
           : `${API_BASE}/task-live`;
 
-        const [mlRes, taskRes, empRes] = await Promise.all([
+        const [mlRes, taskRes, empRes, extEmpRes] = await Promise.all([
           fetch(milestonesUrl, { headers: getAuthHeaders() }),
           fetch(tasksUrl, { headers: getAuthHeaders() }),
-          fetch(`${API_BASE}/employees`, { headers: getAuthHeaders() })
+          fetch(`${API_BASE}/employees`, { headers: getAuthHeaders() }),
+          fetch(`${API_BASE}/external-employees`, { headers: getAuthHeaders() }).catch(() => ({ ok: false }))
         ]);
 
         const mlData = mlRes.ok ? await mlRes.json() : [];
@@ -41,7 +104,9 @@ const ProjectOverview = ({ project }) => {
           console.log(JSON.stringify(allTasks[0], null, 2));
         }
         const empData = empRes.ok ? await empRes.json() : [];
+        const extEmpData = (extEmpRes && extEmpRes.ok) ? await extEmpRes.json() : [];
         setEmployees(empData);
+        setExtEmployees(extEmpData);
 
         const getMilestoneId = (obj) => {
           if (!obj) return null;
@@ -83,7 +148,7 @@ const ProjectOverview = ({ project }) => {
         );
 
         // Map Milestones for display
-        const mappedMilestones = mlData.map((m, idx) => {
+        const rawMappedMilestones = mlData.map((m, idx) => {
           const mId = getMilestoneId(m);
           const mTasks = filteredTasks.filter(t => {
             const taskMid = getMilestoneId(t);
@@ -91,24 +156,74 @@ const ProjectOverview = ({ project }) => {
           });
           const completedTasksCount = mTasks.filter(isTaskDone).length;
 
-          let progressPct = 0;
+          let rawProgressPct = 0;
           if (mTasks.length > 0) {
-            progressPct = Math.round((completedTasksCount / mTasks.length) * 100);
+            rawProgressPct = Math.round((completedTasksCount / mTasks.length) * 100);
           } else {
             const statusUpper = (m.mlstnSts || m.mlstn_sts || m.mlstmSts || m.mlstm_sts || '').toUpperCase();
-            if (statusUpper === 'COMPLETED' || statusUpper === 'CLOSED') progressPct = 100;
-            else if (statusUpper === 'IN_PROGRESS' || statusUpper === 'WIP' || statusUpper === 'LIVE') progressPct = 50;
+            if (statusUpper === 'COMPLETED' || statusUpper === 'CLOSED') rawProgressPct = 100;
+            else if (statusUpper === 'IN_PROGRESS' || statusUpper === 'WIP' || statusUpper === 'LIVE') rawProgressPct = 50;
           }
 
+          const rawDepId = m.mlstnDepMId ?? m.mlstn_dep_m_id ?? m.mlstmDepMId ?? m.mlstm_dep_m_id ?? m.depMId ?? m.dep_m_id;
+          const depMId = (rawDepId != null && rawDepId !== "" && rawDepId !== 0) ? String(rawDepId) : null;
+          const hasDepFlg = m.mlstnDepFlg === true || m.mlstn_dep_flg === true || m.mlstmDepFlg === true || m.mlstm_dep_flg === true || !!depMId;
+
           return {
+            rawMilestone: m,
             id: mId,
+            idx: idx,
             code: m.mlstnCd || m.mlstn_cd || m.mlstmCd || m.mlstm_cd || `ML-${String(idx + 1).padStart(3, '0')}`,
             title: m.mlstnTtl || m.mlstn_ttl || m.mlstmTtl || m.mlstm_ttl || 'N/A',
             duration: m.mlstnDays || m.mlstn_days || m.mlstmDays || m.mlstm_days || 0,
             start: m.stDt || m.st_dt || m.tentStDt || m.tent_st_dt || 'N/A',
             end: m.endDt || m.end_dt || m.tentEndDt || m.tent_end_dt || 'N/A',
-            status: (m.mlstnSts || m.mlstn_sts || m.mlstmSts || m.mlstm_sts || 'DRAFT').toUpperCase().replace(/_/g, ' '),
-            progress: progressPct
+            rawStatus: (m.mlstnSts || m.mlstn_sts || m.mlstmSts || m.mlstm_sts || 'DRAFT').toUpperCase().replace(/_/g, ' '),
+            rawProgress: rawProgressPct,
+            depMId: depMId,
+            hasDepFlg: hasDepFlg,
+            mTasksCount: mTasks.length,
+            completedTasksCount: completedTasksCount
+          };
+        });
+
+        // Enforce sequential dependency locking across milestones
+        const mappedMilestones = rawMappedMilestones.map((m, idx) => {
+          let isLocked = false;
+          let lockReason = "";
+
+          // 1. Check explicit predecessor milestone ID if configured
+          if (m.depMId) {
+            const predM = rawMappedMilestones.find(pm => String(pm.id) === String(m.depMId));
+            if (predM && (predM.rawProgress < 100 || (predM.rawStatus !== "CLOSED" && predM.rawStatus !== "COMPLETED"))) {
+              isLocked = true;
+              lockReason = `Waiting for predecessor milestone "${predM.title}" (${predM.code}) to complete.`;
+            }
+          } 
+          // 2. Check sequential order dependency: if previous milestone in list is incomplete
+          else if (idx > 0) {
+            const prevM = rawMappedMilestones[idx - 1];
+            if (prevM && (prevM.rawProgress < 100 && (prevM.rawStatus !== "CLOSED" && prevM.rawStatus !== "COMPLETED"))) {
+              isLocked = true;
+              lockReason = `Waiting for predecessor milestone "${prevM.title}" (${prevM.code}) to complete.`;
+            }
+          }
+
+          if (isLocked) {
+            return {
+              ...m,
+              status: "LOCKED",
+              progress: 0,
+              isLocked: true,
+              lockReason: lockReason
+            };
+          }
+
+          return {
+            ...m,
+            status: m.rawStatus,
+            progress: m.rawProgress,
+            isLocked: false
           };
         });
 
@@ -117,19 +232,26 @@ const ProjectOverview = ({ project }) => {
           const mId = getMilestoneId(t);
           const milestoneObj = mappedMilestones.find(m => String(m.id) === String(mId));
           const milestoneCode = milestoneObj ? milestoneObj.code : 'N/A';
+          const isMilestoneLocked = milestoneObj?.isLocked === true;
 
-          const emp = empData.find(e => e.empId === t.empId);
-          const assigneeName = emp ? `${emp.fstNm || ''} ${emp.lstNm || ''}`.trim() : (t.taskAsgnTo || 'Unassigned');
+          const assigneeName = getAssigneeName(t, empData, extEmpData);
 
           const rawSts = getTaskStatusStr(t);
           let progressPct = 0;
-          if (isTaskDone(t)) {
+          let displayStatus = 'DRAFT';
+
+          if (isMilestoneLocked) {
+            displayStatus = 'LOCKED';
+            progressPct = 0;
+          } else if (isTaskDone(t)) {
             progressPct = 100;
+            displayStatus = 'CLOSED';
           } else if (rawSts === 'IN PROGRESS' || rawSts === 'WIP' || rawSts === 'IN_PROGRESS') {
             progressPct = 50;
+            displayStatus = 'IN PROGRESS';
+          } else {
+            displayStatus = rawSts.replace(/_/g, ' ') || 'DRAFT';
           }
-
-          const displayStatus = isTaskDone(t) ? 'CLOSED' : (rawSts.replace(/_/g, ' ') || 'DRAFT');
 
           return {
             rawTask: t,
@@ -140,7 +262,8 @@ const ProjectOverview = ({ project }) => {
             start: t.stDt || t.st_dt || t.tentStDt || t.tent_st_dt || 'N/A',
             end: t.endDt || t.end_dt || t.tentEndDt || t.tent_end_dt || 'N/A',
             status: displayStatus,
-            progress: progressPct
+            progress: progressPct,
+            isLocked: isMilestoneLocked
           };
         });
 
@@ -174,6 +297,8 @@ const ProjectOverview = ({ project }) => {
       case 'IN PROGRESS':
       case 'WIP':
         return 'st-in-progress';
+      case 'LOCKED':
+        return 'st-locked';
       case 'NOT STARTED':
       case 'OPEN':
       case 'DRAFT':
@@ -220,48 +345,107 @@ const ProjectOverview = ({ project }) => {
     { label: "Closed Tasks", value: String(completedTasks), subtitle: totalTasks > 0 ? `${((completedTasks / totalTasks) * 100).toFixed(1)}%` : "0.0%", icon: <CheckCircle size={20} color="#10b981" />, bg: "rgba(16, 185, 129, 0.1)" },
   ];
 
-  const [employees, setEmployees] = useState([]);
-
   const teamMemberPerformance = () => {
     if (!tasks || tasks.length === 0) return [];
     const nowMs = new Date().getTime();
     const empMap = {};
 
-    const empIdToNameMap = {};
-    (employees || []).forEach(e => {
-      const name = `${e.fstNm || ''} ${e.lstNm || ''}`.trim();
-      if (name) empIdToNameMap[String(e.empId)] = name;
-    });
+    const addMemberContribution = (empId, extEmpId, rawName, task) => {
+      let isExternal = false;
+      let memberIdStr = "";
+      let memberName = "";
+      let empCode = "";
 
-    tasks.forEach(t => {
-      const tEmpId = t.empId ?? t.emp_id;
-      let empName = null;
-      if (tEmpId && empIdToNameMap[String(tEmpId)]) {
-        empName = empIdToNameMap[String(tEmpId)];
-      } else {
-        empName = t.assignee || t.executorNm || t.assignedByNm || t.createdByName;
+      const raw = task?.rawTask || task || {};
+      const taskAsgnTo = (raw.taskAsgnTo || raw.task_asgn_to || raw.task_typ || '').toUpperCase();
+
+      if (extEmpId != null || taskAsgnTo === 'EXTERNAL' || (rawName && extEmployees.some(e => e.extEmpNm === rawName || e.ext_emp_nm === rawName))) {
+        isExternal = true;
       }
-      if (!empName || empName.trim() === "" || empName === "—") empName = "Unassigned / Team";
 
-      if (!empMap[empName]) {
-        empMap[empName] = {
-          name: empName,
+      if (isExternal) {
+        const extId = extEmpId ?? empId ?? raw.extEmpId ?? raw.ext_emp_id;
+        const extMatch = extEmployees.find(e => String(e.extEmpId ?? e.ext_emp_id ?? e.id) === String(extId)) ||
+                         extEmployees.find(e => (e.extEmpNm || e.ext_emp_nm) === rawName);
+
+        memberName = extMatch?.extEmpNm || extMatch?.ext_emp_nm || rawName || "External Associate";
+        const codeNum = extMatch?.extEmpCd || extMatch?.ext_emp_cd || extMatch?.extEmpId || extMatch?.ext_emp_id || extId;
+        empCode = codeNum ? `EXT-${codeNum}` : (memberName !== "External Associate" ? `EXT` : `EXT-EMP`);
+        memberIdStr = extMatch ? `EXT_${extMatch.extEmpId || extMatch.id}` : `EXT_${memberName}`;
+      } else {
+        const intId = empId ?? raw.empId ?? raw.emp_id;
+        const empMatch = employees.find(e => String(e.empId ?? e.id) === String(intId)) ||
+                         employees.find(e => `${e.fstNm || ''} ${e.lstNm || ''}`.trim() === rawName || e.empNm === rawName);
+
+        if (empMatch) {
+          memberName = `${empMatch.fstNm || ''} ${empMatch.lstNm || ''}`.trim() || empMatch.empNm;
+          const codeNum = empMatch.empCd || empMatch.emp_cd || empMatch.empId || empMatch.id;
+          empCode = codeNum ? `EMP-${codeNum}` : `EMP`;
+          memberIdStr = `EMP_${empMatch.empId || empMatch.id}`;
+        } else if (rawName && rawName !== "Unassigned" && rawName !== "—") {
+          memberName = rawName;
+          empCode = "EMP";
+          memberIdStr = `EMP_${rawName}`;
+        } else {
+          return;
+        }
+      }
+
+      const key = memberIdStr;
+      if (!empMap[key]) {
+        empMap[key] = {
+          key: key,
+          name: memberName,
+          empCode: empCode,
+          isExternal: isExternal,
           total: 0,
           done: 0,
           overdue: 0,
-          onTime: 0
+          onTime: 0,
+          taskIds: new Set()
         };
       }
-      empMap[empName].total += 1;
-      const s = (t.status || "").toUpperCase();
-      if (s === "COMPLETED" || s === "CLOSED" || s === "DONE") {
-        empMap[empName].done += 1;
-      } else {
-        if (t.end && new Date(t.end).setHours(23, 59, 59, 999) < nowMs) {
-          empMap[empName].overdue += 1;
+
+      const taskId = task.code || task.id || JSON.stringify(task);
+      if (!empMap[key].taskIds.has(taskId)) {
+        empMap[key].taskIds.add(taskId);
+        empMap[key].total += 1;
+        const s = (task.status || "").toUpperCase();
+        if (s === "COMPLETED" || s === "CLOSED" || s === "DONE") {
+          empMap[key].done += 1;
         } else {
-          empMap[empName].onTime += 1;
+          if (task.end && task.end !== 'N/A' && new Date(task.end).setHours(23, 59, 59, 999) < nowMs) {
+            empMap[key].overdue += 1;
+          } else {
+            empMap[key].onTime += 1;
+          }
         }
+      }
+    };
+
+    tasks.forEach(t => {
+      const raw = t.rawTask || t;
+
+      // A) Executor
+      const execName = getAssigneeName(t, employees, extEmployees);
+      const execEmpId = raw.empId ?? raw.emp_id ?? raw.assignedTo;
+      const execExtId = raw.extEmpId ?? raw.ext_emp_id;
+      if (execName && execName !== "Unassigned" && execName !== "—") {
+        addMemberContribution(execEmpId, execExtId, execName, t);
+      }
+
+      // B) Reviewer
+      const reviewerId = raw.reviewerId ?? raw.reviewer_id ?? raw.reviewer;
+      const reviewerNm = raw.reviewerNm ?? raw.reviewer_nm ?? raw.reviewerName;
+      if (reviewerId || reviewerNm) {
+        addMemberContribution(reviewerId, null, reviewerNm, t);
+      }
+
+      // C) Approver
+      const approverId = raw.approverId ?? raw.approver_id ?? raw.approver;
+      const approverNm = raw.approverNm ?? raw.approver_nm ?? raw.approverName;
+      if (approverId || approverNm) {
+        addMemberContribution(approverId, null, approverNm, t);
       }
     });
 
@@ -370,17 +554,14 @@ const ProjectOverview = ({ project }) => {
         </div>
       </div>
 
-      {/* Team Member Performance & Bottlenecks Section */}
-
-      {/* Team Member Performance & Bottlenecks Section */}
-      <div className="pd-section-card" style={{ overflow: 'hidden', border: '1px solid #e2e8f0', borderRadius: '12px', boxShadow: '0 4px 15px -3px rgba(0,0,0,0.05)' }}>
+      {/* Team Performance & Schedule Health */}
+      <div className="pd-section-card" style={{ marginTop: '24px' }}>
         <div className="pd-section-header" style={{
           display: 'flex',
           justify: 'space-between',
           alignItems: 'center',
-          background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)',
-          padding: '16px 20px',
-          borderBottom: '1px solid #e2e8f0'
+          padding: '18px 20px',
+          borderBottom: '1px solid #f1f5f9'
         }}>
           <div>
             <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>Team Performance & Schedule Health (Lead / Lag)</h3>
@@ -407,8 +588,6 @@ const ProjectOverview = ({ project }) => {
                   transition: 'all 0.25s ease',
                   boxShadow: m.overdue > 0 ? '0 4px 12px rgba(220, 38, 38, 0.06)' : '0 2px 8px rgba(0,0,0,0.03)'
                 }}
-                onMouseEnter={(e) => { e.currentTarget.style.transform = 'translateY(-3px)'; e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.08)'; }}
-                onMouseLeave={(e) => { e.currentTarget.style.transform = 'none'; e.currentTarget.style.boxShadow = m.overdue > 0 ? '0 4px 12px rgba(220, 38, 38, 0.06)' : '0 2px 8px rgba(0,0,0,0.03)'; }}
               >
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
@@ -429,7 +608,9 @@ const ProjectOverview = ({ project }) => {
                     </div>
                     <div>
                       <strong style={{ fontSize: '14px', color: '#0f172a', display: 'block', lineHeight: 1.2 }}>{m.name}</strong>
-                      <span style={{ fontSize: '11px', color: '#64748b' }}>Assigned Executor</span>
+                      <span style={{ fontSize: '11px', color: '#64748b', fontWeight: '500' }}>
+                        {m.empCode ? `(${m.empCode})` : ''}
+                      </span>
                     </div>
                   </div>
                 </div>

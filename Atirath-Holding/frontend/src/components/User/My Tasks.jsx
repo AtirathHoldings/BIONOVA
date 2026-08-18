@@ -42,7 +42,8 @@ import {
   MessageSquare,
   Paperclip,
   History,
-  MoreVertical
+  MoreVertical,
+  Lock
 } from "lucide-react";
 import "../../styles/MyTasks.css";
 import { apiGet, apiPut, apiPatch, apiPost, apiPostMultipart, apiDelete } from "../../utils/api";
@@ -185,11 +186,13 @@ const getEmployeeName = (empId, employeesList) => {
   return emp.empCode || emp.employee_code || `User ${empId}`;
 };
 
-const getEmployeeInitials = (empId, employeesList) => {
-  const name = getEmployeeName(empId, employeesList);
+const getEmployeeInitials = (empId, employeesList, fallbackName = null) => {
+  let name = getEmployeeName(empId, employeesList);
+  if ((!name || name === "Unknown" || name.startsWith('User ')) && fallbackName) {
+    name = fallbackName;
+  }
   if (!name || name === "Unknown" || name.startsWith('User ')) {
-    const idStr = String(empId);
-    return idStr.substring(0, 2).toUpperCase();
+    return null;
   }
   const parts = name.trim().split(" ");
   if (parts.length >= 2) {
@@ -247,7 +250,7 @@ const formatDate = (dateStr) => {
 // ACTION BUTTON - DYNAMIC BASED ON PROGRESS, PROCESS, PRIORITY, TIME
 // ============================================
 
-const getActionButton = (task, currentUserEmpId, isExternal = false) => {
+const getActionButton = (task, currentUserEmpId, isExternal = false, employeesList = []) => {
   if (!task) return { label: "View", action: "view", variant: "secondary" };
 
   const rawTask = task.rawTask || task;
@@ -259,9 +262,10 @@ const getActionButton = (task, currentUserEmpId, isExternal = false) => {
   const approverId = rawTask.approverId || rawTask.approver || rawTask.approverEmpId;
 
   const isTeamMember = (Array.isArray(rawTask?.teamMembers) && rawTask.teamMembers.some(tm => String(tm.empId) === String(currentUserEmpId))) || (Array.isArray(task?.teamMembers) && task.teamMembers.some(tm => String(tm.empId) === String(currentUserEmpId)));
-  const isDoer = isExternalTask || String(executorId) === String(currentUserEmpId) || isTeamMember;
-  const isReviewer = !isExternalTask && String(reviewerId) === String(currentUserEmpId);
-  const isApprover = !isExternalTask && String(approverId) === String(currentUserEmpId);
+  const myName = getEmployeeName(currentUserEmpId, employeesList || []);
+  const isReviewer = !isExternalTask && (String(reviewerId) === String(currentUserEmpId) || (rawTask?.reviewerNm && myName && myName.trim().toLowerCase() === rawTask.reviewerNm.trim().toLowerCase()));
+  const isApprover = !isExternalTask && (String(approverId) === String(currentUserEmpId) || (rawTask?.approverNm && myName && myName.trim().toLowerCase() === rawTask.approverNm.trim().toLowerCase()));
+  const isDoer = isExternalTask || String(executorId) === String(currentUserEmpId) || String(rawTask.assignedBy || rawTask.assigned_by || rawTask.createdBy) === String(currentUserEmpId) || isTeamMember || (!isReviewer && !isApprover);
 
   // Get progress (status)
   const progress = (rawTask.taskSts || rawTask.status || rawTask.taskStatus || task.status || "OPEN").toUpperCase();
@@ -303,7 +307,7 @@ const getActionButton = (task, currentUserEmpId, isExternal = false) => {
   if (progress === "OPEN") normalizedProgress = "OPEN";
   if (progress === "COMPLETED" || progress === "CLOSED") normalizedProgress = "COMPLETED";
   if (progress === "HOLD") normalizedProgress = "HOLD";
-  if (progress === "DRAFT") normalizedProgress = "OPEN";
+  if (progress === "DRAFT") normalizedProgress = "DRAFT";
 
   // Normalize process
   let normalizedProcess = process;
@@ -328,7 +332,13 @@ const getActionButton = (task, currentUserEmpId, isExternal = false) => {
   // EXECUTOR (DOER) ACTIONS - DYNAMIC
   // ============================================
   if (isDoer) {
-    // OPEN / DRAFT -> Start
+    const isLocked = rawTask?.isSequentialLocked === true || task?.isSequentialLocked === true || normalizedProgress === "DRAFT";
+    // Locked (Waiting for Predecessor)
+    if (isLocked) {
+      return { label: "Locked", action: "view", variant: "secondary" };
+    }
+
+    // OPEN -> Start
     if (normalizedProgress === "OPEN") {
       return { label: "Start", action: "start", variant: "primary" };
     }
@@ -518,16 +528,20 @@ const MyTasks = ({ userRole, onLogout }) => {
           dueDate: data.endDt,
           stDt: data.stDt,
           endDt: data.endDt,
-          progress: data.taskSts === "COMPLETED" || data.taskSts === "CLOSED" ? 100 : (data.checklists?.length ? Math.round((data.checklists.filter(c => c.chkSts).length / data.checklists.length) * 100) : 0),
+          progress: 0,
           project: data.prjNm || "Assignment",
           projectId: data.prjId,
           milestone: data.mlstnTtl || "—",
           milestoneId: data.mId,
+          isSequentialLocked: !!data.isSequentialLocked,
+          lockReason: data.lockReason || null,
           rawTask: {
             ...data,
             empId: data.extEmpId,
             assignedTo: data.extEmpId,
             extEmpNm: data.extEmpNm,
+            email: data.extEmpEmail || data.email,
+            extEmpEmail: data.extEmpEmail || data.email,
             companyNm: data.companyNm,
             taskSts: data.taskSts,
             priority: data.priority,
@@ -536,7 +550,16 @@ const MyTasks = ({ userRole, onLogout }) => {
             taskDesc: data.taskDesc,
             addlRem: data.addlRem,
             isExternal: true,
-            prcsYesActn: "NONE"
+            isSequentialLocked: !!data.isSequentialLocked,
+            lockReason: data.lockReason || null,
+            reviewerId: data.reviewerId || null,
+            reviewer: data.reviewerId || null,
+            reviewerNm: data.reviewerNm || null,
+            approverId: data.approverId || null,
+            approver: data.approverId || null,
+            approverNm: data.approverNm || null,
+            prcsFlg: data.prcsFlg || false,
+            prcsYesActn: data.prcsYesActn || "NONE"
           },
           isExternal: true
         };
@@ -546,6 +569,9 @@ const MyTasks = ({ userRole, onLogout }) => {
           text: (c.chkCd ? `[${c.chkCd}] ` : "") + (c.chkNm || c.chkDesc || ""),
           completed: !!c.chkSts
         }));
+
+        const calculatedProgress = computeProgress(chks, taskObj);
+        taskObj.progress = calculatedProgress;
 
         const atts = (data.attachments || []).map(a => ({
           fileId: a.fileId,
@@ -560,7 +586,7 @@ const MyTasks = ({ userRole, onLogout }) => {
         setUpdateChecklist(chks);
         setTaskAttachments(atts);
         setUpdateRemarks(data.addlRem || "");
-        setUpdateProgressVal(taskObj.progress);
+        setUpdateProgressVal(calculatedProgress);
       }
     } catch (e) {
       console.error("Failed to fetch external task", e);
@@ -1462,11 +1488,15 @@ const MyTasks = ({ userRole, onLogout }) => {
     if (isExternalMode) {
       try {
         setLoadingAction(task.id || task.taskId);
-        await fetch(`${apiBaseUrl}/api/external-tasks/${externalToken}/update`, {
+        const res = await fetch(`${apiBaseUrl}/api/external-tasks/${externalToken}/update`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ taskSts: "WIP", remarks: updateRemarks })
         });
+        const resData = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(resData.message || "Failed to start external task");
+        }
         setSelectedTask(prev => ({
           ...prev,
           status: "WIP",
@@ -1476,6 +1506,7 @@ const MyTasks = ({ userRole, onLogout }) => {
         if (!skipAlert) triggerAlert("success", "Started", "Task moved to Work In Progress.");
       } catch (e) {
         console.error("External start error:", e);
+        if (!skipAlert) triggerAlert("danger", "Error", "Failed to start task: " + e.message);
       } finally {
         setLoadingAction(null);
       }
@@ -1989,9 +2020,33 @@ const MyTasks = ({ userRole, onLogout }) => {
   };
 
   const handleToggleChecklist = async (id) => {
-    if (!id) return;
+    if (!id || !selectedTask) return;
+
+    const rawTask = selectedTask.rawTask || selectedTask;
+    const taskStatus = String(rawTask.taskSts || rawTask.status || selectedTask.rawStatus || selectedTask.status || "").toUpperCase();
+    const isCompleted = ['COMPLETED', 'CLOSED', 'DONE', 'COMPLETE'].includes(taskStatus) || selectedTask.progress === 100;
+    const isUnderReview = rawTask.prcsYesActn === "PENDING_REVIEWER" || rawTask.prcsYesActn === "PENDING_APPROVER" || rawTask.prcsYesActn === "UNDER_REVIEW";
+
+    // 1. If task has not been started yet (OPEN or DRAFT), block and alert user
+    if (taskStatus === "OPEN" || taskStatus === "DRAFT") {
+      triggerAlert("warning", "Task Not Started", "Please click the 'Start' button to begin working on this task before checking off items.");
+      return;
+    }
+
+    // 2. If task is already completed/closed, block
+    if (isCompleted) {
+      triggerAlert("warning", "Task Closed", "Checklists cannot be edited because this task is already closed.");
+      return;
+    }
+
+    // 3. If task is under review, block
+    if (isUnderReview) {
+      triggerAlert("warning", "Under Review", "Checklists cannot be edited while the task is under review.");
+      return;
+    }
+
     if (isExternalMode) {
-      if (isExpired || selectedTask?.rawStatus === "COMPLETED" || selectedTask?.rawStatus === "CLOSED") return;
+      if (isExpired) return;
       const targetItem = updateChecklist.find(c => c.id === id);
       const nextCompleted = !targetItem?.completed;
 
@@ -2016,10 +2071,9 @@ const MyTasks = ({ userRole, onLogout }) => {
       return;
     }
 
-    if (selectedTask?.status === "WIP" && selectedTask?.rawTask?.prcsYesActn === "PENDING_APPROVER") return;
-    if (selectedTask?.status === "COMPLETED") return;
-    const executorId = selectedTask?.rawTask?.empId || selectedTask?.rawTask?.assignedTo;
-    if (String(executorId) !== String(currentUserEmpId)) return;
+    const executorId = rawTask.empId || rawTask.assignedTo;
+    const isTeamMember = (Array.isArray(rawTask?.teamMembers) && rawTask.teamMembers.some(tm => String(tm.empId) === String(currentUserEmpId))) || (Array.isArray(selectedTask?.teamMembers) && selectedTask.teamMembers.some(tm => String(tm.empId) === String(currentUserEmpId)));
+    if (String(executorId) !== String(currentUserEmpId) && !isTeamMember) return;
 
     setUpdateChecklist(prev => {
       const newList = prev.map(item =>
@@ -2178,9 +2232,10 @@ const MyTasks = ({ userRole, onLogout }) => {
     // Always 100 for closed tasks
     if (taskSts === 'COMPLETED' || taskSts === 'CLOSED') return 100;
 
-    const hasReviewer = !!(rawTask.reviewerId || rawTask.reviewer);
-    const hasApprover = !!(rawTask.approverId || rawTask.approver);
-    const hasDependency = hasReviewer || hasApprover;
+    const hasReviewer = !!(rawTask.reviewerId || rawTask.reviewer || rawTask.reviewerNm);
+    const hasApprover = !!(rawTask.approverId || rawTask.approver || rawTask.approverNm);
+    const hasWorkflow = rawTask?.prcsFlg === true || rawTask?.prcsFlg === 'YES' || rawTask?.prcsFlg === 1 || rawTask?.prcsFlg === 'true' || rawTask?.hasProcess === true;
+    const hasDependency = hasReviewer || hasApprover || hasWorkflow;
 
     // ─── No dependency: executor checklist fills 0–100% ───
     if (!hasDependency) {
@@ -2371,15 +2426,50 @@ const MyTasks = ({ userRole, onLogout }) => {
     return true;
   });
 
+  const getTaskTimestamp = (task, isStart = false) => {
+    const raw = task.rawTask || task;
+    const rawVal = isStart
+      ? (raw?.stDt || raw?.stdt || raw?.st_dt || raw?.tentStDt || raw?.tent_st_dt || raw?.startDate || task.startDate || task.stDt)
+      : (task.dueDate || raw?.endDt || raw?.enddt || raw?.end_dt || raw?.tentEndDt || raw?.dueDate);
+
+    if (!rawVal) return Infinity;
+
+    try {
+      if (typeof rawVal === 'string' && rawVal.includes('-')) {
+        const parts = rawVal.split('T')[0].split('-');
+        if (parts.length === 3) {
+          if (parts[0].length === 4) {
+            return new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10)).getTime();
+          } else if (parts[2].length === 4) {
+            return new Date(parseInt(parts[2], 10), parseInt(parts[1], 10) - 1, parseInt(parts[0], 10)).getTime();
+          }
+        }
+      }
+      const d = new Date(rawVal);
+      if (!isNaN(d.getTime())) return d.getTime();
+    } catch (e) {}
+
+    return Infinity;
+  };
+
   const sortedTasks = [...filteredTasks].sort((a, b) => {
     const aOverdue = isTaskOverdue(a);
     const bOverdue = isTaskOverdue(b);
     if (aOverdue && !bOverdue) return -1;
     if (!aOverdue && bOverdue) return 1;
-    if (a.dueDate && b.dueDate) {
-      return a.dueDate.localeCompare(b.dueDate);
+
+    if (selectedStatus === "Upcoming") {
+      const aStart = getTaskTimestamp(a, true);
+      const bStart = getTaskTimestamp(b, true);
+      if (aStart !== bStart) return aStart - bStart;
+      const aEnd = getTaskTimestamp(a, false);
+      const bEnd = getTaskTimestamp(b, false);
+      return aEnd - bEnd;
     }
-    return 0;
+
+    const aTime = getTaskTimestamp(a, false);
+    const bTime = getTaskTimestamp(b, false);
+    return aTime - bTime;
   });
 
   const totalPages = Math.ceil(sortedTasks.length / itemsPerPage);
@@ -2463,7 +2553,7 @@ const MyTasks = ({ userRole, onLogout }) => {
           });
           setReworkMilestones(pMiles);
         }
-      }).catch(() => {});
+      }).catch(() => { });
     }
 
     try {
@@ -2948,7 +3038,7 @@ const MyTasks = ({ userRole, onLogout }) => {
     const priorityBadge = getPriorityBadge(task.priority);
 
     // Get dynamic action based on current state
-    const action = getActionButton(rawTask, currentUserEmpId, isExternalMode);
+    const action = getActionButton(rawTask, currentUserEmpId, isExternalMode, employeesList);
 
     const isCompleted = ['COMPLETED', 'CLOSED', 'DONE', 'COMPLETE'].includes(
       String(rawTask?.taskSts || rawTask?.status || task.rawStatus || task.status || '').toUpperCase()
@@ -2965,32 +3055,33 @@ const MyTasks = ({ userRole, onLogout }) => {
       return today > dueDate;
     })();
     const isTeamMember = taskTeamMembers.some(tm => String(tm.empId) === String(currentUserEmpId)) || (Array.isArray(rawTask?.teamMembers) && rawTask.teamMembers.some(tm => String(tm.empId) === String(currentUserEmpId)));
-    const isDoer = isExternalMode || String(rawTask.empId || rawTask.assignedTo) === String(currentUserEmpId) || isTeamMember;
-    const isReviewer = !isExternalMode && String(rawTask.reviewerId || rawTask.reviewer) === String(currentUserEmpId);
-    const isApprover = !isExternalMode && String(rawTask.approverId || rawTask.approver) === String(currentUserEmpId);
+    const myName = getEmployeeName(currentUserEmpId, employeesList);
+    const isReviewer = !isExternalMode && (String(rawTask.reviewerId || rawTask.reviewer) === String(currentUserEmpId) || (rawTask?.reviewerNm && myName && myName.trim().toLowerCase() === rawTask.reviewerNm.trim().toLowerCase()));
+    const isApprover = !isExternalMode && (String(rawTask.approverId || rawTask.approver) === String(currentUserEmpId) || (rawTask?.approverNm && myName && myName.trim().toLowerCase() === rawTask.approverNm.trim().toLowerCase()));
+    const isDoer = isExternalMode || String(rawTask.empId || rawTask.assignedTo || rawTask.extEmpId) === String(currentUserEmpId) || String(rawTask.assignedBy || rawTask.assigned_by || rawTask.createdBy) === String(currentUserEmpId) || isTeamMember || (!isReviewer && !isApprover);
 
     // Get current progress and process for display
     const currentProgress = (rawTask.taskSts || task.rawStatus || task.status || "OPEN").toUpperCase();
-    const currentProcess = rawTask.prcsYesActn || "NONE";
+    const currentProcess = rawTask.prcsYesActn || (rawTask.subStatus === "Under Review" ? "PENDING_REVIEWER" : "NONE");
 
     // Determine if task is in review
     const isUnderReview = currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER" || currentProcess === "UNDER_REVIEW";
 
-    const renderTeamMember = (empId, role, label, fallbackName = null) => {
+    const renderTeamMember = (empId, role, label, fallbackName = null, isExternal = false) => {
       if (!empId && !fallbackName) return null;
       let name = getEmployeeName(empId, employeesList);
       if ((!name || name === "Unknown" || name.startsWith("User ")) && fallbackName) {
         name = fallbackName;
       }
       let initials = null;
-      if (empId) {
-        initials = getEmployeeInitials(empId, employeesList);
+      if (empId || fallbackName) {
+        initials = getEmployeeInitials(empId, employeesList, fallbackName);
       }
-      if ((!initials || initials === "UN" || initials === "NU" || initials === "TM" || initials === "null") && name && name !== "Unknown") {
+      if ((!initials || initials === "UN" || initials === "NU" || initials === "TM" || initials === "null" || /^\d+$/.test(initials)) && name && name !== "Unknown" && !name.startsWith("User ")) {
         const parts = name.trim().split(" ");
         initials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0].substring(0, 2).toUpperCase();
       }
-      if (!initials) initials = "TM";
+      if (!initials || /^\d+$/.test(initials)) initials = label || "TM";
       const photo = getEmployeePhoto(empId, employeesList);
 
       const roleColors = {
@@ -3038,7 +3129,14 @@ const MyTasks = ({ userRole, onLogout }) => {
             ) : initials || "UN"}
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontWeight: "600", fontSize: "14px", color: "#0f172a" }}>{name}</div>
+            <div style={{ fontWeight: "600", fontSize: "14px", color: "#0f172a", display: "flex", alignItems: "center", gap: "6px" }}>
+              <span>{name}</span>
+              {isExternal && (
+                <span style={{ fontSize: "11px", fontWeight: "600", color: "#2563eb", backgroundColor: "#dbeafe", padding: "1px 6px", borderRadius: "8px" }}>
+                  (External)
+                </span>
+              )}
+            </div>
             <div style={{ fontSize: "12px", color: color.bg, fontWeight: "500" }}>{role}</div>
           </div>
           <span style={{
@@ -3151,8 +3249,38 @@ const MyTasks = ({ userRole, onLogout }) => {
 
       // EXECUTOR ACTIONS - DYNAMIC BASED ON PROGRESS & PROCESS
       if (isDoer) {
-        // OPEN / DRAFT -> Start
-        if (currentProgress === "OPEN" || currentProgress === "DRAFT") {
+        const isLocked = rawTask?.isSequentialLocked === true || task?.isSequentialLocked === true || currentProgress === "DRAFT";
+        // Locked
+        if (isLocked) {
+          return (
+            <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
+              <div style={{
+                padding: "10px 14px",
+                backgroundColor: "#fffbeb",
+                border: "1px solid #fde68a",
+                borderRadius: "6px",
+                color: "#92400e",
+                fontSize: "12px",
+                display: "flex",
+                alignItems: "center",
+                gap: "8px"
+              }}>
+                <Lock size={15} color="#d97706" style={{ flexShrink: 0 }} />
+                <span><strong>Sequential Task:</strong> {rawTask?.lockReason || task?.lockReason || "Waiting for previous predecessor task/milestone to complete and close."}</span>
+              </div>
+              <button
+                className="cc-btn secondary"
+                disabled
+                style={{ borderRadius: "6px", backgroundColor: "#f1f5f9", border: "1px solid #cbd5e1", color: "#94a3b8", width: "100%", padding: "10px", fontWeight: "600", cursor: "not-allowed", display: "flex", alignItems: "center", justifyContent: "center", gap: "6px" }}
+              >
+                <Lock size={15} /> Locked (Predecessor Incomplete)
+              </button>
+            </div>
+          );
+        }
+
+        // OPEN -> Start
+        if (currentProgress === "OPEN") {
           return (
             <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
               <button
@@ -3545,56 +3673,117 @@ const MyTasks = ({ userRole, onLogout }) => {
                   {updateChecklist.filter(c => c.completed).length}/{updateChecklist.length}
                 </div>
               </div>
-              {updateChecklist.length === 0 ? (
-                <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
-                  No checklist items defined for this task.
-                </div>
-              ) : (
-                <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                  {updateChecklist.map(item => (
-                    <div
-                      key={item.id}
-                      onClick={() => handleToggleChecklist(item.id)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "12px",
-                        padding: "10px 12px",
-                        backgroundColor: item.completed ? "#f0fdf4" : "#f8fafc",
-                        borderRadius: "8px",
-                        border: `1px solid ${item.completed ? "#bbf7d0" : "#e2e8f0"}`,
-                        cursor: isCompleted || isUnderReview ? "not-allowed" : "pointer",
-                        opacity: isCompleted || isUnderReview ? 0.7 : 1
-                      }}
-                    >
+              {(() => {
+                const isStarted = currentProgress === "WIP" || currentProgress === "IN_PROGRESS" || currentProgress === "WORK_IN_PROGRESS";
+                const canEditChecklist = isDoer && isStarted && !isCompleted && !isUnderReview;
+
+                return (
+                  <>
+                    {!isStarted && !isCompleted && (
                       <div style={{
-                        width: "20px",
-                        height: "20px",
-                        borderRadius: "4px",
-                        backgroundColor: item.completed ? "#22c55e" : "white",
-                        border: `2px solid ${item.completed ? "#22c55e" : "#cbd5e1"}`,
+                        fontSize: "12px",
+                        color: "#b45309",
+                        backgroundColor: "#fffbeb",
+                        border: "1px solid #fde68a",
+                        padding: "8px 12px",
+                        borderRadius: "6px",
+                        marginBottom: "12px",
                         display: "flex",
                         alignItems: "center",
-                        justifyContent: "center",
-                        flexShrink: 0
+                        gap: "8px"
                       }}>
-                        {item.completed && <Check size={12} color="white" strokeWidth={3} />}
+                        <AlertCircle size={15} color="#d97706" style={{ flexShrink: 0 }} />
+                        <span>Click the <strong>Start</strong> button above to begin working on this task before checking off items.</span>
                       </div>
-                      <span style={{
-                        fontSize: "14px",
-                        color: item.completed ? "#166534" : "#0f172a",
-                        textDecoration: item.completed ? "line-through" : "none",
-                        flex: 1
+                    )}
+                    {isCompleted && (
+                      <div style={{
+                        fontSize: "12px",
+                        color: "#15803d",
+                        backgroundColor: "#f0fdf4",
+                        border: "1px solid #bbf7d0",
+                        padding: "8px 12px",
+                        borderRadius: "6px",
+                        marginBottom: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px"
                       }}>
-                        {item.text}
-                      </span>
-                      <span className={`myt-chk-status ${item.completed ? 'completed' : 'pending'}`}>
-                        {item.completed ? 'Completed' : 'Pending'}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              )}
+                        <CheckCircle2 size={15} color="#16a34a" style={{ flexShrink: 0 }} />
+                        <span>Task is closed. Checklists are locked (read-only).</span>
+                      </div>
+                    )}
+                    {isUnderReview && (
+                      <div style={{
+                        fontSize: "12px",
+                        color: "#6b21a8",
+                        backgroundColor: "#faf5ff",
+                        border: "1px solid #e9d5ff",
+                        padding: "8px 12px",
+                        borderRadius: "6px",
+                        marginBottom: "12px",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "8px"
+                      }}>
+                        <Clock size={15} color="#9333ea" style={{ flexShrink: 0 }} />
+                        <span>Task is under review. Checklists are read-only.</span>
+                      </div>
+                    )}
+
+                    {updateChecklist.length === 0 ? (
+                      <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>
+                        No checklist items defined for this task.
+                      </div>
+                    ) : (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
+                        {updateChecklist.map(item => (
+                          <div
+                            key={item.id}
+                            onClick={() => handleToggleChecklist(item.id)}
+                            style={{
+                              display: "flex",
+                              alignItems: "center",
+                              gap: "12px",
+                              padding: "10px 12px",
+                              backgroundColor: item.completed ? "#f0fdf4" : "#f8fafc",
+                              borderRadius: "8px",
+                              border: `1px solid ${item.completed ? "#bbf7d0" : "#e2e8f0"}`,
+                              cursor: canEditChecklist ? "pointer" : "not-allowed",
+                              opacity: canEditChecklist ? 1 : 0.75
+                            }}
+                          >
+                            <div style={{
+                              width: "20px",
+                              height: "20px",
+                              borderRadius: "4px",
+                              backgroundColor: item.completed ? "#22c55e" : "white",
+                              border: `2px solid ${item.completed ? "#22c55e" : "#cbd5e1"}`,
+                              display: "flex",
+                              alignItems: "center",
+                              justifyContent: "center",
+                              flexShrink: 0
+                            }}>
+                              {item.completed && <Check size={12} color="white" strokeWidth={3} />}
+                            </div>
+                            <span style={{
+                              fontSize: "14px",
+                              color: item.completed ? "#166534" : "#0f172a",
+                              textDecoration: item.completed ? "line-through" : "none",
+                              flex: 1
+                            }}>
+                              {item.text}
+                            </span>
+                            <span className={`myt-chk-status ${item.completed ? 'completed' : 'pending'}`}>
+                              {item.completed ? 'Completed' : 'Pending'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* Description */}
@@ -3646,7 +3835,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                 <div style={{ display: "flex", flexWrap: "wrap", gap: "12px" }}>
                   {taskTeamMembers.map((tm, idx) => {
                     const empName = getEmployeeName(tm.empId, employeesList);
-                    const empInitials = getEmployeeInitials(tm.empId, employeesList);
+                    const empInitials = getEmployeeInitials(tm.empId, employeesList, tm.fallbackName) || tm.label || "TM";
                     const empPhoto = getEmployeePhoto(tm.empId, employeesList);
                     const isPrimaryExec = String(rawTask.empId || rawTask.executorId) === String(currentUserEmpId);
                     const canManageTeam = !isCompleted && isPrimaryExec && !isReviewer && !isApprover;
@@ -4266,26 +4455,60 @@ const MyTasks = ({ userRole, onLogout }) => {
                 Team
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
-                {isExternalMode ? (
-                  <>
-                    {renderTeamMember(null, "Assigned By", "AB", "Project Admin")}
-                    {renderTeamMember(null, "Executor", "EX", rawTask?.extEmpNm || "External Associate")}
-                  </>
-                ) : (
-                  <>
-                    {(task.isIndividual || projectInfo.isIndividual || rawTask?.assignedBy || rawTask?.assigned_by) && (
-                      renderTeamMember(
-                        rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy,
-                        "Assigned By",
-                        "AB",
-                        rawTask?.assignedByNm || rawTask?.assignedByName
-                      )
-                    )}
-                    {renderTeamMember(rawTask?.empId || rawTask?.assignedTo, "Executor", "EX")}
-                    {renderTeamMember(rawTask?.reviewerId || rawTask?.reviewer, "Reviewer", "RV")}
-                    {renderTeamMember(rawTask?.approverId || rawTask?.approver, "Approver", "AP")}
-                  </>
-                )}
+                {(() => {
+                  const isIndTask = task.isIndividual || projectInfo?.isIndividual || rawTask?.taskSource === "INDIVIDUAL" || rawTask?.entityTyp === "INDIVIDUAL_TASK" || (!rawTask?.prjId && (!rawTask?.prjNm || rawTask?.prjNm === "Individual Task"));
+                  
+                  if (isExternalMode && !isIndTask) {
+                    return null;
+                  }
+                  
+                  if (isIndTask) {
+                    const assignerName = rawTask?.assignedByNm || rawTask?.assignedByName || (rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy ? getEmployeeName(rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy, employeesList) : null) || (isExternalMode ? "Project Admin" : null);
+                    
+                    if (isExternalMode) {
+                      return (
+                        <div style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          padding: "8px 12px",
+                          borderRadius: "8px",
+                          backgroundColor: "#EEF2FF",
+                          border: "1px solid #6366F133"
+                        }}>
+                          <span style={{ fontSize: "12px", fontWeight: "600", color: "#4F46E5" }}>Assigned By</span>
+                          <span style={{ fontSize: "13px", fontWeight: "600", color: "#0F172A" }}>{assignerName}</span>
+                        </div>
+                      );
+                    }
+                    
+                    return renderTeamMember(
+                      rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy,
+                      "Assigned By",
+                      "AB",
+                      assignerName
+                    );
+                  }
+                  
+                  return renderTeamMember(
+                    rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy,
+                    "Assigned By",
+                    "AB",
+                    rawTask?.assignedByNm || rawTask?.assignedByName
+                  );
+                })()}
+                {(() => {
+                  const isExtTask = rawTask?.taskAsgnTo === 'EXTERNAL' || !!rawTask?.extEmpId || isExternalMode;
+                  return renderTeamMember(
+                    isExtTask ? null : (rawTask?.empId || rawTask?.assignedTo || rawTask?.executorId),
+                    "Executor",
+                    "EX",
+                    rawTask?.extEmpNm || rawTask?.executorName || rawTask?.empNm || rawTask?.empName || rawTask?.assignedToName || (isExtTask ? "External Associate" : null),
+                    isExtTask
+                  );
+                })()}
+                {(rawTask?.reviewerId || rawTask?.reviewer || rawTask?.reviewerNm) && renderTeamMember(rawTask?.reviewerId || rawTask?.reviewer, "Reviewer", "RV", rawTask?.reviewerNm)}
+                {(rawTask?.approverId || rawTask?.approver || rawTask?.approverNm) && renderTeamMember(rawTask?.approverId || rawTask?.approver, "Approver", "AP", rawTask?.approverNm)}
               </div>
             </div>
 
@@ -4334,7 +4557,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                 <div style={{ display: "flex", justifyContent: "space-between", padding: "6px 0", borderBottom: isExternalMode ? "1px solid #f1f5f9" : "none" }}>
                   <span style={{ fontSize: "13px", color: "#64748b" }}>Assigned To</span>
                   <span style={{ fontSize: "13px", fontWeight: "500", color: "#0f172a" }}>
-                    {isExternalMode ? (rawTask?.extEmpNm || "External Associate") : (getEmployeeName(rawTask?.empId || rawTask?.assignedTo, employeesList) || "Unassigned")}
+                    {(isExternalMode || rawTask?.extEmpNm || rawTask?.taskAsgnTo === 'EXTERNAL' || rawTask?.extEmpId) ? `${rawTask?.extEmpNm || "External Associate"} (External)` : (getEmployeeName(rawTask?.empId || rawTask?.assignedTo, employeesList) || "Unassigned")}
                   </span>
                 </div>
                 {isExternalMode && (
@@ -4766,13 +4989,14 @@ const MyTasks = ({ userRole, onLogout }) => {
   const renderTeamMembers = (task) => {
     const rawTask = task.rawTask || task;
 
-    const executorId = rawTask.empId || rawTask.assignedTo || rawTask.executorId;
+    const isExtTask = rawTask?.taskAsgnTo === 'EXTERNAL' || !!rawTask?.extEmpId || task.isExternal || rawTask?.isExternal;
+    const executorId = isExtTask ? null : (rawTask.empId || rawTask.assignedTo || rawTask.executorId);
     const reviewerId = rawTask.reviewerId || rawTask.reviewer;
     const approverId = rawTask.approverId || rawTask.approver;
     const assignedById = rawTask.assignedBy || rawTask.assigned_by || rawTask.createdBy;
 
     let teamMembers = [
-      ...((task.isIndividual || rawTask.taskSource === "INDIVIDUAL" || assignedById) && (assignedById || rawTask.assignedByNm) ? [{
+      ...((task.isIndividual || rawTask.taskSource === "INDIVIDUAL" || (!task.isProject && !rawTask.mId && !rawTask.prjId && !rawTask.mlstnCd && !rawTask.prjCd && assignedById)) && (assignedById || rawTask.assignedByNm) ? [{
         empId: assignedById,
         role: "Assigned By",
         label: "AB",
@@ -4783,7 +5007,7 @@ const MyTasks = ({ userRole, onLogout }) => {
         empId: executorId,
         role: "Executor",
         label: "EX",
-        fallbackName: rawTask.executorName || rawTask.empNm || rawTask.empName || rawTask.assignedToName || rawTask.executorNm,
+        fallbackName: rawTask.extEmpNm || rawTask.executorName || rawTask.empNm || rawTask.empName || rawTask.assignedToName || rawTask.executorNm,
         fallbackPhoto: rawTask.executorPhoto || rawTask.empPhoto
       },
       {
@@ -4998,7 +5222,7 @@ const MyTasks = ({ userRole, onLogout }) => {
     if (!task) return null;
 
     const rawTask = task.rawTask || task;
-    const action = getActionButton(rawTask, currentUserEmpId);
+    const action = getActionButton(rawTask, currentUserEmpId, false, employeesList);
     const isDisabled = loadingAction === (task.id || task.taskId);
 
     if (!action) return null;
@@ -5191,7 +5415,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                       <div style={{ display: "flex", flexDirection: "column" }}>
                         <small style={{ fontSize: "10px", textTransform: "uppercase", color: "#94a3b8", fontWeight: "600", letterSpacing: "0.5px" }}>Email</small>
                         <span style={{ fontSize: "13px", color: "#334155", wordBreak: "break-all" }}>
-                          {selectedTask?.rawTask?.email || "—"}
+                          {selectedTask?.rawTask?.email || selectedTask?.rawTask?.extEmpEmail || "—"}
                         </span>
                       </div>
                       <div style={{ display: "flex", alignItems: "center", gap: "6px", marginTop: "4px" }}>
@@ -5248,8 +5472,8 @@ const MyTasks = ({ userRole, onLogout }) => {
               </h2>
 
               <p style={{ fontSize: "15px", color: "#64748b", maxWidth: "520px", lineHeight: "1.6", margin: "0 auto 28px auto" }}>
-                {expiredMessage || (expiredReason === "TASK_CLOSED" 
-                  ? "This task has been marked as Completed / Closed. Access via this link is now expired and locked." 
+                {expiredMessage || (expiredReason === "TASK_CLOSED"
+                  ? "This task has been marked as Completed / Closed. Access via this link is now expired and locked."
                   : "The scheduled due date for this task has passed and the access link is now expired. Please contact your Project Administrator if you need an extension.")}
               </p>
 
@@ -5316,282 +5540,310 @@ const MyTasks = ({ userRole, onLogout }) => {
                   }
                 )
               ) : (
-            /* Tasks List View */
-            <>
-              {/* Metrics Cards */}
-              <div className="myt-metrics-grid" style={{ marginBottom: "24px", display: "flex", gap: "16px", flexWrap: "nowrap", overflowX: "auto" }}>
-                <div className={`myt-metric-card sketch-layout todo ${selectedStatus === "To Do" ? "active" : ""}`} onClick={() => handleStatusFilterChange("To Do")} style={{ flex: "1", minWidth: "120px" }}>
-                  <div className="myt-metric-left"><div className="myt-metric-icon-box yellow-circle"><ClipboardList size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">To-Do</div><div className="myt-metric-subtitle">Active Tasks</div></div></div>
-                  <div className="myt-metric-right"><div className="myt-metric-value">{countTodo}</div></div>
-                </div>
-
-                <div className={`myt-metric-card sketch-layout upcoming ${selectedStatus === "Upcoming" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Upcoming")} style={{ flex: "1", minWidth: "120px" }}>
-                  <div className="myt-metric-left"><div className="myt-metric-icon-box" style={{ backgroundColor: "#e0e7ff", color: "#4f46e5" }}><Calendar size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Upcoming</div><div className="myt-metric-subtitle">Planned</div></div></div>
-                  <div className="myt-metric-right"><div className="myt-metric-value">{countUpcoming}</div></div>
-                </div>
-
-                <div className={`myt-metric-card sketch-layout completed ${selectedStatus === "Completed" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Completed")} style={{ flex: "1", minWidth: "120px" }}>
-                  <div className="myt-metric-left"><div className="myt-metric-icon-box green-circle"><CheckCircle2 size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Closed</div><div className="myt-metric-subtitle">Done</div></div></div>
-                  <div className="myt-metric-right"><div className="myt-metric-value">{countCompleted}</div></div>
-                </div>
-
-                <div className={`myt-metric-card sketch-layout all ${selectedStatus === "All Tasks" ? "active" : ""}`} onClick={() => handleStatusFilterChange("All Tasks")} style={{ flex: "1", minWidth: "120px" }}>
-                  <div className="myt-metric-left"><div className="myt-metric-icon-box orange-circle"><Layers size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">All Tasks</div><div className="myt-metric-subtitle">Total Work</div></div></div>
-                  <div className="myt-metric-right"><div className="myt-metric-value">{countAllTasks}</div></div>
-                </div>
-              </div>
-
-              {/* Search and Filters */}
-              <div className="myt-tabs-container" style={{ marginBottom: "20px", borderBottom: "none", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-                {showTaskFilters ? (
-                  <div className="myt-tabs-left" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "All" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("All"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "All" ? "#3B82F6" : "white",
-                        color: taskFilter === "All" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      All
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "OPEN" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("OPEN"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "OPEN" ? "#3B82F6" : "white",
-                        color: taskFilter === "OPEN" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Open
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "IN_PROGRESS" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("IN_PROGRESS"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "IN_PROGRESS" ? "#3B82F6" : "white",
-                        color: taskFilter === "IN_PROGRESS" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Work In Progress
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "UNDER_REVIEW" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("UNDER_REVIEW"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "UNDER_REVIEW" ? "#3B82F6" : "white",
-                        color: taskFilter === "UNDER_REVIEW" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Under Review
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "REASSIGNED" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("REASSIGNED"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "REASSIGNED" ? "#3B82F6" : "white",
-                        color: taskFilter === "REASSIGNED" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Re-Assigned
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "OVERDUE" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("OVERDUE"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "OVERDUE" ? "#EF4444" : "white",
-                        color: taskFilter === "OVERDUE" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Overdue
-                    </button>
-                  </div>
-                ) : (
-                  <div className="myt-tabs-left" />
-                )}
-                <div className="myt-tabs-right" style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: showTaskFilters ? "0" : "auto" }}>
-                  <div className="myt-search-box" style={{ position: "relative" }}>
-                    <Search size={15} className="myt-search-icon" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                    <input
-                      type="text"
-                      placeholder="Search task code or title..."
-                      value={searchInput}
-                      onChange={(e) => { setSearchInput(e.target.value); setSearchQuery(e.target.value); }}
-                      style={{ padding: "8px 12px 8px 32px", border: "1px solid #e2e8f0", borderRadius: "6px", outline: "none", fontSize: "13px", width: "240px" }}
-                      onKeyDown={handleSearchKeyDown}
-                    />
-                  </div>
-                  {(searchInput || searchQuery) && (
-                    <button onClick={handleResetFilters} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: "white", cursor: "pointer", fontSize: "12px", color: "#64748b" }}>
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
-
-              {/* Table */}
-              <div className="cc-table-panel" style={{ border: "none", boxShadow: "none", padding: 0 }}>
-                <div className="cc-table-container">
-                  <table className="cc-list-table myt-table">
-                    <thead>
-                      <tr>
-                        <th>
-                          <div style={{ display: "flex", flexDirection: "column" }}>
-                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>TASK</span>
-                            <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>Task Code / Name<br />Milestone</span>
-                          </div>
-                        </th>
-                        <th>
-                          <div style={{ display: "flex", flexDirection: "column" }}>
-                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>TEAM</span>
-                            <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>Members</span>
-                          </div>
-                        </th>
-                        <th>
-                          <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase" }}>PRIORITY</span>
-                        </th>
-                        <th style={{ textAlign: "center" }}>
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>DUE DATE</span>
-                            <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>(Date Only)</span>
-                          </div>
-                        </th>
-                        <th style={{ textAlign: "center" }}>
-                          <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
-                            <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>PROGRESS</span>
-                            <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>(Status &bull; Process &bull; Time)</span>
-                          </div>
-                        </th>
-                        <th style={{ textAlign: "center" }}>
-                          <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase" }}>ACTION</span>
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {isLoading ? (
-                        <tr><td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}><Loader2 size={24} className="spinning" /> Loading tasks...</td></tr>
-                      ) : paginatedTasks.length > 0 ? (
-                        paginatedTasks.map((task) => {
-                          const progressBadge = getProgressBadge(task.status);
-                          const processIcon = getProcessIcon(task.rawTask?.prcsYesActn);
-                          const parsedRemarks = parseRemarksHistory(task.rawTask?.addlRem || task.rawTask?.remarks, task, employeesList);
-                          const wasReassigned = parsedRemarks.some(r => r.action?.toLowerCase().includes("reassign"));
-                          const timeStatus = calculateTimeStatus(task.rawTask || task);
-                          const priorityBadge = getPriorityBadge(task.priority);
-                          const isCompleted = task.rawStatus === "COMPLETED" || task.rawStatus === "CLOSED";
-                          const isOverdue = isTaskOverdue(task);
-
-                          return (
-                            <tr key={task.id || task.taskId} onClick={() => { openTaskDetail(task); }} style={{ cursor: "pointer", backgroundColor: isOverdue ? "#FEF2F2" : "transparent" }}>
-                              <td style={{ maxWidth: "250px" }}>
-                                <div style={{ fontWeight: "600", color: "#0f172a", marginBottom: "4px" }}>{task.taskCode || task.id}</div>
-                                <div style={{ fontWeight: "500", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={task.title}>{task.title}</div>
-                                {!task.isIndividual && task.project !== "Individual Task" && task.milestone && task.milestone !== "—" && (
-                                  <div style={{ fontSize: "12px", color: "#94a3b8" }}>{task.milestone}</div>
-                                )}
-                              </td>
-                              <td>
-                                {renderTeamMembers(task)}
-                              </td>
-                              <td>
-                                {!isCompleted && (
-                                  <span className="cc-status-badge" style={{ backgroundColor: priorityBadge.bg, color: priorityBadge.color, padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "600" }}>
-                                    {task.priority === "ATMOST CRITICAL" ? "Atmost Critical" : task.priority}
-                                  </span>
-                                )}
-                              </td>
-                              <td style={{ fontWeight: "600", color: isOverdue ? "#EF4444" : "#0f172a", textAlign: "center" }}>
-                                {formatDate(task.dueDate) || "—"}
-                                {isOverdue && <span style={{ display: "block", fontSize: "10px", color: "#EF4444" }}>⚠️ Overdue</span>}
-                              </td>
-                              <td>
-                                <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
-                                  <span className="cc-status-badge" style={{ backgroundColor: progressBadge.bg, color: progressBadge.color, minWidth: "90px", textAlign: "center", display: "inline-block", textTransform: "uppercase", fontWeight: "700", padding: "4px 12px", borderRadius: "12px", fontSize: "11px" }}>{progressBadge.label}</span>
-                                  {/* Hide process icon for closed tasks — only show Lead/Lag/On Time clock */}
-                                  {!isCompleted && (
-                                    <div style={{ display: "flex", gap: "6px" }}>
-                                      {processIcon && <div className="myt-custom-tooltip-wrap" title={processIcon.title} style={{ color: processIcon.color, display: "flex", alignItems: "center", cursor: "help" }}><processIcon.icon size={18} strokeWidth={2.5} /></div>}
-                                      {wasReassigned && task.rawTask?.prcsYesActn !== "REASSIGN" && (
-                                        <div className="myt-custom-tooltip-wrap" title="Previously Reassigned" style={{ color: "#4F46E5", display: "flex", alignItems: "center", cursor: "help" }}><ReassignIcon size={18} color="#4F46E5" strokeWidth={2.5} /></div>
-                                      )}
-                                    </div>
-                                  )}
-                                  <div className="myt-custom-tooltip-wrap" title={timeStatus.title} style={{ color: timeStatus.color, display: "flex", alignItems: "center", cursor: "help" }}><timeStatus.icon size={18} strokeWidth={2.5} /></div>
-                                </div>
-                              </td>
-                              <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
-                                {renderActionButton(task)}
-                              </td>
-                            </tr>
-                          );
-                        })
-                      ) : (
-                        <tr><td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>No tasks found.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
-
-                  {sortedTasks.length > 0 && (
-                    <div className="myt-pagination-container">
-                      <div className="myt-pagination-info">Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, sortedTasks.length)} of {sortedTasks.length} tasks</div>
-                      <div className="myt-pagination-controls">
-                        <button className="myt-page-btn" disabled={currentPage === 1} onClick={() => handlePageChange(currentPage - 1)}><ChevronLeft size={16} /></button>
-                        {Array.from({ length: Math.min(totalPages, 5) }).map((_, i) => {
-                          const pageNum = i + 1;
-                          return <button key={i} className={`myt-page-btn ${currentPage === pageNum ? 'active' : ''}`} onClick={() => handlePageChange(pageNum)}>{pageNum}</button>;
-                        })}
-                        {totalPages > 5 && <span style={{ padding: "0 4px", color: "#94a3b8" }}>...</span>}
-                        {totalPages > 5 && <button className="myt-page-btn" onClick={() => handlePageChange(totalPages)}>{totalPages}</button>}
-                        <button className="myt-page-btn" disabled={currentPage === totalPages} onClick={() => handlePageChange(currentPage + 1)}><ChevronRight size={16} /></button>
-                      </div>
+                /* Tasks List View */
+                <>
+                  {/* Metrics Cards */}
+                  <div className="myt-metrics-grid" style={{ marginBottom: "24px", display: "flex", gap: "16px", flexWrap: "nowrap", overflowX: "auto" }}>
+                    <div className={`myt-metric-card sketch-layout todo ${selectedStatus === "To Do" ? "active" : ""}`} onClick={() => handleStatusFilterChange("To Do")} style={{ flex: "1", minWidth: "120px" }}>
+                      <div className="myt-metric-left"><div className="myt-metric-icon-box yellow-circle"><ClipboardList size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">To-Do</div><div className="myt-metric-subtitle">Active Tasks</div></div></div>
+                      <div className="myt-metric-right"><div className="myt-metric-value">{countTodo}</div></div>
                     </div>
-                  )}
-                </div>
-              </div>
-            </>
-          )}
+
+                    <div className={`myt-metric-card sketch-layout upcoming ${selectedStatus === "Upcoming" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Upcoming")} style={{ flex: "1", minWidth: "120px" }}>
+                      <div className="myt-metric-left"><div className="myt-metric-icon-box" style={{ backgroundColor: "#e0e7ff", color: "#4f46e5" }}><Calendar size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Upcoming</div><div className="myt-metric-subtitle">Planned</div></div></div>
+                      <div className="myt-metric-right"><div className="myt-metric-value">{countUpcoming}</div></div>
+                    </div>
+
+                    <div className={`myt-metric-card sketch-layout completed ${selectedStatus === "Completed" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Completed")} style={{ flex: "1", minWidth: "120px" }}>
+                      <div className="myt-metric-left"><div className="myt-metric-icon-box green-circle"><CheckCircle2 size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Closed</div><div className="myt-metric-subtitle">Done</div></div></div>
+                      <div className="myt-metric-right"><div className="myt-metric-value">{countCompleted}</div></div>
+                    </div>
+
+                    <div className={`myt-metric-card sketch-layout all ${selectedStatus === "All Tasks" ? "active" : ""}`} onClick={() => handleStatusFilterChange("All Tasks")} style={{ flex: "1", minWidth: "120px" }}>
+                      <div className="myt-metric-left"><div className="myt-metric-icon-box orange-circle"><Layers size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">All Tasks</div><div className="myt-metric-subtitle">Total Work</div></div></div>
+                      <div className="myt-metric-right"><div className="myt-metric-value">{countAllTasks}</div></div>
+                    </div>
+                  </div>
+
+                  {/* Search and Filters */}
+                  <div className="myt-tabs-container" style={{ marginBottom: "20px", borderBottom: "none", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                    {showTaskFilters ? (
+                      <div className="myt-tabs-left" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "All" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("All"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "All" ? "#3B82F6" : "white",
+                            color: taskFilter === "All" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          All
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "OPEN" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("OPEN"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "OPEN" ? "#3B82F6" : "white",
+                            color: taskFilter === "OPEN" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Open
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "IN_PROGRESS" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("IN_PROGRESS"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "IN_PROGRESS" ? "#3B82F6" : "white",
+                            color: taskFilter === "IN_PROGRESS" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Work In Progress
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "UNDER_REVIEW" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("UNDER_REVIEW"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "UNDER_REVIEW" ? "#3B82F6" : "white",
+                            color: taskFilter === "UNDER_REVIEW" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Under Review
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "REASSIGNED" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("REASSIGNED"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "REASSIGNED" ? "#3B82F6" : "white",
+                            color: taskFilter === "REASSIGNED" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Re-Assigned
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "OVERDUE" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("OVERDUE"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "OVERDUE" ? "#EF4444" : "white",
+                            color: taskFilter === "OVERDUE" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Overdue
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="myt-tabs-left" />
+                    )}
+                    <div className="myt-tabs-right" style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: showTaskFilters ? "0" : "auto" }}>
+                      <div className="myt-search-box" style={{ position: "relative" }}>
+                        <Search size={15} className="myt-search-icon" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                        <input
+                          type="text"
+                          placeholder="Search task code or title..."
+                          value={searchInput}
+                          onChange={(e) => { setSearchInput(e.target.value); setSearchQuery(e.target.value); }}
+                          style={{ padding: "8px 12px 8px 32px", border: "1px solid #e2e8f0", borderRadius: "6px", outline: "none", fontSize: "13px", width: "240px" }}
+                          onKeyDown={handleSearchKeyDown}
+                        />
+                      </div>
+                      {(searchInput || searchQuery) && (
+                        <button onClick={handleResetFilters} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: "white", cursor: "pointer", fontSize: "12px", color: "#64748b" }}>
+                          Clear
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Table */}
+                  <div className="cc-table-panel" style={{ border: "none", boxShadow: "none", padding: 0 }}>
+                    <div className="cc-table-container">
+                      <table className="cc-list-table myt-table">
+                        <thead>
+                          <tr>
+                            <th>
+                              <div style={{ display: "flex", flexDirection: "column" }}>
+                                <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>TASK</span>
+                                <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>Task Code / Name<br />Milestone</span>
+                              </div>
+                            </th>
+                            <th>
+                              <div style={{ display: "flex", flexDirection: "column" }}>
+                                <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>TEAM</span>
+                                <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>Members</span>
+                              </div>
+                            </th>
+                            <th>
+                              <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase" }}>PRIORITY</span>
+                            </th>
+                            <th style={{ textAlign: "center" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                                <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>
+                                  {selectedStatus === "Upcoming" ? "START / END DATE" : "DUE DATE"}
+                                </span>
+                                <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>
+                                  {selectedStatus === "Upcoming" ? "(Start - End)" : "(Date Only)"}
+                                </span>
+                              </div>
+                            </th>
+                            <th style={{ textAlign: "center" }}>
+                              <div style={{ display: "flex", flexDirection: "column", alignItems: "center" }}>
+                                <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase", marginBottom: "2px" }}>PROGRESS</span>
+                                <span style={{ fontSize: "11px", fontWeight: "500", color: "#64748b" }}>(Status &bull; Process &bull; Time)</span>
+                              </div>
+                            </th>
+                            <th style={{ textAlign: "center" }}>
+                              <span style={{ fontSize: "12px", fontWeight: "700", color: "#0f172a", textTransform: "uppercase" }}>ACTION</span>
+                            </th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {isLoading ? (
+                            <tr><td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}><Loader2 size={24} className="spinning" /> Loading tasks...</td></tr>
+                          ) : paginatedTasks.length > 0 ? (
+                            paginatedTasks.map((task) => {
+                              const progressBadge = getProgressBadge(task.status);
+                              const processIcon = getProcessIcon(task.rawTask?.prcsYesActn);
+                              const parsedRemarks = parseRemarksHistory(task.rawTask?.addlRem || task.rawTask?.remarks, task, employeesList);
+                              const wasReassigned = parsedRemarks.some(r => r.action?.toLowerCase().includes("reassign"));
+                              const timeStatus = calculateTimeStatus(task.rawTask || task);
+                              const priorityBadge = getPriorityBadge(task.priority);
+                              const isCompleted = task.rawStatus === "COMPLETED" || task.rawStatus === "CLOSED";
+                              const isOverdue = isTaskOverdue(task);
+
+                              return (
+                                <tr key={task.id || task.taskId} onClick={() => { openTaskDetail(task); }} style={{ cursor: "pointer", backgroundColor: isOverdue ? "#FEF2F2" : "transparent" }}>
+                                  <td style={{ maxWidth: "250px" }}>
+                                    <div style={{ fontWeight: "600", color: "#0f172a", marginBottom: "4px" }}>{task.taskCode || task.id}</div>
+                                    <div style={{ fontWeight: "500", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={task.title}>{task.title}</div>
+                                    {!task.isIndividual && task.project !== "Individual Task" && task.milestone && task.milestone !== "—" && (
+                                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>{task.milestone}</div>
+                                    )}
+                                  </td>
+                                  <td>
+                                    {renderTeamMembers(task)}
+                                  </td>
+                                  <td>
+                                    {!isCompleted && (
+                                      <span className="cc-status-badge" style={{ backgroundColor: priorityBadge.bg, color: priorityBadge.color, padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "600" }}>
+                                        {task.priority === "ATMOST CRITICAL" ? "Atmost Critical" : task.priority}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td style={{ fontWeight: "600", color: isOverdue ? "#EF4444" : "#0f172a", textAlign: "center" }}>
+                                    {(() => {
+                                      const rawTaskObj = task.rawTask || task;
+                                      const rawStartVal = rawTaskObj?.stDt || rawTaskObj?.stdt || rawTaskObj?.st_dt || rawTaskObj?.tentStDt || rawTaskObj?.tent_st_dt || rawTaskObj?.startDate || task.startDate || task.stDt;
+                                      const startFormatted = formatDate(rawStartVal);
+                                      const endFormatted = formatDate(task.dueDate || rawTaskObj?.endDt || rawTaskObj?.enddt || rawTaskObj?.end_dt || rawTaskObj?.tentEndDt);
+
+                                      if (selectedStatus === "Upcoming" || isUpcomingTab(task)) {
+                                        if (startFormatted && endFormatted && startFormatted !== endFormatted) {
+                                          return (
+                                            <div style={{ display: "flex", flexDirection: "column", gap: "2px", alignItems: "center" }}>
+                                              <span style={{ fontSize: "11px", fontWeight: "600", color: "#4f46e5" }}>Start: {startFormatted}</span>
+                                              <span style={{ fontSize: "11px", fontWeight: "600", color: "#0f172a" }}>End: {endFormatted}</span>
+                                            </div>
+                                          );
+                                        } else if (startFormatted) {
+                                          return (
+                                            <div style={{ fontSize: "11px", fontWeight: "600", color: "#4f46e5" }}>
+                                              Start: {startFormatted}
+                                            </div>
+                                          );
+                                        }
+                                      }
+
+                                      return endFormatted || formatDate(task.dueDate) || "—";
+                                    })()}
+                                    {isOverdue && <span style={{ display: "block", fontSize: "10px", color: "#EF4444" }}>⚠️ Overdue</span>}
+                                  </td>
+                                  <td>
+                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                                      <span className="cc-status-badge" style={{ backgroundColor: progressBadge.bg, color: progressBadge.color, minWidth: "90px", textAlign: "center", display: "inline-block", textTransform: "uppercase", fontWeight: "700", padding: "4px 12px", borderRadius: "12px", fontSize: "11px" }}>{progressBadge.label}</span>
+                                      {/* Hide process icon for closed tasks — only show Lead/Lag/On Time clock */}
+                                      {!isCompleted && (
+                                        <div style={{ display: "flex", gap: "6px" }}>
+                                          {processIcon && <div className="myt-custom-tooltip-wrap" title={processIcon.title} style={{ color: processIcon.color, display: "flex", alignItems: "center", cursor: "help" }}><processIcon.icon size={18} strokeWidth={2.5} /></div>}
+                                          {wasReassigned && task.rawTask?.prcsYesActn !== "REASSIGN" && (
+                                            <div className="myt-custom-tooltip-wrap" title="Previously Reassigned" style={{ color: "#4F46E5", display: "flex", alignItems: "center", cursor: "help" }}><ReassignIcon size={18} color="#4F46E5" strokeWidth={2.5} /></div>
+                                          )}
+                                        </div>
+                                      )}
+                                      <div className="myt-custom-tooltip-wrap" title={timeStatus.title} style={{ color: timeStatus.color, display: "flex", alignItems: "center", cursor: "help" }}><timeStatus.icon size={18} strokeWidth={2.5} /></div>
+                                    </div>
+                                  </td>
+                                  <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
+                                    {renderActionButton(task)}
+                                  </td>
+                                </tr>
+                              );
+                            })
+                          ) : (
+                            <tr><td colSpan="6" style={{ textAlign: "center", padding: "40px", color: "#64748b" }}>No tasks found.</td></tr>
+                          )}
+                        </tbody>
+                      </table>
+
+                      {sortedTasks.length > 0 && (
+                        <div className="myt-pagination-container">
+                          <div className="myt-pagination-info">Showing {startIndex + 1} to {Math.min(startIndex + itemsPerPage, sortedTasks.length)} of {sortedTasks.length} tasks</div>
+                          <div className="myt-pagination-controls">
+                            <button className="myt-page-btn" disabled={currentPage === 1} onClick={() => handlePageChange(currentPage - 1)}><ChevronLeft size={16} /></button>
+                            {Array.from({ length: Math.min(totalPages, 5) }).map((_, i) => {
+                              const pageNum = i + 1;
+                              return <button key={i} className={`myt-page-btn ${currentPage === pageNum ? 'active' : ''}`} onClick={() => handlePageChange(pageNum)}>{pageNum}</button>;
+                            })}
+                            {totalPages > 5 && <span style={{ padding: "0 4px", color: "#94a3b8" }}>...</span>}
+                            {totalPages > 5 && <button className="myt-page-btn" onClick={() => handlePageChange(totalPages)}>{totalPages}</button>}
+                            <button className="myt-page-btn" disabled={currentPage === totalPages} onClick={() => handlePageChange(currentPage + 1)}><ChevronRight size={16} /></button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
             </>
           )}
         </main>
