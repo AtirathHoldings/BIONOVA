@@ -44,6 +44,16 @@ public class ExternalTaskViewDto {
     private String expiredReason;  // "TASK_CLOSED" | "DUE_DATE_PASSED" | "INACTIVE"
     private String expiredMessage;
 
+    private Boolean isSequentialLocked;
+    private String lockReason;
+
+    private Long reviewerId;
+    private String reviewerNm;
+    private Long approverId;
+    private String approverNm;
+    private Boolean prcsFlg;
+    private String prcsYesActn;
+
     private List<ChecklistItemDto> checklists;
     private List<AttachmentItemDto> attachments;
 

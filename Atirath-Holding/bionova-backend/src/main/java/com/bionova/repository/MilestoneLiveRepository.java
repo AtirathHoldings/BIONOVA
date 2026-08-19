@@ -11,6 +11,7 @@ import java.util.List;
 @Repository
 public interface MilestoneLiveRepository extends JpaRepository<MilestoneLive, Long> {
     List<MilestoneLive> findByPrjId(Long prjId);
+    List<MilestoneLive> findByMlstnDepMId(Long mlstnDepMId);
     java.util.Optional<MilestoneLive> findByDrftMId(Long drftMId);
     boolean existsByMlstnCdAndPrjId(String mlstnCd, Long prjId);
 

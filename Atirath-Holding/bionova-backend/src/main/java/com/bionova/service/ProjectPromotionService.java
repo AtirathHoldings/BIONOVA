@@ -308,7 +308,10 @@ public class ProjectPromotionService {
             ml.setMlstnDesc(md.getMlstnDesc());
             ml.setMlstnDepFlg(md.getMlstnDepFlg());
             ml.setMlstnDepTyp(md.getMlstnDepTyp());
-            ml.setMlstnDepMId(md.getMlstnDepMId());
+            Long mappedDepMId = md.getMlstnDepMId() != null && milestoneLiveMap.containsKey(md.getMlstnDepMId())
+                    ? milestoneLiveMap.get(md.getMlstnDepMId()).getMId()
+                    : md.getMlstnDepMId();
+            ml.setMlstnDepMId(mappedDepMId);
             ml.setStDt(msAdjustedStartDt);
             ml.setEndDt(msAdjustedEndDt);
             if (msAdjustedStartDt != null && msAdjustedEndDt != null) {
@@ -431,16 +434,20 @@ public class ProjectPromotionService {
             savedProject = projectLiveRepository.save(savedProject);
         }
 
-        // ── 7.5. Map depTaskId to Live Task IDs and set status to DRAFT if there is a dependency ──
+        // ── 7.5. Map depTaskId to Live Task IDs and set status to DRAFT if sequential dependency is pending ──
         for (Map.Entry<Long, Long> entry : draftToLiveTaskIdMap.entrySet()) {
             Long liveTaskId = entry.getValue();
             TaskLive liveTask = taskLiveRepository.findById(liveTaskId).orElse(null);
-            if (liveTask != null && liveTask.getDepTaskId() != null) {
-                Long liveDepTaskId = draftToLiveTaskIdMap.get(liveTask.getDepTaskId());
-                if (liveDepTaskId != null) {
-                    liveTask.setDepTaskId(liveDepTaskId);
-                    taskLiveRepository.save(liveTask);
+            if (liveTask != null) {
+                if (liveTask.getDepTaskId() != null) {
+                    Long liveDepTaskId = draftToLiveTaskIdMap.get(liveTask.getDepTaskId());
+                    if (liveDepTaskId != null) {
+                        liveTask.setDepTaskId(liveDepTaskId);
+                    }
                 }
+
+                liveTask.setTaskSts(TaskStatusMaster.OPEN);
+                taskLiveRepository.save(liveTask);
             }
         }
 

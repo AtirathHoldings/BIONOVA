@@ -46,6 +46,34 @@ public class ProjectStatusCascadeService {
         }
     }
 
+    public boolean isTaskPrerequisitesMet(TaskLive task) {
+        if (task == null) return false;
+
+        // 1. Check task-level sequential dependency
+        if (Boolean.TRUE.equals(task.getTaskDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(task.getTaskDepTyp()) && task.getDepTaskId() != null) {
+            TaskLive pred = taskLiveRepository.findById(task.getDepTaskId()).orElse(null);
+            if (pred != null) {
+                String pSts = pred.getTaskSts() != null ? pred.getTaskSts().getStatusNm() : "";
+                if (!"Closed".equalsIgnoreCase(pSts) && !"Completed".equalsIgnoreCase(pSts)) {
+                    return false;
+                }
+            }
+        }
+
+        // 2. Check milestone-level sequential dependency
+        if (task.getMId() != null) {
+            MilestoneLive ms = milestoneLiveRepository.findById(task.getMId()).orElse(null);
+            if (ms != null && Boolean.TRUE.equals(ms.getMlstnDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(ms.getMlstnDepTyp()) && ms.getMlstnDepMId() != null) {
+                MilestoneLive predMs = milestoneLiveRepository.findById(ms.getMlstnDepMId()).orElse(null);
+                if (predMs != null && !"CLOSED".equalsIgnoreCase(predMs.getMlstnSts())) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void syncAllStatusesOnStartup() {
@@ -86,6 +114,16 @@ public class ProjectStatusCascadeService {
                     }
                 }
             }
+
+            // Ensure all live tasks in Draft are set to OPEN so they are visible to employees
+            List<TaskLive> allTasks = taskLiveRepository.findAll();
+            for (TaskLive t : allTasks) {
+                String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "";
+                if ("Draft".equalsIgnoreCase(sts)) {
+                    t.setTaskSts(TaskStatusMaster.OPEN);
+                    taskLiveRepository.save(t);
+                }
+            }
         } catch (Exception e) {
             // Log warning gracefully
         }
@@ -101,9 +139,11 @@ public class ProjectStatusCascadeService {
             List<TaskLive> downstreamTasks = taskLiveRepository.findByDepTaskId(taskId);
             for (TaskLive dt : downstreamTasks) {
                 String dtSts = dt.getTaskSts() != null ? dt.getTaskSts().getStatusNm() : "";
-                if ("Draft".equalsIgnoreCase(dtSts) || "".equalsIgnoreCase(dtSts)) {
-                    dt.setTaskSts(TaskStatusMaster.OPEN);
-                    taskLiveRepository.save(dt);
+                if ("Draft".equalsIgnoreCase(dtSts) || "".equalsIgnoreCase(dtSts) || "Hold".equalsIgnoreCase(dtSts)) {
+                    if (isTaskPrerequisitesMet(dt)) {
+                        dt.setTaskSts(TaskStatusMaster.OPEN);
+                        taskLiveRepository.save(dt);
+                    }
                 }
             }
         }
@@ -143,6 +183,23 @@ public class ProjectStatusCascadeService {
         if (!targetMilestoneStatus.equals(currentMilestoneStatus)) {
             milestone.setMlstnSts(targetMilestoneStatus);
             milestoneLiveRepository.save(milestone);
+
+            // If milestone became CLOSED, release any downstream sequential milestones
+            if ("CLOSED".equals(targetMilestoneStatus)) {
+                List<MilestoneLive> downstreamMilestones = milestoneLiveRepository.findByMlstnDepMId(milestoneId);
+                for (MilestoneLive dms : downstreamMilestones) {
+                    List<TaskLive> dmsTasks = taskLiveRepository.findByMilestoneId(dms.getMId());
+                    for (TaskLive dmt : dmsTasks) {
+                        String dmtSts = dmt.getTaskSts() != null ? dmt.getTaskSts().getStatusNm() : "";
+                        if ("Draft".equalsIgnoreCase(dmtSts) || "Hold".equalsIgnoreCase(dmtSts) || "".equalsIgnoreCase(dmtSts)) {
+                            if (isTaskPrerequisitesMet(dmt)) {
+                                dmt.setTaskSts(TaskStatusMaster.OPEN);
+                                taskLiveRepository.save(dmt);
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         // 2. Fetch all milestones under this project to compute project status

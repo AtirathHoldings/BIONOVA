@@ -38,6 +38,9 @@ public class ChecklistController {
     @Autowired
     private ChecklistMasterRepository checklistRepo;
 
+    @Autowired
+    private com.bionova.repository.TaskLiveRepository taskLiveRepo;
+
     // ── GET single ─────────────────────────────────────────────────────────
 
     @GetMapping("/{chkId}")
@@ -224,6 +227,19 @@ public class ChecklistController {
         ChecklistMaster item = checklistRepo.findById(chkId)
                 .orElseThrow(() -> new RuntimeException("Checklist item not found: " + chkId));
 
+        if (Boolean.TRUE.equals(item.getIsLive()) && item.getTaskId() != null) {
+            com.bionova.entity.TaskLive task = taskLiveRepo.findById(item.getTaskId()).orElse(null);
+            if (task != null) {
+                String sts = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
+                if ("Closed".equalsIgnoreCase(sts) || "Completed".equalsIgnoreCase(sts)) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Cannot modify checklist: Task is already Closed."));
+                }
+                if (!"WIP".equalsIgnoreCase(sts)) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Cannot modify checklist: Task has not been started yet. Please click Start to work on this task."));
+                }
+            }
+        }
+
         item.setChkSts(true);
         item.setCompletedTs(LocalDateTime.now());
         return ResponseEntity.ok(checklistRepo.save(item));
@@ -236,6 +252,19 @@ public class ChecklistController {
     public ResponseEntity<?> reopen(@PathVariable Integer chkId) {
         ChecklistMaster item = checklistRepo.findById(chkId)
                 .orElseThrow(() -> new RuntimeException("Checklist item not found: " + chkId));
+
+        if (Boolean.TRUE.equals(item.getIsLive()) && item.getTaskId() != null) {
+            com.bionova.entity.TaskLive task = taskLiveRepo.findById(item.getTaskId()).orElse(null);
+            if (task != null) {
+                String sts = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
+                if ("Closed".equalsIgnoreCase(sts) || "Completed".equalsIgnoreCase(sts)) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Cannot modify checklist: Task is already Closed."));
+                }
+                if (!"WIP".equalsIgnoreCase(sts)) {
+                    return ResponseEntity.badRequest().body(Map.of("message", "Cannot modify checklist: Task has not been started yet. Please click Start to work on this task."));
+                }
+            }
+        }
 
         item.setChkSts(false);
         item.setCompletedTs(null);

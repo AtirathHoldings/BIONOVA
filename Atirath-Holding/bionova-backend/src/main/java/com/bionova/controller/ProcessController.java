@@ -28,8 +28,36 @@ public class ProcessController {
     @Autowired private TaskLiveRepository      taskLiveRepo;
     @Autowired private AssignmentRepository    assignmentRepo;
     @Autowired private ChecklistMasterRepository checklistRepo;
+    @Autowired private com.bionova.repository.MilestoneLiveRepository milestoneLiveRepo;
     @Autowired private com.bionova.repository.ReviewerMasterRepository reviewerMasterRepo;
     @Autowired private com.bionova.service.ProjectStatusCascadeService projectStatusCascadeService;
+
+    private String getPrerequisitesErrorMessage(TaskLive task) {
+        if (task == null) return null;
+        if (Boolean.TRUE.equals(task.getTaskDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(task.getTaskDepTyp()) && task.getDepTaskId() != null) {
+            TaskLive pred = taskLiveRepo.findById(task.getDepTaskId()).orElse(null);
+            if (pred != null) {
+                String pSts = pred.getTaskSts() != null ? pred.getTaskSts().getStatusNm() : "";
+                if (!"Closed".equalsIgnoreCase(pSts) && !"Completed".equalsIgnoreCase(pSts)) {
+                    String code = pred.getTaskCd() != null ? pred.getTaskCd() : "Predecessor";
+                    String name = pred.getTaskNm() != null ? pred.getTaskNm() : "";
+                    return "Cannot proceed: Sequential predecessor task [" + code + " - " + name + "] must be completed and closed first.";
+                }
+            }
+        }
+        if (task.getMId() != null) {
+            com.bionova.entity.MilestoneLive ms = milestoneLiveRepo.findById(task.getMId()).orElse(null);
+            if (ms != null && Boolean.TRUE.equals(ms.getMlstnDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(ms.getMlstnDepTyp()) && ms.getMlstnDepMId() != null) {
+                com.bionova.entity.MilestoneLive predMs = milestoneLiveRepo.findById(ms.getMlstnDepMId()).orElse(null);
+                if (predMs != null && !"CLOSED".equalsIgnoreCase(predMs.getMlstnSts())) {
+                    String msCd = predMs.getMlstnCd() != null ? predMs.getMlstnCd() : "Predecessor";
+                    String msTtl = predMs.getMlstnTtl() != null ? predMs.getMlstnTtl() : "";
+                    return "Cannot proceed: Sequential predecessor milestone [" + msCd + " - " + msTtl + "] must be closed first.";
+                }
+            }
+        }
+        return null;
+    }
 
     // ── GET history ─────────────────────────────────────────────────────────
 
@@ -58,6 +86,11 @@ public class ProcessController {
         boolean isIndividual = Boolean.parseBoolean(String.valueOf(body.getOrDefault("isIndividual", "false")));
         if (!isIndividual && taskLiveRepo.existsById(taskId)) {
             TaskLive task = getTask(taskId);
+
+            String prereqErr = getPrerequisitesErrorMessage(task);
+            if (prereqErr != null) {
+                return ResponseEntity.badRequest().body(Map.of("message", prereqErr));
+            }
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
             if (!"OPEN".equalsIgnoreCase(currentStatus)) {
@@ -113,6 +146,11 @@ public class ProcessController {
         boolean isIndividual = Boolean.parseBoolean(String.valueOf(body.getOrDefault("isIndividual", "false")));
         if (!isIndividual && taskLiveRepo.existsById(taskId)) {
             TaskLive task = getTask(taskId);
+
+            String prereqErr = getPrerequisitesErrorMessage(task);
+            if (prereqErr != null) {
+                return ResponseEntity.badRequest().body(Map.of("message", prereqErr));
+            }
 
             String currentStatus = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
             if (!"WIP".equalsIgnoreCase(currentStatus)) {

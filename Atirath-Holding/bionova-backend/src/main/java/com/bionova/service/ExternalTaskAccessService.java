@@ -44,6 +44,12 @@ public class ExternalTaskAccessService {
     @Autowired
     private ProjectStatusCascadeService projectStatusCascadeService;
 
+    @Autowired
+    private ProcessConfigRepository processConfigRepository;
+
+    @Autowired
+    private EmployeeRepository employeeRepository;
+
     @Value("${app.base-url:http://localhost:5173}")
     private String baseUrl;
 
@@ -290,6 +296,53 @@ public class ExternalTaskAccessService {
         String priorityName = task.getPriority() != null ? task.getPriority().getPriorityNm() : "Low";
         String statusName = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "OPEN";
 
+        boolean isSeqLocked = false;
+        String lockReason = null;
+        if (!projectStatusCascadeService.isTaskPrerequisitesMet(task)) {
+            isSeqLocked = true;
+            if (Boolean.TRUE.equals(task.getTaskDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(task.getTaskDepTyp()) && task.getDepTaskId() != null) {
+                TaskLive pred = taskLiveRepository.findById(task.getDepTaskId()).orElse(null);
+                if (pred != null) {
+                    lockReason = "Waiting for predecessor task " + (pred.getTaskCd() != null ? pred.getTaskCd() : "") + " to be completed.";
+                }
+            } else if (task.getMId() != null) {
+                MilestoneLive ms = milestoneLiveRepository.findById(task.getMId()).orElse(null);
+                if (ms != null && ms.getMlstnDepMId() != null) {
+                    MilestoneLive predMs = milestoneLiveRepository.findById(ms.getMlstnDepMId()).orElse(null);
+                    if (predMs != null) {
+                        lockReason = "Waiting for predecessor milestone " + (predMs.getMlstnCd() != null ? predMs.getMlstnCd() : "") + " to be closed.";
+                    }
+                }
+            }
+        }
+
+        // Fetch Process Config (Reviewer / Approver)
+        Long reviewerId = null;
+        String reviewerNm = null;
+        Long approverId = null;
+        String approverNm = null;
+
+        List<ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
+        for (ProcessConfig pc : configs) {
+            if (pc.getOrdrId() == 1) {
+                reviewerId = pc.getEmpId();
+                if (pc.getEmpId() != null) {
+                    Employee emp = employeeRepository.findById(pc.getEmpId()).orElse(null);
+                    if (emp != null) {
+                        reviewerNm = ((emp.getFirstName() != null ? emp.getFirstName() : "") + " " + (emp.getLastName() != null ? emp.getLastName() : "")).trim();
+                    }
+                }
+            } else if (pc.getOrdrId() == 2) {
+                approverId = pc.getEmpId();
+                if (pc.getEmpId() != null) {
+                    Employee emp = employeeRepository.findById(pc.getEmpId()).orElse(null);
+                    if (emp != null) {
+                        approverNm = ((emp.getFirstName() != null ? emp.getFirstName() : "") + " " + (emp.getLastName() != null ? emp.getLastName() : "")).trim();
+                    }
+                }
+            }
+        }
+
         return ExternalTaskViewDto.builder()
                 .taskId(task.getTaskId())
                 .taskCd(task.getTaskCd())
@@ -317,6 +370,14 @@ public class ExternalTaskAccessService {
                 .isExpired(isExpired)
                 .expiredReason(expiredReason)
                 .expiredMessage(expiredMessage)
+                .isSequentialLocked(isSeqLocked)
+                .lockReason(lockReason)
+                .reviewerId(reviewerId)
+                .reviewerNm(reviewerNm)
+                .approverId(approverId)
+                .approverNm(approverNm)
+                .prcsFlg(task.getPrcsFlg())
+                .prcsYesActn(task.getPrcsYesActn())
                 .checklists(checklists)
                 .attachments(attachments)
                 .build();
@@ -353,6 +414,11 @@ public class ExternalTaskAccessService {
 
         if (updateDto.getTaskSts() != null && !updateDto.getTaskSts().trim().isEmpty()) {
             String status = updateDto.getTaskSts().trim().toUpperCase().replace(" ", "_");
+            if ("WIP".equals(status) || "SUBMIT_REVIEW".equals(status) || "COMPLETED".equals(status)) {
+                if (!projectStatusCascadeService.isTaskPrerequisitesMet(task)) {
+                    throw new IllegalStateException("Cannot proceed: Sequential predecessor task/milestone must be completed and closed first.");
+                }
+            }
             if ("SUBMIT_REVIEW".equals(status)) {
                 task.setTaskSts(TaskStatusMaster.WIP);
                 task.setSubStatus("Under Review");
@@ -390,10 +456,13 @@ public class ExternalTaskAccessService {
         TaskLive task = taskLiveRepository.findById(token.getTaskId())
                 .orElseThrow(() -> new NoSuchElementException("Task not found"));
 
-        if (task.getTaskSts() != null &&
-                ("CLOSED".equalsIgnoreCase(task.getTaskSts().getStatusNm()) ||
-                 "COMPLETED".equalsIgnoreCase(task.getTaskSts().getStatusNm()))) {
-            throw new IllegalStateException("This task is completed and closed.");
+        String taskStatusNm = task.getTaskSts() != null ? task.getTaskSts().getStatusNm() : "";
+        if ("CLOSED".equalsIgnoreCase(taskStatusNm) || "COMPLETED".equalsIgnoreCase(taskStatusNm)) {
+            throw new IllegalStateException("Checklist cannot be edited: Task is already Closed.");
+        }
+
+        if (!"WIP".equalsIgnoreCase(taskStatusNm)) {
+            throw new IllegalStateException("Checklist cannot be updated: Task has not been started yet. Please click Start to work on this task.");
         }
 
         if (token.getExpiryDt() != null && LocalDateTime.now().isAfter(token.getExpiryDt())) {

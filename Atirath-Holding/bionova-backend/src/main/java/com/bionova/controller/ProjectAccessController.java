@@ -21,6 +21,7 @@ import com.bionova.repository.CompanyRepository;
 import com.bionova.repository.PlantRepository;
 import com.bionova.service.ActivityLogService;
 import com.bionova.service.ProjectLeadLagService;
+import com.bionova.service.ExternalTaskAccessService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -72,6 +73,9 @@ public class ProjectAccessController {
 
     @Autowired
     private ProjectLeadLagService leadLagService;
+
+    @Autowired
+    private ExternalTaskAccessService externalTaskAccessService;
 
     // Helper: format LocalDate to yyyy-MM-dd
     private String formatLocalDate(java.time.LocalDate date) {
@@ -569,10 +573,22 @@ public class ProjectAccessController {
                         if (c.getRId() != null) {
                             ReviewerMaster rm = reviewerMasterRepository.findById(c.getRId()).orElse(null);
                             if (rm != null) {
-                                if ("Reviewer".equalsIgnoreCase(rm.getRNm()) && c.getEmpId() != null) {
-                                    reviewerName = resolveEmployeeNameAndCode(c.getEmpId());
-                                } else if ("Approver".equalsIgnoreCase(rm.getRNm()) && c.getEmpId() != null) {
-                                    approverName = resolveEmployeeNameAndCode(c.getEmpId());
+                                if ("Reviewer".equalsIgnoreCase(rm.getRNm())) {
+                                    if (c.getEmpId() != null) {
+                                        reviewerName = resolveEmployeeNameAndCode(c.getEmpId());
+                                    } else if (c.getExtEmpId() != null) {
+                                        reviewerName = externalEmployeeRepository.findById(c.getExtEmpId())
+                                                .map(ext -> ext.getExtEmpNm() + " (" + (ext.getExtEmpCode() != null ? ext.getExtEmpCode() : "EXT-" + ext.getExtEmpId()) + ")")
+                                                .orElse("Unassigned");
+                                    }
+                                } else if ("Approver".equalsIgnoreCase(rm.getRNm())) {
+                                    if (c.getEmpId() != null) {
+                                        approverName = resolveEmployeeNameAndCode(c.getEmpId());
+                                    } else if (c.getExtEmpId() != null) {
+                                        approverName = externalEmployeeRepository.findById(c.getExtEmpId())
+                                                .map(ext -> ext.getExtEmpNm() + " (" + (ext.getExtEmpCode() != null ? ext.getExtEmpCode() : "EXT-" + ext.getExtEmpId()) + ")")
+                                                .orElse("Unassigned");
+                                    }
                                 }
                             }
                         }
@@ -718,6 +734,9 @@ public class ProjectAccessController {
         try {
             String roleType = (String) body.get("roleType");
             Object empIdObj = body.get("empId");
+            Object extEmpIdObj = body.get("extEmpId");
+            Boolean isExternal = body.get("isExternal") instanceof Boolean ? (Boolean) body.get("isExternal") : false;
+
             Long empId = null;
             if (empIdObj != null && !empIdObj.toString().isEmpty()) {
                 empId = Long.valueOf(empIdObj.toString());
@@ -726,17 +745,50 @@ public class ProjectAccessController {
                 }
             }
 
+            Long extEmpId = null;
+            if (extEmpIdObj != null && !extEmpIdObj.toString().isEmpty()) {
+                extEmpId = Long.valueOf(extEmpIdObj.toString());
+                if (extEmpId == 0) {
+                    extEmpId = null;
+                }
+            }
+
             TaskLive task = taskLiveRepository.findById(taskId)
                     .orElseThrow(() -> new RuntimeException("Task not found: " + taskId));
 
             if ("assignee".equalsIgnoreCase(roleType)) {
                 Long oldEmpId = task.getEmpId();
-                String oldStatus = (oldEmpId != null) ? "EMP_" + oldEmpId : "UNASSIGNED";
-                task.setEmpId(empId);
-                taskLiveRepository.save(task);
+                Long oldExtEmpId = task.getExtEmpId();
+                String oldStatus = (oldEmpId != null) ? "EMP_" + oldEmpId : ((oldExtEmpId != null) ? "EXT_" + oldExtEmpId : "UNASSIGNED");
 
-                String newStatus = (empId != null) ? "EMP_" + empId : "UNASSIGNED";
-                activityLogService.logActivity("TASK", taskId, oldStatus, newStatus);
+                if (Boolean.TRUE.equals(isExternal) && extEmpId != null) {
+                    task.setEmpId(null);
+                    task.setExtEmpId(extEmpId);
+                    task.setTaskAsgnTo("EXTERNAL");
+                    taskLiveRepository.save(task);
+
+                    try {
+                        externalTaskAccessService.generateOrRefreshToken(task.getTaskId(), extEmpId);
+                    } catch (Exception ex) {
+                        System.err.println("Failed to dispatch external task token in assign-role: " + ex.getMessage());
+                    }
+
+                    activityLogService.logActivity("TASK", taskId, oldStatus, "EXT_" + extEmpId);
+                } else if (!Boolean.TRUE.equals(isExternal) && empId != null) {
+                    task.setEmpId(empId);
+                    task.setExtEmpId(null);
+                    task.setTaskAsgnTo("INTERNAL");
+                    taskLiveRepository.save(task);
+
+                    activityLogService.logActivity("TASK", taskId, oldStatus, "EMP_" + empId);
+                } else {
+                    task.setEmpId(null);
+                    task.setExtEmpId(null);
+                    task.setTaskAsgnTo("UNASSIGNED");
+                    taskLiveRepository.save(task);
+
+                    activityLogService.logActivity("TASK", taskId, oldStatus, "UNASSIGNED");
+                }
             } else if ("reviewer".equalsIgnoreCase(roleType) || "approver".equalsIgnoreCase(roleType)) {
                 int ordrId = "reviewer".equalsIgnoreCase(roleType) ? 1 : 2;
                 List<ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(taskId, true);
@@ -748,10 +800,13 @@ public class ProjectAccessController {
                     }
                 }
 
-                String oldStatus = (targetConfig != null && targetConfig.getEmpId() != null)
-                        ? "EMP_" + targetConfig.getEmpId() : "UNASSIGNED";
+                String oldStatus = "UNASSIGNED";
+                if (targetConfig != null) {
+                    if (targetConfig.getEmpId() != null) oldStatus = "EMP_" + targetConfig.getEmpId();
+                    else if (targetConfig.getExtEmpId() != null) oldStatus = "EXT_" + targetConfig.getExtEmpId();
+                }
 
-                if (empId == null) {
+                if (empId == null && extEmpId == null) {
                     if (targetConfig != null) {
                         processConfigRepository.delete(targetConfig);
                     }
@@ -773,16 +828,22 @@ public class ProjectAccessController {
                                 });
                         targetConfig.setRId(rId);
                     }
-                    targetConfig.setEmpId(empId);
+                    if (Boolean.TRUE.equals(isExternal) && extEmpId != null) {
+                        targetConfig.setExtEmpId(extEmpId);
+                        targetConfig.setEmpId(null);
+                    } else {
+                        targetConfig.setEmpId(empId);
+                        targetConfig.setExtEmpId(null);
+                    }
                     processConfigRepository.save(targetConfig);
                 }
 
-                String newStatus = (empId != null) ? "EMP_" + empId : "UNASSIGNED";
+                String newStatus = (Boolean.TRUE.equals(isExternal) && extEmpId != null) ? "EXT_" + extEmpId : ((empId != null) ? "EMP_" + empId : "UNASSIGNED");
                 activityLogService.logActivity("TASK", taskId, oldStatus, newStatus);
 
                 // Auto-update prcs_flg in task_live_master based on active process configs
                 List<ProcessConfig> remainingConfigs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(taskId, true);
-                boolean hasAnyProcessRole = remainingConfigs.stream().anyMatch(c -> c.getEmpId() != null);
+                boolean hasAnyProcessRole = remainingConfigs.stream().anyMatch(c -> c.getEmpId() != null || c.getExtEmpId() != null);
                 task.setPrcsFlg(hasAnyProcessRole);
                 taskLiveRepository.save(task);
             } else {

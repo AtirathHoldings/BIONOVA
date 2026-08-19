@@ -111,6 +111,12 @@ public class TaskLive {
     @Transient
     private TimeStatus timeStatus; // LEAD, ON_TIME, DUE_TODAY, OVERDUE, LAG
 
+    @Transient
+    private Boolean isSequentialLocked = false;
+
+    @Transient
+    private String lockReason;
+
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "priority", referencedColumnName = "priority_id")
     private TaskPriorityMaster priority;

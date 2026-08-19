@@ -201,6 +201,24 @@ public class TaskLiveController {
         if (task.getTaskId() != null) {
             task.setTeamMembers(teamMemberRepository.findByTaskId(task.getTaskId()));
         }
+        if (!projectStatusCascadeService.isTaskPrerequisitesMet(task)) {
+            task.setIsSequentialLocked(true);
+            if (Boolean.TRUE.equals(task.getTaskDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(task.getTaskDepTyp()) && task.getDepTaskId() != null) {
+                taskLiveRepository.findById(task.getDepTaskId()).ifPresent(pred -> {
+                    task.setLockReason("Waiting for predecessor task " + (pred.getTaskCd() != null ? pred.getTaskCd() : "") + " to be completed.");
+                });
+            } else if (task.getMId() != null) {
+                milestoneLiveRepository.findById(task.getMId()).ifPresent(ms -> {
+                    if (ms.getMlstnDepMId() != null) {
+                        milestoneLiveRepository.findById(ms.getMlstnDepMId()).ifPresent(predMs -> {
+                            task.setLockReason("Waiting for predecessor milestone " + (predMs.getMlstnCd() != null ? predMs.getMlstnCd() : "") + " to be closed.");
+                        });
+                    }
+                });
+            }
+        } else {
+            task.setIsSequentialLocked(false);
+        }
     }
 
     private void populateReviewerAndApprover(List<TaskLive> tasks) {
@@ -258,6 +276,25 @@ public class TaskLiveController {
                         task.setApproverNm(empNameMap.get(pc.getEmpId()));
                     }
                 }
+            }
+
+            if (!projectStatusCascadeService.isTaskPrerequisitesMet(task)) {
+                task.setIsSequentialLocked(true);
+                if (Boolean.TRUE.equals(task.getTaskDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(task.getTaskDepTyp()) && task.getDepTaskId() != null) {
+                    taskLiveRepository.findById(task.getDepTaskId()).ifPresent(pred -> {
+                        task.setLockReason("Waiting for predecessor task " + (pred.getTaskCd() != null ? pred.getTaskCd() : "") + " to be completed.");
+                    });
+                } else if (task.getMId() != null) {
+                    milestoneLiveRepository.findById(task.getMId()).ifPresent(ms -> {
+                        if (ms.getMlstnDepMId() != null) {
+                            milestoneLiveRepository.findById(ms.getMlstnDepMId()).ifPresent(predMs -> {
+                                task.setLockReason("Waiting for predecessor milestone " + (predMs.getMlstnCd() != null ? predMs.getMlstnCd() : "") + " to be closed.");
+                            });
+                        }
+                    });
+                }
+            } else {
+                task.setIsSequentialLocked(false);
             }
         }
     }
@@ -594,6 +631,13 @@ public class TaskLiveController {
             return ResponseEntity.badRequest()
                     .body(Map.of("message", "Invalid status. Allowed: DRAFT, OPEN, WIP, UNDER_REVIEW, SUBMIT_REVIEW, CLOSED, REASSIGN, REWORK, OVER_DUE, HOLD"));
         }
+
+        if (!"DRAFT".equals(upperStatus) && !"HOLD".equals(upperStatus)) {
+            if (!projectStatusCascadeService.isTaskPrerequisitesMet(task)) {
+                return ResponseEntity.badRequest().body(Map.of("message", "Cannot update status: Sequential predecessor task/milestone must be completed and closed first."));
+            }
+        }
+
         // SUBMIT_REVIEW is a frontend-only state → maps to WIP
         if ("SUBMIT_REVIEW".equals(upperStatus)) {
             task.setTaskSts(TaskStatusMaster.WIP);
