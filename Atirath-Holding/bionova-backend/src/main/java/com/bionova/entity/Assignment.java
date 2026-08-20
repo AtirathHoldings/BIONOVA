@@ -99,6 +99,15 @@ public class Assignment {
     @Transient
     private java.util.List<TeamMember> teamMembers;
 
+    @Transient
+    private java.util.List<AttachmentMaster> attachments;
+
+    @Transient
+    private Integer attachmentCount = 0;
+
+    @Transient
+    private Integer checklistCount = 0;
+
     public TaskPriorityMaster getPriority() {
         if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
             return this.priority != null ? this.priority : TaskPriorityMaster.calculatePriority(stDt, endDt, null, taskSts, null);

@@ -27,6 +27,8 @@ public interface ChecklistMasterRepository extends JpaRepository<ChecklistMaster
 
     List<ChecklistMaster> findByEmpTaskId(Long empTaskId);
 
+    List<ChecklistMaster> findByEmpTaskIdIn(List<Long> empTaskIds);
+
     long countByEmpTaskIdAndChkStsAndSts(Long empTaskId, Boolean chkSts, Boolean sts);
 
     @org.springframework.transaction.annotation.Transactional

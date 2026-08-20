@@ -42,4 +42,26 @@ public interface AttachmentMasterRepository extends JpaRepository<AttachmentMast
     default List<AttachmentMaster> findByDraftTaskId(Long drftTaskId) {
         return findByRefIdAndRefType(drftTaskId, "TASK_DRAFT");
     }
+
+    /** All attachments for an individual task / assignment */
+    @Query("SELECT a FROM AttachmentMaster a WHERE " +
+           "(a.refId = :empTaskId AND (a.refType IN ('ASSIGNMENT', 'TASK_ASSIGNMENT', 'TASK_INDIVIDUAL', 'INDIVIDUAL_TASK') OR a.refType IS NULL)) " +
+           "OR (a.tId = :empTaskId AND (a.refType IN ('ASSIGNMENT', 'TASK_ASSIGNMENT', 'TASK_INDIVIDUAL', 'INDIVIDUAL_TASK') OR a.isLive = false)) " +
+           "ORDER BY a.dateTimestamp DESC")
+    List<AttachmentMaster> findByAssignmentTaskId(@Param("empTaskId") Long empTaskId);
+
+    @Query("SELECT a FROM AttachmentMaster a WHERE " +
+           "(a.refId IN :empTaskIds AND (a.refType IN ('ASSIGNMENT', 'TASK_ASSIGNMENT', 'TASK_INDIVIDUAL', 'INDIVIDUAL_TASK') OR a.refType IS NULL)) " +
+           "OR (a.tId IN :empTaskIds AND (a.refType IN ('ASSIGNMENT', 'TASK_ASSIGNMENT', 'TASK_INDIVIDUAL', 'INDIVIDUAL_TASK') OR a.isLive = false)) " +
+           "ORDER BY a.dateTimestamp DESC")
+    List<AttachmentMaster> findByAssignmentTaskIds(@Param("empTaskIds") List<Long> empTaskIds);
+
+    default List<AttachmentMaster> findByAssignmentId(Long empTaskId) {
+        return findByAssignmentTaskId(empTaskId);
+    }
+
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
+    @Query("DELETE FROM AttachmentMaster a WHERE (a.refId = :empTaskId AND (a.refType IN ('ASSIGNMENT', 'TASK_ASSIGNMENT', 'TASK_INDIVIDUAL', 'INDIVIDUAL_TASK') OR a.refType IS NULL)) OR (a.tId = :empTaskId AND (a.refType IN ('ASSIGNMENT', 'TASK_ASSIGNMENT', 'TASK_INDIVIDUAL', 'INDIVIDUAL_TASK') OR a.isLive = false))")
+    void deleteByAssignmentTaskId(@Param("empTaskId") Long empTaskId);
 }

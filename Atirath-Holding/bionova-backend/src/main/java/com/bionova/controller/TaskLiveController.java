@@ -71,6 +71,9 @@ public class TaskLiveController {
     @Autowired
     private com.bionova.service.ExternalTaskAccessService externalTaskAccessService;
 
+    @Autowired
+    private com.bionova.repository.ExternalEmployeeRepository externalEmployeeRepository;
+
     /**
      * Determines if the employee has access to the Project module.
      * Rules:
@@ -226,10 +229,12 @@ public class TaskLiveController {
         populateMilestoneAndProjectDetails(tasks);
 
         java.util.Set<Long> empIds = new java.util.HashSet<>();
+        java.util.Set<Long> extEmpIds = new java.util.HashSet<>();
         java.util.List<Long> taskIds = new java.util.ArrayList<>();
 
         for (TaskLive t : tasks) {
             if (t.getEmpId() != null) empIds.add(t.getEmpId());
+            if (t.getExtEmpId() != null) extEmpIds.add(t.getExtEmpId());
             if (t.getTaskId() != null) taskIds.add(t.getTaskId());
         }
 
@@ -253,6 +258,14 @@ public class TaskLiveController {
                         (v1, v2) -> v1
                 ));
 
+        java.util.Map<Long, String> extEmpNameMap = extEmpIds.isEmpty() ? java.util.Collections.emptyMap() :
+                externalEmployeeRepository.findAllById(extEmpIds).stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        com.bionova.entity.ExternalEmployee::getExtEmpId,
+                        e -> e.getExtEmpNm() != null ? e.getExtEmpNm() : "",
+                        (v1, v2) -> v1
+                ));
+
         java.util.Map<Long, java.util.List<com.bionova.entity.ProcessConfig>> configMap = allConfigs.stream()
                 .filter(pc -> pc.getTaskId() != null)
                 .collect(java.util.stream.Collectors.groupingBy(com.bionova.entity.ProcessConfig::getTaskId));
@@ -262,6 +275,9 @@ public class TaskLiveController {
                 .collect(java.util.stream.Collectors.groupingBy(TeamMember::getTaskId));
 
         for (TaskLive task : tasks) {
+            if (task.getExtEmpId() != null) {
+                task.setExtEmpNm(extEmpNameMap.get(task.getExtEmpId()));
+            }
             task.setTeamMembers(teamMemberMap.getOrDefault(task.getTaskId(), java.util.Collections.emptyList()));
             java.util.List<com.bionova.entity.ProcessConfig> configs = configMap.getOrDefault(task.getTaskId(), java.util.Collections.emptyList());
             for (com.bionova.entity.ProcessConfig pc : configs) {

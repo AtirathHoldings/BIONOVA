@@ -144,19 +144,15 @@ public class AttachmentController {
     // ── INDIVIDUAL TASK / ASSIGNMENT ─────────────────────────────────────────
 
     /** List all attachments for an Individual Task / Assignment */
-    @GetMapping("/assignment/{empTaskId}")
+    @GetMapping({"/assignment/{empTaskId}", "/individual-task/{empTaskId}"})
     public List<AttachmentMaster> getAssignmentAttachments(@PathVariable Long empTaskId) {
-        List<AttachmentMaster> newStyle = attachmentRepo.findByRefIdAndRefType(empTaskId, "ASSIGNMENT");
-        if (!newStyle.isEmpty()) return newStyle;
-        List<AttachmentMaster> indStyle = attachmentRepo.findByRefIdAndRefType(empTaskId, "TASK_INDIVIDUAL");
-        if (!indStyle.isEmpty()) return indStyle;
-        List<AttachmentMaster> liveStyle = attachmentRepo.findByLiveTaskId(empTaskId);
-        if (!liveStyle.isEmpty()) return liveStyle;
+        List<AttachmentMaster> list = attachmentRepo.findByAssignmentTaskId(empTaskId);
+        if (!list.isEmpty()) return list;
         return attachmentRepo.findByTIdAndIsLive(empTaskId, false);
     }
 
     /** Add an attachment to an Individual Task / Assignment */
-    @PostMapping("/assignment/{empTaskId}")
+    @PostMapping({"/assignment/{empTaskId}", "/individual-task/{empTaskId}"})
     public ResponseEntity<?> addToAssignment(
             @PathVariable Long empTaskId,
             @RequestBody AttachmentMaster attachment) {
@@ -169,7 +165,11 @@ public class AttachmentController {
         attachment.setTId(empTaskId);
         attachment.setIsLive(true);
         attachment.setCreatedBy(getCurrentUserName());
-        return ResponseEntity.ok(attachmentRepo.save(attachment));
+        AttachmentMaster saved = attachmentRepo.save(attachment);
+        try {
+            activityLogService.logActivity("DOCUMENT", saved.getFileId().longValue(), "N/A", "UPLOADED");
+        } catch (Exception ignored) {}
+        return ResponseEntity.ok(saved);
     }
 
     // ── MILESTONE ───────────────────────────────────────────────────────────

@@ -149,6 +149,9 @@ public class TaskLive {
     private String mlstnTtl;
 
     @Transient
+    private String extEmpNm;
+
+    @Transient
     private java.util.List<TeamMember> teamMembers;
 
     public ProcessStatus getProcessStatus() {

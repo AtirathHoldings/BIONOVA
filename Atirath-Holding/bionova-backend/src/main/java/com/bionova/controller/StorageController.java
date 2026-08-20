@@ -106,7 +106,7 @@ public class StorageController {
      * Upload a task attachment document (draft or live).
      * Stored in: documents/attachments/tasks/<uuid>.<ext>
      */
-    @PostMapping("/upload/attachment/task")
+    @PostMapping({"/upload/attachment/task", "/upload/attachment/assignment"})
     public ResponseEntity<?> uploadTaskAttachment(@RequestParam("file") MultipartFile file) {
         return uploadDocument(SupabaseStorageService.FOLDER_ATTACHMENT_TASKS, file);
     }

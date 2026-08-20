@@ -13,4 +13,10 @@ public interface ProcessMasterRepository extends JpaRepository<ProcessMaster, In
     List<ProcessMaster> findByTaskIdOrderByOrdrIdAsc(Long taskId);
 
     List<ProcessMaster> findByEmpTaskIdOrderByOrdrIdAsc(Long empTaskId);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByEmpTaskId(Long empTaskId);
+
+    @org.springframework.transaction.annotation.Transactional
+    void deleteByTaskId(Long taskId);
 }

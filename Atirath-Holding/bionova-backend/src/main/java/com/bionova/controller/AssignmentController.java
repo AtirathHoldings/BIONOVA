@@ -43,6 +43,15 @@ public class AssignmentController {
     @Autowired
     private TeamMemberRepository teamMemberRepository;
 
+    @Autowired
+    private com.bionova.repository.AttachmentMasterRepository attachmentRepo;
+
+    @Autowired
+    private com.bionova.repository.ProcessMasterRepository processMasterRepository;
+
+    @Autowired
+    private com.bionova.service.SupabaseStorageService storageService;
+
     private boolean isAdminOrManager(Employee employee) {
         if (employee == null) {
             return false;
@@ -96,6 +105,17 @@ public class AssignmentController {
         }
         if (task.getEmpTaskId() != null) {
             task.setTeamMembers(teamMemberRepository.findByEmpTaskId(task.getEmpTaskId()));
+            java.util.List<com.bionova.entity.AttachmentMaster> atts = attachmentRepo.findByAssignmentTaskId(task.getEmpTaskId());
+            task.setAttachments(atts);
+            task.setAttachmentCount(atts != null ? atts.size() : 0);
+            if (atts != null && !atts.isEmpty()) {
+                task.setAttaFlg(true);
+            }
+            java.util.List<com.bionova.entity.ChecklistMaster> chks = checklistRepo.findByEmpTaskId(task.getEmpTaskId());
+            task.setChecklistCount(chks != null ? chks.size() : 0);
+            if (chks != null && !chks.isEmpty()) {
+                task.setChkFlg(true);
+            }
         }
     }
 
@@ -119,6 +139,14 @@ public class AssignmentController {
                 ? java.util.Collections.emptyList()
                 : teamMemberRepository.findByEmpTaskIdIn(taskIds);
 
+        java.util.List<com.bionova.entity.AttachmentMaster> allAttachments = taskIds.isEmpty()
+                ? java.util.Collections.emptyList()
+                : attachmentRepo.findByAssignmentTaskIds(taskIds);
+
+        java.util.List<com.bionova.entity.ChecklistMaster> allChecklists = taskIds.isEmpty()
+                ? java.util.Collections.emptyList()
+                : checklistRepo.findByEmpTaskIdIn(taskIds);
+
         for (com.bionova.entity.ProcessConfig pc : allConfigs) {
             if (pc.getEmpId() != null) empIds.add(pc.getEmpId());
         }
@@ -139,6 +167,18 @@ public class AssignmentController {
                 .filter(tm -> tm.getEmpTaskId() != null)
                 .collect(java.util.stream.Collectors.groupingBy(TeamMember::getEmpTaskId));
 
+        java.util.Map<Long, java.util.List<com.bionova.entity.AttachmentMaster>> attachmentMap = new java.util.HashMap<>();
+        for (com.bionova.entity.AttachmentMaster att : allAttachments) {
+            Long tid = att.getRefId() != null ? att.getRefId() : att.getTId();
+            if (tid != null) {
+                attachmentMap.computeIfAbsent(tid, k -> new java.util.ArrayList<>()).add(att);
+            }
+        }
+
+        java.util.Map<Long, java.util.List<com.bionova.entity.ChecklistMaster>> checklistMap = allChecklists.stream()
+                .filter(c -> c.getEmpTaskId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(com.bionova.entity.ChecklistMaster::getEmpTaskId));
+
         for (Assignment task : tasks) {
             if (task.getEmpId() != null) {
                 task.setEmpNm(empNameMap.get(task.getEmpId()));
@@ -147,6 +187,20 @@ public class AssignmentController {
                 task.setAssignedByNm(empNameMap.get(task.getAssignedBy()));
             }
             task.setTeamMembers(teamMemberMap.getOrDefault(task.getEmpTaskId(), java.util.Collections.emptyList()));
+            
+            java.util.List<com.bionova.entity.AttachmentMaster> taskAtts = attachmentMap.getOrDefault(task.getEmpTaskId(), java.util.Collections.emptyList());
+            task.setAttachments(taskAtts);
+            task.setAttachmentCount(taskAtts.size());
+            if (!taskAtts.isEmpty()) {
+                task.setAttaFlg(true);
+            }
+
+            java.util.List<com.bionova.entity.ChecklistMaster> taskChks = checklistMap.getOrDefault(task.getEmpTaskId(), java.util.Collections.emptyList());
+            task.setChecklistCount(taskChks.size());
+            if (!taskChks.isEmpty()) {
+                task.setChkFlg(true);
+            }
+
             java.util.List<com.bionova.entity.ProcessConfig> configs = configMap.getOrDefault(task.getEmpTaskId(), java.util.Collections.emptyList());
             for (com.bionova.entity.ProcessConfig pc : configs) {
                 if (pc.getOrdrId() == 1) {
@@ -446,8 +500,24 @@ public class AssignmentController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> deleteTask(@PathVariable Long id) {
+        // 1. Delete attachments & files from Supabase Storage
+        try {
+            java.util.List<com.bionova.entity.AttachmentMaster> atts = attachmentRepo.findByAssignmentTaskId(id);
+            for (com.bionova.entity.AttachmentMaster att : atts) {
+                if ("UPLOAD".equals(att.getAtType()) && att.getAtPath() != null) {
+                    storageService.deleteFileByUrl(att.getAtPath());
+                }
+            }
+            attachmentRepo.deleteByAssignmentTaskId(id);
+        } catch (Exception ignored) {}
+
+        // 2. Delete child configs, checklists, team members, and process master records
         processConfigRepo.deleteByEmpTaskId(id);
         checklistRepo.deleteByEmpTaskId(id);
+        teamMemberRepository.deleteByEmpTaskId(id);
+        processMasterRepository.deleteByEmpTaskId(id);
+
+        // 3. Delete assignment record
         repository.deleteById(id);
         return ResponseEntity.ok().build();
     }
