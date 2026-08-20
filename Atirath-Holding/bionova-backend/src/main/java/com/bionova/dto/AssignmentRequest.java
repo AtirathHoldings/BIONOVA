@@ -6,6 +6,7 @@ import lombok.Data;
 @Data
 public class AssignmentRequest {
     private Assignment task;
+    private String priority;
     private boolean excludeSat;
     private boolean excludeSun;
     private boolean includeMandatory;

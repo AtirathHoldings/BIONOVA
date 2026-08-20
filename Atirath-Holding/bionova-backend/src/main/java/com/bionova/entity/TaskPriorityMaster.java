@@ -39,7 +39,27 @@ public class TaskPriorityMaster {
         if (value instanceof Number) {
             return getById(((Number) value).intValue());
         }
-        return getByName(value.toString());
+        if (value instanceof java.util.Map) {
+            java.util.Map<?, ?> map = (java.util.Map<?, ?>) value;
+            Object id = map.get("priorityId");
+            if (id instanceof Number) {
+                return getById(((Number) id).intValue());
+            } else if (id != null) {
+                try {
+                    return getById(Integer.parseInt(id.toString()));
+                } catch (NumberFormatException ignored) {}
+            }
+            Object nm = map.get("priorityNm");
+            if (nm != null) {
+                return getByName(nm.toString());
+            }
+        }
+        String str = value.toString().trim();
+        try {
+            int numId = Integer.parseInt(str);
+            return getById(numId);
+        } catch (NumberFormatException ignored) {}
+        return getByName(str);
     }
 
     public static final TaskPriorityMaster LOW = new TaskPriorityMaster(1, "LOW");

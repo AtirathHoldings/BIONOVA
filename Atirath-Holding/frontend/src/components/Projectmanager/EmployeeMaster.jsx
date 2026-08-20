@@ -575,16 +575,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       if (/[^a-zA-Z\s]/.test(value)) {
         error = "Only letters and spaces are allowed.";
       }
-    } else if (name === "dateOfBirth") {
-      if (!value) {
-        error = "Date of Birth is required.";
-      } else {
-        const today = new Date();
-        const maxDob = new Date(today.setFullYear(today.getFullYear() - 18)).toISOString().split('T')[0];
-        if (value > maxDob) {
-          error = "Employee must be at least 18 years old.";
-        }
-      }
     }
     return error;
   };
@@ -978,9 +968,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Date of Birth is required.");
       return;
     }
-    const maxDob = new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split('T')[0];
-    if (form.dateOfBirth > maxDob) {
-      triggerAlert("error", "Validation Error", "Employee must be at least 18 years old.");
+    const todayStr = new Date().toISOString().split('T')[0];
+    if (form.dateOfBirth > todayStr) {
+      triggerAlert("error", "Validation Error", "Date of Birth cannot be in the future.");
       return;
     }
 
@@ -1315,12 +1305,60 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     setActiveActionsMenu(null);
   };
 
+  const generateDeleteWarningMessage = (empId, isExternal = false) => {
+    const userAssignments = assignments.filter(a => String(a.empId) === String(empId) || (isExternal && String(a.extEmpId || a.ext_emp_id) === String(empId)));
+    const userLiveTasks = liveTasks.filter(t => String(t.empId) === String(empId) || (isExternal && String(t.extEmpId || t.ext_emp_id) === String(empId)));
+    
+    const taskItems = [
+      ...userAssignments.map(t => ({ title: t.taskNm || t.tasknm || t.taskCd || "Unnamed Task", type: "Individual Task" })),
+      ...userLiveTasks.map(t => ({ title: t.taskNm || t.tasknm || t.taskCd || "Unnamed Task", type: "Project Task" }))
+    ];
+
+    if (taskItems.length === 0) {
+      return (
+        <div style={{ textAlign: "left", width: "100%", marginTop: "8px" }}>
+          <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#16a34a", marginBottom: "8px", borderBottom: "1px solid #bbf7d0", paddingBottom: "6px" }}>
+            ✅ Safe to Delete
+          </h4>
+          <p style={{ fontSize: "13px", color: "#334155", marginBottom: "12px" }}>
+            This employee is currently assigned to <strong>0</strong> active tasks.
+          </p>
+          <p style={{ fontSize: "13px", color: "#0f172a", marginTop: "12px", fontWeight: "600" }}>
+            Are you sure you want to proceed with deletion? This action cannot be undone.
+          </p>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{ textAlign: "left", width: "100%", marginTop: "8px" }}>
+        <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#dc2626", marginBottom: "8px", borderBottom: "1px solid #fecaca", paddingBottom: "6px" }}>
+          ⚠️ Warning: Employee has active assignments!
+        </h4>
+        <p style={{ fontSize: "13px", color: "#334155", marginBottom: "12px" }}>
+          This employee is currently assigned to <strong>{taskItems.length}</strong> tasks. Deleting them may cause these tasks to become unassigned.
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "200px", overflowY: "auto", paddingRight: "4px", background: "#f8fafc", padding: "8px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
+          {taskItems.map((item, idx) => (
+            <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", borderBottom: idx === taskItems.length - 1 ? "none" : "1px solid #e2e8f0", paddingBottom: "4px" }}>
+              <span style={{ color: "#0f172a", fontWeight: "500", wordBreak: "break-word", paddingRight: "8px" }}>{item.title}</span>
+              <span style={{ color: "#64748b", whiteSpace: "nowrap" }}>{item.type}</span>
+            </div>
+          ))}
+        </div>
+        <p style={{ fontSize: "13px", color: "#ef4444", marginTop: "12px", fontWeight: "600" }}>
+          Are you sure you want to proceed with deletion?
+        </p>
+      </div>
+    );
+  };
+
   const handleDelete = (empId) => {
     setAlertConfig({
       isOpen: true,
       type: "warning",
       title: "Confirm Delete",
-      message: "Are you sure you want to delete this employee? This action cannot be undone.",
+      message: generateDeleteWarningMessage(empId, false),
       confirmText: "Delete",
       cancelText: "Cancel",
       onConfirm: async () => {
@@ -1478,7 +1516,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       isOpen: true,
       type: "warning",
       title: "Confirm Delete",
-      message: "Are you sure you want to delete this external employee? This action cannot be undone.",
+      message: generateDeleteWarningMessage(id, true),
       confirmText: "Delete",
       cancelText: "Cancel",
       onConfirm: async () => {
@@ -1819,7 +1857,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             name="dateOfBirth"
                             value={form.dateOfBirth}
                             onChange={handleChange}
-                            max={new Date(new Date().setFullYear(new Date().getFullYear() - 18)).toISOString().split("T")[0]}
+                            max={new Date().toISOString().split("T")[0]}
                             style={{
                               width: '100%',
                               padding: '8px 12px',
@@ -1831,11 +1869,6 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             }}
                           />
                         </div>
-                        {formErrors.dateOfBirth && (
-                          <div style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px" }}>
-                            {formErrors.dateOfBirth}
-                          </div>
-                        )}
                       </div>
                       <div className="emp-form-item">
                         <label>Email <span className="emp-req-star">*</span></label>

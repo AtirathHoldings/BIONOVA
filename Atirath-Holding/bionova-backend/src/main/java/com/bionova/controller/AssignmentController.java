@@ -367,6 +367,14 @@ public class AssignmentController {
             task.setEndDt(endDt);
         }
 
+        if (task.getPriority() == null) {
+            if (request.getPriority() != null) {
+                task.setPriority(TaskPriorityMaster.getByName(request.getPriority()));
+            } else {
+                task.setPriority(TaskPriorityMaster.HIGH);
+            }
+        }
+
         Assignment saved;
         if (taskId != null) {
             Assignment existing = repository.findById(taskId).orElse(null);
@@ -381,6 +389,7 @@ public class AssignmentController {
                 if (endDt != null) existing.setEndDt(endDt);
                 else if (task.getEndDt() != null) existing.setEndDt(task.getEndDt());
                 if (task.getPriority() != null) existing.setPriority(task.getPriority());
+                else if (request.getPriority() != null) existing.setPriority(TaskPriorityMaster.getByName(request.getPriority()));
                 if (task.getChkFlg() != null) existing.setChkFlg(task.getChkFlg());
                 if (task.getAttaFlg() != null) existing.setAttaFlg(task.getAttaFlg());
                 if (task.getPrcsFlg() != null) existing.setPrcsFlg(task.getPrcsFlg());
@@ -421,6 +430,10 @@ public class AssignmentController {
 
         if (task.getTaskSts() == null) {
             task.setTaskSts(TaskStatusMaster.DRAFT);
+        }
+
+        if (task.getPriority() == null) {
+            task.setPriority(TaskPriorityMaster.HIGH);
         }
 
         Assignment saved = repository.save(task);
