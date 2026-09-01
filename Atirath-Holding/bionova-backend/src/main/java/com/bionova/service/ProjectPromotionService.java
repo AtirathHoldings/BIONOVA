@@ -278,7 +278,8 @@ public class ProjectPromotionService {
                 tl.setPrcsFlg(td.getPrcsFlg());
                 tl.setPrcsYesActn(td.getPrcsYesActn());
                 tl.setTaskSts(TaskStatusMaster.OPEN);
-                tl.setPriority(td.getPriority());
+                TaskPriorityMaster basePrty = td.getRawPriority() != null ? td.getRawPriority() : (draft.getPrjPrty() != null ? draft.getPrjPrty() : td.getPriority());
+                tl.setPriority(basePrty != null ? basePrty : TaskPriorityMaster.LOW);
                 tl.setAddlRem(td.getAddlRem());
 
                 // Compute task working days

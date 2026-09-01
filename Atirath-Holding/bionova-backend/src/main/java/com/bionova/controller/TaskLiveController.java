@@ -5,6 +5,7 @@ import com.bionova.entity.Employee;
 import com.bionova.entity.MilestoneLive;
 import com.bionova.entity.ProjectLive;
 import com.bionova.entity.TaskLive;
+import com.bionova.entity.TaskPriorityMaster;
 import com.bionova.entity.TeamMember;
 import com.bionova.entity.TaskStatusMaster;
 import com.bionova.entity.ScreenMaster;
@@ -420,6 +421,15 @@ public class TaskLiveController {
 
         if (task.getTaskSts() == null) {
             task.setTaskSts(TaskStatusMaster.OPEN);
+        }
+
+        if (task.getRawPriority() == null) {
+            ProjectLive project = projectLiveRepository.findById(milestone.getPrjId()).orElse(null);
+            if (project != null && project.getPrjPrty() != null) {
+                task.setPriority(project.getPrjPrty());
+            } else {
+                task.setPriority(TaskPriorityMaster.LOW);
+            }
         }
 
         // Auto-compute dates or days (inclusive: start=day1)

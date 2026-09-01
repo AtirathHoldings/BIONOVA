@@ -66,4 +66,21 @@ public class TaskPriorityTest {
         // Day 9 (July 9 - Overdue 3 days > step 2.0): ATMOST CRITICAL
         assertEquals(TaskPriorityMaster.ATMOST_CRITICAL, TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, null, LocalDate.of(2026, 7, 9), initP));
     }
+
+    @Test
+    public void testFourDaysTaskWithHighInitialPriority() {
+        LocalDate stDt = LocalDate.of(2026, 7, 1);
+        LocalDate endDt = LocalDate.of(2026, 7, 4); // 4 days
+        Integer noOfDays = 4;
+        TaskPriorityMaster initP = TaskPriorityMaster.HIGH;
+
+        // Days 1-4: HIGH
+        for (int i = 1; i <= 4; i++) {
+            assertEquals(TaskPriorityMaster.HIGH, TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, null, LocalDate.of(2026, 7, i), initP));
+        }
+
+        // Day 5 (Overdue <= 4 days): CRITICAL
+        assertEquals(TaskPriorityMaster.CRITICAL, TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, null, LocalDate.of(2026, 7, 5), initP));
+    }
 }
+

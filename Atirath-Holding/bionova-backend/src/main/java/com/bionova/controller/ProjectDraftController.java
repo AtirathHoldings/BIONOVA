@@ -1,6 +1,7 @@
 package com.bionova.controller;
 
 import com.bionova.entity.ProjectDraft;
+import com.bionova.entity.TaskPriorityMaster;
 import com.bionova.repository.ProjectDraftRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
@@ -134,6 +135,18 @@ public class ProjectDraftController {
         }
 
         ProjectDraft saved = projectDraftRepository.save(draft);
+
+        // Sync project priority down to child tasks if project priority is updated
+        if (details.getPrjPrty() != null) {
+            List<com.bionova.entity.MilestoneDraft> milestones = milestoneDraftRepository.findByDrftPrjId(id);
+            for (com.bionova.entity.MilestoneDraft milestone : milestones) {
+                List<com.bionova.entity.TaskDraft> tasks = taskDraftRepository.findByDrftMId(milestone.getDrftMId());
+                for (com.bionova.entity.TaskDraft task : tasks) {
+                    task.setPriority(details.getPrjPrty());
+                    taskDraftRepository.save(task);
+                }
+            }
+        }
 
         // Shift milestones and tasks if project start date changed or if they are out of sync
         if (saved.getTentStDt() != null) {
@@ -360,7 +373,7 @@ public class ProjectDraftController {
                 newT.setPrcsYesActn(oldT.getPrcsYesActn());
                 newT.setTaskSts(oldT.getTaskSts());
                 newT.setSubStatus(oldT.getSubStatus());
-                newT.setPriority(oldT.getPriority());
+                newT.setPriority(savedDraft.getPrjPrty() != null ? savedDraft.getPrjPrty() : (oldT.getRawPriority() != null ? oldT.getRawPriority() : TaskPriorityMaster.LOW));
                 newT.setAddlRem(oldT.getAddlRem());
                 newT.setSts(true);
 

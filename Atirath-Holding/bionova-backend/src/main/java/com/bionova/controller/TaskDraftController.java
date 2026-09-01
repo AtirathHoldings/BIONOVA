@@ -3,6 +3,7 @@ package com.bionova.controller;
 import com.bionova.entity.MilestoneDraft;
 import com.bionova.entity.ProjectDraft;
 import com.bionova.entity.TaskDraft;
+import com.bionova.entity.TaskPriorityMaster;
 import com.bionova.entity.TaskStatusMaster;
 import com.bionova.repository.MilestoneDraftRepository;
 import com.bionova.repository.ProjectDraftRepository;
@@ -61,6 +62,15 @@ public class TaskDraftController {
             task.setSts(true);
         }
 
+        ProjectDraft project = projectDraftRepository.findById(milestone.getDrftPrjId()).orElse(null);
+        if (task.getRawPriority() == null) {
+            if (project != null && project.getPrjPrty() != null) {
+                task.setPriority(project.getPrjPrty());
+            } else {
+                task.setPriority(TaskPriorityMaster.LOW);
+            }
+        }
+
         // Auto-compute dates or days (inclusive: noOfDays counts start day)
         if (task.getTentEndDt() != null) {
             if (task.getTentStDt() != null && task.getNoOfDays() == null) {
@@ -85,7 +95,6 @@ public class TaskDraftController {
                                        (saved.getNoOfDays() != null && milestone.getMlstnDays() != null && saved.getNoOfDays() > milestone.getMlstnDays());
             
             boolean exceedsProject = false;
-            ProjectDraft project = projectDraftRepository.findById(milestone.getDrftPrjId()).orElse(null);
             if (project != null) {
                 exceedsProject = saved.getTentStDt().isBefore(project.getTentStDt()) ||
                                  saved.getTentEndDt().isAfter(project.getTentEndDt()) ||
@@ -129,6 +138,9 @@ public class TaskDraftController {
         task.setTaskDepFlg(details.getTaskDepFlg());
         task.setTaskDepTyp(details.getTaskDepTyp());
         task.setDepTaskId(details.getDepTaskId());
+        if (details.getRawPriority() != null) {
+            task.setPriority(details.getRawPriority());
+        }
         
         // Auto-compute dates or days based on changes (inclusive)
         if (details.getTentEndDt() != null) {

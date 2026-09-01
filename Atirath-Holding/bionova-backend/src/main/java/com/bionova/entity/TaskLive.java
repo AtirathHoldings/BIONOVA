@@ -214,6 +214,10 @@ public class TaskLive {
         return sb.toString().trim();
     }
 
+    public TaskPriorityMaster getRawPriority() {
+        return this.priority;
+    }
+
     public TaskPriorityMaster getPriority() {
         TaskPriorityMaster baseP = (this.priority != null) ? this.priority : TaskPriorityMaster.LOW;
         if (taskSts != null && "CLOSED".equalsIgnoreCase(taskSts.getStatusNm())) {
