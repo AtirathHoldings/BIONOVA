@@ -135,23 +135,30 @@ const Calendar = ({ userRole, onLogout }) => {
           const empId = profile ? (profile.empId || profile.empid || profile.id) : null;
 
           // 1. Process Holidays from /api/calendar first
+          const seenHolidayKeys = new Set();
           if (Array.isArray(rawHolidays)) {
             rawHolidays.forEach(h => {
               if (!h.calDt) return;
-              allEvents.push({
-                id: `HOLIDAY-${h.clId || h.id || Math.random()}`,
-                title: h.holidayNm || h.name || h.title || "Public Holiday",
-                type: 'holiday',
-                date: h.calDt,
-                status: h.holTyp || 'MANDATORY',
-                code: 'Public Holiday',
-                description: h.holidayNm || "Public Holiday"
-              });
+              const holTitle = h.holidayNm || h.name || h.title || "Public Holiday";
+              const holKey = `${h.calDt}_${holTitle.trim().toLowerCase()}`;
+              if (!seenHolidayKeys.has(holKey)) {
+                seenHolidayKeys.add(holKey);
+                allEvents.push({
+                  id: `HOLIDAY-${h.clId || h.id || Math.random()}`,
+                  title: holTitle,
+                  type: 'holiday',
+                  date: h.calDt,
+                  status: h.holTyp || 'MANDATORY',
+                  code: 'Public Holiday',
+                  description: holTitle
+                });
+              }
             });
           }
 
-          // 2. Collect all employee tasks
-          let userTasks = [];
+          // 2. Collect and deduplicate all employee tasks (Live project tasks and individual assignments)
+          const userTaskMap = new Map();
+
           if (Array.isArray(liveTasks)) {
             const userLive = liveTasks.filter(t => 
               !empId ||
@@ -162,7 +169,13 @@ const Calendar = ({ userRole, onLogout }) => {
               String(t.reviewer) === String(empId) ||
               String(t.approver) === String(empId)
             );
-            userTasks.push(...userLive);
+            userLive.forEach(t => {
+              const rawId = String(t.taskId || t.id || t.taskCd || '').replace(/^TASK[-_]?/i, '').trim();
+              const key = rawId ? `LIVE_${rawId}` : `LIVE_${(t.taskNm || '').trim().toLowerCase()}_${t.endDt || t.stDt}`;
+              if (!userTaskMap.has(key)) {
+                userTaskMap.set(key, { ...t, _taskSource: 'LIVE', _cleanId: rawId, _uniqueKey: key });
+              }
+            });
           }
 
           if (Array.isArray(indTasks)) {
@@ -175,31 +188,82 @@ const Calendar = ({ userRole, onLogout }) => {
               String(t.reviewer) === String(empId) ||
               String(t.approver) === String(empId)
             );
-            userTasks.push(...userInd);
+            userInd.forEach(t => {
+              const rawId = String(t.empTaskId || t.id || t.taskCd || '').replace(/^IND[-_]?TASK[-_]?/i, '').trim();
+              const key = rawId ? `IND_${rawId}` : `IND_${(t.taskNm || '').trim().toLowerCase()}_${t.endDt || t.stDt}`;
+              if (!userTaskMap.has(key)) {
+                userTaskMap.set(key, { ...t, _taskSource: 'IND', _cleanId: rawId, _uniqueKey: key });
+              }
+            });
           }
 
-          // Also include tasks from user-feed that might not be in liveTasks/indTasks
+          // Also include tasks & milestones from user-feed that might not be in liveTasks/indTasks
           if (Array.isArray(rawFeed)) {
             rawFeed.forEach(evt => {
               const typeLower = (evt.type || "").toLowerCase();
               if (typeLower === 'holiday') {
-                if (!allEvents.some(e => e.date === evt.date && (e.title || "").toLowerCase() === (evt.title || "").toLowerCase())) {
+                const holTitle = (evt.title || "").trim().toLowerCase();
+                const holKey = `${evt.date}_${holTitle}`;
+                if (!seenHolidayKeys.has(holKey) && !allEvents.some(e => (e.type || '').toLowerCase() === 'holiday' && `${e.date}_${(e.title || '').trim().toLowerCase()}` === holKey)) {
+                  seenHolidayKeys.add(holKey);
                   allEvents.push(evt);
                 }
               } else if (typeLower === 'milestone') {
-                allEvents.push(evt);
+                const msId = String(evt.id || evt.mId || '').replace(/^MILESTONE-/i, '');
+                const msTitle = (evt.title || '').trim().toLowerCase();
+                if (!allEvents.some(e => (e.type || '').toLowerCase() === 'milestone' && (String(e.id || '').replace(/^MILESTONE-/i, '') === msId || ((e.title || '').trim().toLowerCase() === msTitle && e.date === evt.date)))) {
+                  allEvents.push(evt);
+                }
               } else if (typeLower === 'task' || typeLower === 'overdue' || evt.taskId) {
-                const evtTaskId = String(evt.taskId || evt.id || '').replace(/^TASK-/, '');
-                const found = userTasks.some(t => String(t.taskId || t.empTaskId || t.id) === evtTaskId);
+                const rawIdStr = String(evt.id || evt.taskId || '');
+                const isIndTask = rawIdStr.toUpperCase().startsWith('IND-TASK') || rawIdStr.toUpperCase().startsWith('IND_TASK');
+                const cleanId = rawIdStr.replace(/^(IND[-_]TASK|TASK)[-_]?/i, '').trim();
+                const evtTitle = (evt.title || '').trim().toLowerCase();
+                const evtDate = evt.date ? String(evt.date).split('T')[0] : '';
+                const evtCode = (evt.code || '').trim().toLowerCase();
+
+                // Check if this task is already in userTaskMap
+                let found = false;
+                if (isIndTask && cleanId) {
+                  if (userTaskMap.has(`IND_${cleanId}`)) found = true;
+                } else if (cleanId) {
+                  if (userTaskMap.has(`LIVE_${cleanId}`)) found = true;
+                }
+
+                // Match by code or by title + date
                 if (!found) {
-                  userTasks.push({
-                    taskId: evtTaskId,
+                  for (const existing of userTaskMap.values()) {
+                    const exTitle = (existing.taskNm || existing.taskName || existing.title || '').trim().toLowerCase();
+                    const exEnd = String(existing.endDt || existing.dueDate || existing.date || '').split('T')[0];
+                    const exStart = String(existing.stDt || existing.startDate || '').split('T')[0];
+                    const exCode = (existing.taskCd || existing.empTaskCd || existing.code || '').trim().toLowerCase();
+                    
+                    if (evtCode && exCode && evtCode === exCode) {
+                      found = true;
+                      break;
+                    }
+                    if (exTitle && evtTitle && exTitle === evtTitle && (exEnd === evtDate || exStart === evtDate)) {
+                      found = true;
+                      break;
+                    }
+                  }
+                }
+
+                if (!found) {
+                  const source = isIndTask ? 'IND' : 'LIVE';
+                  const key = cleanId ? `${source}_${cleanId}` : `${source}_${evtTitle}_${evtDate}`;
+                  userTaskMap.set(key, {
+                    taskId: isIndTask ? undefined : cleanId,
+                    empTaskId: isIndTask ? cleanId : undefined,
                     taskNm: evt.title,
                     endDt: evt.date,
                     stDt: evt.startDate || evt.stDt || evt.date,
                     taskSts: evt.status,
                     taskCd: evt.code,
-                    taskDesc: evt.description
+                    taskDesc: evt.description,
+                    _taskSource: source,
+                    _cleanId: cleanId,
+                    _uniqueKey: key
                   });
                 }
               } else {
@@ -209,10 +273,14 @@ const Calendar = ({ userRole, onLogout }) => {
           }
 
           // 3. Process every task -> map strictly to Start Date and Due Date (no intermediate days)
-          const processedTaskKeys = new Set();
+          const processedEventKeys = new Set();
 
-          userTasks.forEach(t => {
-            const taskId = String(t.empTaskId || t.emptaskid || t.taskId || t.taskid || t.id || t.taskCd || Math.random().toString());
+          userTaskMap.forEach(t => {
+            const isInd = t._taskSource === 'IND' || Boolean(t.empTaskId);
+            const rawId = String(t.empTaskId || t.taskId || t.id || t.taskCd || t.taskNm || Math.random().toString());
+            const cleanId = rawId.replace(/^(IND[-_]TASK|TASK)[-_]?/i, '').trim();
+            const taskUniqueId = isInd ? `IND-${cleanId}` : `TASK-${cleanId}`;
+
             const title = t.taskNm || t.taskName || t.taskTitle || t.title || "Task";
             const code = t.taskCd || t.empTaskCd || t.code || "";
             const status = t.taskSts || t.tasksts || t.status || "OPEN";
@@ -234,15 +302,17 @@ const Calendar = ({ userRole, onLogout }) => {
 
             const subStatus = t.subStatus || t.sub_status || t.subSts || t.sub_sts || t.prcsYesActn || t.prcs_yes_actn || "";
             const leadLagStatus = t.leadLagStatus || t.lead_lag_status || t.leadLagSts || t.lead_lag_sts || "";
+            const normalizedTitle = title.trim().toLowerCase();
 
             if (isSameDay) {
               const targetDate = endStr || startStr;
-              const taskKey = `${taskId}_${targetDate}`;
-              if (!processedTaskKeys.has(taskKey)) {
-                processedTaskKeys.add(taskKey);
+              const eventKey = `${taskUniqueId}_due_${targetDate}_${normalizedTitle}`;
+              if (!processedEventKeys.has(eventKey)) {
+                processedEventKeys.add(eventKey);
                 allEvents.push({
-                  id: taskId,
-                  taskId: taskId,
+                  id: `${taskUniqueId}-${targetDate}`,
+                  taskId: cleanId,
+                  taskType: isInd ? 'INDIVIDUAL' : 'PROJECT',
                   type: 'task',
                   title: title,
                   date: targetDate,
@@ -264,12 +334,13 @@ const Calendar = ({ userRole, onLogout }) => {
               }
             } else {
               // 1. Start Date only
-              const startKey = `${taskId}_${startStr}_start`;
-              if (!processedTaskKeys.has(startKey)) {
-                processedTaskKeys.add(startKey);
+              const startKey = `${taskUniqueId}_start_${startStr}_${normalizedTitle}`;
+              if (!processedEventKeys.has(startKey)) {
+                processedEventKeys.add(startKey);
                 allEvents.push({
-                  id: `${taskId}-start`,
-                  taskId: taskId,
+                  id: `${taskUniqueId}-start-${startStr}`,
+                  taskId: cleanId,
+                  taskType: isInd ? 'INDIVIDUAL' : 'PROJECT',
                   type: 'task',
                   title: title,
                   date: startStr,
@@ -291,12 +362,13 @@ const Calendar = ({ userRole, onLogout }) => {
               }
 
               // 2. Due Date only
-              const dueKey = `${taskId}_${endStr}_due`;
-              if (!processedTaskKeys.has(dueKey)) {
-                processedTaskKeys.add(dueKey);
+              const dueKey = `${taskUniqueId}_due_${endStr}_${normalizedTitle}`;
+              if (!processedEventKeys.has(dueKey)) {
+                processedEventKeys.add(dueKey);
                 allEvents.push({
-                  id: `${taskId}-due`,
-                  taskId: taskId,
+                  id: `${taskUniqueId}-due-${endStr}`,
+                  taskId: cleanId,
+                  taskType: isInd ? 'INDIVIDUAL' : 'PROJECT',
                   type: 'task',
                   title: title,
                   date: endStr,
@@ -326,7 +398,26 @@ const Calendar = ({ userRole, onLogout }) => {
           }
         }
 
-        setEventsList(allEvents);
+        // Final safeguard deduplication across all events
+        const uniqueEvents = [];
+        const seenSignatures = new Set();
+
+        allEvents.forEach(evt => {
+          const type = (evt.type || 'task').toLowerCase();
+          const evtDate = evt.date ? String(evt.date).split('T')[0] : '';
+          const evtTitle = (evt.title || '').trim().toLowerCase();
+          const badge = (evt.dateBadge || '').toLowerCase();
+          const code = (evt.code || '').trim().toLowerCase();
+          const rawId = String(evt.id || evt.taskId || '').toLowerCase();
+
+          const sig = `${type}_${evtDate}_${badge}_${evtTitle}_${code || rawId}`;
+          if (!seenSignatures.has(sig)) {
+            seenSignatures.add(sig);
+            uniqueEvents.push(evt);
+          }
+        });
+
+        setEventsList(uniqueEvents);
       } catch (err) {
         console.error("Error fetching calendar data:", err);
         setError("Failed to load calendar events.");
@@ -595,16 +686,15 @@ const Calendar = ({ userRole, onLogout }) => {
 
     return eventsList
       .filter(evt => {
-        const isClosed = isEventClosed(evt);
-
-        if (isClosed) {
-          if (!showCompleted) return false;
-        } else {
-          const eventType = getEventType(evt);
-          if (eventType === 'task' && !filterTasks) return false;
-          if (eventType === 'overdue' && !filterOverdue) return false;
-          if (eventType === 'milestone' && !filterMilestones) return false;
+        // Closed/completed tasks should NEVER appear in Upcoming Due's
+        if (isEventClosed(evt)) {
+          return false;
         }
+
+        const eventType = getEventType(evt);
+        if (eventType === 'task' && !filterTasks) return false;
+        if (eventType === 'overdue' && !filterOverdue) return false;
+        if (eventType === 'milestone' && !filterMilestones) return false;
 
         const dateVal = getEventDateString(evt);
         const evtDate = parseLocalDate(dateVal);
@@ -916,7 +1006,7 @@ const Calendar = ({ userRole, onLogout }) => {
                   )}
                 </div>
                 <div className="upcoming-list">
-                  {getUpcomingEvents().map((evt) => {
+                  {getUpcomingEvents().map((evt, idx) => {
                     const eventType = getEventType(evt);
                     const isStart = evt.dateBadge === 'Start Date';
                     const dotColor = isStart ? '#10b981' : (EVENT_COLORS[eventType] || EVENT_COLORS.task);
@@ -943,7 +1033,7 @@ const Calendar = ({ userRole, onLogout }) => {
 
                     return (
                       <div 
-                        key={evt.id} 
+                        key={evt.id || `upcoming-${idx}`} 
                         className="upcoming-item" 
                         onClick={() => setSelectedEvent(evt)} 
                         style={{ cursor: "pointer" }}
