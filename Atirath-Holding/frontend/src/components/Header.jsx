@@ -255,9 +255,15 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
       });
       if (res.ok) {
         const data = await res.json();
-        // Filter out notifications that were cleared locally
         const hiddenIds = JSON.parse(localStorage.getItem("hiddenNotifIds") || "[]");
-        setNotifications(data.filter(n => !hiddenIds.includes(n.id)));
+        const readIds = JSON.parse(localStorage.getItem("readNotifIds") || "[]");
+        
+        const normalizedData = data.map(n => {
+          const isActuallyRead = n.isRead === true || n.read === true || n.status === 'READ' || readIds.includes(n.id);
+          return { ...n, isRead: isActuallyRead };
+        });
+        
+        setNotifications(normalizedData.filter(n => !hiddenIds.includes(n.id)));
       }
     } catch (err) {
       console.error("Failed to fetch notifications", err);
@@ -270,6 +276,11 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
         method: "PATCH",
         headers: authHeaders()
       });
+      
+      const readIds = JSON.parse(localStorage.getItem("readNotifIds") || "[]");
+      const newReadIds = [...new Set([...readIds, ...notifications.map(n => n.id)])];
+      localStorage.setItem("readNotifIds", JSON.stringify(newReadIds));
+      
       setNotifications(prev => prev.map(n => ({ ...n, isRead: true })));
     } catch (err) {
       console.error("Failed to mark all as read", err);
@@ -304,11 +315,17 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
 
   const markOneAsRead = async (id) => {
     try {
+      // Optimistic update in UI and local storage
+      const readIds = JSON.parse(localStorage.getItem("readNotifIds") || "[]");
+      if (!readIds.includes(id)) {
+        localStorage.setItem("readNotifIds", JSON.stringify([...readIds, id]));
+      }
+      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
+      
       await fetch(`${import.meta.env.VITE_API_BASE_URL}/api/notifications/${id}/read`, {
         method: "PATCH",
         headers: authHeaders()
       });
-      setNotifications(prev => prev.map(n => n.id === id ? { ...n, isRead: true } : n));
     } catch (err) {
       console.error("Failed to mark notification as read", err);
     }

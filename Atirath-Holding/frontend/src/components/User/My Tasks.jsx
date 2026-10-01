@@ -996,28 +996,20 @@ const MyTasks = ({ userRole, onLogout }) => {
       let mappedInd = filteredIndTasks.map(t => mapIndividualTask(t, employeesData || []));
       mapped = [...mapped, ...mappedInd];
 
-      // Final strict deduplication by unique task code, database primary ID, and composite keys
+      // Final strict deduplication by unique database primary ID (typePrefix + taskId)
       const uniqueMapped = [];
-      const seenTaskCodes = new Set();
       const seenPrimaryKeys = new Set();
 
       mapped.forEach(t => {
-        const rawCode = String(t.taskCode || t.id || t.rawTask?.taskCd || t.rawTask?.taskCode || t.code || "").toUpperCase().trim();
         const rawId = String(t.taskId || t.empTaskId || t.rawTask?.empTaskId || t.rawTask?.taskId || t.rawTask?.id || "").trim();
         const typePrefix = t.isIndividual ? 'IND' : 'LIVE';
         const primaryKey = rawId ? `${typePrefix}_${rawId}` : null;
-
-        // Skip if task code already seen (e.g. "INDTSK-004")
-        if (rawCode && seenTaskCodes.has(rawCode)) {
-          return;
-        }
 
         // Skip if database primary ID already seen
         if (primaryKey && seenPrimaryKeys.has(primaryKey)) {
           return;
         }
 
-        if (rawCode) seenTaskCodes.add(rawCode);
         if (primaryKey) seenPrimaryKeys.add(primaryKey);
         uniqueMapped.push(t);
       });
@@ -2390,7 +2382,7 @@ const MyTasks = ({ userRole, onLogout }) => {
       }
       const d = new Date(rawVal);
       if (!isNaN(d.getTime())) return d.getTime();
-    } catch (e) {}
+    } catch (e) { }
 
     return Infinity;
   };
@@ -3004,11 +2996,20 @@ const MyTasks = ({ userRole, onLogout }) => {
     const isDoer = isExternalMode || String(rawTask.empId || rawTask.assignedTo || rawTask.extEmpId) === String(currentUserEmpId) || String(rawTask.assignedBy || rawTask.assigned_by || rawTask.createdBy) === String(currentUserEmpId) || isTeamMember || (!isReviewer && !isApprover);
 
     // Get current progress and process for display
+    const rawSubStatus = String(rawTask?.subStatus || rawTask?.sub_status || task?.subStatus || task?.sub_status || task?.processStatus || '').trim().toUpperCase();
+    const rawStatusNm = String(rawTask?.statusNm || rawTask?.status_nm || rawTask?.taskSts || task?.rawStatus || task?.status || '').trim().toUpperCase();
     const currentProgress = (rawTask.taskSts || task.rawStatus || task.status || "OPEN").toUpperCase();
-    const currentProcess = rawTask.prcsYesActn || (rawTask.subStatus === "Under Review" ? "PENDING_REVIEWER" : "NONE");
+    const currentProcess = String(rawTask.prcsYesActn || (rawSubStatus === "UNDER REVIEW" ? "PENDING_REVIEWER" : "NONE")).trim().toUpperCase();
 
-    // Determine if task is in review
-    const isUnderReview = currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER" || currentProcess === "UNDER_REVIEW";
+    // Determine if task is in review (with Reviewer/Approver, and not in Reassign/Rework)
+    const isUnderReview = (
+      currentProcess === "PENDING_REVIEWER" ||
+      currentProcess === "PENDING_APPROVER" ||
+      currentProcess === "UNDER_REVIEW" ||
+      rawSubStatus === "UNDER REVIEW" ||
+      rawStatusNm === "UNDER_REVIEW" ||
+      rawStatusNm === "UNDER REVIEW"
+    ) && rawSubStatus !== "REASSIGN" && rawSubStatus !== "REWORK" && currentProcess !== "REASSIGN" && currentProcess !== "REWORK";
 
     const renderTeamMember = (empId, role, label, fallbackName = null, isExternal = false) => {
       if (!empId && !fallbackName) return null;
@@ -3761,7 +3762,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                   <Users size={18} color="#475569" />
                   Team Members {taskTeamMembers.length > 0 ? `(${taskTeamMembers.length})` : ''}
                 </div>
-                {!isCompleted && !showAddMemberModal && (
+                {!isCompleted && !isUnderReview && !showAddMemberModal && (
                   String(rawTask.empId || rawTask.executorId) === String(currentUserEmpId) && !isReviewer && !isApprover
                 ) && (
                     <button onClick={() => setShowAddMemberModal(true)} style={{ padding: "6px 12px", fontSize: "13px", fontWeight: "600", color: "#3B82F6", backgroundColor: "#DBEAFE", border: "none", borderRadius: "6px", cursor: "pointer", display: "flex", alignItems: "center", gap: "4px" }}>
@@ -3781,7 +3782,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                     const empInitials = getEmployeeInitials(tm.empId, employeesList, tm.fallbackName) || tm.label || "TM";
                     const empPhoto = getEmployeePhoto(tm.empId, employeesList);
                     const isPrimaryExec = String(rawTask.empId || rawTask.executorId) === String(currentUserEmpId);
-                    const canManageTeam = !isCompleted && isPrimaryExec && !isReviewer && !isApprover;
+                    const canManageTeam = !isCompleted && !isUnderReview && isPrimaryExec && !isReviewer && !isApprover;
                     return (
                       <div key={idx} style={{ display: "flex", alignItems: "center", gap: "8px", backgroundColor: "#f8fafc", padding: "6px 12px", borderRadius: "20px", border: "1px solid #e2e8f0" }}>
                         {empPhoto ? (
@@ -4400,14 +4401,14 @@ const MyTasks = ({ userRole, onLogout }) => {
               <div style={{ display: "flex", flexDirection: "column", gap: "8px" }}>
                 {(() => {
                   const isIndTask = task.isIndividual || projectInfo?.isIndividual || rawTask?.taskSource === "INDIVIDUAL" || rawTask?.entityTyp === "INDIVIDUAL_TASK" || (!rawTask?.prjId && (!rawTask?.prjNm || rawTask?.prjNm === "Individual Task"));
-                  
+
                   if (isExternalMode && !isIndTask) {
                     return null;
                   }
-                  
+
                   if (isIndTask) {
                     const assignerName = rawTask?.assignedByNm || rawTask?.assignedByName || (rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy ? getEmployeeName(rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy, employeesList) : null) || (isExternalMode ? "Project Admin" : null);
-                    
+
                     if (isExternalMode) {
                       return (
                         <div style={{
@@ -4424,7 +4425,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                         </div>
                       );
                     }
-                    
+
                     return renderTeamMember(
                       rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy,
                       "Assigned By",
@@ -4432,7 +4433,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                       assignerName
                     );
                   }
-                  
+
                   return renderTeamMember(
                     rawTask?.assignedBy || rawTask?.assigned_by || rawTask?.createdBy,
                     "Assigned By",
@@ -5484,160 +5485,160 @@ const MyTasks = ({ userRole, onLogout }) => {
                 )
               ) : (
 
-            /* Tasks List View */
-            <>
-              {/* Metrics Cards */}
-              <div className="myt-metrics-grid" style={{ marginBottom: "24px", display: "flex", gap: "16px", flexWrap: "nowrap", overflowX: "auto" }}>
-                <div className={`myt-metric-card sketch-layout todo ${selectedStatus === "To Do" ? "active" : ""}`} onClick={() => handleStatusFilterChange("To Do")} style={{ flex: "1", minWidth: "120px" }}>
-                  <div className="myt-metric-left"><div className="myt-metric-icon-box yellow-circle"><ClipboardList size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">To-Do</div><div className="myt-metric-subtitle">Active Tasks</div></div></div>
-                  <div className="myt-metric-right"><div className="myt-metric-value">{countTodo}</div></div>
-                </div>
+                /* Tasks List View */
+                <>
+                  {/* Metrics Cards */}
+                  <div className="myt-metrics-grid" style={{ marginBottom: "24px", display: "flex", gap: "16px", flexWrap: "nowrap", overflowX: "auto" }}>
+                    <div className={`myt-metric-card sketch-layout todo ${selectedStatus === "To Do" ? "active" : ""}`} onClick={() => handleStatusFilterChange("To Do")} style={{ flex: "1", minWidth: "120px" }}>
+                      <div className="myt-metric-left"><div className="myt-metric-icon-box yellow-circle"><ClipboardList size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">To-Do</div><div className="myt-metric-subtitle">Active Tasks</div></div></div>
+                      <div className="myt-metric-right"><div className="myt-metric-value">{countTodo}</div></div>
+                    </div>
 
-                <div className={`myt-metric-card sketch-layout upcoming ${selectedStatus === "Upcoming" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Upcoming")} style={{ flex: "1", minWidth: "120px" }}>
-                  <div className="myt-metric-left"><div className="myt-metric-icon-box" style={{ backgroundColor: "#e0e7ff", color: "#4f46e5" }}><Calendar size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Upcoming</div><div className="myt-metric-subtitle">Planned</div></div></div>
-                  <div className="myt-metric-right"><div className="myt-metric-value">{countUpcoming}</div></div>
-                </div>
+                    <div className={`myt-metric-card sketch-layout upcoming ${selectedStatus === "Upcoming" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Upcoming")} style={{ flex: "1", minWidth: "120px" }}>
+                      <div className="myt-metric-left"><div className="myt-metric-icon-box" style={{ backgroundColor: "#e0e7ff", color: "#4f46e5" }}><Calendar size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Upcoming</div><div className="myt-metric-subtitle">Planned</div></div></div>
+                      <div className="myt-metric-right"><div className="myt-metric-value">{countUpcoming}</div></div>
+                    </div>
 
-                <div className={`myt-metric-card sketch-layout completed ${selectedStatus === "Completed" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Completed")} style={{ flex: "1", minWidth: "120px" }}>
-                  <div className="myt-metric-left"><div className="myt-metric-icon-box green-circle"><CheckCircle2 size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Closed</div><div className="myt-metric-subtitle">Done</div></div></div>
-                  <div className="myt-metric-right"><div className="myt-metric-value">{countCompleted}</div></div>
-                </div>
+                    <div className={`myt-metric-card sketch-layout completed ${selectedStatus === "Completed" ? "active" : ""}`} onClick={() => handleStatusFilterChange("Completed")} style={{ flex: "1", minWidth: "120px" }}>
+                      <div className="myt-metric-left"><div className="myt-metric-icon-box green-circle"><CheckCircle2 size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">Closed</div><div className="myt-metric-subtitle">Done</div></div></div>
+                      <div className="myt-metric-right"><div className="myt-metric-value">{countCompleted}</div></div>
+                    </div>
 
-                <div className={`myt-metric-card sketch-layout all ${selectedStatus === "All Tasks" ? "active" : ""}`} onClick={() => handleStatusFilterChange("All Tasks")} style={{ flex: "1", minWidth: "120px" }}>
-                  <div className="myt-metric-left"><div className="myt-metric-icon-box orange-circle"><Layers size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">All Tasks</div><div className="myt-metric-subtitle">Total Work</div></div></div>
-                  <div className="myt-metric-right"><div className="myt-metric-value">{countAllTasks}</div></div>
-                </div>
-              </div>
-
-              {/* Search and Filters */}
-              <div className="myt-tabs-container" style={{ marginBottom: "20px", borderBottom: "none", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
-                {showTaskFilters ? (
-                  <div className="myt-tabs-left" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "All" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("All"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "All" ? "#3B82F6" : "white",
-                        color: taskFilter === "All" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      All
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "OPEN" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("OPEN"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "OPEN" ? "#3B82F6" : "white",
-                        color: taskFilter === "OPEN" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Open
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "IN_PROGRESS" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("IN_PROGRESS"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "IN_PROGRESS" ? "#3B82F6" : "white",
-                        color: taskFilter === "IN_PROGRESS" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Work In Progress
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "UNDER_REVIEW" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("UNDER_REVIEW"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "UNDER_REVIEW" ? "#3B82F6" : "white",
-                        color: taskFilter === "UNDER_REVIEW" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Under Review
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "REASSIGNED" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("REASSIGNED"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "REASSIGNED" ? "#3B82F6" : "white",
-                        color: taskFilter === "REASSIGNED" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Re-Assigned
-                    </button>
-                    <button
-                      className={`myt-filter-btn ${taskFilter === "OVERDUE" ? "active" : ""}`}
-                      onClick={() => { setTaskFilter("OVERDUE"); setCurrentPage(1); }}
-                      style={{
-                        padding: "6px 14px",
-                        borderRadius: "20px",
-                        border: "1px solid #e2e8f0",
-                        backgroundColor: taskFilter === "OVERDUE" ? "#EF4444" : "white",
-                        color: taskFilter === "OVERDUE" ? "white" : "#475569",
-                        cursor: "pointer",
-                        fontSize: "12px",
-                        fontWeight: "500",
-                        transition: "all 0.2s"
-                      }}
-                    >
-                      Overdue
-                    </button>
+                    <div className={`myt-metric-card sketch-layout all ${selectedStatus === "All Tasks" ? "active" : ""}`} onClick={() => handleStatusFilterChange("All Tasks")} style={{ flex: "1", minWidth: "120px" }}>
+                      <div className="myt-metric-left"><div className="myt-metric-icon-box orange-circle"><Layers size={20} /></div><div className="myt-metric-text-group"><div className="myt-metric-title">All Tasks</div><div className="myt-metric-subtitle">Total Work</div></div></div>
+                      <div className="myt-metric-right"><div className="myt-metric-value">{countAllTasks}</div></div>
+                    </div>
                   </div>
-                ) : (
-                  <div className="myt-tabs-left" />
-                )}
-                <div className="myt-tabs-right" style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: showTaskFilters ? "0" : "auto" }}>
-                  <div className="myt-search-box" style={{ position: "relative" }}>
-                    <Search size={15} className="myt-search-icon" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
-                    <input
-                      type="text"
-                      placeholder="Search task code or title..."
-                      value={searchInput}
-                      onChange={(e) => { setSearchInput(e.target.value); setSearchQuery(e.target.value); }}
-                      style={{ padding: "8px 12px 8px 32px", border: "1px solid #e2e8f0", borderRadius: "6px", outline: "none", fontSize: "13px", width: "240px" }}
-                      onKeyDown={handleSearchKeyDown}
-                    />
+
+                  {/* Search and Filters */}
+                  <div className="myt-tabs-container" style={{ marginBottom: "20px", borderBottom: "none", display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: "12px" }}>
+                    {showTaskFilters ? (
+                      <div className="myt-tabs-left" style={{ display: "flex", gap: "8px", flexWrap: "wrap" }}>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "All" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("All"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "All" ? "#3B82F6" : "white",
+                            color: taskFilter === "All" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          All
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "OPEN" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("OPEN"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "OPEN" ? "#3B82F6" : "white",
+                            color: taskFilter === "OPEN" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Open
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "IN_PROGRESS" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("IN_PROGRESS"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "IN_PROGRESS" ? "#3B82F6" : "white",
+                            color: taskFilter === "IN_PROGRESS" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Work In Progress
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "UNDER_REVIEW" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("UNDER_REVIEW"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "UNDER_REVIEW" ? "#3B82F6" : "white",
+                            color: taskFilter === "UNDER_REVIEW" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Under Review
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "REASSIGNED" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("REASSIGNED"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "REASSIGNED" ? "#3B82F6" : "white",
+                            color: taskFilter === "REASSIGNED" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Re-Assigned
+                        </button>
+                        <button
+                          className={`myt-filter-btn ${taskFilter === "OVERDUE" ? "active" : ""}`}
+                          onClick={() => { setTaskFilter("OVERDUE"); setCurrentPage(1); }}
+                          style={{
+                            padding: "6px 14px",
+                            borderRadius: "20px",
+                            border: "1px solid #e2e8f0",
+                            backgroundColor: taskFilter === "OVERDUE" ? "#EF4444" : "white",
+                            color: taskFilter === "OVERDUE" ? "white" : "#475569",
+                            cursor: "pointer",
+                            fontSize: "12px",
+                            fontWeight: "500",
+                            transition: "all 0.2s"
+                          }}
+                        >
+                          Overdue
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="myt-tabs-left" />
+                    )}
+                    <div className="myt-tabs-right" style={{ display: "flex", gap: "8px", alignItems: "center", marginLeft: showTaskFilters ? "0" : "auto" }}>
+                      <div className="myt-search-box" style={{ position: "relative" }}>
+                        <Search size={15} className="myt-search-icon" style={{ position: "absolute", left: "10px", top: "50%", transform: "translateY(-50%)", color: "#94a3b8" }} />
+                        <input
+                          type="text"
+                          placeholder="Search task code or title..."
+                          value={searchInput}
+                          onChange={(e) => { setSearchInput(e.target.value); setSearchQuery(e.target.value); }}
+                          style={{ padding: "8px 12px 8px 32px", border: "1px solid #e2e8f0", borderRadius: "6px", outline: "none", fontSize: "13px", width: "240px" }}
+                          onKeyDown={handleSearchKeyDown}
+                        />
+                      </div>
+                      {(searchInput || searchQuery) && (
+                        <button onClick={handleResetFilters} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: "white", cursor: "pointer", fontSize: "12px", color: "#64748b" }}>
+                          Clear
+                        </button>
+                      )}
+                    </div>
                   </div>
-                  {(searchInput || searchQuery) && (
-                    <button onClick={handleResetFilters} style={{ padding: "6px 12px", border: "1px solid #e2e8f0", borderRadius: "6px", backgroundColor: "white", cursor: "pointer", fontSize: "12px", color: "#64748b" }}>
-                      Clear
-                    </button>
-                  )}
-                </div>
-              </div>
 
 
                   {/* Table */}
@@ -5699,7 +5700,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                               const isOverdue = isTaskOverdue(task);
 
                               return (
-                                <tr key={task.id || task.taskId} onClick={() => { openTaskDetail(task); }} style={{ cursor: "pointer", backgroundColor: isOverdue ? "#FEF2F2" : "transparent" }}>
+                                <tr key={`${task.isIndividual ? 'IND' : 'LIVE'}_${task.taskId || task.id}`} onClick={() => { openTaskDetail(task); }} style={{ cursor: "pointer", backgroundColor: isOverdue ? "#FEF2F2" : "transparent" }}>
                                   <td style={{ maxWidth: "250px" }}>
                                     <div style={{ fontWeight: "600", color: "#0f172a", marginBottom: "4px" }}>{task.taskCode || task.id}</div>
                                     <div style={{ fontWeight: "500", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={task.title}>{task.title}</div>
