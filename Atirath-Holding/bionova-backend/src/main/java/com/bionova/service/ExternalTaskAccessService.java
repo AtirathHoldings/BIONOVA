@@ -53,7 +53,7 @@ public class ExternalTaskAccessService {
     @Autowired
     private EmployeeRepository employeeRepository;
 
-    @Value("${app.base-url:http://localhost:5173}")
+    @Value("${app.base-url:https://bionova-sable.vercel.app}")
     private String baseUrl;
 
     /**
@@ -108,7 +108,7 @@ public class ExternalTaskAccessService {
             }
         }
 
-        String cleanBaseUrl = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "http://localhost:5173";
+        String cleanBaseUrl = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "https://bionova-sable.vercel.app";
         if (cleanBaseUrl.endsWith("/")) {
             cleanBaseUrl = cleanBaseUrl.substring(0, cleanBaseUrl.length() - 1);
         }
@@ -180,7 +180,7 @@ public class ExternalTaskAccessService {
             }
         }
 
-        String cleanBaseUrl = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "http://localhost:5173";
+        String cleanBaseUrl = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "https://bionova-sable.vercel.app";
         if (cleanBaseUrl.endsWith("/")) {
             cleanBaseUrl = cleanBaseUrl.substring(0, cleanBaseUrl.length() - 1);
         }
@@ -320,19 +320,19 @@ public class ExternalTaskAccessService {
         }
 
         // Fetch Process Config (Reviewer / Approver)
-        Long reviewerId = null;
-        String reviewerNm = null;
-        Long approverId = null;
-        String approverNm = null;
+        java.util.List<Long> revIds = new java.util.ArrayList<>();
+        java.util.List<String> revNames = new java.util.ArrayList<>();
+        java.util.List<Long> appIds = new java.util.ArrayList<>();
+        java.util.List<String> appNames = new java.util.ArrayList<>();
 
         List<ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
         if (configs == null || configs.isEmpty()) {
             configs = processConfigRepository.findByTaskIdOrderByOrdrIdAsc(task.getTaskId());
         }
         for (ProcessConfig pc : configs) {
-            boolean isRev = false;
-            boolean isApp = false;
-            if (pc.getRId() != null) {
+            boolean isRev = "REVIEWER".equalsIgnoreCase(pc.getStepType());
+            boolean isApp = "APPROVER".equalsIgnoreCase(pc.getStepType());
+            if (!isRev && !isApp && pc.getRId() != null) {
                 ReviewerMaster rm = reviewerMasterRepository.findById(pc.getRId()).orElse(null);
                 if (rm != null) {
                     if ("Reviewer".equalsIgnoreCase(rm.getRNm())) isRev = true;
@@ -341,50 +341,29 @@ public class ExternalTaskAccessService {
             }
             if (!isRev && !isApp) {
                 if (pc.getOrdrId() != null && pc.getOrdrId() == 1) isRev = true;
-                else if (pc.getOrdrId() != null && pc.getOrdrId() == 2) isApp = true;
+                else if (pc.getOrdrId() != null && pc.getOrdrId() > 1) isApp = true;
             }
-            if (isRev && reviewerId == null) {
-                reviewerId = pc.getEmpId();
-                if (pc.getEmpId() != null) {
-                    Employee emp = employeeRepository.findById(pc.getEmpId()).orElse(null);
-                    if (emp != null) {
-                        reviewerNm = ((emp.getFirstName() != null ? emp.getFirstName() : "") + " " + (emp.getLastName() != null ? emp.getLastName() : "")).trim();
-                    }
+            if (isRev && pc.getEmpId() != null) {
+                revIds.add(pc.getEmpId());
+                Employee emp = employeeRepository.findById(pc.getEmpId()).orElse(null);
+                if (emp != null) {
+                    String lName = emp.getLastName() != null ? emp.getLastName() : "";
+                    revNames.add(((emp.getFirstName() != null ? emp.getFirstName() : "") + " " + lName).trim());
                 }
-            } else if (isApp && approverId == null) {
-                approverId = pc.getEmpId();
-                if (pc.getEmpId() != null) {
-                    Employee emp = employeeRepository.findById(pc.getEmpId()).orElse(null);
-                    if (emp != null) {
-                        approverNm = ((emp.getFirstName() != null ? emp.getFirstName() : "") + " " + (emp.getLastName() != null ? emp.getLastName() : "")).trim();
-                    }
+            } else if (isApp && pc.getEmpId() != null) {
+                appIds.add(pc.getEmpId());
+                Employee emp = employeeRepository.findById(pc.getEmpId()).orElse(null);
+                if (emp != null) {
+                    String lName = emp.getLastName() != null ? emp.getLastName() : "";
+                    appNames.add(((emp.getFirstName() != null ? emp.getFirstName() : "") + " " + lName).trim());
                 }
             }
         }
 
-        if (reviewerId == null && task.getReviewer() != null) {
-            reviewerId = task.getReviewer();
-            if (task.getReviewerNm() != null) {
-                reviewerNm = task.getReviewerNm();
-            } else {
-                Employee emp = employeeRepository.findById(reviewerId).orElse(null);
-                if (emp != null) {
-                    reviewerNm = ((emp.getFirstName() != null ? emp.getFirstName() : "") + " " + (emp.getLastName() != null ? emp.getLastName() : "")).trim();
-                }
-            }
-        }
-
-        if (approverId == null && task.getApprover() != null) {
-            approverId = task.getApprover();
-            if (task.getApproverNm() != null) {
-                approverNm = task.getApproverNm();
-            } else {
-                Employee emp = employeeRepository.findById(approverId).orElse(null);
-                if (emp != null) {
-                    approverNm = ((emp.getFirstName() != null ? emp.getFirstName() : "") + " " + (emp.getLastName() != null ? emp.getLastName() : "")).trim();
-                }
-            }
-        }
+        Long reviewerId = revIds.isEmpty() ? task.getReviewer() : revIds.get(0);
+        String reviewerNm = !revNames.isEmpty() ? String.join(", ", revNames) : task.getReviewerNm();
+        Long approverId = appIds.isEmpty() ? task.getApprover() : appIds.get(0);
+        String approverNm = !appNames.isEmpty() ? String.join(", ", appNames) : task.getApproverNm();
 
         return ExternalTaskViewDto.builder()
                 .taskId(task.getTaskId())
@@ -587,7 +566,7 @@ public class ExternalTaskAccessService {
 
         ExternalEmployee extEmp = task.getExtEmpId() != null ? externalEmployeeRepository.findById(task.getExtEmpId()).orElse(null) : null;
 
-        String cleanBaseUrl = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "http://localhost:5173";
+        String cleanBaseUrl = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "https://bionova-sable.vercel.app";
         if (cleanBaseUrl.endsWith("/")) {
             cleanBaseUrl = cleanBaseUrl.substring(0, cleanBaseUrl.length() - 1);
         }
@@ -605,5 +584,137 @@ public class ExternalTaskAccessService {
         map.put("extEmpEmail", extEmp != null ? extEmp.getEmail() : "");
         map.put("companyNm", extEmp != null ? extEmp.getCompanyNm() : "");
         return map;
+    }
+
+    /**
+     * Notify an external employee when their task has been sent back for rework by a Reviewer or Approver.
+     */
+    public void notifyExternalEmployeeRework(Long taskId, String reviewerRole, Long reviewerEmpId, String remarks) {
+        if (taskId == null) return;
+        try {
+            TaskLive task = taskLiveRepository.findById(taskId).orElse(null);
+            if (task == null) return;
+
+            if (!"EXTERNAL".equalsIgnoreCase(task.getTaskAsgnTo()) || task.getExtEmpId() == null) {
+                return;
+            }
+
+            ExternalEmployee extEmp = externalEmployeeRepository.findById(task.getExtEmpId()).orElse(null);
+            if (extEmp == null || extEmp.getEmail() == null || extEmp.getEmail().trim().isEmpty()) {
+                System.out.println("No external employee or email found for task " + taskId + " (extEmpId=" + task.getExtEmpId() + ")");
+                return;
+            }
+
+            // Ensure active token exists
+            ProjectTaskExternalToken tokenEntity = tokenRepository.findByTaskIdAndExtEmpId(taskId, task.getExtEmpId())
+                    .orElse(null);
+            if (tokenEntity == null) {
+                tokenEntity = generateOrRefreshToken(taskId, task.getExtEmpId());
+            }
+
+            if (tokenEntity == null || tokenEntity.getToken() == null) return;
+
+            String prjNm = "Bionova Project";
+            if (task.getMId() != null) {
+                MilestoneLive ms = milestoneLiveRepository.findById(task.getMId()).orElse(null);
+                if (ms != null && ms.getPrjId() != null) {
+                    ProjectLive prj = projectLiveRepository.findById(ms.getPrjId()).orElse(null);
+                    if (prj != null && prj.getPrjNm() != null) {
+                        prjNm = prj.getPrjNm();
+                    }
+                }
+            }
+
+            String reviewerName = "Project Reviewer";
+            if (reviewerEmpId != null) {
+                Employee revEmp = employeeRepository.findById(reviewerEmpId).orElse(null);
+                if (revEmp != null) {
+                    reviewerName = ((revEmp.getFirstName() != null ? revEmp.getFirstName() : "") + " " +
+                                    (revEmp.getLastName() != null ? revEmp.getLastName() : "")).trim();
+                }
+            }
+
+            String cleanBaseUrl = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "https://bionova-sable.vercel.app";
+            if (cleanBaseUrl.endsWith("/")) {
+                cleanBaseUrl = cleanBaseUrl.substring(0, cleanBaseUrl.length() - 1);
+            }
+            String magicLink = cleanBaseUrl + "/external-task/" + tokenEntity.getToken();
+
+            emailService.sendExternalTaskReworkEmail(
+                    extEmp.getEmail(),
+                    extEmp.getExtEmpNm(),
+                    task.getTaskNm(),
+                    prjNm,
+                    magicLink,
+                    reviewerRole != null ? reviewerRole : "Reviewer",
+                    reviewerName,
+                    remarks,
+                    tokenEntity.getExpiryDt()
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to notify external employee about rework for Task ID " + taskId + ": " + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Notify an external employee when a task has been reassigned to them.
+     */
+    public void notifyExternalEmployeeReassign(Long taskId, Long newExtEmpId, String reassignerRole, Long reassignerEmpId, String remarks) {
+        if (taskId == null || newExtEmpId == null) return;
+        try {
+            TaskLive task = taskLiveRepository.findById(taskId).orElse(null);
+            if (task == null) return;
+
+            ExternalEmployee extEmp = externalEmployeeRepository.findById(newExtEmpId).orElse(null);
+            if (extEmp == null || extEmp.getEmail() == null || extEmp.getEmail().trim().isEmpty()) {
+                return;
+            }
+
+            // For reassign, generate/refresh token for new external employee
+            ProjectTaskExternalToken tokenEntity = generateOrRefreshToken(taskId, newExtEmpId);
+            if (tokenEntity == null || tokenEntity.getToken() == null) return;
+
+            String prjNm = "Bionova Project";
+            if (task.getMId() != null) {
+                MilestoneLive ms = milestoneLiveRepository.findById(task.getMId()).orElse(null);
+                if (ms != null && ms.getPrjId() != null) {
+                    ProjectLive prj = projectLiveRepository.findById(ms.getPrjId()).orElse(null);
+                    if (prj != null && prj.getPrjNm() != null) {
+                        prjNm = prj.getPrjNm();
+                    }
+                }
+            }
+
+            String reassignerName = "Project Reviewer";
+            if (reassignerEmpId != null) {
+                Employee rEmp = employeeRepository.findById(reassignerEmpId).orElse(null);
+                if (rEmp != null) {
+                    reassignerName = ((rEmp.getFirstName() != null ? rEmp.getFirstName() : "") + " " +
+                                     (rEmp.getLastName() != null ? rEmp.getLastName() : "")).trim();
+                }
+            }
+
+            String cleanBaseUrl = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "https://bionova-sable.vercel.app";
+            if (cleanBaseUrl.endsWith("/")) {
+                cleanBaseUrl = cleanBaseUrl.substring(0, cleanBaseUrl.length() - 1);
+            }
+            String magicLink = cleanBaseUrl + "/external-task/" + tokenEntity.getToken();
+
+            emailService.sendExternalTaskReassignEmail(
+                    extEmp.getEmail(),
+                    extEmp.getExtEmpNm(),
+                    task.getTaskNm(),
+                    prjNm,
+                    magicLink,
+                    reassignerRole != null ? reassignerRole : "Reviewer",
+                    reassignerName,
+                    remarks,
+                    tokenEntity.getExpiryDt()
+            );
+        } catch (Exception e) {
+            System.err.println("Failed to notify external employee about reassign for Task ID " + taskId + ": " + e.getMessage());
+            e.printStackTrace();
+        }
     }
 }

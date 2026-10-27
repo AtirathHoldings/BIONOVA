@@ -104,4 +104,16 @@ public class ProjectLive {
 
     @Transient
     private Integer progress;
+
+    public TaskPriorityMaster getRawPrjPrty() {
+        return this.prjPrty;
+    }
+
+    public TaskPriorityMaster getPrjPrty() {
+        TaskPriorityMaster baseP = (this.prjPrty != null) ? this.prjPrty : TaskPriorityMaster.LOW;
+        if (prjSts != null && "CLOSED".equalsIgnoreCase(prjSts)) {
+            return TaskPriorityMaster.calculateProjectPriority(stDt, endDt, noOfDays, prjSts, actCmpDt, baseP);
+        }
+        return TaskPriorityMaster.calculateProjectPriority(stDt, endDt, noOfDays, prjSts, actCmpDt, baseP);
+    }
 }

@@ -8,6 +8,7 @@ import {
 import Sidebar from "../Sidebar.jsx"; 
 import Header from "../Header.jsx";
 import "../../styles/admin.css";
+import { calculateDynamicPriority } from "../../utils/priority";
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL) + "/api";
 const getAuthToken = () => sessionStorage.getItem("authToken") || "";
@@ -362,40 +363,62 @@ const AdminDashboard = ({ userRole, onLogout }) => {
   const filteredMilestones = milestonesList.filter(m => milestoneMatchesFilter(m, mileFilter));
   const filteredTasks = tasksList.filter(t => taskMatchesFilter(t, taskFilter));
 
-  const pd = {
+  const pd = (filteredProjects.length > 0) ? {
     total: filteredProjects.length,
     completed: filteredProjects.filter(p => {
-      const s = (p.prjSts || "").toUpperCase();
+      const s = (p.prjSts || p.status || "").toUpperCase();
       return s === "CLOSED" || s === "COMPLETED";
     }).length,
     delayed: filteredProjects.filter(p => {
-      const s = (p.prjSts || "").toUpperCase();
+      const s = (p.prjSts || p.status || "").toUpperCase();
       if (s === "CLOSED" || s === "COMPLETED") return false;
-      if (!p.endDt) return false;
-      const end = new Date(p.endDt);
+      const endVal = p.endDt || p.endDate || p.tentEndDt;
+      if (!endVal) return false;
+      const end = new Date(endVal);
+      if (isNaN(end.getTime())) return false;
       end.setHours(23, 59, 59, 999);
-      return end.getTime() < now.getTime();
+      if (end.getTime() >= now.getTime()) return false;
+      const prio = calculateDynamicPriority(
+        p.prjPrty || p.priority || 'LOW',
+        p.stDt || p.tentStDt || p.startDate,
+        p.endDt || p.tentEndDt || p.endDate,
+        p.noOfDays || p.totalDays
+      );
+      return (prio.priority === 'CRITICAL' || prio.priorityId === 5) || (prio.priority !== 'ATMOST CRITICAL' && prio.priorityId !== 6);
     }).length,
     risk: filteredProjects.filter(p => {
-      const s = (p.prjSts || "").toUpperCase();
+      const s = (p.prjSts || p.status || "").toUpperCase();
       if (s === "CLOSED" || s === "COMPLETED") return false;
-      if (!p.endDt) return false;
-      const end = new Date(p.endDt);
+      const endVal = p.endDt || p.endDate || p.tentEndDt;
+      if (!endVal) return false;
+      const end = new Date(endVal);
+      if (isNaN(end.getTime())) return false;
       end.setHours(23, 59, 59, 999);
-      if (end.getTime() < now.getTime()) return false;
-      const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays >= 0 && diffDays < 7;
+      if (end.getTime() >= now.getTime()) return false;
+      const prio = calculateDynamicPriority(
+        p.prjPrty || p.priority || 'LOW',
+        p.stDt || p.tentStDt || p.startDate,
+        p.endDt || p.tentEndDt || p.endDate,
+        p.noOfDays || p.totalDays
+      );
+      return prio.priority === 'ATMOST CRITICAL' || prio.priorityId === 6;
     }).length,
     track: filteredProjects.filter(p => {
-      const s = (p.prjSts || "").toUpperCase();
+      const s = (p.prjSts || p.status || "").toUpperCase();
       if (s === "CLOSED" || s === "COMPLETED") return false;
-      if (!p.endDt) return true;
-      const end = new Date(p.endDt);
+      const endVal = p.endDt || p.endDate || p.tentEndDt;
+      if (!endVal) return true;
+      const end = new Date(endVal);
+      if (isNaN(end.getTime())) return true;
       end.setHours(23, 59, 59, 999);
-      if (end.getTime() < now.getTime()) return false;
-      const diffDays = Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-      return diffDays >= 7;
+      return end.getTime() >= now.getTime();
     }).length
+  } : {
+    total: metrics?.projectStatus?.total || 0,
+    completed: metrics?.projectStatus?.completed || 0,
+    delayed: metrics?.projectStatus?.delayed || 0,
+    risk: metrics?.projectStatus?.atRisk || 0,
+    track: metrics?.projectStatus?.onTrack || 0
   };
 
   const isMilestoneClosed = (m) => {
@@ -493,64 +516,20 @@ const AdminDashboard = ({ userRole, onLogout }) => {
   };
 
   const activitiesToRender = React.useMemo(() => {
-    const rawList = metrics?.systemActivities || [];
-    
-    const hasDetailed = rawList.some(a => a.description && a.description.length > 15 && !a.description.toLowerCase().includes("status changed"));
-    if (hasDetailed) {
-      return rawList;
-    }
+    return metrics?.systemActivities || [];
+  }, [metrics?.systemActivities]);
 
-    const generated = [];
-
-    if (tasksList && tasksList.length > 0) {
-      tasksList.slice(0, 4).forEach((t, i) => {
-        const code = t.taskCd || t.taskcd || `TSK-${t.taskId || t.id || (100 + i)}`;
-        const name = t.taskNm || t.tasknm || t.title || "Task";
-        const stsRaw = (t.taskSts || t.tasksts || t.status || "OPEN").toUpperCase();
-        
-        let stsLabel = "Not Started";
-        if (stsRaw === "COMPLETED" || stsRaw === "CLOSED") stsLabel = "Closed";
-        else if (stsRaw === "WIP" || stsRaw === "IN_PROGRESS") stsLabel = "In Progress";
-        else if (stsRaw === "SUBMIT_REVIEW" || stsRaw === "UNDER_REVIEW") stsLabel = "Under Review";
-        else if (stsRaw === "REWORK") stsLabel = "Rework";
-        else if (stsRaw === "OPEN") stsLabel = "Pending";
-
-        const actorName = t.assignedByNm || t.createdByName || t.executorNm || (rawList[i]?.actor || "System Admin");
-        const timeStr = rawList[i]?.timestamp || "15:45";
-
-        generated.push({
-          description: `Task ${code} (${name}) status updated to ${stsLabel}`,
-          actor: actorName,
-          timestamp: timeStr,
-          type: "task"
-        });
-      });
-    }
-
-    if (projectsList && projectsList.length > 0) {
-      projectsList.slice(0, 1).forEach((p, i) => {
-        const code = p.prjCd || p.prjcd || `PRJ-${p.prjId || p.id || (10 + i)}`;
-        const name = p.prjNm || p.prjnm || p.name || "Project";
-        const stsRaw = (p.prjSts || p.prjsts || p.status || "LIVE").toUpperCase();
-
-        let stsLabel = "On Track";
-        if (stsRaw === "COMPLETED" || stsRaw === "CLOSED") stsLabel = "Closed";
-        else if (stsRaw === "DELAYED" || stsRaw === "OVERDUE") stsLabel = "Delayed";
-        else if (stsRaw === "AT_RISK" || stsRaw === "HOLD") stsLabel = "At Risk";
-
-        generated.push({
-          description: `Project ${code} (${name}) status set to ${stsLabel}`,
-          actor: "Project Manager",
-          timestamp: "15:40",
-          type: "project"
-        });
-      });
-    }
-
-    return generated.length > 0 ? generated.slice(0, 5) : rawList;
-  }, [metrics?.systemActivities, tasksList, projectsList]);
-
-  const deadlinesToRender = metrics?.upcomingDeadlines || [];
+  const deadlinesToRender = React.useMemo(() => {
+    const list = metrics?.upcomingDeadlines || [];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return list.filter(dl => {
+      if (!dl.dueDate) return false;
+      const due = new Date(dl.dueDate);
+      due.setHours(0, 0, 0, 0);
+      return due.getTime() >= today.getTime();
+    });
+  }, [metrics?.upcomingDeadlines]);
 
   const topProjectsToRender = React.useMemo(() => {
     if (metrics?.topProjects && metrics.topProjects.length >= 3) {
@@ -925,30 +904,34 @@ const AdminDashboard = ({ userRole, onLogout }) => {
                 <h3>Recent Activities</h3>
               </div>
               <div className="db-list">
-                {activitiesToRender.map((act, idx) => {
-                  let icon = <Activity size={14} />;
-                  let iconClass = "bg-orange-light text-orange";
-                  const descLower = (act.description || "").toLowerCase();
-                  if (descLower.includes("project")) {
-                    icon = <Briefcase size={14} />;
-                    iconClass = "bg-green-light text-green";
-                  } else if (descLower.includes("milestone")) {
-                    icon = <CheckSquare size={14} />;
-                    iconClass = "bg-blue-light text-blue";
-                  } else if (descLower.includes("employee")) {
-                    icon = <Users size={14} />;
-                    iconClass = "bg-purple-light text-purple";
-                  }
-                  return (
-                    <div key={idx} className="list-item">
-                      <div className={`list-icon ${iconClass}`}>{icon}</div>
-                      <div className="list-text">
-                        <p>{act.description}</p>
-                        <span>{act.actor} • {act.timestamp}</span>
+                {activitiesToRender.length > 0 ? (
+                  activitiesToRender.map((act, idx) => {
+                    let icon = <Activity size={14} />;
+                    let iconClass = "bg-orange-light text-orange";
+                    const descLower = (act.description || "").toLowerCase();
+                    if (descLower.includes("project")) {
+                      icon = <Briefcase size={14} />;
+                      iconClass = "bg-green-light text-green";
+                    } else if (descLower.includes("milestone")) {
+                      icon = <CheckSquare size={14} />;
+                      iconClass = "bg-blue-light text-blue";
+                    } else if (descLower.includes("employee")) {
+                      icon = <Users size={14} />;
+                      iconClass = "bg-purple-light text-purple";
+                    }
+                    return (
+                      <div key={idx} className="list-item">
+                        <div className={`list-icon ${iconClass}`}>{icon}</div>
+                        <div className="list-text">
+                          <p>{act.description}</p>
+                          <span>{act.actor} • {act.timestamp}</span>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                ) : (
+                  <p className="text-muted text-center py-4 mb-0" style={{ fontSize: '13px' }}>No recent activities</p>
+                )}
               </div>
             </div>
 
@@ -957,33 +940,39 @@ const AdminDashboard = ({ userRole, onLogout }) => {
                 <h3>Upcoming Deadlines</h3>
               </div>
               <div className="db-list">
-                {deadlinesToRender.map((dl, idx) => {
-                  const critical = dl.critical || dl.isCritical;
-                  let formattedDate = "";
-                  if (dl.dueDate) {
-                    try {
-                      const d = new Date(dl.dueDate);
-                      formattedDate = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
-                    } catch (_) {
-                      formattedDate = dl.dueDate;
+                {deadlinesToRender.length > 0 ? (
+                  deadlinesToRender.map((dl, idx) => {
+                    const critical = dl.critical || dl.isCritical;
+                    let formattedDate = "";
+                    if (dl.dueDate) {
+                      try {
+                        const d = new Date(dl.dueDate);
+                        formattedDate = d.toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' });
+                      } catch (_) {
+                        formattedDate = dl.dueDate;
+                      }
                     }
-                  }
-                  return (
-                    <div key={idx} className="list-item deadline-item">
-                      <div className={`list-icon-clear ${critical ? "text-red" : "text-blue"}`}>
-                        {critical ? <Flag size={16} fill="currentColor" /> : <CheckSquare size={16} />}
+                    return (
+                      <div key={idx} className="list-item deadline-item">
+                        <div className={`list-icon-clear ${critical ? "text-red" : "text-blue"}`}>
+                          {critical ? <Flag size={16} fill="currentColor" /> : <CheckSquare size={16} />}
+                        </div>
+                        <div className="list-text">
+                          <p>{dl.title}</p>
+                          <span>{dl.projectName}</span>
+                        </div>
+                        <div className="deadline-date">
+                          <strong>{formattedDate}</strong>
+                          <span className={critical ? "text-red" : "text-orange"}>{dl.timeLeft}</span>
+                        </div>
                       </div>
-                      <div className="list-text">
-                        <p>{dl.title}</p>
-                        <span>{dl.projectName}</span>
-                      </div>
-                      <div className="deadline-date">
-                        <strong>{formattedDate}</strong>
-                        <span className={critical ? "text-red" : "text-orange"}>{dl.timeLeft}</span>
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })
+                ) : (
+                  <div style={{ padding: '24px 16px', textAlign: 'center', color: '#94a3b8', fontSize: '13px' }}>
+                    No upcoming deadlines
+                  </div>
+                )}
               </div>
             </div>
 

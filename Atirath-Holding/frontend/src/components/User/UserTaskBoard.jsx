@@ -811,6 +811,38 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
                   <p>{selectedTask.assigned}</p>
                 </div>
               </div>
+
+              {(() => {
+                const raw = selectedTask.rawTask || {};
+                const getEmpNm = (id) => {
+                  const e = (employeesData || []).find(emp => String(emp.empId || emp.id) === String(id));
+                  return e ? `${e.fstNm || e.firstName || ''} ${e.lstNm || e.lastName || ''}`.trim() : null;
+                };
+                const revNames = Array.isArray(raw.reviewerNames) && raw.reviewerNames.length > 0
+                  ? raw.reviewerNames.join(", ")
+                  : (raw.reviewerNm || (raw.reviewerId || raw.reviewer ? getEmpNm(raw.reviewerId || raw.reviewer) : null));
+                const appNames = Array.isArray(raw.approverNames) && raw.approverNames.length > 0
+                  ? raw.approverNames.join(", ")
+                  : (raw.approverNm || (raw.approverId || raw.approver ? getEmpNm(raw.approverId || raw.approver) : null));
+
+                if (!revNames && !appNames) return null;
+                return (
+                  <div className="utb-modal-row">
+                    {revNames && (
+                      <div className="utb-modal-field">
+                        <label>Reviewer(s)</label>
+                        <p>{revNames}</p>
+                      </div>
+                    )}
+                    {appNames && (
+                      <div className="utb-modal-field">
+                        <label>Approver(s)</label>
+                        <p>{appNames}</p>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {(() => {
                 const isClosedTask = selectedTask.status === "Closed" || selectedTask.status === "Completed" || selectedTask.rawStatus === "CLOSED" || selectedTask.rawStatus === "COMPLETED";
                 const startDateVal = selectedTask.startDate || selectedTask.rawTask?.stDt || selectedTask.rawTask?.stdt || selectedTask.rawTask?.st_dt || selectedTask.rawTask?.startDate || selectedTask.rawTask?.tentStrtDt;

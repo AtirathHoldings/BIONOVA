@@ -789,9 +789,9 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
   });
 
   const handleExportCSV = () => {
-    let csvContent = "data:text/csv;charset=utf-8,Type,ID,Name,Start Date,End Date,Plan Progress %,Actual Progress %,Status\n";
+    let csvContent = "data:text/csv;charset=utf-8,Type,ID,Name,Start Date,End Date,Actual Progress %,Baseline Plan Dates,Status\n";
     visibleRows.forEach(row => {
-      const rowData = [row.type, row.id, `"${row.name}"`, row.start, row.end, 100, row.aProg, row.status];
+      const rowData = [row.type, row.id, `"${row.name}"`, row.start, row.end, row.prog, `"${row.rawPlannedStart || row.start} - ${row.rawPlannedEnd || row.end}"`, row.status];
       csvContent += rowData.join(",") + "\n";
     });
     const encodedUri = encodeURI(csvContent);
@@ -933,12 +933,16 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                 }}>
                   <span style={{fontWeight:600, color:'#0369a1'}}>📊 Baseline Comparison Mode</span>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
-                    <div style={{width:24,height:10,borderRadius:3,background:'#3b82f6'}}/>
-                    <span style={{color:'#334155'}}>Planned Schedule (Project Plan)</span>
+                    <div style={{display:'flex',gap:2,alignItems:'center'}}>
+                      <div style={{width:8,height:10,borderRadius:'2px 0 0 2px',background:'#10b981'}}/>
+                      <div style={{width:8,height:10,background:'#3b82f6'}}/>
+                      <div style={{width:8,height:10,borderRadius:'0 2px 2px 0',background:'#ef4444'}}/>
+                    </div>
+                    <span style={{color:'#334155',fontWeight:500}}>Actual Progress (Employee Work - Top Bar)</span>
                   </div>
                   <div style={{display:'flex',alignItems:'center',gap:6}}>
                     <div style={{width:24,height:10,borderRadius:3,background:'#94a3b8'}}/>
-                    <span style={{color:'#334155'}}>Actual Progress (Employee Work)</span>
+                    <span style={{color:'#334155',fontWeight:500}}>Baseline Schedule (Project Plan - Bottom Bar)</span>
                   </div>
                 </div>
               )}
@@ -992,7 +996,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                               </span>
                             </div>
 
-                            {baseline && <div className="gantt-td" style={{ width: '60px', fontWeight: 600, color: '#64748b' }}>{row.aProg}%</div>}
+                            {baseline && <div className="gantt-td" style={{ width: '60px', fontWeight: 600, color: '#64748b' }}>{row.prog}%</div>}
                           </div>
                         ))}
                       </div>
@@ -1141,7 +1145,6 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                         const barColor = SC[row.status]?.bar || '#94a3b8';
                         const barBg   = SC[row.status]?.bg  || '#f1f5f9';
                         const isActive = activeRow === row.id;
-                        const highlightColor = isActive ? '#f97316' : barColor;
 
                         // Bar height and vertical centering by row type
                         const barH = row.type === 'project' ? 22 : row.type === 'milestone' ? 18 : 16;
@@ -1156,7 +1159,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                         return (
                           <div
                             key={row.id}
-                            style={{ position: 'absolute', top: i * ROW_H, left: 0, right: 0, height: ROW_H, borderBottom: '1px solid #f1f5f9', background: isActive ? '#fffbeb' : 'transparent', cursor: 'pointer' }}
+                            style={{ position: 'absolute', top: i * ROW_H, left: 0, right: 0, height: ROW_H, borderBottom: '1px solid #f1f5f9', background: isActive ? '#f1f5f9' : 'transparent', cursor: 'pointer' }}
                             onClick={() => {
                               setActiveRow(isActive ? null : row.id);
                               if (row.type === 'project') toggleProjectExpand(row.id);
@@ -1164,36 +1167,36 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                             }}
                           >
                             
-                            {/* ── Planned Bar (only if row.w > 0) ── */}
+                            {/* ── Actual Progress / Employee Work Bar (Top Colored Bar) ── */}
                             {row.w > 0 && (
                               <div
-                                style={{ position: 'absolute', top: barTop, left: barLeft, width: barWidth, height: barH, borderRadius: radius, overflow: 'hidden', cursor: 'pointer', zIndex: 4, boxShadow: isActive ? `0 0 0 2px ${highlightColor}` : 'none' }}
-                                title={`${row.name} | ${row.start} → ${row.end} | 100%`}
+                                style={{ position: 'absolute', top: barTop, left: barLeft, width: barWidth, height: barH, borderRadius: radius, overflow: 'hidden', cursor: 'pointer', zIndex: 4, boxShadow: isActive ? `0 0 0 2px ${barColor}` : 'none' }}
+                                title={`${row.name} | Actual Work: ${row.prog}% (${row.start} → ${row.end}) | Status: ${row.status}`}
                                 onClick={(e) => { e.stopPropagation(); setActiveRow(row.id); if (row.type === 'project') toggleProjectExpand(row.id); if (row.type === 'milestone') toggleMilestoneExpand(row.id); }}
                               >
                                 {/* Background track */}
-                                <div style={{ position: 'absolute', inset: 0, background: isActive ? '#fed7aa' : barBg }} />
+                                <div style={{ position: 'absolute', inset: 0, background: barBg }} />
                                 {/* Progress fill */}
-                                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: highlightColor, transition: 'width 0.3s ease' }} />
+                                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: barColor, transition: 'width 0.3s ease' }} />
                               </div>
                             )}
 
                             {/* Progress % badge */}
                             {row.w > 0 && barWidth > 30 && (
                               <span style={{ position: 'absolute', top: baseline ? barTop + barH + 14 : barTop + barH + 2, left: barLeft, fontSize: 9, color: barColor, fontWeight: 600, pointerEvents: 'none' }}>
-                                {baseline ? `${row.prog}%` : '100%'}
+                                {row.prog}%
                               </span>
                             )}
 
-                            {/* ── Baseline Actual Bar (only when baseline ON) ── */}
+                            {/* ── Baseline Schedule (Project Plan) Bar (only when baseline ON) ── */}
                             {baseline && row.aW > 0 && (
                               <div
                                 style={{ position: 'absolute', top: barTop + barH + 2, left: row.aOff * DW, width: Math.max(row.aW * DW, 8), height: 10, borderRadius: 2, overflow: 'hidden', cursor: 'pointer', zIndex: 4 }}
-                                title={`Progress: ${row.prog || 0}%`}
+                                title={`Baseline Schedule (Project Plan): ${row.rawPlannedStart || row.start} → ${row.rawPlannedEnd || row.end}`}
                                 onClick={(e) => { e.stopPropagation(); setActiveRow(row.id); if (row.type === 'project') toggleProjectExpand(row.id); if (row.type === 'milestone') toggleMilestoneExpand(row.id); }}
                               >
-                                <div style={{ position: 'absolute', inset: 0, background: '#e2e8f0' }} />
-                                <div style={{ position: 'absolute', top: 0, left: 0, width: progWidth, height: '100%', background: isActive ? '#f97316' : '#64748b', transition: 'width 0.3s ease' }} />
+                                <div style={{ position: 'absolute', inset: 0, background: '#cbd5e1' }} />
+                                <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', background: '#94a3b8', transition: 'width 0.3s ease' }} />
                               </div>
                             )}
                           </div>

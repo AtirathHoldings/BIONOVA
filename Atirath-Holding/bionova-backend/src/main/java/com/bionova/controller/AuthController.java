@@ -27,7 +27,7 @@ public class AuthController {
     @org.springframework.beans.factory.annotation.Autowired
     private com.bionova.security.JwtUtil jwtUtil;
 
-    @org.springframework.beans.factory.annotation.Value("${app.base-url:http://localhost:5173}")
+    @org.springframework.beans.factory.annotation.Value("${app.base-url:https://bionova-sable.vercel.app}")
     private String baseUrl;
 
     public AuthController(AuthService authService,
@@ -98,7 +98,7 @@ public class AuthController {
         String schemeLink = "bionova://reset-password?token=" + token;
         String intentLink = "intent://reset-password?token=" + token + "#Intent;scheme=bionova;package=com.example.cbg_app;end";
         
-        String cleanBase = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "http://localhost:5173";
+        String cleanBase = (baseUrl != null && !baseUrl.trim().isEmpty()) ? baseUrl.trim() : "https://bionova-sable.vercel.app";
         if (!cleanBase.contains("/reset-password")) {
             if (cleanBase.endsWith("/")) {
                 cleanBase = cleanBase.substring(0, cleanBase.length() - 1);

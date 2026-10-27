@@ -513,19 +513,37 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
 
   const getMilestoneFirstDay = () => milestone.tent_st_dt || getTodayDate();
   const generateMilestoneCode = (prjId = milestone.drft_prj_id, list = milestoneList) => {
+    let actualPrjId = prjId;
+    let actualList = list;
+    if (Array.isArray(prjId)) {
+      actualList = prjId;
+      actualPrjId = milestone.drft_prj_id;
+    }
+    if (!actualList || !Array.isArray(actualList)) {
+      actualList = milestoneList || [];
+    }
+
     let maxNum = 0;
-    const projectMilestonesOnly = prjId
-      ? (list || []).filter(m => String(m.projectId || m.drftPrjId || m.drft_prj_id) === String(prjId))
-      : (list || []);
+    const projectMilestonesOnly = actualPrjId
+      ? actualList.filter(m => {
+          const mPrj = m.projectId || m.drftPrjId || m.drft_prj_id || m.prjId || m.prj_id;
+          return String(mPrj) === String(actualPrjId);
+        })
+      : actualList;
 
     projectMilestonesOnly.forEach(m => {
-      const code = m.code || m.mlstnCd || m.mlstm_cd || "";
-      const match = code.match(/(?:MLS|MS)[-_]?(\d+)/i);
+      const code = String(m.code || m.mlstnCd || m.mlstm_cd || m.mlstn_cd || "").trim();
+      const match = code.match(/(?:MLS|MS|ML|M)?[-_]?(\d+)/i) || code.match(/(\d+)/);
       if (match && match[1]) {
         const num = parseInt(match[1], 10);
         if (num > maxNum) maxNum = num;
       }
     });
+
+    if (maxNum === 0 && projectMilestonesOnly.length > 0) {
+      maxNum = projectMilestonesOnly.length;
+    }
+
     const nextNum = maxNum + 1;
     return `MLS-${String(nextNum).padStart(3, '0')}`;
   };
@@ -711,10 +729,26 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
     if (location.state?.createMode || location.state?.projectId || location.state?.taskMode) {
       if (location.state?.projectId) {
         const pId = String(location.state.projectId);
+        
+        // Fetch project milestones immediately to get exact count even before loadAllData finishes
+        fetch(`${API_BASE}/milestone-drafts/by-project/${pId}`, { headers: authHeaders() })
+          .then(res => res.ok ? res.json() : [])
+          .then(pMilestones => {
+            if (Array.isArray(pMilestones)) {
+              const code = generateMilestoneCode(pId, pMilestones);
+              setMilestone(prev => ({
+                ...prev,
+                drft_prj_id: pId,
+                mlstm_cd: code
+              }));
+            }
+          })
+          .catch(() => {});
+
         setMilestone(prev => ({
           ...prev,
           drft_prj_id: pId,
-          mlstm_cd: generateMilestoneCode(milestoneList)
+          mlstm_cd: generateMilestoneCode(pId, milestoneList)
         }));
       }
       setView("form");
@@ -832,7 +866,17 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       });
 
       // Combine
-      setMilestoneList([...draftList, ...liveList]);
+      const fullList = [...draftList, ...liveList];
+      setMilestoneList(fullList);
+
+      // Auto-update milestone code if creating a new milestone for a project
+      setMilestone(prev => {
+        if (!isEditing && prev.drft_prj_id) {
+          const nextCd = generateMilestoneCode(prev.drft_prj_id, fullList);
+          return { ...prev, mlstm_cd: nextCd };
+        }
+        return prev;
+      });
 
       // 5. Employees & External Employees
       const mappedEmps = (emps || []).map(emp => ({
@@ -1845,12 +1889,14 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           let process = { enabled: false, reviewer_id: "", approver_id: "", steps: [] };
           const prcsEnabled = t.prcsFlg || t.prcs_flg || false;
           if (prcsEnabled) {
-            const reviewerStep = processSteps.find(s => s.stepType === "REVIEWER");
-            const approverStep = processSteps.find(s => s.stepType === "APPROVER");
+            const revSteps = processSteps.filter(s => (s.stepType && s.stepType.toUpperCase() === "REVIEWER") || (!s.stepType && (s.ordrId === 1 || s.ordr_id === 1)));
+            const appSteps = processSteps.filter(s => (s.stepType && s.stepType.toUpperCase() === "APPROVER") || (!s.stepType && (s.ordrId > 1 || s.ordr_id > 1)));
             process = {
               enabled: true,
-              reviewer_id: reviewerStep ? (reviewerStep.empId || reviewerStep.emp_id || "") : "",
-              approver_id: approverStep ? (approverStep.empId || approverStep.emp_id || "") : "",
+              reviewer_id: revSteps.length > 0 ? (revSteps[0].empId || revSteps[0].emp_id || "") : "",
+              approver_id: appSteps.length > 0 ? (appSteps[0].empId || appSteps[0].emp_id || "") : "",
+              reviewer_ids: revSteps.map(r => String(r.empId || r.emp_id)),
+              approver_ids: appSteps.map(a => String(a.empId || a.emp_id)),
               steps: processSteps
             };
           }
@@ -1961,12 +2007,14 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
           let process = { enabled: false, reviewer_id: "", approver_id: "", steps: [] };
           const prcsEnabled = t.prcsFlg || t.prcs_flg || false;
           if (prcsEnabled) {
-            const reviewerStep = processSteps.find(s => s.stepType === "REVIEWER");
-            const approverStep = processSteps.find(s => s.stepType === "APPROVER");
+            const revSteps = processSteps.filter(s => (s.stepType && s.stepType.toUpperCase() === "REVIEWER") || (!s.stepType && (s.ordrId === 1 || s.ordr_id === 1)));
+            const appSteps = processSteps.filter(s => (s.stepType && s.stepType.toUpperCase() === "APPROVER") || (!s.stepType && (s.ordrId > 1 || s.ordr_id > 1)));
             process = {
               enabled: true,
-              reviewer_id: reviewerStep ? (reviewerStep.empId || reviewerStep.emp_id || "") : "",
-              approver_id: approverStep ? (approverStep.empId || approverStep.emp_id || "") : "",
+              reviewer_id: revSteps.length > 0 ? (revSteps[0].empId || revSteps[0].emp_id || "") : "",
+              approver_id: appSteps.length > 0 ? (appSteps[0].empId || appSteps[0].emp_id || "") : "",
+              reviewer_ids: revSteps.map(r => String(r.empId || r.emp_id)),
+              approver_ids: appSteps.map(a => String(a.empId || a.emp_id)),
               steps: processSteps
             };
           }
@@ -2133,12 +2181,14 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
         let process = { enabled: false, reviewer_id: "", approver_id: "", steps: [] };
         const prcsEnabled = t.prcsFlg || t.prcs_flg || false;
         if (prcsEnabled) {
-          const reviewerStep = processSteps.find(s => s.stepType === "REVIEWER");
-          const approverStep = processSteps.find(s => s.stepType === "APPROVER");
+          const revSteps = processSteps.filter(s => (s.stepType && s.stepType.toUpperCase() === "REVIEWER") || (!s.stepType && (s.ordrId === 1 || s.ordr_id === 1)));
+          const appSteps = processSteps.filter(s => (s.stepType && s.stepType.toUpperCase() === "APPROVER") || (!s.stepType && (s.ordrId > 1 || s.ordr_id > 1)));
           process = {
             enabled: true,
-            reviewer_id: reviewerStep ? (reviewerStep.empId || reviewerStep.emp_id || "") : "",
-            approver_id: approverStep ? (approverStep.empId || approverStep.emp_id || "") : "",
+            reviewer_id: revSteps.length > 0 ? (revSteps[0].empId || revSteps[0].emp_id || "") : "",
+            approver_id: appSteps.length > 0 ? (appSteps[0].empId || appSteps[0].emp_id || "") : "",
+            reviewer_ids: revSteps.map(r => String(r.empId || r.emp_id)),
+            approver_ids: appSteps.map(a => String(a.empId || a.emp_id)),
             steps: processSteps
           };
         }
@@ -2684,13 +2734,22 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
               if (task.task_typ === "INTERNAL") { const emp = employees.find(e => e.emp_id === parseInt(task.emp_id)); assigneeName = emp ? emp.emp_nm : "Not Assigned"; }
               else { const emp = externalEmployees.find(e => e.ext_emp_id === parseInt(task.ext_emp_id)); assigneeName = emp ? (emp.ext_emp_nm || emp.name) : "Not Assigned"; }
               const assignedTo = [{ role: "Executor", name: assigneeName }];
-              if (task.process?.enabled && task.process?.reviewer_id) {
-                const rev = employees.find(e => String(e.emp_id) === String(task.process.reviewer_id));
-                assignedTo.push({ role: "Reviewer", name: rev ? rev.emp_nm : "Not Selected" });
-              }
-              if (task.process?.enabled && task.process?.approver_id) {
-                const app = employees.find(e => String(e.emp_id) === String(task.process.approver_id));
-                assignedTo.push({ role: "Approver", name: app ? app.emp_nm : "Not Selected" });
+              if (task.process?.enabled) {
+                const revIds = (task.process?.reviewer_ids && task.process.reviewer_ids.length > 0)
+                  ? task.process.reviewer_ids
+                  : (task.process?.reviewer_id ? [task.process.reviewer_id] : []);
+                revIds.forEach((rId, rIdx) => {
+                  const rev = employees.find(e => String(e.emp_id) === String(rId));
+                  assignedTo.push({ role: revIds.length > 1 ? `Reviewer ${rIdx + 1}` : "Reviewer", name: rev ? rev.emp_nm : "Not Selected" });
+                });
+
+                const appIds = (task.process?.approver_ids && task.process.approver_ids.length > 0)
+                  ? task.process.approver_ids
+                  : (task.process?.approver_id ? [task.process.approver_id] : []);
+                appIds.forEach((aId, aIdx) => {
+                  const app = employees.find(e => String(e.emp_id) === String(aId));
+                  assignedTo.push({ role: appIds.length > 1 ? `Approver ${aIdx + 1}` : "Approver", name: app ? app.emp_nm : "Not Selected" });
+                });
               }
               const hasChecklist = task.checklist && task.checklist.length > 0;
               const hasAttachments = task.attachments && task.attachments.length > 0;
@@ -2997,13 +3056,22 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
                 assigneeName = emp ? (emp.ext_emp_nm || emp.name) : "Not Assigned";
               }
               const assignedTo = [{ role: "Executor", name: assigneeName }];
-              if (task.process?.enabled && task.process?.reviewer_id) {
-                const rev = employees.find(e => String(e.emp_id) === String(task.process.reviewer_id));
-                assignedTo.push({ role: "Reviewer", name: rev ? rev.emp_nm : "Not Selected" });
-              }
-              if (task.process?.enabled && task.process?.approver_id) {
-                const app = employees.find(e => String(e.emp_id) === String(task.process.approver_id));
-                assignedTo.push({ role: "Approver", name: app ? app.emp_nm : "Not Selected" });
+              if (task.process?.enabled) {
+                const revIds = (task.process?.reviewer_ids && task.process.reviewer_ids.length > 0)
+                  ? task.process.reviewer_ids
+                  : (task.process?.reviewer_id ? [task.process.reviewer_id] : []);
+                revIds.forEach((rId, rIdx) => {
+                  const rev = employees.find(e => String(e.emp_id) === String(rId));
+                  assignedTo.push({ role: revIds.length > 1 ? `Reviewer ${rIdx + 1}` : "Reviewer", name: rev ? rev.emp_nm : "Not Selected" });
+                });
+
+                const appIds = (task.process?.approver_ids && task.process.approver_ids.length > 0)
+                  ? task.process.approver_ids
+                  : (task.process?.approver_id ? [task.process.approver_id] : []);
+                appIds.forEach((aId, aIdx) => {
+                  const app = employees.find(e => String(e.emp_id) === String(aId));
+                  assignedTo.push({ role: appIds.length > 1 ? `Approver ${aIdx + 1}` : "Approver", name: app ? app.emp_nm : "Not Selected" });
+                });
               }
               const hasChecklist = task.checklist && task.checklist.length > 0;
               const hasAttachments = task.attachments && task.attachments.length > 0;
@@ -3214,10 +3282,36 @@ const MilestoneCreation = ({ onLogout, userRole }) => {
       }
       return true;
     });
+    const compareMilestoneCodes = (a, b) => {
+      const codeA = (a.code || a.mlstnCd || a.mlstm_cd || "").trim();
+      const codeB = (b.code || b.mlstnCd || b.mlstm_cd || "").trim();
+
+      const matchA = codeA.match(/^(?:MLS|MS)-?(\d+)$/i);
+      const matchB = codeB.match(/^(?:MLS|MS)-?(\d+)$/i);
+
+      if (matchA && !matchB) return -1;
+      if (!matchA && matchB) return 1;
+
+      if (matchA && matchB) {
+        const numA = parseInt(matchA[1], 10);
+        const numB = parseInt(matchB[1], 10);
+        return numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+      }
+
+      if (codeA && codeB) {
+        return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+      } else if (codeA) {
+        return -1;
+      } else if (codeB) {
+        return 1;
+      }
+      return (a.title || "").localeCompare(b.title || "");
+    };
+
     const searched = filtered.filter(m =>
       m.code?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       m.title?.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    ).sort(compareMilestoneCodes);
 
 
     return (

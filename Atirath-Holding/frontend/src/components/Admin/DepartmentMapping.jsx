@@ -271,6 +271,16 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
       return;
     }
 
+    if (/[^a-zA-Z0-9\s]/.test(newDeptData.deptNm.trim())) {
+      triggerAlert("error", "Validation Error", "Special characters are not allowed in Department Name.");
+      return;
+    }
+
+    if (!/[a-zA-Z]/.test(newDeptData.deptNm.trim())) {
+      triggerAlert("error", "Validation Error", "Department Name must contain at least one letter.");
+      return;
+    }
+
     const codeToCheck = newDeptData.deptCode.trim().toUpperCase();
     const isDuplicate = departments.some(dept => {
       const apiCode = dept.deptCd || dept.deptCode || dept.code || "";

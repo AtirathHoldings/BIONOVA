@@ -76,14 +76,16 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                if (!taskId) return task;
                const path = isDraft ? `/process-config/draft-task/${taskId}` : `/process-config/live-task/${taskId}`;
                const pcsRes = await fetch(`${API_BASE}${path}`, { headers: authHeaders() });
-               if (!pcsRes.ok) return task;
                const configs = await pcsRes.json() || [];
-               const revCfg = configs.find(pc => pc.ordrId === 1 || pc.ordr_id === 1);
-               const appCfg = configs.find(pc => pc.ordrId === 2 || pc.ordr_id === 2);
+               const revCfgs = configs.filter(pc => (pc.stepType && pc.stepType.toUpperCase() === 'REVIEWER') || (!pc.stepType && (pc.ordrId === 1 || pc.ordr_id === 1)));
+               const appCfgs = configs.filter(pc => (pc.stepType && pc.stepType.toUpperCase() === 'APPROVER') || (!pc.stepType && (pc.ordrId > 1 || pc.ordr_id > 1)));
                return {
                   ...task,
-                  reviewerId: revCfg ? (revCfg.empId || revCfg.emp_id) : (task.reviewerId || task.reviewer_id),
-                  approverId: appCfg ? (appCfg.empId || appCfg.emp_id) : (task.approverId || task.approver_id)
+                  reviewerId: revCfgs.length > 0 ? (revCfgs[0].empId || revCfgs[0].emp_id) : (task.reviewerId || task.reviewer_id),
+                  approverId: appCfgs.length > 0 ? (appCfgs[0].empId || appCfgs[0].emp_id) : (task.approverId || task.approver_id),
+                  reviewerIds: revCfgs.map(r => r.empId || r.emp_id),
+                  approverIds: appCfgs.map(a => a.empId || a.emp_id),
+                  processConfigs: configs
                };
            } catch(e) { return task; }
         }));
@@ -342,74 +344,72 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
         </div>
       </div>
 
-      {/* Stats Cards - hidden when collapsed */}
-      {!collapseAll && (
-        <div className="mt-stats-grid">
-          <div className="mt-stat-card">
-            <div className="mt-stat-icon-wrap bg-purple">
-              <Flag size={20} color="#8b5cf6" />
-            </div>
-            <div className="mt-stat-info">
-              <span className="mt-stat-value">{totalMilestones}</span>
-              <span className="mt-stat-label">Total Milestones</span>
-            </div>
+      {/* Stats Cards */}
+      <div className="mt-stats-grid">
+        <div className="mt-stat-card">
+          <div className="mt-stat-icon-wrap bg-purple">
+            <Flag size={20} color="#8b5cf6" />
           </div>
-
-          <div className="mt-stat-card">
-            <div className="mt-stat-icon-wrap bg-blue">
-              <ListTodo size={20} color="#3b82f6" />
-            </div>
-            <div className="mt-stat-info">
-              <span className="mt-stat-value">{totalTasks}</span>
-              <span className="mt-stat-label">Total Tasks</span>
-            </div>
-          </div>
-
-          <div className="mt-stat-card">
-            <div className="mt-stat-icon-wrap bg-yellow">
-              <HelpCircle size={20} color="#eab308" />
-            </div>
-            <div className="mt-stat-info">
-              <span className="mt-stat-value">{notStartedTasks}</span>
-              <span className="mt-stat-label">open Tasks</span>
-              <span className="mt-stat-percent">{getPercentage(notStartedTasks, totalTasks)}%</span>
-            </div>
-          </div>
-
-          <div className="mt-stat-card">
-            <div className="mt-stat-icon-wrap bg-orange">
-              <RefreshCcw size={20} color="#f97316" />
-            </div>
-            <div className="mt-stat-info">
-              <span className="mt-stat-value">{inProgressTasks}</span>
-              <span className="mt-stat-label">In Progress Tasks</span>
-              <span className="mt-stat-percent">{getPercentage(inProgressTasks, totalTasks)}%</span>
-            </div>
-          </div>
-
-          <div className="mt-stat-card">
-            <div className="mt-stat-icon-wrap bg-red">
-              <Clock size={20} color="#ef4444" />
-            </div>
-            <div className="mt-stat-info">
-              <span className="mt-stat-value">{overdueTasks}</span>
-              <span className="mt-stat-label">Overdue Tasks</span>
-              <span className="mt-stat-percent">{getPercentage(overdueTasks, totalTasks)}%</span>
-            </div>
-          </div>
-
-          <div className="mt-stat-card">
-            <div className="mt-stat-icon-wrap bg-green">
-              <CheckSquare size={20} color="#10b981" />
-            </div>
-            <div className="mt-stat-info">
-              <span className="mt-stat-value">{completedTasks}</span>
-              <span className="mt-stat-label">Closed Tasks</span>
-              <span className="mt-stat-percent">{getPercentage(completedTasks, totalTasks)}%</span>
-            </div>
+          <div className="mt-stat-info">
+            <span className="mt-stat-value">{totalMilestones}</span>
+            <span className="mt-stat-label">Total Milestones</span>
           </div>
         </div>
-      )}
+
+        <div className="mt-stat-card">
+          <div className="mt-stat-icon-wrap bg-blue">
+            <ListTodo size={20} color="#3b82f6" />
+          </div>
+          <div className="mt-stat-info">
+            <span className="mt-stat-value">{totalTasks}</span>
+            <span className="mt-stat-label">Total Tasks</span>
+          </div>
+        </div>
+
+        <div className="mt-stat-card">
+          <div className="mt-stat-icon-wrap bg-yellow">
+            <HelpCircle size={20} color="#eab308" />
+          </div>
+          <div className="mt-stat-info">
+            <span className="mt-stat-value">{notStartedTasks}</span>
+            <span className="mt-stat-label">open Tasks</span>
+            <span className="mt-stat-percent">{getPercentage(notStartedTasks, totalTasks)}%</span>
+          </div>
+        </div>
+
+        <div className="mt-stat-card">
+          <div className="mt-stat-icon-wrap bg-orange">
+            <RefreshCcw size={20} color="#f97316" />
+          </div>
+          <div className="mt-stat-info">
+            <span className="mt-stat-value">{inProgressTasks}</span>
+            <span className="mt-stat-label">In Progress Tasks</span>
+            <span className="mt-stat-percent">{getPercentage(inProgressTasks, totalTasks)}%</span>
+          </div>
+        </div>
+
+        <div className="mt-stat-card">
+          <div className="mt-stat-icon-wrap bg-red">
+            <Clock size={20} color="#ef4444" />
+          </div>
+          <div className="mt-stat-info">
+            <span className="mt-stat-value">{overdueTasks}</span>
+            <span className="mt-stat-label">Overdue Tasks</span>
+            <span className="mt-stat-percent">{getPercentage(overdueTasks, totalTasks)}%</span>
+          </div>
+        </div>
+
+        <div className="mt-stat-card">
+          <div className="mt-stat-icon-wrap bg-green">
+            <CheckSquare size={20} color="#10b981" />
+          </div>
+          <div className="mt-stat-info">
+            <span className="mt-stat-value">{completedTasks}</span>
+            <span className="mt-stat-label">Closed Tasks</span>
+            <span className="mt-stat-percent">{getPercentage(completedTasks, totalTasks)}%</span>
+          </div>
+        </div>
+      </div>
 
       {collapseAll ? (
         <div style={{ padding: '40px', textAlign: 'center', color: '#64748b', background: 'white', border: '1px solid #e2e8f0', borderRadius: '8px', margin: '16px 0' }}>
@@ -609,26 +609,66 @@ const ProjectMilestonesTab = ({ project, userRole }) => {
                             </div>
                           </td>
                           <td>
-                            <div className="mt-assignee">
-                              <div className="mt-avatar" style={{ backgroundColor: '#8b5cf6' }}>
-                                {reviewer.name.charAt(0)}
-                              </div>
-                              <div className="mt-assignee-info">
-                                <span className="mt-assignee-name">{reviewer.name}</span>
-                                <span className="mt-assignee-role">{reviewer.role}</span>
-                              </div>
-                            </div>
+                            {(() => {
+                              const rIds = (t.reviewerIds && t.reviewerIds.length > 0) ? t.reviewerIds : (t.reviewerId || t.reviewer_id ? [t.reviewerId || t.reviewer_id] : []);
+                              if (rIds.length === 0) {
+                                return (
+                                  <div className="mt-assignee">
+                                    <div className="mt-avatar" style={{ backgroundColor: '#94a3b8' }}>-</div>
+                                    <div className="mt-assignee-info"><span className="mt-assignee-name">-</span></div>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {rIds.map((rId, rIdx) => {
+                                    const rev = getAssigneeInfo(rId);
+                                    return (
+                                      <div key={`rev-${rId}-${rIdx}`} className="mt-assignee">
+                                        <div className="mt-avatar" style={{ backgroundColor: '#8b5cf6' }}>
+                                          {rev.name.charAt(0)}
+                                        </div>
+                                        <div className="mt-assignee-info">
+                                          <span className="mt-assignee-name">{rev.name}</span>
+                                          <span className="mt-assignee-role">{rIds.length > 1 ? `Reviewer ${rIdx + 1}` : rev.role}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td>
-                            <div className="mt-assignee">
-                              <div className="mt-avatar" style={{ backgroundColor: '#f59e0b' }}>
-                                {approver.name.charAt(0)}
-                              </div>
-                              <div className="mt-assignee-info">
-                                <span className="mt-assignee-name">{approver.name}</span>
-                                <span className="mt-assignee-role">{approver.role}</span>
-                              </div>
-                            </div>
+                            {(() => {
+                              const aIds = (t.approverIds && t.approverIds.length > 0) ? t.approverIds : (t.approverId || t.approver_id ? [t.approverId || t.approver_id] : []);
+                              if (aIds.length === 0) {
+                                return (
+                                  <div className="mt-assignee">
+                                    <div className="mt-avatar" style={{ backgroundColor: '#94a3b8' }}>-</div>
+                                    <div className="mt-assignee-info"><span className="mt-assignee-name">-</span></div>
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                                  {aIds.map((aId, aIdx) => {
+                                    const app = getAssigneeInfo(aId);
+                                    return (
+                                      <div key={`app-${aId}-${aIdx}`} className="mt-assignee">
+                                        <div className="mt-avatar" style={{ backgroundColor: '#f59e0b' }}>
+                                          {app.name.charAt(0)}
+                                        </div>
+                                        <div className="mt-assignee-info">
+                                          <span className="mt-assignee-name">{app.name}</span>
+                                          <span className="mt-assignee-role">{aIds.length > 1 ? `Approver ${aIdx + 1}` : app.role}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              );
+                            })()}
                           </td>
                           <td>{sDt}</td>
                           <td style={{ color: isTaskOverdue ? '#dc2626' : 'inherit', fontWeight: isTaskOverdue ? '600' : 'normal' }}>{eDt}</td>

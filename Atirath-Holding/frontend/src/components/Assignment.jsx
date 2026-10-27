@@ -856,13 +856,37 @@ const Assignment = ({ userRole, onLogout }) => {
         .then(pcs => {
           if (pcs && pcs.length > 0) {
             setEnableWorkflow(true);
-            const revs = pcs.filter(p => p.stepType === 'REVIEWER' || p.ordrId === 1);
-            if (revs.length > 0) setReviewer(revs.map(r => String(r.empId)));
-            const apps = pcs.filter(p => p.stepType === 'APPROVER' || p.ordrId === 2);
-            if (apps.length > 0) setApprover(apps.map(a => String(a.empId)));
+            const revs = pcs.filter(p => (p.stepType && p.stepType.toUpperCase() === 'REVIEWER') || (p.rId === 1) || (p.stepLabel && p.stepLabel.toLowerCase().includes('reviewer')) || (!p.stepType && p.ordrId === 1));
+            if (revs.length > 0) setReviewer(Array.from(new Set(revs.map(r => String(r.empId)).filter(Boolean))));
+            else {
+              const revIds = task.reviewerIds && task.reviewerIds.length > 0 ? task.reviewerIds : (task.reviewer ? [task.reviewer] : []);
+              if (revIds.length > 0) setReviewer(Array.from(new Set(revIds.map(String).filter(Boolean))));
+              else setReviewer([]);
+            }
+
+            const apps = pcs.filter(p => (p.stepType && p.stepType.toUpperCase() === 'APPROVER') || (p.rId === 2) || (p.stepLabel && p.stepLabel.toLowerCase().includes('approver')) || (!p.stepType && p.ordrId > 1));
+            if (apps.length > 0) setApprover(Array.from(new Set(apps.map(a => String(a.empId)).filter(Boolean))));
+            else {
+              const appIds = task.approverIds && task.approverIds.length > 0 ? task.approverIds : (task.approver ? [task.approver] : []);
+              if (appIds.length > 0) setApprover(Array.from(new Set(appIds.map(String).filter(Boolean))));
+              else setApprover([]);
+            }
+          } else {
+            const revIds = task.reviewerIds && task.reviewerIds.length > 0 ? task.reviewerIds : (task.reviewer ? [task.reviewer] : []);
+            const appIds = task.approverIds && task.approverIds.length > 0 ? task.approverIds : (task.approver ? [task.approver] : []);
+            if (revIds.length > 0) setReviewer(revIds.map(String));
+            else setReviewer([]);
+            if (appIds.length > 0) setApprover(appIds.map(String));
+            else setApprover([]);
           }
         })
-        .catch(err => console.error("Error loading process config:", err));
+        .catch(err => {
+          console.error("Error loading process config:", err);
+          const revIds = task.reviewerIds && task.reviewerIds.length > 0 ? task.reviewerIds : (task.reviewer ? [task.reviewer] : []);
+          const appIds = task.approverIds && task.approverIds.length > 0 ? task.approverIds : (task.approver ? [task.approver] : []);
+          if (revIds.length > 0) setReviewer(revIds.map(String));
+          if (appIds.length > 0) setApprover(appIds.map(String));
+        });
         
       fetch(`${apiBaseUrl}/api/checklists/assignments/${taskId}?t=${new Date().getTime()}`, { headers: getAuthHeaders() })
         .then(res => res.ok ? res.json() : [])
@@ -1262,37 +1286,42 @@ const Assignment = ({ userRole, onLogout }) => {
 
         // Save Process Configs
         if (enableWorkflow && taskId) {
-          const validReviewers = reviewer.filter(r => r.trim() !== '');
-          const validApprovers = approver.filter(a => a.trim() !== '');
-
-          if (validReviewers && validReviewers.length > 0) {
-            for (let i = 0; i < validReviewers.length; i++) {
-              try {
-                const revRes = await fetch(`${apiBaseUrl}/api/process-config/assignments/${taskId}`, {
-                  method: "POST", headers: getAuthHeaders(),
-                  body: JSON.stringify({ ordrId: i + 1, stepType: "REVIEWER", empId: parseInt(validReviewers[i]), stepLabel: `Reviewer ${i + 1}` })
-                });
-                if (!revRes.ok) {
-                  const errTxt = await revRes.text();
-                  triggerAlert("error", "Reviewer Error", errTxt);
-                }
-              } catch (e) { triggerAlert("error", "Reviewer Exception", e.message); }
+          const validReviewers = Array.from(new Set(reviewer.filter(r => r && String(r).trim() !== '')));
+          const validApprovers = Array.from(new Set(approver.filter(a => a && String(a).trim() !== '')));
+          const configsToSave = [
+            ...validReviewers.map((r, i) => ({
+              ordrId: i + 1,
+              stepType: "REVIEWER",
+              empId: parseInt(r),
+              stepLabel: validReviewers.length > 1 ? `Reviewer ${i + 1}` : "Reviewer"
+            })),
+            ...validApprovers.map((a, i) => ({
+              ordrId: validReviewers.length + i + 1,
+              stepType: "APPROVER",
+              empId: parseInt(a),
+              stepLabel: validApprovers.length > 1 ? `Approver ${i + 1}` : "Approver"
+            }))
+          ];
+          try {
+            const bulkRes = await fetch(`${apiBaseUrl}/api/process-config/assignments/${taskId}/bulk`, {
+              method: "POST",
+              headers: getAuthHeaders(),
+              body: JSON.stringify(configsToSave)
+            });
+            if (!bulkRes.ok) {
+              const errTxt = await bulkRes.text();
+              triggerAlert("error", "Workflow Config Error", errTxt);
             }
+          } catch (e) {
+            triggerAlert("error", "Workflow Exception", e.message);
           }
-          if (validApprovers && validApprovers.length > 0) {
-            for (let i = 0; i < validApprovers.length; i++) {
-              try {
-                const appRes = await fetch(`${apiBaseUrl}/api/process-config/assignments/${taskId}`, {
-                  method: "POST", headers: getAuthHeaders(),
-                  body: JSON.stringify({ ordrId: validReviewers.length + i + 1, stepType: "APPROVER", empId: parseInt(validApprovers[i]), stepLabel: `Approver ${i + 1}` })
-                });
-                if (!appRes.ok) {
-                  const errTxt = await appRes.text();
-                  triggerAlert("error", "Approver Error", errTxt);
-                }
-              } catch (e) { triggerAlert("error", "Approver Exception", e.message); }
-            }
-          }
+        } else if (!enableWorkflow && taskId) {
+          try {
+            await fetch(`${apiBaseUrl}/api/process-config/assignments/${taskId}`, {
+              method: "DELETE",
+              headers: getAuthHeaders()
+            });
+          } catch (e) {}
         }
 
         // Send Notifications
@@ -1354,6 +1383,37 @@ const Assignment = ({ userRole, onLogout }) => {
     }
   };
 
+  // --- Sorting calculation (same as Company Creation) ---
+  const compareTaskCodes = (a, b, direction = 'asc') => {
+    const codeA = (a.taskCd || a.task_cd || "").trim();
+    const codeB = (b.taskCd || b.task_cd || "").trim();
+
+    const matchA = codeA.match(/^(?:INDTSK|TSK)-?(\d+)$/i);
+    const matchB = codeB.match(/^(?:INDTSK|TSK)-?(\d+)$/i);
+
+    // Proper format always comes first; non-standard format always displayed at the last
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    if (matchA && matchB) {
+      const numA = parseInt(matchA[1], 10);
+      const numB = parseInt(matchB[1], 10);
+      const diff = numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+      return direction === 'desc' ? -diff : diff;
+    }
+
+    // Both are non-standard format (remaining items displayed at the last)
+    let diff = 0;
+    if (codeA && codeB) {
+      diff = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (codeA) {
+      diff = -1;
+    } else if (codeB) {
+      diff = 1;
+    }
+    return direction === 'desc' ? -diff : diff;
+  };
+
   // --- Filter tasks ---
   const getFilteredTasks = () => {
     let baseTasks = tasks;
@@ -1368,7 +1428,7 @@ const Assignment = ({ userRole, onLogout }) => {
     }
 
     const q = searchQuery.toLowerCase();
-    return baseTasks.filter(task => {
+    const filtered = baseTasks.filter(task => {
       const taskCodeStr = (task.taskCd || task.task_cd || "").toLowerCase();
       const formattedCodeStr = formatTaskCode(task.taskCd || task.task_cd || "").toLowerCase();
       const taskTitleStr = (task.taskNm || task.task_nm || "").toLowerCase();
@@ -1379,6 +1439,8 @@ const Assignment = ({ userRole, onLogout }) => {
         taskTitleStr.includes(q)
       );
     });
+
+    return filtered.sort((a, b) => compareTaskCodes(a, b, 'asc'));
   };
 
   const filteredTasks = getFilteredTasks();
@@ -2172,12 +2234,12 @@ const Assignment = ({ userRole, onLogout }) => {
                               <>
                                 <span style={{ color: "#10b981", background: "#d1fae5", padding: "2px 10px", borderRadius: 4, fontWeight: 600, border: "1px solid #a7f3d0", fontSize: 13 }}>Enabled</span>
                                 <div style={{ marginTop: '4px', fontSize: '13px', color: '#334155' }}>
-                                  <span style={{ fontWeight: '500' }}>Reviewer:</span> 
-                                  {reviewer.length === 0 ? 'Loading...' : reviewer.filter(r => r.trim() !== '').map(r => getEmployeeName(r)).join(', ') || 'None'}
+                                  <span style={{ fontWeight: '500' }}>Reviewer{reviewer.filter(r => r && r.trim() !== '').length > 1 ? 's' : ''}:</span> 
+                                  {" " + (reviewer.length === 0 ? 'None' : reviewer.filter(r => r && r.trim() !== '').map(r => getEmployeeName(r)).join(', ') || 'None')}
                                 </div>
                                 <div style={{ fontSize: '13px', color: '#334155' }}>
-                                  <span style={{ fontWeight: '500' }}>Approver:</span> 
-                                  {approver.length === 0 ? 'Loading...' : approver.filter(a => a.trim() !== '').map(a => getEmployeeName(a)).join(', ') || 'None'}
+                                  <span style={{ fontWeight: '500' }}>Approver{approver.filter(a => a && a.trim() !== '').length > 1 ? 's' : ''}:</span> 
+                                  {" " + (approver.length === 0 ? 'None' : approver.filter(a => a && a.trim() !== '').map(a => getEmployeeName(a)).join(', ') || 'None')}
                                 </div>
                               </>
                             ) : (

@@ -47,6 +47,7 @@ public class ProjectLiveController {
     @Autowired private com.bionova.repository.ProjectAccessRepository projectAccessRepository;
     @Autowired private com.bionova.repository.PlantRepository plantRepository;
     @Autowired private com.bionova.repository.CompanyRepository companyRepository;
+    @Autowired private com.bionova.service.ProcessWorkflowService processWorkflowService;
 
     /**
      * Determines if the employee has access to the Project module.
@@ -239,13 +240,61 @@ public class ProjectLiveController {
     private void populateReviewerAndApprover(TaskLive task) {
         if (task == null) return;
         List<com.bionova.entity.ProcessConfig> configs = processConfigRepository.findByTaskIdAndIsLiveOrderByOrdrIdAsc(task.getTaskId(), true);
+        java.util.List<com.bionova.entity.ProcessConfig> uniqueConfigs = new java.util.ArrayList<>();
+        java.util.Set<Long> seenPcEmp = new java.util.HashSet<>();
         for (com.bionova.entity.ProcessConfig pc : configs) {
-            if (pc.getOrdrId() == 1) {
-                task.setReviewer(pc.getEmpId());
-            } else if (pc.getOrdrId() == 2) {
-                task.setApprover(pc.getEmpId());
+            if (pc.getEmpId() != null && seenPcEmp.add(pc.getEmpId())) {
+                uniqueConfigs.add(pc);
+            } else if (pc.getEmpId() == null) {
+                uniqueConfigs.add(pc);
             }
         }
+        task.setProcessConfigs(uniqueConfigs);
+
+        java.util.List<Long> revIds = new java.util.ArrayList<>();
+        java.util.List<String> revNames = new java.util.ArrayList<>();
+        java.util.List<Long> appIds = new java.util.ArrayList<>();
+        java.util.List<String> appNames = new java.util.ArrayList<>();
+
+        java.util.Set<Long> seenRev = new java.util.HashSet<>();
+        java.util.Set<Long> seenApp = new java.util.HashSet<>();
+
+        for (com.bionova.entity.ProcessConfig pc : configs) {
+            boolean isRev = "REVIEWER".equalsIgnoreCase(pc.getStepType()) || (pc.getRId() != null && pc.getRId() == 1);
+            boolean isApp = "APPROVER".equalsIgnoreCase(pc.getStepType()) || (pc.getRId() != null && pc.getRId() == 2);
+            if (!isRev && !isApp) {
+                isRev = (pc.getOrdrId() != null && pc.getOrdrId() == 1);
+                isApp = (pc.getOrdrId() != null && pc.getOrdrId() > 1);
+            }
+
+            if (isRev && pc.getEmpId() != null) {
+                if (seenRev.add(pc.getEmpId())) {
+                    revIds.add(pc.getEmpId());
+                    employeeRepository.findById(pc.getEmpId()).ifPresent(emp -> {
+                        String lastName = emp.getLastName() != null ? emp.getLastName() : "";
+                        revNames.add((emp.getFirstName() + " " + lastName).trim());
+                    });
+                }
+            } else if (isApp && pc.getEmpId() != null) {
+                if (seenApp.add(pc.getEmpId())) {
+                    appIds.add(pc.getEmpId());
+                    employeeRepository.findById(pc.getEmpId()).ifPresent(emp -> {
+                        String lastName = emp.getLastName() != null ? emp.getLastName() : "";
+                        appNames.add((emp.getFirstName() + " " + lastName).trim());
+                    });
+                }
+            }
+        }
+
+        task.setReviewer(revIds.isEmpty() ? null : revIds.get(0));
+        task.setReviewerNm(revNames.isEmpty() ? null : String.join(", ", revNames));
+        task.setApprover(appIds.isEmpty() ? null : appIds.get(0));
+        task.setApproverNm(appNames.isEmpty() ? null : String.join(", ", appNames));
+        task.setReviewerIds(revIds);
+        task.setApproverIds(appIds);
+        task.setReviewerNames(revNames);
+        task.setApproverNames(appNames);
+        processWorkflowService.populateTaskWorkflowState(task);
     }
 
     private void populateReviewerAndApprover(List<TaskLive> tasks) {
@@ -360,9 +409,16 @@ public class ProjectLiveController {
         boolean pltHolidays      = getBool(options, "pltHolidays",      true);
         boolean extHolidays      = getBool(options, "extHolidays",      false);
 
+        java.time.LocalDate liveStartDate = null;
+        if (options.get("liveStartDate") != null) {
+            try {
+                liveStartDate = java.time.LocalDate.parse(options.get("liveStartDate").toString());
+            } catch (Exception ignored) {}
+        }
+
         try {
             Map<String, Object> result = promotionService.promoteToLive(
-                    drftPrjId, excludeSat, excludeSun, includeMandatory, coyHolidays, pltHolidays, extHolidays);
+                    drftPrjId, excludeSat, excludeSun, includeMandatory, coyHolidays, pltHolidays, extHolidays, liveStartDate);
             return ResponseEntity.ok(result);
         } catch (RuntimeException e) {
             return ResponseEntity.badRequest().body(Map.of("message", e.getMessage()));

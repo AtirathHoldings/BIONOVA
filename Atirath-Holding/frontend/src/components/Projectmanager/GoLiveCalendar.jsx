@@ -236,16 +236,20 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
 
       const skipPub = skipPubRequested && publicHolidayDates.length > 0;
 
-      const projStart = project.startDate || project.tentStDt || project.tent_st_dt || project.start_date || '';
-      const projEnd   = project.endDate   || project.tentEndDt  || project.tent_end_dt  || project.end_date   || '';
+      const origProjStart = project.startDate || project.tentStDt || project.tent_st_dt || project.start_date || '';
+      const origProjEnd   = project.endDate   || project.tentEndDt  || project.tent_end_dt  || project.end_date   || '';
+      const todayStr = formatLocal(new Date());
+      // When going live, the live project start date starts from today (the live date)
+      const projStart = todayStr;
+
       let totalDays = parseInt(project.totalProjectDays || project.noOfDays || project.no_of_days || 0, 10);
-      if (!totalDays && projStart && projEnd) {
-        const sd = parseLocal(projStart);
-        const ed = parseLocal(projEnd);
+      if (!totalDays && origProjStart && origProjEnd) {
+        const sd = parseLocal(origProjStart);
+        const ed = parseLocal(origProjEnd);
         if (sd && ed) totalDays = Math.round((ed - sd) / 86400000) + 1;
       }
       const projAdjustedStart = projStart ? getNextWorkingDay(projStart, skipSat, skipSun, publicHolidayDates) : '';
-      const projAdjustedEnd = (totalDays && projAdjustedStart) ? calcEndDate(projAdjustedStart, totalDays, skipSat, skipSun, publicHolidayDates) : (totalDays && projStart ? calcEndDate(projStart, totalDays, skipSat, skipSun, publicHolidayDates) : projEnd);
+      const projAdjustedEnd = (totalDays && projAdjustedStart) ? calcEndDate(projAdjustedStart, totalDays, skipSat, skipSun, publicHolidayDates) : (totalDays && projStart ? calcEndDate(projStart, totalDays, skipSat, skipSun, publicHolidayDates) : origProjEnd);
 
       let hierarchy = [];
       const drftPrjId = project.drftPrjId || project.drft_prj_id || project.projectId || project.project_id || project.id;
@@ -286,7 +290,11 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
               if (sd && ed) mDays = Math.round((ed - sd) / 86400000) + 1;
             }
 
-            let rawMStart = mStart || projAdjustedStart || projStart;
+            let mOffsetDays = 0;
+            if (origProjStart && mStart && parseLocal(mStart) >= parseLocal(origProjStart)) {
+              mOffsetDays = Math.round((parseLocal(mStart) - parseLocal(origProjStart)) / 86400000);
+            }
+            let rawMStart = addDays(projAdjustedStart, mOffsetDays);
             const mDepFlg = m.mlstnDepFlg ?? m.mlstn_dep_flg ?? false;
             const mDepMId = m.mlstnDepMId || m.mlstn_dep_m_id;
             const mDepTyp = (m.mlstnDepTyp || m.mlstn_dep_typ || 'SEQUENTIAL').toUpperCase();
@@ -315,7 +323,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
               }
               if (maxPrevMilestoneEnd) {
                 const nextDay = addDays(maxPrevMilestoneEnd, 1);
-                if (!mStart || parseLocal(nextDay) > parseLocal(rawMStart)) {
+                if (parseLocal(nextDay) > parseLocal(rawMStart)) {
                   rawMStart = nextDay;
                 }
               }
@@ -356,7 +364,11 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
                   if (sd && ed) tDays = Math.round((ed - sd) / 86400000) + 1;
                 }
 
-                let rawStart = tStart || fallbackMAdjStart;
+                let tOffsetDays = 0;
+                if (mStart && tStart && parseLocal(tStart) >= parseLocal(mStart)) {
+                  tOffsetDays = Math.round((parseLocal(tStart) - parseLocal(mStart)) / 86400000);
+                }
+                let rawStart = addDays(fallbackMAdjStart, tOffsetDays);
                 const depId = t.depTaskId || t.dep_task_id;
                 const tDepFlg = t.taskDepFlg ?? t.task_dep_flg ?? false;
                 const tDepTyp = (t.taskDepTyp || t.task_dep_typ || 'SEQUENTIAL').toUpperCase();
@@ -385,12 +397,6 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
                     const nextDay = addDays(maxPrevAdjEnd, 1);
                     if (parseLocal(nextDay) > parseLocal(rawStart)) {
                       rawStart = nextDay;
-                    }
-                  } else if (mStart && parseLocal(tStart) > parseLocal(mStart)) {
-                    const offsetDays = Math.round((parseLocal(tStart) - parseLocal(mStart)) / 86400000);
-                    const candidate = addDays(fallbackMAdjStart, offsetDays);
-                    if (parseLocal(candidate) > parseLocal(rawStart)) {
-                      rawStart = candidate;
                     }
                   }
                 }
@@ -462,7 +468,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
 
             milestoneMap[mId] = { adjStart: mAdjStart, adjEnd: mAdjEnd };
 
-            const mCalculatedDays = (mAdjStart && mAdjEnd) ? calcWorkingDays(mAdjStart, mAdjEnd, skipSat, skipSun, publicHolidayDates) : mDays;
+            const mExactDays = mDays || ((mAdjStart && mAdjEnd) ? calcWorkingDays(mAdjStart, mAdjEnd, skipSat, skipSun, publicHolidayDates) : 0);
 
             hierarchy.push({
               type: 'M',
@@ -473,7 +479,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
               end: mEnd,
               adjStart: mAdjStart,
               adjEnd: mAdjEnd,
-              adjDays: mCalculatedDays,
+              adjDays: mExactDays,
               tasks: taskRows
             });
           }
@@ -492,7 +498,7 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
         }
       });
       const projFinalAdjustedStart = (hierarchy.length > 0 && minMilestoneAdjStart) ? minMilestoneAdjStart : (projAdjustedStart || projStart);
-      const projFinalAdjustedEnd = projAdjustedEnd || maxMilestoneAdjEnd || projEnd;
+      const projFinalAdjustedEnd = projAdjustedEnd || maxMilestoneAdjEnd || origProjEnd;
       const projFinalDuration = totalDays || ((projFinalAdjustedStart && projFinalAdjustedEnd) ? calcWorkingDays(projFinalAdjustedStart, projFinalAdjustedEnd, skipSat, skipSun, publicHolidayDates) : 0);
 
       const pType = project.isIndividualTask ? 'T' : 'P';
@@ -504,8 +510,8 @@ const GoLiveCalendar = ({ project, onCancel, onPreview }) => {
           id: 'project',
           code: pCode,
           name: project.prjNm || project.prj_nm || project.projectName || '',
-          start: projStart,
-          end: projEnd,
+          start: origProjStart,
+          end: origProjEnd,
           adjStart: projFinalAdjustedStart,
           adjEnd: projFinalAdjustedEnd,
           adjDays: projFinalDuration

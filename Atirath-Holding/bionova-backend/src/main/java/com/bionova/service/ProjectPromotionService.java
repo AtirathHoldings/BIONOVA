@@ -56,6 +56,19 @@ public class ProjectPromotionService {
             boolean coyHolidays,
             boolean pltHolidays,
             boolean extHolidays) {
+        return promoteToLive(drftPrjId, excludeSat, excludeSun, includeMandatory, coyHolidays, pltHolidays, extHolidays, null);
+    }
+
+    @Transactional
+    public Map<String, Object> promoteToLive(
+            Long drftPrjId,
+            boolean excludeSat,
+            boolean excludeSun,
+            boolean includeMandatory,
+            boolean coyHolidays,
+            boolean pltHolidays,
+            boolean extHolidays,
+            java.time.LocalDate customLiveStartDate) {
 
         // ── 1. Load draft project ──────────────────────────────────────────
         ProjectDraft draft = projectDraftRepository.findById(drftPrjId)
@@ -85,8 +98,12 @@ public class ProjectPromotionService {
         Integer pltId = pltHolidays  ? draft.getPltId() : null;
 
         // ── 2. Create ProjectLive ──────────────────────────────────────────
+        // Live project start date defaults to Today (the day it goes live)
+        java.time.LocalDate origDraftPrjStart = draft.getTentStDt();
+        java.time.LocalDate liveBaseDate = customLiveStartDate != null ? customLiveStartDate : java.time.LocalDate.now();
+
         java.time.LocalDate prjAdjustedStartDt = calendarService.getNextWorkingDate(
-                draft.getTentStDt(), excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
+                liveBaseDate, excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
         java.time.LocalDate prjAdjustedEndDt = calendarService.calculateEndDate(
                 prjAdjustedStartDt, draft.getNoOfDays() != null ? draft.getNoOfDays() : 0,
                 excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);
@@ -100,13 +117,9 @@ public class ProjectPromotionService {
         live.setPrjPrty(draft.getPrjPrty());
         live.setPrjSts("LIVE");
         live.setCreatedBy(draft.getCreatedBy());
-        live.setStDt(prjAdjustedStartDt != null ? prjAdjustedStartDt : draft.getTentStDt());
+        live.setStDt(prjAdjustedStartDt != null ? prjAdjustedStartDt : liveBaseDate);
         live.setEndDt(prjAdjustedEndDt);
-        if (live.getStDt() != null && prjAdjustedEndDt != null) {
-            live.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(live.getStDt(), prjAdjustedEndDt) + 1);
-        } else {
-            live.setNoOfDays(draft.getNoOfDays());
-        }
+        live.setNoOfDays(draft.getNoOfDays());
         live.setCoyId(draft.getCoyId() != null ? draft.getCoyId() : 0);
         live.setPltId(draft.getPltId() != null ? draft.getPltId() : 0);
         live.setPrjObjtv(draft.getPrjObjtv());
@@ -154,7 +167,10 @@ public class ProjectPromotionService {
             java.time.LocalDate mStart = md.getTentStDt();
             int mDays = md.getMlstnDays() != null ? md.getMlstnDays() : 1;
 
-            java.time.LocalDate rawMStart = mStart != null ? mStart : savedProject.getStDt();
+            long mOffsetDays = (origDraftPrjStart != null && mStart != null && !mStart.isBefore(origDraftPrjStart))
+                    ? java.time.temporal.ChronoUnit.DAYS.between(origDraftPrjStart, mStart)
+                    : 0;
+            java.time.LocalDate rawMStart = prjAdjustedStartDt.plusDays(mOffsetDays);
 
             // Check explicit dependency
             if (Boolean.TRUE.equals(md.getMlstnDepFlg()) && md.getMlstnDepMId() != null && milestoneLiveMap.containsKey(md.getMlstnDepMId())) {
@@ -179,7 +195,7 @@ public class ProjectPromotionService {
                 }
                 if (maxPrevEnd != null) {
                     java.time.LocalDate nextDay = maxPrevEnd.plusDays(1);
-                    if (mStart == null || nextDay.isAfter(rawMStart)) {
+                    if (nextDay.isAfter(rawMStart)) {
                         rawMStart = nextDay;
                     }
                 }
@@ -212,7 +228,10 @@ public class ProjectPromotionService {
                 java.time.LocalDate tStart = td.getTentStDt();
                 int tDays = td.getNoOfDays() != null ? td.getNoOfDays() : 1;
 
-                java.time.LocalDate rawTStart = tStart != null ? tStart : msAdjustedStartDt;
+                long tOffsetDays = (mStart != null && tStart != null && !tStart.isBefore(mStart))
+                        ? java.time.temporal.ChronoUnit.DAYS.between(mStart, tStart)
+                        : 0;
+                java.time.LocalDate rawTStart = msAdjustedStartDt.plusDays(tOffsetDays);
                 Long depTaskId = td.getDepTaskId();
 
                 if (Boolean.TRUE.equals(td.getTaskDepFlg()) && depTaskId != null && taskLiveMap.containsKey(depTaskId)) {
@@ -236,12 +255,6 @@ public class ProjectPromotionService {
                         java.time.LocalDate nextDay = maxPrevTaskEnd.plusDays(1);
                         if (nextDay.isAfter(rawTStart)) {
                             rawTStart = nextDay;
-                        }
-                    } else if (mStart != null && tStart.isAfter(mStart)) {
-                        long offset = java.time.temporal.ChronoUnit.DAYS.between(mStart, tStart);
-                        java.time.LocalDate candidate = msAdjustedStartDt.plusDays(offset);
-                        if (candidate.isAfter(rawTStart)) {
-                            rawTStart = candidate;
                         }
                     }
                 }
@@ -270,11 +283,7 @@ public class ProjectPromotionService {
                 tl.setNoteTxt(td.getNoteTxt());
                 tl.setStDt(taskAdjustedStartDt);
                 tl.setEndDt(taskAdjustedEndDt);
-                if (taskAdjustedStartDt != null && taskAdjustedEndDt != null) {
-                    tl.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(taskAdjustedStartDt, taskAdjustedEndDt) + 1);
-                } else {
-                    tl.setNoOfDays(td.getNoOfDays());
-                }
+                tl.setNoOfDays(td.getNoOfDays());
                 tl.setPrcsFlg(td.getPrcsFlg());
                 tl.setPrcsYesActn(td.getPrcsYesActn());
                 tl.setTaskSts(TaskStatusMaster.OPEN);
@@ -315,11 +324,7 @@ public class ProjectPromotionService {
             ml.setMlstnDepMId(mappedDepMId);
             ml.setStDt(msAdjustedStartDt);
             ml.setEndDt(msAdjustedEndDt);
-            if (msAdjustedStartDt != null && msAdjustedEndDt != null) {
-                ml.setMlstnDays((int) java.time.temporal.ChronoUnit.DAYS.between(msAdjustedStartDt, msAdjustedEndDt) + 1);
-            } else {
-                ml.setMlstnDays(md.getMlstnDays());
-            }
+            ml.setMlstnDays(md.getMlstnDays());
             ml.setAddlRem(md.getAddlRem());
             ml.setMlstnSts("LIVE");
             ml.setSts(true);
@@ -427,7 +432,11 @@ public class ProjectPromotionService {
             savedProject.setEndDt(maxProjectEnd);
         }
         if (savedProject.getStDt() != null && savedProject.getEndDt() != null) {
-            savedProject.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(savedProject.getStDt(), savedProject.getEndDt()) + 1);
+            if (draft.getNoOfDays() != null) {
+                savedProject.setNoOfDays(draft.getNoOfDays());
+            } else {
+                savedProject.setNoOfDays((int) java.time.temporal.ChronoUnit.DAYS.between(savedProject.getStDt(), savedProject.getEndDt()) + 1);
+            }
             int updatedWrkDays = calendarService.countWorkingDaysWithExternal(
                     savedProject.getStDt(), savedProject.getEndDt(),
                     excludeSat, excludeSun, includeMandatory, coyId, pltId, extHolidays);

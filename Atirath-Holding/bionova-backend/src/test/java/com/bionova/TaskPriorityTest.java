@@ -82,5 +82,48 @@ public class TaskPriorityTest {
         // Day 5 (Overdue <= 4 days): CRITICAL
         assertEquals(TaskPriorityMaster.CRITICAL, TaskPriorityMaster.calculatePriority(stDt, endDt, noOfDays, null, LocalDate.of(2026, 7, 5), initP));
     }
+
+    @Test
+    public void testProjectLiveDynamicPriority() {
+        com.bionova.entity.ProjectLive project = new com.bionova.entity.ProjectLive();
+        project.setStDt(LocalDate.of(2026, 7, 1));
+        project.setEndDt(LocalDate.of(2026, 7, 4));
+        project.setNoOfDays(4);
+        project.setPrjSts("LIVE");
+        project.setPrjPrty(TaskPriorityMaster.LOW);
+
+        // Raw priority is LOW
+        assertEquals(TaskPriorityMaster.LOW, project.getRawPrjPrty());
+
+        // Test with String status calculation
+        assertEquals(TaskPriorityMaster.LOW, TaskPriorityMaster.calculateProjectPriority(
+                project.getStDt(), project.getEndDt(), project.getNoOfDays(), project.getPrjSts(), LocalDate.of(2026, 7, 1), project.getRawPrjPrty()));
+        assertEquals(TaskPriorityMaster.NORMAL, TaskPriorityMaster.calculateProjectPriority(
+                project.getStDt(), project.getEndDt(), project.getNoOfDays(), project.getPrjSts(), LocalDate.of(2026, 7, 2), project.getRawPrjPrty()));
+        assertEquals(TaskPriorityMaster.MEDIUM, TaskPriorityMaster.calculateProjectPriority(
+                project.getStDt(), project.getEndDt(), project.getNoOfDays(), project.getPrjSts(), LocalDate.of(2026, 7, 3), project.getRawPrjPrty()));
+        assertEquals(TaskPriorityMaster.HIGH, TaskPriorityMaster.calculateProjectPriority(
+                project.getStDt(), project.getEndDt(), project.getNoOfDays(), project.getPrjSts(), LocalDate.of(2026, 7, 4), project.getRawPrjPrty()));
+        assertEquals(TaskPriorityMaster.CRITICAL, TaskPriorityMaster.calculateProjectPriority(
+                project.getStDt(), project.getEndDt(), project.getNoOfDays(), project.getPrjSts(), LocalDate.of(2026, 7, 5), project.getRawPrjPrty()));
+
+        // When closed on July 2, priority is frozen as of July 2 (NORMAL)
+        project.setPrjSts("CLOSED");
+        project.setActCmpDt(LocalDate.of(2026, 7, 2));
+        assertEquals(TaskPriorityMaster.NORMAL, project.getPrjPrty());
+    }
+
+    @Test
+    public void testProjectDraftStaticPriority() {
+        com.bionova.entity.ProjectDraft draft = new com.bionova.entity.ProjectDraft();
+        draft.setTentStDt(LocalDate.of(2026, 7, 1));
+        draft.setTentEndDt(LocalDate.of(2026, 7, 4));
+        draft.setNoOfDays(4);
+        draft.setPrjSts("DRAFT");
+        draft.setPrjPrty(TaskPriorityMaster.LOW);
+
+        // Project draft priority must always remain static as set by user
+        assertEquals(TaskPriorityMaster.LOW, draft.getPrjPrty());
+    }
 }
 

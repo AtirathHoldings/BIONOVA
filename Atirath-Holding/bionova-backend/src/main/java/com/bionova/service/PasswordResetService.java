@@ -28,7 +28,7 @@ public class PasswordResetService {
     private final JavaMailSender mailSender;
     private final PasswordEncoder passwordEncoder;
 
-    @Value("${app.base-url:http://localhost:5173}")
+    @Value("${app.base-url:https://bionova-sable.vercel.app}")
     private String baseUrl;
 
     @Value("${app.server-base-url:http://localhost:8080}")
@@ -121,7 +121,7 @@ public class PasswordResetService {
     }
 
     private String formatWebResetUrl(String base, String token) {
-        String trimmed = (base != null && !base.trim().isEmpty()) ? base.trim() : "http://localhost:5173";
+        String trimmed = (base != null && !base.trim().isEmpty()) ? base.trim() : "https://bionova-sable.vercel.app";
         if (!trimmed.contains("/reset-password")) {
             if (trimmed.endsWith("/")) {
                 trimmed = trimmed.substring(0, trimmed.length() - 1);

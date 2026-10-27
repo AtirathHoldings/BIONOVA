@@ -111,10 +111,10 @@ public class TaskPriorityMaster {
     }
 
     /**
-     * Dynamically calculates task priority based on start date, end date, total duration,
-     * status, actual completion date, and initial base priority.
+     * Dynamically calculates project priority based on start date, end date, total duration,
+     * status name (String e.g. "LIVE", "CLOSED"), actual completion date, and initial base priority.
      */
-    public static TaskPriorityMaster calculatePriority(LocalDate stDt, LocalDate endDt, Integer noOfDays, TaskStatusMaster status, LocalDate actCmpDt, TaskPriorityMaster initialPriority) {
+    public static TaskPriorityMaster calculateProjectPriority(LocalDate stDt, LocalDate endDt, Integer noOfDays, String statusNm, LocalDate actCmpDt, TaskPriorityMaster initialPriority) {
         TaskPriorityMaster baseP = (initialPriority != null) ? initialPriority : TaskPriorityMaster.LOW;
         if (stDt == null) {
             return baseP;
@@ -135,7 +135,7 @@ public class TaskPriorityMaster {
         LocalDate refDate = LocalDate.now();
         if (actCmpDt != null) {
             refDate = actCmpDt;
-        } else if (status != null && "CLOSED".equalsIgnoreCase(status.getStatusNm()) && endDt != null) {
+        } else if (statusNm != null && "CLOSED".equalsIgnoreCase(statusNm) && endDt != null) {
             refDate = endDt;
         }
 
@@ -174,8 +174,21 @@ public class TaskPriorityMaster {
         }
     }
 
+    /**
+     * Dynamically calculates task priority based on start date, end date, total duration,
+     * status (TaskStatusMaster), actual completion date, and initial base priority.
+     */
+    public static TaskPriorityMaster calculatePriority(LocalDate stDt, LocalDate endDt, Integer noOfDays, TaskStatusMaster status, LocalDate actCmpDt, TaskPriorityMaster initialPriority) {
+        String statusNm = (status != null) ? status.getStatusNm() : null;
+        return calculateProjectPriority(stDt, endDt, noOfDays, statusNm, actCmpDt, initialPriority);
+    }
+
     public static TaskPriorityMaster calculatePriority(LocalDate stDt, LocalDate endDt, Integer noOfDays, TaskStatusMaster status, LocalDate actCmpDt) {
         return calculatePriority(stDt, endDt, noOfDays, status, actCmpDt, null);
+    }
+
+    public static TaskPriorityMaster calculateProjectPriority(LocalDate stDt, LocalDate endDt, Integer noOfDays, String statusNm, LocalDate actCmpDt) {
+        return calculateProjectPriority(stDt, endDt, noOfDays, statusNm, actCmpDt, null);
     }
 
     @Override

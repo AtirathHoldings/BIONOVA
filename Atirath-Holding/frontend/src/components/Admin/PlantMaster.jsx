@@ -328,7 +328,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
   const [deleteTargetId, setDeleteTargetId] = useState(null);
 
   // Sorting state
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: "plantCode", direction: 'asc' });
   const [tableSearchQuery, setTableSearchQuery] = useState("");
   const [formErrors, setFormErrors] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
@@ -822,6 +822,36 @@ const PlantCreation = ({ userRole, onLogout }) => {
     triggerDelete(id);
   };
 
+  const comparePlantCodes = (a, b, direction = 'asc') => {
+    const codeA = (a.pltCd || a.plantCode || "").trim();
+    const codeB = (b.pltCd || b.plantCode || "").trim();
+
+    const matchA = codeA.match(/^PLT-?(\d+)$/i);
+    const matchB = codeB.match(/^PLT-?(\d+)$/i);
+
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    if (matchA && matchB) {
+      const numA = parseInt(matchA[1], 10);
+      const numB = parseInt(matchB[1], 10);
+      const diff = numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+      return direction === 'desc' ? -diff : diff;
+    }
+
+    let diff = 0;
+    if (codeA && codeB) {
+      diff = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (codeA) {
+      diff = -1;
+    } else if (codeB) {
+      diff = 1;
+    } else {
+      diff = (a.pltNm || a.plantName || "").localeCompare(b.pltNm || b.plantName || "");
+    }
+    return direction === 'desc' ? -diff : diff;
+  };
+
   // Sorting calculation
   const handleSort = (key) => {
     let direction = 'asc';
@@ -849,8 +879,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
         let valA = "";
         let valB = "";
         if (sortConfig.key === "plantCode") {
-          valA = (a.pltCd || "").toString().toLowerCase();
-          valB = (b.pltCd || "").toString().toLowerCase();
+          return comparePlantCodes(a, b, sortConfig.direction);
         } else if (sortConfig.key === "plantName") {
           valA = (a.pltNm || "").toString().toLowerCase();
           valB = (b.pltNm || "").toString().toLowerCase();
@@ -867,6 +896,8 @@ const PlantCreation = ({ userRole, onLogout }) => {
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
+    } else {
+      sortable.sort((a, b) => comparePlantCodes(a, b, 'asc'));
     }
     return sortable;
   }, [plants, sortConfig, companies, tableSearchQuery]);

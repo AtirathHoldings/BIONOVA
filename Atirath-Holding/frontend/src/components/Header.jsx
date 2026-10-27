@@ -346,7 +346,62 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
   };
 
   const getGreeting = () => {
-    return "Welcome";
+    const now = new Date();
+    const totalMinutes = now.getHours() * 60 + now.getMinutes();
+
+    // 12:00 AM (00:00) to 12:00 PM (12:00) -> Good Morning
+    if (totalMinutes <= 720) {
+      return "Good Morning";
+    }
+    // 12:01 PM (12:01) to 4:00 PM (16:00) -> Good Afternoon
+    if (totalMinutes <= 960) {
+      return "Good Afternoon";
+    }
+    // 4:01 PM (16:01) onwards -> Good Evening
+    return "Good Evening";
+  };
+
+  const handleNotificationClick = (notif) => {
+    if (!notif) return;
+    setToastExiting(false);
+    setToastNotif(notif);
+    setShowNotifications(false);
+
+    // Mark as read
+    if (!notif.isRead) markOneAsRead(notif.id);
+
+    const typ = (notif.entityTyp || '').toUpperCase();
+    const id = notif.entityId;
+    const combinedText = `${notif.title || ''} ${notif.message || ''}`;
+
+    // Extract task code if present in title or message (e.g. INDTSK-001, TSK-005)
+    const codeMatch = combinedText.match(/(?:INDTSK|TSK)-?\d+/i);
+    const extractedCode = codeMatch ? codeMatch[0] : null;
+
+    const navState = { showToastNotif: notif };
+
+    // If it's a project notification and has project ID
+    if (typ === 'PROJECT' && id) {
+      navigate(`/project-details/${id}`, { state: { ...navState, viewMode: 'full', projectType: 'live' } });
+      return;
+    }
+
+    // If it's a milestone notification without a specific task
+    if (typ === 'MILESTONE' && !extractedCode) {
+      navigate('/milestone-creation', { state: navState });
+      return;
+    }
+
+    // Default to Task Details page (/my-tasks with selectedTaskId)
+    const targetTaskId = id || extractedCode;
+    navigate('/my-tasks', {
+      state: {
+        ...navState,
+        selectedTaskId: targetTaskId,
+        taskCode: extractedCode,
+        _t: Date.now()
+      }
+    });
   };
 
   return (
@@ -670,31 +725,7 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
                       <div 
                         key={notif.id} 
                         className={`notif-item notif-item-clickable ${!notif.isRead ? 'notif-unread' : ''}`}
-                        onClick={() => {
-                          // Show toast on the left side
-                          setToastExiting(false);
-                          setToastNotif(notif);
-                          setShowNotifications(false);
-                          // Mark as read
-                          if (!notif.isRead) markOneAsRead(notif.id);
-
-                          // Immediately navigate based on entity type
-                          const typ = (notif.entityTyp || '').toUpperCase();
-                          const id = notif.entityId;
-                          
-                          // We pass the notification object in state so the next page's Header can show the toast
-                          const navState = { showToastNotif: notif };
-
-                          if (typ === 'PROJECT' && id) {
-                            navigate(`/project-details/${id}`, { state: { ...navState, viewMode: 'full', projectType: 'live' } });
-                          } else if (typ === 'TASK') {
-                            navigate('/my-tasks', { state: navState });
-                          } else if (typ === 'MILESTONE') {
-                            navigate('/milestone-creation', { state: navState });
-                          } else {
-                            navigate('/pm-dashboard', { state: navState });
-                          }
-                        }}
+                        onClick={() => handleNotificationClick(notif)}
                         style={{ transition: 'transform 0.15s ease, background 0.2s' }}
                       >
                         <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "4px", alignItems: "flex-start" }}>
@@ -875,18 +906,7 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
           <div 
             style={{ padding: '14px 16px' }}
             onClick={() => {
-              // Navigate based on entity type
-              const typ = (toastNotif.entityTyp || '').toUpperCase();
-              const id = toastNotif.entityId;
-              if (typ === 'PROJECT' && id) {
-                navigate(`/project-details/${id}`);
-              } else if (typ === 'TASK') {
-                navigate('/my-tasks');
-              } else if (typ === 'MILESTONE') {
-                navigate('/milestone-creation');
-              } else {
-                navigate('/pm-dashboard');
-              }
+              handleNotificationClick(toastNotif);
               setToastExiting(true);
             }}
           >

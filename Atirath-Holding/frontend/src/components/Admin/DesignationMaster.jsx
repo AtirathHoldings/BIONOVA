@@ -135,7 +135,7 @@ const DesignationCreation = ({ userRole, onLogout }) => {
   };
 
   // Sorting & Search
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [sortConfig, setSortConfig] = useState({ key: "code", direction: "asc" });
   const [tableSearchQuery, setTableSearchQuery] = useState("");
   const [formErrors, setFormErrors] = useState({});
   const [currentPage, setCurrentPage] = useState(1);
@@ -388,6 +388,36 @@ const DesignationCreation = ({ userRole, onLogout }) => {
     setActiveDropdown((prev) => (prev === id ? null : id));
   };
 
+  const compareDesigCodes = (a, b, direction = 'asc') => {
+    const codeA = (a.code || a.desigCd || "").trim();
+    const codeB = (b.code || b.desigCd || "").trim();
+
+    const matchA = codeA.match(/^(?:DESG|DESIG|DSG)-?(\d+)$/i);
+    const matchB = codeB.match(/^(?:DESG|DESIG|DSG)-?(\d+)$/i);
+
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    if (matchA && matchB) {
+      const numA = parseInt(matchA[1], 10);
+      const numB = parseInt(matchB[1], 10);
+      const diff = numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+      return direction === 'desc' ? -diff : diff;
+    }
+
+    let diff = 0;
+    if (codeA && codeB) {
+      diff = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (codeA) {
+      diff = -1;
+    } else if (codeB) {
+      diff = 1;
+    } else {
+      diff = (a.name || a.desigNm || "").localeCompare(b.name || b.desigNm || "");
+    }
+    return direction === 'desc' ? -diff : diff;
+  };
+
   const handleSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") { direction = "desc"; }
@@ -395,7 +425,10 @@ const DesignationCreation = ({ userRole, onLogout }) => {
   };
 
   const sortedDesignations = [...designations].sort((a, b) => {
-    if (!sortConfig.key) return 0;
+    if (!sortConfig.key) return compareDesigCodes(a, b, 'asc');
+    if (sortConfig.key === "code" || sortConfig.key === "desigCd") {
+      return compareDesigCodes(a, b, sortConfig.direction);
+    }
     const aValue = a[sortConfig.key] || "";
     const bValue = b[sortConfig.key] || "";
     if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;

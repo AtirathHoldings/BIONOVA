@@ -705,7 +705,7 @@ const ProjectCreation = ({ userRole, onLogout }) => {
   const [showDeactivateModal, setShowDeactivateModal] = useState(false);
   const [deactivateTargetId, setDeactivateTargetId] = useState(null);
 
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: "projectCode", direction: 'asc' });
 
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 8;
@@ -1362,6 +1362,36 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     }
   };
 
+  const compareProjectCodes = (a, b, direction = 'asc') => {
+    const codeA = (a.projectCode || a.prjCd || "").trim();
+    const codeB = (b.projectCode || b.prjCd || "").trim();
+
+    const matchA = codeA.match(/^PRJ-?(\d+)$/i);
+    const matchB = codeB.match(/^PRJ-?(\d+)$/i);
+
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    if (matchA && matchB) {
+      const numA = parseInt(matchA[1], 10);
+      const numB = parseInt(matchB[1], 10);
+      const diff = numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+      return direction === 'desc' ? -diff : diff;
+    }
+
+    let diff = 0;
+    if (codeA && codeB) {
+      diff = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (codeA) {
+      diff = -1;
+    } else if (codeB) {
+      diff = 1;
+    } else {
+      diff = (a.projectName || a.prjNm || "").localeCompare(b.projectName || b.prjNm || "");
+    }
+    return direction === 'desc' ? -diff : diff;
+  };
+
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -1374,12 +1404,17 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     let sortable = [...projects];
     if (sortConfig.key !== null) {
       sortable.sort((a, b) => {
+        if (sortConfig.key === "projectCode") {
+          return compareProjectCodes(a, b, sortConfig.direction);
+        }
         const valA = (a[sortConfig.key] || "").toString().toLowerCase();
         const valB = (b[sortConfig.key] || "").toString().toLowerCase();
         if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
+    } else {
+      sortable.sort((a, b) => compareProjectCodes(a, b, 'asc'));
     }
     return sortable;
   }, [projects, sortConfig]);
@@ -1919,18 +1954,14 @@ const ProjectCreation = ({ userRole, onLogout }) => {
                             onClick={() => handleSort("projectCode")}
                             style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
                           >
-                            PROJECT CODE{" "}
-                            {sortConfig.key === "projectCode" &&
-                              (sortConfig.direction === "asc" ? "▲" : "▼")}
+                            PROJECT CODE
                           </th>
                           <th
                             className="sortable"
                             onClick={() => handleSort("projectName")}
                             style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', cursor: 'pointer', textTransform: 'uppercase', letterSpacing: '0.5px' }}
                           >
-                            PROJECT NAME{" "}
-                            {sortConfig.key === "projectName" &&
-                              (sortConfig.direction === "asc" ? "▲" : "▼")}
+                            PROJECT NAME
                           </th>
                           <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>COMPANY</th>
                           <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PLANT</th>

@@ -255,17 +255,24 @@ const getActionButton = (task, currentUserEmpId, isExternal = false, employeesLi
 
   const rawTask = task.rawTask || task;
   const isExternalTask = isExternal || task.isExternal || rawTask.isExternal;
+  const executorId = rawTask.empId || rawTask.emp_id || rawTask.assignedTo || rawTask.assigned_to || rawTask.extEmpId || rawTask.executorId || task.empId;
 
   // Get user roles
-  const executorId = rawTask.empId || rawTask.assignedTo || rawTask.executorId || rawTask.doerId;
-  const reviewerId = rawTask.reviewerId || rawTask.reviewer || rawTask.reviewerEmpId;
-  const approverId = rawTask.approverId || rawTask.approver || rawTask.approverEmpId;
+  const allReviewerIds = Array.isArray(rawTask.reviewerIds) && rawTask.reviewerIds.length > 0 
+    ? Array.from(new Set(rawTask.reviewerIds.filter(Boolean)))
+    : (rawTask.processConfigs ? Array.from(new Set(rawTask.processConfigs.filter(p => (p.stepType && p.stepType.toUpperCase() === 'REVIEWER') || (p.rId === 1) || (p.stepLabel && p.stepLabel.toLowerCase().includes('reviewer')) || (!p.stepType && p.ordrId === 1)).map(p => p.empId).filter(Boolean))) : (rawTask.reviewerId || rawTask.reviewer || rawTask.reviewerEmpId ? [rawTask.reviewerId || rawTask.reviewer || rawTask.reviewerEmpId] : []));
+  const allApproverIds = Array.isArray(rawTask.approverIds) && rawTask.approverIds.length > 0 
+    ? Array.from(new Set(rawTask.approverIds.filter(Boolean)))
+    : (rawTask.processConfigs ? Array.from(new Set(rawTask.processConfigs.filter(p => (p.stepType && p.stepType.toUpperCase() === 'APPROVER') || (p.rId === 2) || (p.stepLabel && p.stepLabel.toLowerCase().includes('approver')) || (!p.stepType && p.ordrId > 1)).map(p => p.empId).filter(Boolean))) : (rawTask.approverId || rawTask.approver || rawTask.approverEmpId ? [rawTask.approverId || rawTask.approver || rawTask.approverEmpId] : []));
+
+  const reviewerId = allReviewerIds.length > 0 ? allReviewerIds[0] : null;
+  const approverId = allApproverIds.length > 0 ? allApproverIds[0] : null;
 
   const isTeamMember = (Array.isArray(rawTask?.teamMembers) && rawTask.teamMembers.some(tm => String(tm.empId) === String(currentUserEmpId))) || (Array.isArray(task?.teamMembers) && task.teamMembers.some(tm => String(tm.empId) === String(currentUserEmpId)));
   const myName = getEmployeeName(currentUserEmpId, employeesList || []);
-  const isReviewer = !isExternalTask && (String(reviewerId) === String(currentUserEmpId) || (rawTask?.reviewerNm && myName && myName.trim().toLowerCase() === rawTask.reviewerNm.trim().toLowerCase()));
-  const isApprover = !isExternalTask && (String(approverId) === String(currentUserEmpId) || (rawTask?.approverNm && myName && myName.trim().toLowerCase() === rawTask.approverNm.trim().toLowerCase()));
-  const isDoer = isExternalTask || String(executorId) === String(currentUserEmpId) || String(rawTask.assignedBy || rawTask.assigned_by || rawTask.createdBy) === String(currentUserEmpId) || isTeamMember || (!isReviewer && !isApprover);
+  const isReviewer = !isExternalTask && (allReviewerIds.some(id => String(id) === String(currentUserEmpId)) || (rawTask?.reviewerNm && myName && rawTask.reviewerNm.toLowerCase().includes(myName.trim().toLowerCase())));
+  const isApprover = !isExternalTask && (allApproverIds.some(id => String(id) === String(currentUserEmpId)) || (rawTask?.approverNm && myName && rawTask.approverNm.toLowerCase().includes(myName.trim().toLowerCase())));
+  const isDoer = isExternalTask || (executorId && String(executorId) === String(currentUserEmpId)) || (rawTask.assignedBy && String(rawTask.assignedBy) === String(currentUserEmpId)) || (rawTask.assigned_by && String(rawTask.assigned_by) === String(currentUserEmpId)) || (rawTask.createdBy && String(rawTask.createdBy) === String(currentUserEmpId)) || isTeamMember || (!isReviewer && !isApprover);
 
   // Get progress (status)
   const progress = (rawTask.taskSts || rawTask.status || rawTask.taskStatus || task.status || "OPEN").toUpperCase();
@@ -381,8 +388,12 @@ const getActionButton = (task, currentUserEmpId, isExternal = false, employeesLi
   // REVIEWER ACTIONS - DYNAMIC
   // ============================================
   if (isReviewer) {
+    const isActiveReviewer = rawTask?.activeReviewerId 
+      ? String(rawTask.activeReviewerId) === String(currentUserEmpId)
+      : (allReviewerIds.length > 0 ? String(allReviewerIds[0]) === String(currentUserEmpId) : true);
+
     // WORK_IN_PROGRESS with PENDING_REVIEWER or UNDER_REVIEW -> Review
-    if (normalizedProgress === "WORK_IN_PROGRESS" && (process === "PENDING_REVIEWER" || process === "UNDER_REVIEW")) {
+    if (isActiveReviewer && normalizedProgress === "WORK_IN_PROGRESS" && (process === "PENDING_REVIEWER" || process === "UNDER_REVIEW")) {
       return { label: "Review", action: "review", variant: "review" };
     }
 
@@ -394,8 +405,12 @@ const getActionButton = (task, currentUserEmpId, isExternal = false, employeesLi
   // APPROVER ACTIONS - DYNAMIC
   // ============================================
   if (isApprover) {
+    const isActiveApprover = rawTask?.activeApproverId
+      ? String(rawTask.activeApproverId) === String(currentUserEmpId)
+      : (allApproverIds.length > 0 ? String(allApproverIds[0]) === String(currentUserEmpId) : true);
+
     // WORK_IN_PROGRESS with PENDING_APPROVER -> Approve
-    if (normalizedProgress === "WORK_IN_PROGRESS" && process === "PENDING_APPROVER") {
+    if (isActiveApprover && normalizedProgress === "WORK_IN_PROGRESS" && process === "PENDING_APPROVER") {
       return { label: "Approve", action: "approve", variant: "success" };
     }
 
@@ -486,6 +501,7 @@ const MyTasks = ({ userRole, onLogout }) => {
 
   const [allProjectTasks, setAllProjectTasks] = useState([]);
   const [taskTeamMembers, setTaskTeamMembers] = useState([]);
+  const [taskProcessConfigs, setTaskProcessConfigs] = useState([]);
   const [showAddMemberModal, setShowAddMemberModal] = useState(false);
   const [selectedNewMember, setSelectedNewMember] = useState("");
   const [loadingTeamMembers, setLoadingTeamMembers] = useState(false);
@@ -588,6 +604,11 @@ const MyTasks = ({ userRole, onLogout }) => {
         setTaskAttachments(atts);
         setUpdateRemarks(data.addlRem || "");
         setUpdateProgressVal(calculatedProgress);
+        if (Array.isArray(data.processConfigs) && data.processConfigs.length > 0) {
+          setTaskProcessConfigs(data.processConfigs);
+        } else {
+          setTaskProcessConfigs([]);
+        }
       }
     } catch (e) {
       console.error("Failed to fetch external task", e);
@@ -1340,19 +1361,35 @@ const MyTasks = ({ userRole, onLogout }) => {
   }, [location.state]);
 
   useEffect(() => {
-    if (tasks && tasks.length > 0 && location.state?.selectedTaskId) {
-      const targetId = String(location.state.selectedTaskId).toLowerCase().trim();
+    const rawTarget = location.state?.selectedTaskId || location.state?.taskCode;
+    if (tasks && tasks.length > 0 && rawTarget) {
+      const targetId = String(rawTarget).toLowerCase().trim();
+      const targetCode = location.state?.taskCode ? String(location.state.taskCode).toLowerCase().trim() : '';
+
       const matched = tasks.find(t => {
         const id1 = String(t.taskId || '').toLowerCase().trim();
         const id2 = String(t.id || '').toLowerCase().trim();
-        const id3 = String(t.code || '').toLowerCase().trim();
+        const id3 = String(t.code || t.taskCode || '').toLowerCase().trim();
         const id4 = String(t.empTaskId || '').toLowerCase().trim();
         const id5 = String(t.rawTask?.taskId || '').toLowerCase().trim();
         const id6 = String(t.rawTask?.empTaskId || '').toLowerCase().trim();
         const id7 = String(t.rawTask?.taskCd || t.rawTask?.taskCode || '').toLowerCase().trim();
 
-        return targetId === id1 || targetId === id2 || targetId === id3 ||
+        const directMatch = targetId === id1 || targetId === id2 || targetId === id3 ||
           targetId === id4 || targetId === id5 || targetId === id6 || targetId === id7;
+
+        const codeMatch = targetCode && (
+          targetCode === id1 || targetCode === id2 || targetCode === id3 ||
+          targetCode === id4 || targetCode === id5 || targetCode === id6 || targetCode === id7
+        );
+
+        const matchTarget = targetId.match(/^([a-z]+)-?(\d+)$/i);
+        const matchItem = id2.match(/^([a-z]+)-?(\d+)$/i) || id7.match(/^([a-z]+)-?(\d+)$/i);
+        const numMatch = matchTarget && matchItem &&
+          matchTarget[1].toLowerCase() === matchItem[1].toLowerCase() &&
+          parseInt(matchTarget[2], 10) === parseInt(matchItem[2], 10);
+
+        return directMatch || codeMatch || numMatch;
       });
 
       if (matched) {
@@ -1672,17 +1709,23 @@ const MyTasks = ({ userRole, onLogout }) => {
       const originalTask = task.rawTask || task;
 
       console.log(`✅ Reviewer approving task ${taskId} via ProcessController`);
-      await apiPost(`/api/process/task/${taskId}/checker-action`, { decision: "YES", empId: currentUserEmpId, remarks: "", isIndividual: task.isIndividual });
+      const res = await apiPost(`/api/process/task/${taskId}/checker-action`, { decision: "YES", empId: currentUserEmpId, remarks: "", isIndividual: task.isIndividual });
 
-      const isCompleted = !originalTask.approverId;
-      if (isCompleted) {
-        await sendNotification(originalTask.empId, `Task Closed: ${task.id}`, task);
-      } else if (originalTask.approverId) {
-        await sendNotification(originalTask.approverId, `Task ready for approval: ${task.id}`, task);
+      const nextPendingEmpId = res?.nextPendingEmpId;
+      const nextStage = res?.nextStage;
+      const alertMsg = res?.message || "Task approved successfully.";
+
+      if (nextPendingEmpId) {
+        const msg = nextStage === "REVIEWER"
+          ? `Task ready for your review: ${task.id || task.taskCd}`
+          : `Task ready for your approval: ${task.id || task.taskCd}`;
+        await sendNotification(nextPendingEmpId, msg, task);
+      } else if (nextStage === "CLOSED") {
+        await sendNotification(originalTask.empId, `Task Closed: ${task.id || task.taskCd}`, task);
       }
 
       const latestTasks = await fetchTasks();
-      triggerAlert("success", "Approved", "Task approved successfully.");
+      triggerAlert("success", "Approved", alertMsg);
       if (selectedTask && latestTasks) {
         const updatedTask = latestTasks.find(t => t.id === task.id);
         if (updatedTask) setSelectedTask(updatedTask);
@@ -1703,15 +1746,20 @@ const MyTasks = ({ userRole, onLogout }) => {
       const originalTask = task.rawTask || task;
 
       console.log(`✅ Approver approving task ${taskId} via ProcessController`);
-      await apiPost(`/api/process/task/${taskId}/reviewer-action`, { decision: "YES", empId: currentUserEmpId, remarks: "", isIndividual: task.isIndividual });
+      const res = await apiPost(`/api/process/task/${taskId}/reviewer-action`, { decision: "YES", empId: currentUserEmpId, remarks: "", isIndividual: task.isIndividual });
 
-      await sendNotification(originalTask.empId, `Task Closed: ${task.id}`, task);
-      if (originalTask.reviewerId) {
-        await sendNotification(originalTask.reviewerId, `Task Closed: ${task.id}`, task);
+      const nextPendingEmpId = res?.nextPendingEmpId;
+      const nextStage = res?.nextStage;
+      const alertMsg = res?.message || (nextStage === "CLOSED" ? "Task closed successfully. 🎉" : "Task forwarded to next approver.");
+
+      if (nextPendingEmpId) {
+        await sendNotification(nextPendingEmpId, `Task ready for your approval: ${task.id || task.taskCd}`, task);
+      } else if (nextStage === "CLOSED") {
+        await sendNotification(originalTask.empId, `Task Closed: ${task.id || task.taskCd}`, task);
       }
 
       const latestTasks = await fetchTasks();
-      triggerAlert("success", "Closed", "Task closed successfully.");
+      triggerAlert("success", nextStage === "CLOSED" ? "Closed" : "Approved", alertMsg);
       if (selectedTask && latestTasks) {
         const updatedTask = latestTasks.find(t => t.id === task.id);
         if (updatedTask) setSelectedTask(updatedTask);
@@ -2034,6 +2082,10 @@ const MyTasks = ({ userRole, onLogout }) => {
 
   const handleSubmitDeny = async (actionType) => {
     if (!selectedTask) return;
+    if (!denyData.reason || !denyData.reason.trim()) {
+      triggerAlert("warning", "Reason Required", "Please enter a detailed reason before submitting.");
+      return;
+    }
     try {
       const originalTask = selectedTask.rawTask || selectedTask;
       const newStatus = actionType || denyData.type || "REASSIGN";
@@ -2261,6 +2313,37 @@ const MyTasks = ({ userRole, onLogout }) => {
     return true;
   };
 
+  const isTaskCurrentlyReassigned = (task) => {
+    const rawTask = task.rawTask || task;
+    const process = String(rawTask?.prcsYesActn || "").toUpperCase();
+    if (process === "REASSIGN") return true;
+
+    const rawSts = String(rawTask?.taskSts || rawTask?.status || task?.status || "").toUpperCase();
+    if (rawSts === "REASSIGN" || rawSts === "REASSIGNED") return true;
+
+    return false;
+  };
+
+  const isTaskPreviouslyReassigned = (task) => {
+    const rawTask = task.rawTask || task;
+    const remStr = rawTask?.addlRem || rawTask?.remarks || task?.remarks || "";
+    if (typeof remStr === 'string' && remStr) {
+      if (remStr.toLowerCase().includes("reassign")) {
+        const parsed = parseRemarksHistory(remStr, task, employeesList);
+        if (parsed.some(r => r.action?.toLowerCase().includes("reassign"))) {
+          return true;
+        }
+        if (remStr.toLowerCase().includes("[reassign")) {
+          return true;
+        }
+      }
+    }
+    if (Array.isArray(task.processHistory) && task.processHistory.some(p => String(p.prcsSts || p.action || "").toUpperCase() === "REASSIGN")) {
+      return true;
+    }
+    return false;
+  };
+
   const getTaskStatusFilter = (task) => {
     const rawTask = task.rawTask || task;
     const rawSts = rawTask.taskSts || rawTask.status || task.status;
@@ -2279,7 +2362,11 @@ const MyTasks = ({ userRole, onLogout }) => {
       return "COMPLETED";
     }
 
-    if (sts === "WIP" || sts === "IN_PROGRESS") {
+    if (sts === "REASSIGN" || sts === "REASSIGNED" || process === "REASSIGN") {
+      return "REASSIGNED";
+    }
+
+    if (sts === "WIP" || sts === "IN_PROGRESS" || sts === "WORK_IN_PROGRESS") {
       if (process === "PENDING_REVIEWER" || process === "PENDING_APPROVER" || process === "UNDER_REVIEW") {
         return "UNDER_REVIEW";
       }
@@ -2287,6 +2374,10 @@ const MyTasks = ({ userRole, onLogout }) => {
         return "REASSIGNED";
       }
       return "IN_PROGRESS";
+    }
+
+    if (process === "PENDING_REVIEWER" || process === "PENDING_APPROVER" || process === "UNDER_REVIEW") {
+      return "UNDER_REVIEW";
     }
 
     if (sts === "HOLD") {
@@ -2337,10 +2428,26 @@ const MyTasks = ({ userRole, onLogout }) => {
 
     if (taskFilter !== "All" && selectedStatus !== "Completed") {
       const statusFilter = getTaskStatusFilter(task);
+      const isCurrReassigned = statusFilter === "REASSIGNED" || isTaskCurrentlyReassigned(task);
+      const isPrevReassigned = isTaskPreviouslyReassigned(task);
+      const isUnderReview = statusFilter === "UNDER_REVIEW";
+
       if (taskFilter === "OVERDUE") {
         if (!isTaskOverdue(task)) return false;
-      } else if (taskFilter === "IN_PROGRESS" && (statusFilter === "REASSIGNED" || statusFilter === "UNDER_REVIEW")) {
-        // allow Reassigned and Under Review tasks in IN_PROGRESS pill filter
+      } else if (taskFilter === "IN_PROGRESS") {
+        if (statusFilter !== "IN_PROGRESS" && !isCurrReassigned && !isUnderReview) {
+          return false;
+        }
+      } else if (taskFilter === "UNDER_REVIEW") {
+        // Allow Under Review tasks as well as Reassigned tasks
+        if (!isUnderReview && !isCurrReassigned && !isPrevReassigned) {
+          return false;
+        }
+      } else if (taskFilter === "REASSIGNED") {
+        // Allow Reassigned tasks and Under Review tasks that were previously reassigned
+        if (!isCurrReassigned && !isPrevReassigned) {
+          return false;
+        }
       } else if (statusFilter !== taskFilter) {
         return false;
       }
@@ -2587,10 +2694,33 @@ const MyTasks = ({ userRole, onLogout }) => {
       setLoadingTeamMembers(false);
     }
 
+    // Load Process Configs (All Reviewers and Approvers)
+    setTaskProcessConfigs([]);
+    try {
+      const rawT = task.rawTask || task;
+      const tId = task.taskId || task.id || rawT.taskId || rawT.empTaskId || rawT.id;
+      const isInd = task.isIndividual || rawT.taskSource === "INDIVIDUAL" || rawT.entityTyp === "INDIVIDUAL_TASK";
+      const pcPath = isInd
+        ? `/api/process-config/assignments/${tId}`
+        : `/api/process-config/live-task/${tId}`;
+      const pcs = await apiGet(pcPath);
+      if (Array.isArray(pcs) && pcs.length > 0) {
+        setTaskProcessConfigs(pcs);
+      } else if (Array.isArray(rawT.processConfigs) && rawT.processConfigs.length > 0) {
+        setTaskProcessConfigs(rawT.processConfigs);
+      }
+    } catch (err) {
+      console.error("Failed to load process configs:", err);
+      const rawT = task.rawTask || task;
+      if (Array.isArray(rawT.processConfigs)) {
+        setTaskProcessConfigs(rawT.processConfigs);
+      }
+    }
+
     setShowDetailView(true);
   };
 
-  const parseRemarksHistory = (rawStr, task, employeesList) => {
+  function parseRemarksHistory(rawStr, task, employeesList) {
     if (!rawStr || typeof rawStr !== 'string') return [];
 
     const rawBlocks = rawStr.split(/\n---\n|\n(?=\[[^\]]+\]:)/).map(s => s.trim()).filter(Boolean);
@@ -2695,7 +2825,7 @@ const MyTasks = ({ userRole, onLogout }) => {
     return parsed;
   };
 
-  const parseProcessHistory = (historyArr, task, employeesList) => {
+  function parseProcessHistory(historyArr, task, employeesList) {
     if (!Array.isArray(historyArr) || historyArr.length === 0) return [];
 
     return historyArr.map((event, idx) => {
@@ -2991,8 +3121,16 @@ const MyTasks = ({ userRole, onLogout }) => {
     })();
     const isTeamMember = taskTeamMembers.some(tm => String(tm.empId) === String(currentUserEmpId)) || (Array.isArray(rawTask?.teamMembers) && rawTask.teamMembers.some(tm => String(tm.empId) === String(currentUserEmpId)));
     const myName = getEmployeeName(currentUserEmpId, employeesList);
-    const isReviewer = !isExternalMode && (String(rawTask.reviewerId || rawTask.reviewer) === String(currentUserEmpId) || (rawTask?.reviewerNm && myName && myName.trim().toLowerCase() === rawTask.reviewerNm.trim().toLowerCase()));
-    const isApprover = !isExternalMode && (String(rawTask.approverId || rawTask.approver) === String(currentUserEmpId) || (rawTask?.approverNm && myName && myName.trim().toLowerCase() === rawTask.approverNm.trim().toLowerCase()));
+
+    const allTaskRevIds = (taskProcessConfigs && taskProcessConfigs.length > 0)
+      ? Array.from(new Set(taskProcessConfigs.filter(p => (p.stepType && p.stepType.toUpperCase() === 'REVIEWER') || (p.rId === 1) || (p.stepLabel && p.stepLabel.toLowerCase().includes('reviewer')) || (!p.stepType && p.ordrId === 1)).map(p => p.empId).filter(Boolean)))
+      : (Array.isArray(rawTask.reviewerIds) && rawTask.reviewerIds.length > 0 ? Array.from(new Set(rawTask.reviewerIds.filter(Boolean))) : (rawTask.processConfigs ? Array.from(new Set(rawTask.processConfigs.filter(p => (p.stepType && p.stepType.toUpperCase() === 'REVIEWER') || (p.rId === 1) || (p.stepLabel && p.stepLabel.toLowerCase().includes('reviewer')) || (!p.stepType && p.ordrId === 1)).map(p => p.empId).filter(Boolean))) : (rawTask.reviewerId || rawTask.reviewer ? [rawTask.reviewerId || rawTask.reviewer] : [])));
+    const allTaskAppIds = (taskProcessConfigs && taskProcessConfigs.length > 0)
+      ? Array.from(new Set(taskProcessConfigs.filter(p => (p.stepType && p.stepType.toUpperCase() === 'APPROVER') || (p.rId === 2) || (p.stepLabel && p.stepLabel.toLowerCase().includes('approver')) || (!p.stepType && p.ordrId > 1)).map(p => p.empId).filter(Boolean)))
+      : (Array.isArray(rawTask.approverIds) && rawTask.approverIds.length > 0 ? Array.from(new Set(rawTask.approverIds.filter(Boolean))) : (rawTask.processConfigs ? Array.from(new Set(rawTask.processConfigs.filter(p => (p.stepType && p.stepType.toUpperCase() === 'APPROVER') || (p.rId === 2) || (p.stepLabel && p.stepLabel.toLowerCase().includes('approver')) || (!p.stepType && p.ordrId > 1)).map(p => p.empId).filter(Boolean))) : (rawTask.approverId || rawTask.approver ? [rawTask.approverId || rawTask.approver] : [])));
+
+    const isReviewer = !isExternalMode && (allTaskRevIds.some(id => String(id) === String(currentUserEmpId)) || (rawTask?.reviewerNm && myName && rawTask.reviewerNm.toLowerCase().includes(myName.trim().toLowerCase())));
+    const isApprover = !isExternalMode && (allTaskAppIds.some(id => String(id) === String(currentUserEmpId)) || (rawTask?.approverNm && myName && rawTask.approverNm.toLowerCase().includes(myName.trim().toLowerCase())));
     const isDoer = isExternalMode || String(rawTask.empId || rawTask.assignedTo || rawTask.extEmpId) === String(currentUserEmpId) || String(rawTask.assignedBy || rawTask.assigned_by || rawTask.createdBy) === String(currentUserEmpId) || isTeamMember || (!isReviewer && !isApprover);
 
     // Get current progress and process for display
@@ -3034,7 +3172,33 @@ const MyTasks = ({ userRole, onLogout }) => {
         "Reviewer": { bg: "#8B5CF6", light: "#EDE9FE" },
         "Approver": { bg: "#F59E0B", light: "#FEF3C7" }
       };
-      const color = roleColors[role] || { bg: "#64748B", light: "#F1F5F9" };
+      const color = role.startsWith("Reviewer")
+        ? roleColors["Reviewer"]
+        : (role.startsWith("Approver") ? roleColors["Approver"] : (roleColors[role] || { bg: "#64748B", light: "#F1F5F9" }));
+
+      // Sequential review stage status
+      let stageBadge = null;
+      if (role.startsWith("Reviewer") && empId) {
+        const isApproved = Array.isArray(rawTask?.approvedReviewerIds) && rawTask.approvedReviewerIds.some(id => String(id) === String(empId));
+        const isActive = String(rawTask?.activeReviewerId) === String(empId) && (currentProcess === "PENDING_REVIEWER" || currentProcess === "UNDER_REVIEW");
+        if (isApproved) {
+          stageBadge = <span style={{ fontSize: "10px", fontWeight: "700", color: "#16a34a", backgroundColor: "#dcfce7", padding: "1px 7px", borderRadius: "10px" }}>✓ Approved</span>;
+        } else if (isActive) {
+          stageBadge = <span style={{ fontSize: "10px", fontWeight: "700", color: "#8b5cf6", backgroundColor: "#f3e8ff", padding: "1px 7px", borderRadius: "10px" }}>⏳ In Review</span>;
+        } else if (currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER" || currentProcess === "UNDER_REVIEW") {
+          stageBadge = <span style={{ fontSize: "10px", fontWeight: "600", color: "#94a3b8", backgroundColor: "#f1f5f9", padding: "1px 7px", borderRadius: "10px" }}>Waiting</span>;
+        }
+      } else if (role.startsWith("Approver") && empId) {
+        const isApproved = Array.isArray(rawTask?.approvedApproverIds) && rawTask.approvedApproverIds.some(id => String(id) === String(empId));
+        const isActive = String(rawTask?.activeApproverId) === String(empId) && currentProcess === "PENDING_APPROVER";
+        if (isApproved) {
+          stageBadge = <span style={{ fontSize: "10px", fontWeight: "700", color: "#16a34a", backgroundColor: "#dcfce7", padding: "1px 7px", borderRadius: "10px" }}>✓ Approved</span>;
+        } else if (isActive) {
+          stageBadge = <span style={{ fontSize: "10px", fontWeight: "700", color: "#d97706", backgroundColor: "#fef3c7", padding: "1px 7px", borderRadius: "10px" }}>⏳ In Review</span>;
+        } else if (currentProcess === "PENDING_REVIEWER" || currentProcess === "PENDING_APPROVER" || currentProcess === "UNDER_REVIEW") {
+          stageBadge = <span style={{ fontSize: "10px", fontWeight: "600", color: "#94a3b8", backgroundColor: "#f1f5f9", padding: "1px 7px", borderRadius: "10px" }}>Waiting</span>;
+        }
+      }
 
       return (
         <div style={{
@@ -3072,16 +3236,19 @@ const MyTasks = ({ userRole, onLogout }) => {
               />
             ) : initials || "UN"}
           </div>
-          <div style={{ flex: 1 }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: "600", fontSize: "14px", color: "#0f172a", display: "flex", alignItems: "center", gap: "6px" }}>
-              <span>{name}</span>
+              <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
               {isExternal && (
-                <span style={{ fontSize: "11px", fontWeight: "600", color: "#2563eb", backgroundColor: "#dbeafe", padding: "1px 6px", borderRadius: "8px" }}>
+                <span style={{ fontSize: "11px", fontWeight: "600", color: "#2563eb", backgroundColor: "#dbeafe", padding: "1px 6px", borderRadius: "8px", flexShrink: 0 }}>
                   (External)
                 </span>
               )}
             </div>
-            <div style={{ fontSize: "12px", color: color.bg, fontWeight: "500" }}>{role}</div>
+            <div style={{ fontSize: "12px", color: color.bg, fontWeight: "500", display: "flex", alignItems: "center", gap: "6px", marginTop: "2px" }}>
+              <span>{role}</span>
+              {stageBadge}
+            </div>
           </div>
           <span style={{
             fontSize: "10px",
@@ -3089,7 +3256,8 @@ const MyTasks = ({ userRole, onLogout }) => {
             color: color.bg,
             backgroundColor: `${color.bg}22`,
             padding: "2px 10px",
-            borderRadius: "12px"
+            borderRadius: "12px",
+            flexShrink: 0
           }}>
             {label}
           </span>
@@ -3134,7 +3302,34 @@ const MyTasks = ({ userRole, onLogout }) => {
       }
 
       // REVIEWER ACTIONS
+      const isActiveReviewer = rawTask?.activeReviewerId 
+        ? String(rawTask.activeReviewerId) === String(currentUserEmpId)
+        : (allTaskRevIds.length > 0 ? String(allTaskRevIds[0]) === String(currentUserEmpId) : isReviewer);
+
       if (isReviewer && (currentProcess === "PENDING_REVIEWER" || currentProcess === "UNDER_REVIEW")) {
+        if (!isActiveReviewer) {
+          const activeRevName = rawTask?.activeReviewerId ? getEmployeeName(rawTask.activeReviewerId, employeesList) : "previous reviewer";
+          const myRevApproved = Array.isArray(rawTask?.approvedReviewerIds) && rawTask.approvedReviewerIds.some(id => String(id) === String(currentUserEmpId));
+          return (
+            <div style={{
+              padding: "12px 16px",
+              backgroundColor: myRevApproved ? "#f0fdf4" : "#f8fafc",
+              border: `1px solid ${myRevApproved ? '#bbf7d0' : '#e2e8f0'}`,
+              borderRadius: "8px",
+              color: myRevApproved ? "#15803d" : "#64748b",
+              fontSize: "13px",
+              width: "100%",
+              textAlign: "center"
+            }}>
+              {myRevApproved ? (
+                <span>✓ You have approved this task. Waiting for next stage.</span>
+              ) : (
+                <span>⏳ Waiting for <strong>{activeRevName}</strong> (Reviewer {rawTask?.activeReviewerIndex || 1}) to complete review.</span>
+              )}
+            </div>
+          );
+        }
+
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
             <button
@@ -3163,7 +3358,34 @@ const MyTasks = ({ userRole, onLogout }) => {
       }
 
       // APPROVER ACTIONS
+      const isActiveApprover = rawTask?.activeApproverId
+        ? String(rawTask.activeApproverId) === String(currentUserEmpId)
+        : (allTaskAppIds.length > 0 ? String(allTaskAppIds[0]) === String(currentUserEmpId) : isApprover);
+
       if (isApprover && currentProcess === "PENDING_APPROVER") {
+        if (!isActiveApprover) {
+          const activeAppName = rawTask?.activeApproverId ? getEmployeeName(rawTask.activeApproverId, employeesList) : "previous approver";
+          const myAppApproved = Array.isArray(rawTask?.approvedApproverIds) && rawTask.approvedApproverIds.some(id => String(id) === String(currentUserEmpId));
+          return (
+            <div style={{
+              padding: "12px 16px",
+              backgroundColor: myAppApproved ? "#f0fdf4" : "#f8fafc",
+              border: `1px solid ${myAppApproved ? '#bbf7d0' : '#e2e8f0'}`,
+              borderRadius: "8px",
+              color: myAppApproved ? "#15803d" : "#64748b",
+              fontSize: "13px",
+              width: "100%",
+              textAlign: "center"
+            }}>
+              {myAppApproved ? (
+                <span>✓ You have approved this task.</span>
+              ) : (
+                <span>⏳ Waiting for <strong>{activeAppName}</strong> (Approver {rawTask?.activeApproverIndex || 1}) to complete approval.</span>
+              )}
+            </div>
+          );
+        }
+
         return (
           <div style={{ display: "flex", flexDirection: "column", gap: "8px", width: "100%" }}>
             <button
@@ -4451,8 +4673,100 @@ const MyTasks = ({ userRole, onLogout }) => {
                     isExtTask
                   );
                 })()}
-                {(rawTask?.reviewerId || rawTask?.reviewer || rawTask?.reviewerNm) && renderTeamMember(rawTask?.reviewerId || rawTask?.reviewer, "Reviewer", "RV", rawTask?.reviewerNm)}
-                {(rawTask?.approverId || rawTask?.approver || rawTask?.approverNm) && renderTeamMember(rawTask?.approverId || rawTask?.approver, "Approver", "AP", rawTask?.approverNm)}
+                {(() => {
+                  const pcs = (taskProcessConfigs && taskProcessConfigs.length > 0)
+                    ? taskProcessConfigs
+                    : (Array.isArray(rawTask?.processConfigs) ? rawTask.processConfigs : []);
+
+                  const seenRevEmpIds = new Set();
+                  const revConfigs = [];
+                  const seenAppEmpIds = new Set();
+                  const appConfigs = [];
+
+                  pcs.forEach(p => {
+                    const isRev = (p.stepType && p.stepType.toUpperCase() === 'REVIEWER') || 
+                                  (p.rId === 1) || 
+                                  (p.stepLabel && p.stepLabel.toLowerCase().includes('reviewer')) || 
+                                  (!p.stepType && p.ordrId === 1);
+                    const isApp = (p.stepType && p.stepType.toUpperCase() === 'APPROVER') || 
+                                  (p.rId === 2) || 
+                                  (p.stepLabel && p.stepLabel.toLowerCase().includes('approver')) || 
+                                  (!p.stepType && p.ordrId > 1);
+
+                    if (isRev && p.empId) {
+                      const idKey = String(p.empId);
+                      if (!seenRevEmpIds.has(idKey)) {
+                        seenRevEmpIds.add(idKey);
+                        revConfigs.push(p);
+                      }
+                    } else if (isApp && p.empId) {
+                      const idKey = String(p.empId);
+                      if (!seenAppEmpIds.has(idKey)) {
+                        seenAppEmpIds.add(idKey);
+                        appConfigs.push(p);
+                      }
+                    }
+                  });
+
+                  let revIds = revConfigs.map(r => r.empId);
+                  if (revIds.length === 0) {
+                    if (Array.isArray(rawTask?.reviewerIds) && rawTask.reviewerIds.length > 0) {
+                      revIds = Array.from(new Set(rawTask.reviewerIds.filter(Boolean)));
+                    } else if (rawTask?.reviewerId || rawTask?.reviewer || rawTask?.reviewerEmpId) {
+                      revIds = [rawTask.reviewerId || rawTask.reviewer || rawTask.reviewerEmpId].filter(Boolean);
+                    }
+                  }
+
+                  let appIds = appConfigs.map(a => a.empId);
+                  if (appIds.length === 0) {
+                    if (Array.isArray(rawTask?.approverIds) && rawTask.approverIds.length > 0) {
+                      appIds = Array.from(new Set(rawTask.approverIds.filter(Boolean)));
+                    } else if (rawTask?.approverId || rawTask?.approver || rawTask?.approverEmpId) {
+                      appIds = [rawTask.approverId || rawTask.approver || rawTask.approverEmpId].filter(Boolean);
+                    }
+                  }
+
+                  const revFallbackNames = (revConfigs.length > 0)
+                    ? revConfigs.map(r => r.empNm || r.empName)
+                    : (Array.isArray(rawTask?.reviewerNames) && rawTask.reviewerNames.length > 0 ? Array.from(new Set(rawTask.reviewerNames.filter(Boolean))) : (rawTask?.reviewerNm ? Array.from(new Set(rawTask.reviewerNm.split(',').map(s => s.trim()).filter(Boolean))) : []));
+                  const appFallbackNames = (appConfigs.length > 0)
+                    ? appConfigs.map(a => a.empNm || a.empName)
+                    : (Array.isArray(rawTask?.approverNames) && rawTask.approverNames.length > 0 ? Array.from(new Set(rawTask.approverNames.filter(Boolean))) : (rawTask?.approverNm ? Array.from(new Set(rawTask.approverNm.split(',').map(s => s.trim()).filter(Boolean))) : []));
+
+                  return (
+                    <>
+                      {revIds.length > 0 ? (
+                        revIds.map((rId, idx) => (
+                          <React.Fragment key={`detail-rev-${rId}-${idx}`}>
+                            {renderTeamMember(
+                              rId,
+                              revIds.length > 1 ? `Reviewer ${idx + 1}` : "Reviewer",
+                              "RV",
+                              revFallbackNames[idx] || (idx === 0 ? rawTask?.reviewerNm : null)
+                            )}
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        rawTask?.reviewerNm && renderTeamMember(null, "Reviewer", "RV", rawTask?.reviewerNm)
+                      )}
+
+                      {appIds.length > 0 ? (
+                        appIds.map((aId, idx) => (
+                          <React.Fragment key={`detail-app-${aId}-${idx}`}>
+                            {renderTeamMember(
+                              aId,
+                              appIds.length > 1 ? `Approver ${idx + 1}` : "Approver",
+                              "AP",
+                              appFallbackNames[idx] || (idx === 0 ? rawTask?.approverNm : null)
+                            )}
+                          </React.Fragment>
+                        ))
+                      ) : (
+                        rawTask?.approverNm && renderTeamMember(null, "Approver", "AP", rawTask?.approverNm)
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             </div>
 
@@ -4754,9 +5068,28 @@ const MyTasks = ({ userRole, onLogout }) => {
                             </div>
 
                             <div className="myt-form-group" style={{ marginBottom: "20px" }}>
-                              <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Reason</label>
-                              <textarea className="myt-input" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", minHeight: "100px", fontSize: "14px" }}
-                                placeholder="Enter detailed reason for reassigning..." value={denyData.reason || ""} onChange={e => setDenyData({ ...denyData, reason: e.target.value })} />
+                              <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>
+                                Reason <span style={{ color: "#ef4444" }}>*</span>
+                              </label>
+                              <textarea
+                                className="myt-input"
+                                style={{
+                                  width: "100%",
+                                  padding: "12px",
+                                  borderRadius: "8px",
+                                  border: `1px solid ${(!denyData.reason || !denyData.reason.trim()) ? '#f87171' : '#cbd5e1'}`,
+                                  minHeight: "100px",
+                                  fontSize: "14px"
+                                }}
+                                placeholder="Enter detailed reason for reassigning (mandatory)..."
+                                value={denyData.reason || ""}
+                                onChange={e => setDenyData({ ...denyData, reason: e.target.value })}
+                              />
+                              {(!denyData.reason || !denyData.reason.trim()) && (
+                                <small style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                                  Reason is mandatory so the executor understands why the task was reassigned.
+                                </small>
+                              )}
                             </div>
 
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
@@ -4790,8 +5123,20 @@ const MyTasks = ({ userRole, onLogout }) => {
 
                             <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "20px", borderTop: "1px solid #e2e8f0" }}>
                               <button className="cc-btn secondary" onClick={() => setShowDenyForm(false)} style={{ borderRadius: "8px", padding: "10px 20px" }}>Cancel</button>
-                              <button className="cc-btn primary" onClick={() => handleSubmitDeny("REASSIGN")} disabled={!denyData.reason}
-                                style={{ borderRadius: "8px", backgroundColor: "#4f46e5", border: "none", color: "white", padding: "10px 24px", fontSize: "15px", fontWeight: "600" }}>
+                              <button
+                                className="cc-btn primary"
+                                onClick={() => handleSubmitDeny("REASSIGN")}
+                                disabled={!denyData.reason || !denyData.reason.trim()}
+                                style={{
+                                  borderRadius: "8px",
+                                  backgroundColor: (!denyData.reason || !denyData.reason.trim()) ? "#94a3b8" : "#4f46e5",
+                                  cursor: (!denyData.reason || !denyData.reason.trim()) ? "not-allowed" : "pointer",
+                                  border: "none",
+                                  color: "white",
+                                  padding: "10px 24px",
+                                  fontSize: "15px",
+                                  fontWeight: "600"
+                                }}>
                                 Submit Reassign
                               </button>
                             </div>
@@ -4873,9 +5218,28 @@ const MyTasks = ({ userRole, onLogout }) => {
                           </div>
 
                           <div className="myt-form-group" style={{ marginBottom: "20px" }}>
-                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Reason</label>
-                            <textarea className="myt-input" style={{ width: "100%", padding: "12px", borderRadius: "8px", border: "1px solid #cbd5e1", minHeight: "100px", fontSize: "14px" }}
-                              placeholder="Enter detailed reason for rework..." value={denyData.reason || ""} onChange={e => setDenyData({ ...denyData, reason: e.target.value })} />
+                            <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>
+                              Reason <span style={{ color: "#ef4444" }}>*</span>
+                            </label>
+                            <textarea
+                              className="myt-input"
+                              style={{
+                                width: "100%",
+                                padding: "12px",
+                                borderRadius: "8px",
+                                border: `1px solid ${(!denyData.reason || !denyData.reason.trim()) ? '#f87171' : '#cbd5e1'}`,
+                                minHeight: "100px",
+                                fontSize: "14px"
+                              }}
+                              placeholder="Enter detailed reason for rework (mandatory)..."
+                              value={denyData.reason || ""}
+                              onChange={e => setDenyData({ ...denyData, reason: e.target.value })}
+                            />
+                            {(!denyData.reason || !denyData.reason.trim()) && (
+                              <small style={{ color: "#ef4444", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                                Reason is mandatory so the executor understands what needs rework.
+                              </small>
+                            )}
                           </div>
 
                           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
@@ -4909,8 +5273,20 @@ const MyTasks = ({ userRole, onLogout }) => {
 
                           <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", paddingTop: "20px", borderTop: "1px solid #e2e8f0" }}>
                             <button className="cc-btn secondary" onClick={() => setShowDenyForm(false)} style={{ borderRadius: "8px", padding: "10px 20px" }}>Cancel</button>
-                            <button className="cc-btn primary" onClick={() => handleSubmitDeny("REWORK")} disabled={!denyData.reason}
-                              style={{ borderRadius: "8px", backgroundColor: "#3b82f6", border: "none", color: "white", padding: "10px 24px", fontSize: "15px", fontWeight: "600" }}>
+                            <button
+                              className="cc-btn primary"
+                              onClick={() => handleSubmitDeny("REWORK")}
+                              disabled={!denyData.reason || !denyData.reason.trim()}
+                              style={{
+                                borderRadius: "8px",
+                                backgroundColor: (!denyData.reason || !denyData.reason.trim()) ? "#94a3b8" : "#3b82f6",
+                                cursor: (!denyData.reason || !denyData.reason.trim()) ? "not-allowed" : "pointer",
+                                border: "none",
+                                color: "white",
+                                padding: "10px 24px",
+                                fontSize: "15px",
+                                fontWeight: "600"
+                              }}>
                               Submit Rework
                             </button>
                           </div>
@@ -4935,9 +5311,63 @@ const MyTasks = ({ userRole, onLogout }) => {
 
     const isExtTask = rawTask?.taskAsgnTo === 'EXTERNAL' || !!rawTask?.extEmpId || task.isExternal || rawTask?.isExternal;
     const executorId = isExtTask ? null : (rawTask.empId || rawTask.assignedTo || rawTask.executorId);
-    const reviewerId = rawTask.reviewerId || rawTask.reviewer;
-    const approverId = rawTask.approverId || rawTask.approver;
     const assignedById = rawTask.assignedBy || rawTask.assigned_by || rawTask.createdBy;
+    const pcs = Array.isArray(rawTask.processConfigs) ? rawTask.processConfigs : [];
+
+    const seenRevEmpIds = new Set();
+    const revConfigs = [];
+    const seenAppEmpIds = new Set();
+    const appConfigs = [];
+
+    pcs.forEach(p => {
+      const isRev = (p.stepType && p.stepType.toUpperCase() === 'REVIEWER') || 
+                    (p.rId === 1) || 
+                    (p.stepLabel && p.stepLabel.toLowerCase().includes('reviewer')) || 
+                    (!p.stepType && p.ordrId === 1);
+      const isApp = (p.stepType && p.stepType.toUpperCase() === 'APPROVER') || 
+                    (p.rId === 2) || 
+                    (p.stepLabel && p.stepLabel.toLowerCase().includes('approver')) || 
+                    (!p.stepType && p.ordrId > 1);
+
+      if (isRev && p.empId) {
+        const idKey = String(p.empId);
+        if (!seenRevEmpIds.has(idKey)) {
+          seenRevEmpIds.add(idKey);
+          revConfigs.push(p);
+        }
+      } else if (isApp && p.empId) {
+        const idKey = String(p.empId);
+        if (!seenAppEmpIds.has(idKey)) {
+          seenAppEmpIds.add(idKey);
+          appConfigs.push(p);
+        }
+      }
+    });
+
+    let revIds = revConfigs.map(r => r.empId);
+    if (revIds.length === 0) {
+      if (Array.isArray(rawTask.reviewerIds) && rawTask.reviewerIds.length > 0) {
+        revIds = Array.from(new Set(rawTask.reviewerIds.filter(Boolean)));
+      } else if (rawTask.reviewerId || rawTask.reviewer || rawTask.reviewerEmpId) {
+        revIds = [rawTask.reviewerId || rawTask.reviewer || rawTask.reviewerEmpId].filter(Boolean);
+      }
+    }
+
+    let appIds = appConfigs.map(a => a.empId);
+    if (appIds.length === 0) {
+      if (Array.isArray(rawTask.approverIds) && rawTask.approverIds.length > 0) {
+        appIds = Array.from(new Set(rawTask.approverIds.filter(Boolean)));
+      } else if (rawTask.approverId || rawTask.approver || rawTask.approverEmpId) {
+        appIds = [rawTask.approverId || rawTask.approver || rawTask.approverEmpId].filter(Boolean);
+      }
+    }
+
+    const revFallbackNames = (revConfigs.length > 0)
+      ? revConfigs.map(r => r.empNm || r.empName)
+      : (Array.isArray(rawTask.reviewerNames) && rawTask.reviewerNames.length > 0 ? Array.from(new Set(rawTask.reviewerNames.filter(Boolean))) : (rawTask.reviewerNm ? Array.from(new Set(rawTask.reviewerNm.split(',').map(s => s.trim()).filter(Boolean))) : []));
+    const appFallbackNames = (appConfigs.length > 0)
+      ? appConfigs.map(a => a.empNm || a.empName)
+      : (Array.isArray(rawTask.approverNames) && rawTask.approverNames.length > 0 ? Array.from(new Set(rawTask.approverNames.filter(Boolean))) : (rawTask.approverNm ? Array.from(new Set(rawTask.approverNm.split(',').map(s => s.trim()).filter(Boolean))) : []));
 
     let teamMembers = [
       ...((task.isIndividual || rawTask.taskSource === "INDIVIDUAL" || (!task.isProject && !rawTask.mId && !rawTask.prjId && !rawTask.mlstnCd && !rawTask.prjCd && assignedById)) && (assignedById || rawTask.assignedByNm) ? [{
@@ -4953,22 +5383,59 @@ const MyTasks = ({ userRole, onLogout }) => {
         label: "EX",
         fallbackName: rawTask.extEmpNm || rawTask.executorName || rawTask.empNm || rawTask.empName || rawTask.assignedToName || rawTask.executorNm,
         fallbackPhoto: rawTask.executorPhoto || rawTask.empPhoto
-      },
-      {
-        empId: reviewerId,
+      }
+    ];
+
+    if (revIds.length > 0) {
+      revIds.forEach((rId, idx) => {
+        teamMembers.push({
+          empId: rId,
+          role: revIds.length > 1 ? `Reviewer ${idx + 1}` : "Reviewer",
+          label: "RV",
+          fallbackName: revFallbackNames[idx] || (idx === 0 ? rawTask.reviewerNm : null),
+          fallbackPhoto: rawTask.reviewerPhoto || rawTask.revPhoto
+        });
+      });
+    } else if (rawTask.reviewerNm) {
+      teamMembers.push({
+        empId: null,
         role: "Reviewer",
         label: "RV",
-        fallbackName: rawTask.reviewerName || rawTask.reviewerNm || rawTask.revNm || rawTask.revName,
-        fallbackPhoto: rawTask.reviewerPhoto || rawTask.revPhoto
-      },
-      {
-        empId: approverId,
+        fallbackName: rawTask.reviewerNm,
+        fallbackPhoto: null
+      });
+    }
+
+    if (appIds.length > 0) {
+      appIds.forEach((aId, idx) => {
+        teamMembers.push({
+          empId: aId,
+          role: appIds.length > 1 ? `Approver ${idx + 1}` : "Approver",
+          label: "AP",
+          fallbackName: appFallbackNames[idx] || (idx === 0 ? rawTask.approverNm : null),
+          fallbackPhoto: rawTask.approverPhoto || rawTask.appPhoto
+        });
+      });
+    } else if (rawTask.approverNm) {
+      teamMembers.push({
+        empId: null,
         role: "Approver",
         label: "AP",
-        fallbackName: rawTask.approverName || rawTask.approverNm || rawTask.appNm || rawTask.appName,
-        fallbackPhoto: rawTask.approverPhoto || rawTask.appPhoto
-      }
-    ].filter(m => m.empId || m.fallbackName);
+        fallbackName: rawTask.approverNm,
+        fallbackPhoto: null
+      });
+    }
+
+    teamMembers = teamMembers.filter(m => m.empId || m.fallbackName);
+
+    // Strict deduplication of teamMembers by empId + role
+    const seenMemberKeys = new Set();
+    teamMembers = teamMembers.filter(m => {
+      const key = `${m.empId || m.fallbackName}_${m.label}`;
+      if (seenMemberKeys.has(key)) return false;
+      seenMemberKeys.add(key);
+      return true;
+    });
 
     if (Array.isArray(rawTask.teamMembers) && rawTask.teamMembers.length > 0) {
       rawTask.teamMembers.forEach(tm => {

@@ -588,9 +588,33 @@ const ProjectDetails = ({ userRole, onLogout }) => {
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: '16px', fontSize: '13px', color: '#64748b' }}>
                 {isClosed ? (
-                  <span>Schedule: <strong style={{ color: leadLag.color }}>{leadLag.label}</strong></span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    Schedule: <strong style={{
+                      backgroundColor: leadLag.bgColor,
+                      color: leadLag.color,
+                      border: `1px solid ${leadLag.borderColor}`,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      letterSpacing: '0.3px',
+                      textTransform: 'uppercase'
+                    }}>{leadLag.label}</strong>
+                  </span>
                 ) : (
-                  <span>Priority: <strong style={{ color: dynamicPriorityInfo.color }}>{dynamicPriorityInfo.priority}</strong></span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    Priority: <strong style={{
+                      backgroundColor: dynamicPriorityInfo.bgColor || '#fef2f2',
+                      color: dynamicPriorityInfo.color || '#ef4444',
+                      border: `1px solid ${dynamicPriorityInfo.borderColor || '#ef4444'}`,
+                      padding: '2px 8px',
+                      borderRadius: '4px',
+                      fontSize: '11px',
+                      fontWeight: '700',
+                      letterSpacing: '0.3px',
+                      textTransform: 'uppercase'
+                    }}>{dynamicPriorityInfo.priority}</strong>
+                  </span>
                 )}
               </div>
             </div>

@@ -585,7 +585,16 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
     // Check if user clicked "+ Create Department"
     if (name === "department" && value === "CREATE_NEW") {
-      setDeptForm({ code: generateDepartmentCode(departments), name: "", description: "", status: "" });
+      fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() })
+        .then(res => res.ok ? res.json() : [])
+        .then(latestDepts => {
+          const dList = latestDepts && latestDepts.length > 0 ? latestDepts : departments;
+          if (latestDepts && latestDepts.length > 0) setDepartments(latestDepts);
+          setDeptForm({ code: generateDepartmentCode(dList), name: "", description: "", status: "Active" });
+        })
+        .catch(() => {
+          setDeptForm({ code: generateDepartmentCode(departments), name: "", description: "", status: "Active" });
+        });
       setShowDeptModal(true);
       setForm((prev) => ({ ...prev, department: "" }));
       return;
@@ -797,10 +806,23 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       return;
     }
 
+    const trimmedName = desigForm.name.trim().toLowerCase();
+    const nameExists = designations.some(d => {
+      const dName = (d.desigNm || d.name || "").trim().toLowerCase();
+      const dId = d.desigId || d.id;
+      if (isEditingDesig && String(dId) === String(editingDesigId)) return false;
+      return dName === trimmedName;
+    });
+
+    if (nameExists) {
+      triggerAlert("error", "Already Exists", "Designation name already exists.");
+      return;
+    }
+
     const payload = {
       desigCd: trimmedCode,
       desigNm: desigForm.name.trim(),
-      desigDesc: desigForm.description.trim()
+      desigDesc: desigForm.description ? desigForm.description.trim() : ""
     };
     try {
       const url = isEditingDesig ? `${apiBaseUrl}/api/designations/${editingDesigId}` : `${apiBaseUrl}/api/designations`;
@@ -834,42 +856,213 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
   // Save New Department from Modal
   const handleSaveNewDepartment = async () => {
-    if (!deptForm.code.trim() || !deptForm.name.trim()) {
-      triggerAlert("error", "Validation Error", "Department code and name are required.");
+    // 1. Department Code check
+    if (!deptForm.code.trim()) {
+      triggerAlert("error", "Validation Error", "Department Code is required.");
+      return;
+    }
+    if (/\s/.test(deptForm.code)) {
+      triggerAlert("error", "Validation Error", "Spaces are not allowed in Department Code.");
+      return;
+    }
+    if (deptForm.code.trim().length > 10) {
+      triggerAlert("error", "Validation Error", "Department Code cannot exceed 10 characters.");
       return;
     }
 
+    // 2. Department Name check
+    if (!deptForm.name.trim()) {
+      triggerAlert("error", "Validation Error", "Department Name is required.");
+      return;
+    }
+    if (deptForm.name.trim().length > 100) {
+      triggerAlert("error", "Validation Error", "Department Name cannot exceed 100 characters.");
+      return;
+    }
+    if (/[^a-zA-Z0-9\s]/.test(deptForm.name.trim())) {
+      triggerAlert("error", "Validation Error", "Special characters are not allowed in Department Name.");
+      return;
+    }
+    if (!/[a-zA-Z]/.test(deptForm.name.trim())) {
+      triggerAlert("error", "Validation Error", "Department Name must contain at least one letter.");
+      return;
+    }
+
+    // 3. Description check
+    if (deptForm.description && deptForm.description.length > 255) {
+      triggerAlert("error", "Validation Error", "Department Description cannot exceed 255 characters.");
+      return;
+    }
+
+    // 4. Status check
+    if (!deptForm.status) {
+      triggerAlert("error", "Validation Error", "Department Status is required.");
+      return;
+    }
+
+    // Always fetch latest departments from server in real-time to avoid stale state
+    let latestDepartments = departments;
+    try {
+      const freshRes = await fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() });
+      if (freshRes.ok) {
+        latestDepartments = await freshRes.json();
+        setDepartments(latestDepartments);
+      }
+    } catch (e) {
+      console.warn("Could not refresh departments list:", e);
+    }
+
+    const codeToCheck = deptForm.code.trim().toUpperCase();
+    const isDuplicateCode = latestDepartments.some(
+      (dept) => (dept.deptCd || dept.deptCode || dept.code || "").trim().toUpperCase() === codeToCheck
+    );
+
+    if (isDuplicateCode) {
+      setAlertConfig({
+        isOpen: true,
+        type: "warning",
+        title: "Already Exists",
+        message: "Department code already exists.",
+        confirmText: "OK",
+        onConfirm: () => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
+        }
+      });
+      return;
+    }
+
+    const nameToCheck = deptForm.name.trim().toLowerCase();
+    const isExactDuplicateName = latestDepartments.some(
+      (dept) => {
+        const existingName = (dept.deptNm || dept.name || dept.deptName || "").trim().toLowerCase();
+        return existingName === nameToCheck;
+      }
+    );
+
+    if (isExactDuplicateName) {
+      setAlertConfig({
+        isOpen: true,
+        type: "warning",
+        title: "Already Exists",
+        message: "Department name already exists.",
+        confirmText: "OK",
+        onConfirm: () => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
+        }
+      });
+      return;
+    }
+
+    // Check for partial match (one contains the other) – ask for confirmation like in DepartmentMaster
+    const isPartialMatch = latestDepartments.some(
+      (dept) => {
+        const existingName = (dept.deptNm || dept.name || dept.deptName || "").trim().toLowerCase();
+        if (existingName.includes(nameToCheck) || nameToCheck.includes(existingName)) {
+          return true;
+        }
+        return false;
+      }
+    );
+
     const payload = {
-      deptCode: deptForm.code.trim().toUpperCase(),
+      deptCode: codeToCheck,
       deptNm: deptForm.name.trim(),
-      descr: deptForm.description.trim(),
+      descr: deptForm.description ? deptForm.description.trim() : "",
       sts: deptForm.status === "Inactive" ? false : true
     };
 
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/departments`, {
-        method: "POST",
-        headers: getAuthHeaders(),
-        body: JSON.stringify(payload)
-      });
+    const performSaveDept = async () => {
+      try {
+        const response = await fetch(`${apiBaseUrl}/api/departments`, {
+          method: "POST",
+          headers: getAuthHeaders(),
+          body: JSON.stringify(payload)
+        });
 
-      if (response.ok) {
-        const newDept = await response.json();
-        triggerAlert("success", "Success", "Department created successfully!");
-        setDeptForm({ code: "", name: "", description: "", status: "" });
-        setShowDeptModal(false);
-        const deptRes = await fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() });
-        if (deptRes.ok) {
-          setDepartments(await deptRes.json());
+        if (response.ok) {
+          const newDept = await response.json();
+          const newDeptId = newDept.deptId || newDept.id;
+
+          // If company or plant is selected, auto-map this new department to the company/plant
+          if (form.workingFor === "company" && form.company) {
+            try {
+              await fetch(`${apiBaseUrl}/api/dept-coy-plt-maps`, {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                  coyId: parseInt(form.company),
+                  deptId: newDeptId,
+                  sts: true
+                })
+              });
+            } catch (e) {}
+          } else if (form.workingFor === "plant" && form.plant) {
+            try {
+              await fetch(`${apiBaseUrl}/api/dept-coy-plt-maps`, {
+                method: "POST",
+                headers: getAuthHeaders(),
+                body: JSON.stringify({
+                  pltId: parseInt(form.plant),
+                  deptId: newDeptId,
+                  sts: true
+                })
+              });
+            } catch (e) {}
+          }
+
+          triggerAlert("success", "Success", "Department created successfully!");
+          setDeptForm({ code: "", name: "", description: "", status: "Active" });
+          setShowDeptModal(false);
+
+          // Refresh departments and mappings
+          const [deptRes, mapRes] = await Promise.all([
+            fetch(`${apiBaseUrl}/api/departments`, { headers: getAuthHeaders() }),
+            fetch(`${apiBaseUrl}/api/dept-coy-plt-maps`, { headers: getAuthHeaders() })
+          ]);
+          if (deptRes.ok) setDepartments(await deptRes.json());
+          if (mapRes.ok) setMappings(await mapRes.json());
+
+          setForm((prev) => ({ ...prev, department: String(newDeptId) }));
+        } else {
+          const errData = await response.json().catch(() => null);
+          const errMsg = errData?.message || "Failed to save department. Ensure department code and name are unique.";
+          setAlertConfig({
+            isOpen: true,
+            type: "warning",
+            title: "Already Exists",
+            message: errMsg,
+            confirmText: "OK",
+            onConfirm: () => {
+              setAlertConfig(prev => ({ ...prev, isOpen: false }));
+            }
+          });
         }
-        setForm((prev) => ({ ...prev, department: String(newDept.deptId || newDept.id) }));
-      } else {
-        triggerAlert("error", "Error", "Failed to save department. Ensure department code is unique.");
+      } catch (err) {
+        console.error("Error saving department:", err);
+        triggerAlert("error", "Error", "Server error occurred.");
       }
-    } catch (err) {
-      console.error("Error saving department:", err);
-      triggerAlert("error", "Error", "Server error occurred.");
+    };
+
+    if (isPartialMatch) {
+      setAlertConfig({
+        isOpen: true,
+        type: "warning",
+        title: "Similar Name Found",
+        message: "A department with a similar name already exists. Do you want to continue?",
+        confirmText: "OK",
+        cancelText: "Cancel",
+        onConfirm: () => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
+          performSaveDept();
+        },
+        onCancel: () => {
+          setAlertConfig(prev => ({ ...prev, isOpen: false }));
+        }
+      });
+      return;
     }
+
+    performSaveDept();
   };
 
   // Reset Employee Form
@@ -1599,6 +1792,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       triggerAlert("error", "Validation Error", "Please fill all required fields");
       return;
     }
+
+    if (!extForm.sts || !extForm.sts.trim()) {
+      triggerAlert("error", "Validation Error", "Employee Status is required.");
+      return;
+    }
     
     try {
       const endpoint = isExtEditing && extEditId 
@@ -1635,18 +1833,44 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
     }
   };
 
+  const compareEmployeeCodes = (a, b) => {
+    const codeA = (a.employeeCode || a.empCode || a.emp_code || a.extEmpCode || a.ext_emp_cd || "").trim();
+    const codeB = (b.employeeCode || b.empCode || b.emp_code || b.extEmpCode || b.ext_emp_cd || "").trim();
+
+    const matchA = codeA.match(/^(?:EMP|EXT)-?(\d+)$/i);
+    const matchB = codeB.match(/^(?:EMP|EXT)-?(\d+)$/i);
+
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    if (matchA && matchB) {
+      const numA = parseInt(matchA[1], 10);
+      const numB = parseInt(matchB[1], 10);
+      return numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+    }
+
+    if (codeA && codeB) {
+      return codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (codeA) {
+      return -1;
+    } else if (codeB) {
+      return 1;
+    }
+    return 0;
+  };
+
   const filteredEmployees = (tableSearchQuery
     ? employees.filter(emp =>
       (emp.employeeCode && emp.employeeCode.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
       (emp.employeeName && emp.employeeName.toLowerCase().includes(tableSearchQuery.toLowerCase()))
     )
-    : employees).slice().sort((a, b) => (a.employeeCode || '').localeCompare(b.employeeCode || '', undefined, {numeric: true, sensitivity: 'base'}));
+    : employees).slice().sort(compareEmployeeCodes);
 
-  const filteredExternalEmployees = (tableSearchQuery
+  const filteredExternalEmployees = ((tableSearchQuery
     ? externalEmployees.filter(emp =>
       (emp.extEmpCode && emp.extEmpCode.toLowerCase().includes(tableSearchQuery.toLowerCase())) ||
       (emp.extEmpNm && emp.extEmpNm.toLowerCase().includes(tableSearchQuery.toLowerCase()))
-    ) : externalEmployees) || [];
+    ) : externalEmployees) || []).slice().sort(compareEmployeeCodes);
 
   const indexOfLastRecord = currentPage * recordsPerPage;
   const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;

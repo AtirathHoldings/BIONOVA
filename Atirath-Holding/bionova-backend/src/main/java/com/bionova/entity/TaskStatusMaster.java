@@ -45,7 +45,10 @@ public class TaskStatusMaster {
         if (name == null) return null;
         switch (name.toUpperCase().trim().replace(" ", "_")) {
             case "DRAFT": return 1;
-            case "OPEN": return 2;
+            case "OPEN":
+            case "ASSIGNED":
+            case "PENDING":
+                return 2;
             case "WIP": case "IN_PROGRESS": return 3;
             case "CLOSED": case "COMPLETED": case "COMPLETE": return 4;
             case "HOLD": return 5;

@@ -62,19 +62,35 @@ public class ProcessConfig {
     @Column(name = "r_id")
     private Integer rId;
 
+    @Transient
+    private String stepType;
+
+    @Transient
+    private String stepLabel;
+
     public String getStepType() {
+        if (stepType != null && !stepType.trim().isEmpty()) {
+            return stepType.toUpperCase();
+        }
+        if (rId != null) {
+            if (rId == 1) return "REVIEWER";
+            if (rId == 2) return "APPROVER";
+        }
         return (ordrId != null && ordrId == 1) ? "REVIEWER" : "APPROVER";
     }
 
     public void setStepType(String stepType) {
-        // No-op
+        this.stepType = stepType;
     }
 
     public String getStepLabel() {
-        return (ordrId != null && ordrId == 1) ? "Reviewer" : "Approver";
+        if (stepLabel != null && !stepLabel.trim().isEmpty()) {
+            return stepLabel;
+        }
+        return "REVIEWER".equalsIgnoreCase(getStepType()) ? "Reviewer" : "Approver";
     }
 
     public void setStepLabel(String stepLabel) {
-        // No-op
+        this.stepLabel = stepLabel;
     }
 }

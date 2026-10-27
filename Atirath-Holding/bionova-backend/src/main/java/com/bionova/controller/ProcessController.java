@@ -9,6 +9,7 @@ import com.bionova.repository.ChecklistMasterRepository;
 import com.bionova.repository.ProcessMasterRepository;
 import com.bionova.repository.TaskLiveRepository;
 import com.bionova.repository.AssignmentRepository;
+import com.bionova.service.ProcessWorkflowService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,8 @@ public class ProcessController {
     @Autowired private com.bionova.repository.MilestoneLiveRepository milestoneLiveRepo;
     @Autowired private com.bionova.repository.ReviewerMasterRepository reviewerMasterRepo;
     @Autowired private com.bionova.service.ProjectStatusCascadeService projectStatusCascadeService;
+    @Autowired private com.bionova.service.ExternalTaskAccessService   externalTaskAccessService;
+    @Autowired private com.bionova.service.ProcessWorkflowService      processWorkflowService;
 
     private String getPrerequisitesErrorMessage(TaskLive task) {
         if (task == null) return null;
@@ -167,7 +170,10 @@ public class ProcessController {
                 }
             }
 
-            boolean needsReview = Boolean.TRUE.equals(task.getPrcsFlg());
+            ProcessWorkflowService.ProcessStageInfo stageInfo = processWorkflowService.calculateStageInfo(taskId, false);
+            boolean hasReviewers = !stageInfo.reviewerEmpIds.isEmpty();
+            boolean hasApprovers = !stageInfo.approverEmpIds.isEmpty();
+            boolean needsReview = Boolean.TRUE.equals(task.getPrcsFlg()) && (hasReviewers || hasApprovers);
             TaskStatusMaster targetStatus = needsReview ? TaskStatusMaster.WIP : TaskStatusMaster.CLOSED;
             String newSubStatus = needsReview ? "Under Review" : getCompletionSubStatus(task.getEndDt());
 
@@ -177,7 +183,7 @@ public class ProcessController {
                 task.setActCmpDt(java.time.LocalDate.now());
                 task.setPrcsYesActn("NONE");
             } else {
-                task.setPrcsYesActn(getString(body, "prcsYesActn", "PENDING_REVIEWER"));
+                task.setPrcsYesActn(hasReviewers ? "PENDING_REVIEWER" : "PENDING_APPROVER");
             }
             taskLiveRepo.save(task);
 
@@ -186,6 +192,14 @@ public class ProcessController {
             processRepo.save(event);
 
             projectStatusCascadeService.cascadeStatusFromTask(taskId);
+
+            if (needsReview) {
+                Long nextEmpId = hasReviewers ? stageInfo.reviewerEmpIds.get(0) : stageInfo.approverEmpIds.get(0);
+                String role = hasReviewers ? "review" : "approval";
+                processWorkflowService.sendAppNotification(nextEmpId, "TASK", taskId,
+                    "Task pending for your " + role + ": " + task.getTaskCd(),
+                    "Task '" + task.getTaskNm() + "' has been submitted and is pending your " + role + ".");
+            }
 
             return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", newSubStatus != null ? newSubStatus : "", "message", !needsReview ? "Task completed successfully." : "Task submitted for review."));
         } else {
@@ -207,7 +221,10 @@ public class ProcessController {
                 }
             }
 
-            boolean needsReview = Boolean.TRUE.equals(task.getPrcsFlg());
+            ProcessWorkflowService.ProcessStageInfo stageInfo = processWorkflowService.calculateStageInfo(taskId, true);
+            boolean hasReviewers = !stageInfo.reviewerEmpIds.isEmpty();
+            boolean hasApprovers = !stageInfo.approverEmpIds.isEmpty();
+            boolean needsReview = Boolean.TRUE.equals(task.getPrcsFlg()) && (hasReviewers || hasApprovers);
             TaskStatusMaster targetStatus = needsReview ? TaskStatusMaster.WIP : TaskStatusMaster.CLOSED;
             String newSubStatus = needsReview ? "Under Review" : getCompletionSubStatus(task.getEndDt());
 
@@ -216,13 +233,21 @@ public class ProcessController {
             if (!needsReview) {
                 task.setPrcsYesActn("NONE");
             } else {
-                task.setPrcsYesActn(getString(body, "prcsYesActn", "PENDING_REVIEWER"));
+                task.setPrcsYesActn(hasReviewers ? "PENDING_REVIEWER" : "PENDING_APPROVER");
             }
             assignmentRepo.save(task);
 
             ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "EXECUTOR", "YES");
             event.setRemarks(getString(body, "remarks", ""));
             processRepo.save(event);
+
+            if (needsReview) {
+                Long nextEmpId = hasReviewers ? stageInfo.reviewerEmpIds.get(0) : stageInfo.approverEmpIds.get(0);
+                String role = hasReviewers ? "review" : "approval";
+                processWorkflowService.sendAppNotification(nextEmpId, "ASSIGNMENT", taskId,
+                    "Task pending for your " + role + ": " + task.getTaskCd(),
+                    "Task '" + task.getTaskNm() + "' has been submitted and is pending your " + role + ".");
+            }
 
             return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", newSubStatus != null ? newSubStatus : "", "message", !needsReview ? "Task completed successfully." : "Task submitted for review."));
         }
@@ -289,14 +314,24 @@ public class ProcessController {
                 }
             }
 
+            ProcessWorkflowService.ProcessStageInfo stageInfo = processWorkflowService.calculateStageInfo(taskId, false);
+            boolean hasReviewers = !stageInfo.reviewerEmpIds.isEmpty();
             task.setTaskSts(TaskStatusMaster.WIP);
             task.setSubStatus("Under Review");
-            task.setPrcsYesActn(getString(body, "prcsYesActn", "PENDING_REVIEWER"));
+            task.setPrcsYesActn(hasReviewers ? "PENDING_REVIEWER" : "PENDING_APPROVER");
             taskLiveRepo.save(task);
 
             ProcessMaster event = buildEvent(taskId, nextOrder(taskId), body, "EXECUTOR", "YES");
             event.setRemarks(getString(body, "remarks", ""));
             processRepo.save(event);
+
+            Long nextEmpId = hasReviewers ? stageInfo.reviewerEmpIds.get(0) : (stageInfo.approverEmpIds.isEmpty() ? null : stageInfo.approverEmpIds.get(0));
+            if (nextEmpId != null) {
+                String role = hasReviewers ? "review" : "approval";
+                processWorkflowService.sendAppNotification(nextEmpId, "TASK", taskId,
+                    "Task resubmitted for " + role + ": " + task.getTaskCd(),
+                    "Task '" + task.getTaskNm() + "' has been resubmitted and is pending your " + role + ".");
+            }
 
             return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", "Under Review", "message", "Task resubmitted for review."));
         } else {
@@ -320,14 +355,24 @@ public class ProcessController {
                 }
             }
 
+            ProcessWorkflowService.ProcessStageInfo stageInfo = processWorkflowService.calculateStageInfo(taskId, true);
+            boolean hasReviewers = !stageInfo.reviewerEmpIds.isEmpty();
             task.setTaskSts(TaskStatusMaster.WIP);
             task.setSubStatus("Under Review");
-            task.setPrcsYesActn(getString(body, "prcsYesActn", "PENDING_REVIEWER"));
+            task.setPrcsYesActn(hasReviewers ? "PENDING_REVIEWER" : "PENDING_APPROVER");
             assignmentRepo.save(task);
 
             ProcessMaster event = buildIndividualEvent(taskId, nextOrderForIndividual(taskId), body, "EXECUTOR", "YES");
             event.setRemarks(getString(body, "remarks", ""));
             processRepo.save(event);
+
+            Long nextEmpId = hasReviewers ? stageInfo.reviewerEmpIds.get(0) : (stageInfo.approverEmpIds.isEmpty() ? null : stageInfo.approverEmpIds.get(0));
+            if (nextEmpId != null) {
+                String role = hasReviewers ? "review" : "approval";
+                processWorkflowService.sendAppNotification(nextEmpId, "ASSIGNMENT", taskId,
+                    "Task resubmitted for " + role + ": " + task.getTaskCd(),
+                    "Task '" + task.getTaskNm() + "' has been resubmitted and is pending your " + role + ".");
+            }
 
             return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", "Under Review", "message", "Task resubmitted for review."));
         }
@@ -444,14 +489,91 @@ public class ProcessController {
 
             if ("NO".equals(decision) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
                 projectStatusCascadeService.cascadeReworkDownstream(taskId);
+
+                // Send email notification to external employee if task or target task is assigned to an external employee
+                Long reviewerEmpId = body.get("empId") != null ? Long.valueOf(body.get("empId").toString()) : null;
+                if ("Rework".equals(targetSubStatus)) {
+                    TaskLive taskToNotify = targetTask != null ? targetTask : task;
+                    if ("EXTERNAL".equalsIgnoreCase(taskToNotify.getTaskAsgnTo()) && taskToNotify.getExtEmpId() != null) {
+                        try {
+                            externalTaskAccessService.notifyExternalEmployeeRework(taskToNotify.getTaskId(), "Reviewer", reviewerEmpId, eventRemarks);
+                        } catch (Exception ex) {
+                            System.err.println("Failed to send external employee rework email from reviewer: " + ex.getMessage());
+                        }
+                    }
+                } else if ("Reassign".equals(targetSubStatus)) {
+                    if ("EXTERNAL".equalsIgnoreCase(task.getTaskAsgnTo()) && task.getExtEmpId() != null) {
+                        try {
+                            externalTaskAccessService.notifyExternalEmployeeReassign(task.getTaskId(), task.getExtEmpId(), "Reviewer", reviewerEmpId, eventRemarks);
+                        } catch (Exception ex) {
+                            System.err.println("Failed to send external employee reassign email from reviewer: " + ex.getMessage());
+                        }
+                    }
+                }
             }
             projectStatusCascadeService.cascadeStatusFromTask(taskId);
 
-            String message = "YES".equals(decision)
-                    ? "Reviewer approved. Task moved to Under Review."
-                    : "Reviewer rejected. Task moved to WIP (" + targetSubStatus + ").";
+            if ("YES".equals(decision)) {
+                ProcessWorkflowService.ProcessStageInfo stageInfo = processWorkflowService.calculateStageInfo(taskId, false);
 
-            return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", targetSubStatus, "message", message));
+                if (!stageInfo.allReviewersApproved && stageInfo.activeReviewerId != null) {
+                    task.setTaskSts(TaskStatusMaster.WIP);
+                    task.setSubStatus("Under Review");
+                    task.setPrcsYesActn("PENDING_REVIEWER");
+                    taskLiveRepo.save(task);
+
+                    processWorkflowService.sendAppNotification(stageInfo.activeReviewerId, "TASK", taskId,
+                        "Task pending for your review: " + task.getTaskCd(),
+                        "Task '" + task.getTaskNm() + "' has been approved by the previous reviewer and is now pending your review.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", "WIP",
+                        "subStatus", "Under Review",
+                        "nextStage", "REVIEWER",
+                        "nextPendingEmpId", stageInfo.activeReviewerId,
+                        "nextReviewerIndex", stageInfo.activeReviewerIndex,
+                        "message", "Reviewer approved. Task moved to Reviewer " + stageInfo.activeReviewerIndex + "."
+                    ));
+                } else if (stageInfo.allReviewersApproved && !stageInfo.allApproversApproved && stageInfo.activeApproverId != null) {
+                    task.setTaskSts(TaskStatusMaster.WIP);
+                    task.setSubStatus("Under Review");
+                    task.setPrcsYesActn("PENDING_APPROVER");
+                    taskLiveRepo.save(task);
+
+                    processWorkflowService.sendAppNotification(stageInfo.activeApproverId, "TASK", taskId,
+                        "Task ready for approval: " + task.getTaskCd(),
+                        "All reviewers have approved task '" + task.getTaskNm() + "'. It is now ready for your approval.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", "WIP",
+                        "subStatus", "Under Review",
+                        "nextStage", "APPROVER",
+                        "nextPendingEmpId", stageInfo.activeApproverId,
+                        "nextApproverIndex", stageInfo.activeApproverIndex,
+                        "message", "All reviewers approved. Task forwarded to Approver."
+                    ));
+                } else {
+                    task.setTaskSts(TaskStatusMaster.CLOSED);
+                    task.setPrcsYesActn("NONE");
+                    task.setSubStatus(getCompletionSubStatus(task.getEndDt()));
+                    task.setActCmpDt(java.time.LocalDate.now());
+                    taskLiveRepo.save(task);
+                    projectStatusCascadeService.cascadeStatusFromTask(taskId);
+
+                    processWorkflowService.sendAppNotification(task.getEmpId(), "TASK", taskId,
+                        "Task Closed: " + task.getTaskCd(),
+                        "Your task '" + task.getTaskNm() + "' has been approved and closed.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", TaskStatusMaster.CLOSED.getStatusNm(),
+                        "subStatus", getCompletionSubStatus(task.getEndDt()),
+                        "nextStage", "CLOSED",
+                        "message", "All reviewers approved. Task closed successfully! 🎉"
+                    ));
+                }
+            }
+
+            return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", targetSubStatus, "message", "Reviewer rejected. Task moved to WIP (" + targetSubStatus + ")."));
         } else {
             Assignment task = assignmentRepo.findById(taskId)
                     .orElseThrow(() -> new RuntimeException("Task not found with ID: " + taskId));
@@ -513,11 +635,65 @@ public class ProcessController {
                 }
             }
 
-            String message = "YES".equals(decision)
-                    ? "Reviewer approved. Task moved to Under Review."
-                    : "Reviewer rejected. Task moved to WIP (" + targetSubStatus + ").";
+            if ("YES".equals(decision)) {
+                ProcessWorkflowService.ProcessStageInfo stageInfo = processWorkflowService.calculateStageInfo(taskId, true);
 
-            return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", targetSubStatus, "message", message));
+                if (!stageInfo.allReviewersApproved && stageInfo.activeReviewerId != null) {
+                    task.setTaskSts(TaskStatusMaster.WIP);
+                    task.setSubStatus("Under Review");
+                    task.setPrcsYesActn("PENDING_REVIEWER");
+                    assignmentRepo.save(task);
+
+                    processWorkflowService.sendAppNotification(stageInfo.activeReviewerId, "ASSIGNMENT", taskId,
+                        "Task pending for your review: " + task.getTaskCd(),
+                        "Task '" + task.getTaskNm() + "' has been approved by the previous reviewer and is now pending your review.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", "WIP",
+                        "subStatus", "Under Review",
+                        "nextStage", "REVIEWER",
+                        "nextPendingEmpId", stageInfo.activeReviewerId,
+                        "nextReviewerIndex", stageInfo.activeReviewerIndex,
+                        "message", "Reviewer approved. Task moved to Reviewer " + stageInfo.activeReviewerIndex + "."
+                    ));
+                } else if (stageInfo.allReviewersApproved && !stageInfo.allApproversApproved && stageInfo.activeApproverId != null) {
+                    task.setTaskSts(TaskStatusMaster.WIP);
+                    task.setSubStatus("Under Review");
+                    task.setPrcsYesActn("PENDING_APPROVER");
+                    assignmentRepo.save(task);
+
+                    processWorkflowService.sendAppNotification(stageInfo.activeApproverId, "ASSIGNMENT", taskId,
+                        "Task ready for approval: " + task.getTaskCd(),
+                        "All reviewers have approved task '" + task.getTaskNm() + "'. It is now ready for your approval.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", "WIP",
+                        "subStatus", "Under Review",
+                        "nextStage", "APPROVER",
+                        "nextPendingEmpId", stageInfo.activeApproverId,
+                        "nextApproverIndex", stageInfo.activeApproverIndex,
+                        "message", "All reviewers approved. Task forwarded to Approver."
+                    ));
+                } else {
+                    task.setTaskSts(TaskStatusMaster.CLOSED);
+                    task.setPrcsYesActn("NONE");
+                    task.setSubStatus(getCompletionSubStatus(task.getEndDt()));
+                    assignmentRepo.save(task);
+
+                    processWorkflowService.sendAppNotification(task.getEmpId(), "ASSIGNMENT", taskId,
+                        "Task Closed: " + task.getTaskCd(),
+                        "Your task '" + task.getTaskNm() + "' has been approved and closed.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", TaskStatusMaster.CLOSED.getStatusNm(),
+                        "subStatus", getCompletionSubStatus(task.getEndDt()),
+                        "nextStage", "CLOSED",
+                        "message", "All reviewers approved. Task closed successfully! 🎉"
+                    ));
+                }
+            }
+
+            return ResponseEntity.ok(Map.of("taskSts", "WIP", "subStatus", targetSubStatus, "message", "Reviewer rejected. Task moved to WIP (" + targetSubStatus + ")."));
         }
     }
 
@@ -669,14 +845,73 @@ public class ProcessController {
 
             if (TaskStatusMaster.WIP.equals(targetStatus) && ("Rework".equals(targetSubStatus) || "Reassign".equals(targetSubStatus))) {
                 projectStatusCascadeService.cascadeReworkDownstream(taskId);
+
+                // Send email notification to external employee if task or target task is assigned to an external employee
+                Long approverEmpId = body.get("empId") != null ? Long.valueOf(body.get("empId").toString()) : null;
+                if ("Rework".equals(targetSubStatus)) {
+                    TaskLive taskToNotify = targetTask != null ? targetTask : task;
+                    if ("EXTERNAL".equalsIgnoreCase(taskToNotify.getTaskAsgnTo()) && taskToNotify.getExtEmpId() != null) {
+                        try {
+                            externalTaskAccessService.notifyExternalEmployeeRework(taskToNotify.getTaskId(), "Approver", approverEmpId, eventRemarks);
+                        } catch (Exception ex) {
+                            System.err.println("Failed to send external employee rework email from approver: " + ex.getMessage());
+                        }
+                    }
+                } else if ("Reassign".equals(targetSubStatus)) {
+                    if ("EXTERNAL".equalsIgnoreCase(task.getTaskAsgnTo()) && task.getExtEmpId() != null) {
+                        try {
+                            externalTaskAccessService.notifyExternalEmployeeReassign(task.getTaskId(), task.getExtEmpId(), "Approver", approverEmpId, eventRemarks);
+                        } catch (Exception ex) {
+                            System.err.println("Failed to send external employee reassign email from approver: " + ex.getMessage());
+                        }
+                    }
+                }
             }
             projectStatusCascadeService.cascadeStatusFromTask(taskId);
 
-            String message = "YES".equals(decision)
-                    ? "Approver approved. Task CLOSED! 🎉"
-                    : "Approver rejected. Task moved to WIP (" + targetSubStatus + ").";
+            if ("YES".equals(decision)) {
+                ProcessWorkflowService.ProcessStageInfo stageInfo = processWorkflowService.calculateStageInfo(taskId, false);
 
-            return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", targetSubStatus, "message", message));
+                if (!stageInfo.allApproversApproved && stageInfo.activeApproverId != null) {
+                    task.setTaskSts(TaskStatusMaster.WIP);
+                    task.setSubStatus("Under Review");
+                    task.setPrcsYesActn("PENDING_APPROVER");
+                    taskLiveRepo.save(task);
+
+                    processWorkflowService.sendAppNotification(stageInfo.activeApproverId, "TASK", taskId,
+                        "Task ready for your approval: " + task.getTaskCd(),
+                        "Task '" + task.getTaskNm() + "' was approved by the previous approver and is now pending your approval.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", "WIP",
+                        "subStatus", "Under Review",
+                        "nextStage", "APPROVER",
+                        "nextPendingEmpId", stageInfo.activeApproverId,
+                        "nextApproverIndex", stageInfo.activeApproverIndex,
+                        "message", "Approver approved. Task forwarded to Approver " + stageInfo.activeApproverIndex + "."
+                    ));
+                } else {
+                    task.setTaskSts(TaskStatusMaster.CLOSED);
+                    task.setPrcsYesActn("NONE");
+                    task.setSubStatus(getCompletionSubStatus(task.getEndDt()));
+                    task.setActCmpDt(java.time.LocalDate.now());
+                    taskLiveRepo.save(task);
+                    projectStatusCascadeService.cascadeStatusFromTask(taskId);
+
+                    processWorkflowService.sendAppNotification(task.getEmpId(), "TASK", taskId,
+                        "Task Closed: " + task.getTaskCd(),
+                        "Your task '" + task.getTaskNm() + "' has been approved and closed.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", TaskStatusMaster.CLOSED.getStatusNm(),
+                        "subStatus", getCompletionSubStatus(task.getEndDt()),
+                        "nextStage", "CLOSED",
+                        "message", "Approver approved. Task CLOSED! 🎉"
+                    ));
+                }
+            }
+
+            return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", targetSubStatus, "message", "Approver rejected. Task moved to WIP (" + targetSubStatus + ")."));
         } else {
             Assignment task = assignmentRepo.findById(taskId)
                     .orElseThrow(() -> new RuntimeException("Task not found with ID: " + taskId));
@@ -717,15 +952,6 @@ public class ProcessController {
                 }
                 task.setRemarks(newRem);
             }
-            task.setTaskSts(targetStatus);
-            task.setSubStatus(targetSubStatus);
-            if ("NO".equals(decision)) {
-                task.setPrcsYesActn(getString(body, "rejectionType", "REASSIGN").toUpperCase());
-            } else {
-                task.setPrcsYesActn("NONE");
-            }
-            assignmentRepo.save(task);
-
             Integer rId = body.get("rId") != null
                     ? Integer.valueOf(body.get("rId").toString()) : null;
             if (rId == null) {
@@ -746,6 +972,11 @@ public class ProcessController {
             processRepo.save(event);
 
             if ("NO".equals(decision)) {
+                task.setTaskSts(targetStatus);
+                task.setSubStatus(targetSubStatus);
+                task.setPrcsYesActn(getString(body, "rejectionType", "REASSIGN").toUpperCase());
+                assignmentRepo.save(task);
+
                 List<ChecklistMaster> checklists = checklistRepo.findByTaskIdAndIsLive(taskId, false);
                 if (checklists != null && !checklists.isEmpty()) {
                     for (ChecklistMaster item : checklists) {
@@ -754,13 +985,47 @@ public class ProcessController {
                     }
                     checklistRepo.saveAll(checklists);
                 }
+
+                return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", targetSubStatus, "message", "Approver rejected. Task moved to WIP (" + targetSubStatus + ")."));
+            } else {
+                ProcessWorkflowService.ProcessStageInfo stageInfo = processWorkflowService.calculateStageInfo(taskId, true);
+
+                if (!stageInfo.allApproversApproved && stageInfo.activeApproverId != null) {
+                    task.setTaskSts(TaskStatusMaster.WIP);
+                    task.setSubStatus("Under Review");
+                    task.setPrcsYesActn("PENDING_APPROVER");
+                    assignmentRepo.save(task);
+
+                    processWorkflowService.sendAppNotification(stageInfo.activeApproverId, "ASSIGNMENT", taskId,
+                        "Task ready for your approval: " + task.getTaskCd(),
+                        "Task '" + task.getTaskNm() + "' was approved by the previous approver and is now pending your approval.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", "WIP",
+                        "subStatus", "Under Review",
+                        "nextStage", "APPROVER",
+                        "nextPendingEmpId", stageInfo.activeApproverId,
+                        "nextApproverIndex", stageInfo.activeApproverIndex,
+                        "message", "Approver approved. Task forwarded to Approver " + stageInfo.activeApproverIndex + "."
+                    ));
+                } else {
+                    task.setTaskSts(TaskStatusMaster.CLOSED);
+                    task.setPrcsYesActn("NONE");
+                    task.setSubStatus(getCompletionSubStatus(task.getEndDt()));
+                    assignmentRepo.save(task);
+
+                    processWorkflowService.sendAppNotification(task.getEmpId(), "ASSIGNMENT", taskId,
+                        "Task Closed: " + task.getTaskCd(),
+                        "Your task '" + task.getTaskNm() + "' has been approved and closed.");
+
+                    return ResponseEntity.ok(Map.of(
+                        "taskSts", TaskStatusMaster.CLOSED.getStatusNm(),
+                        "subStatus", getCompletionSubStatus(task.getEndDt()),
+                        "nextStage", "CLOSED",
+                        "message", "Approver approved. Task CLOSED! 🎉"
+                    ));
+                }
             }
-
-            String message = "YES".equals(decision)
-                    ? "Approver approved. Task CLOSED! 🎉"
-                    : "Approver rejected. Task moved to WIP (" + targetSubStatus + ").";
-
-            return ResponseEntity.ok(Map.of("taskSts", targetStatus.getStatusNm(), "subStatus", targetSubStatus, "message", message));
         }
     }
 

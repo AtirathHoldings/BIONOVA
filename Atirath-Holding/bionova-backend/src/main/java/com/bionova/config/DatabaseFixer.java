@@ -54,6 +54,18 @@ public class DatabaseFixer implements CommandLineRunner {
                 jdbcTemplate.execute("ALTER TABLE process_master ALTER COLUMN task_id DROP NOT NULL");
                 System.out.println("SUCCESS: Dropped NOT NULL constraint on process_master.task_id");
             } catch (Exception e) {}
+
+            try {
+                jdbcTemplate.execute(
+                    "DELETE FROM process_config a USING process_config b " +
+                    "WHERE a.pc_id < b.pc_id " +
+                    "AND a.emp_id = b.emp_id " +
+                    "AND COALESCE(a.emp_task_id, -1) = COALESCE(b.emp_task_id, -1) " +
+                    "AND COALESCE(a.task_id, -1) = COALESCE(b.task_id, -1) " +
+                    "AND COALESCE(a.is_live, false) = COALESCE(b.is_live, false)"
+                );
+                System.out.println("SUCCESS: Cleaned up duplicate process_config rows");
+            } catch (Exception e) {}
             
         } catch (Exception e) {
             System.err.println("Error running database fixer: " + e.getMessage());

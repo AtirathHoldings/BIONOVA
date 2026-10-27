@@ -225,6 +225,8 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         dur: pW,
         start: formatDateString(projectItem.startDate),
         end: formatDateString(projectItem.endDate),
+        plannedStart: formatDateString(projectItem.plannedStartDate || projectItem.startDate),
+        plannedEnd: formatDateString(projectItem.plannedEndDate || projectItem.endDate),
         prog: Math.round((projectItem.progress || 0) * 100),
         status: mapStatus(projectItem),
         off: pOff,
@@ -249,6 +251,8 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         dur: msW,
         start: formatDateString(ms.startDate),
         end: formatDateString(ms.endDate),
+        plannedStart: formatDateString(ms.plannedStartDate || ms.startDate),
+        plannedEnd: formatDateString(ms.plannedEndDate || ms.endDate),
         prog: Math.round((ms.progress || 0) * 100),
         status: mapStatus(ms),
         off: msOff,
@@ -275,6 +279,8 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           dur: tW,
           start: formatDateString(tsk.startDate),
           end: formatDateString(tsk.endDate),
+          plannedStart: formatDateString(tsk.plannedStartDate || tsk.startDate),
+          plannedEnd: formatDateString(tsk.plannedEndDate || tsk.endDate),
           prog: Math.round((tsk.progress || 0) * 100),
           status: mapStatus(tsk),
           off: tOff,
@@ -606,31 +612,31 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
     return `M${x1},${y1} H${x1 + 6} V${y2} H${x2}`;
   }).filter(Boolean);
 
-  /* ── render a bar (planned or actual) ── */
-  const renderBar = (row, i, isActual = false) => {
-    const off = row.off; // Always match planned bar's position
-    const w = row.w;     // Always match planned bar's width
-    const prog = isActual ? row.aProg : row.prog;
+  /* ── render a bar (Actual work on top, Baseline plan on bottom) ── */
+  const renderBar = (row, i, isBaseline = false) => {
+    const off = isBaseline ? row.aOff : row.off;
+    const w = isBaseline ? row.aW : row.w;
+    const prog = row.prog;
     const col = SC[row.status] || { bar: '#94a3b8', bg: '#f1f5f9' };
 
     const topOffset = baseline
-      ? (isActual ? ROW_H - 22 : 6)   // planned on top, actual on bottom
-      : (ROW_H - 16) / 2;
+      ? (isBaseline ? ROW_H - 18 : 6)   // Actual (Employee Work) on top, Baseline (Project Plan) on bottom
+      : (ROW_H - 18) / 2;
 
     const COMPACT_COLORS = ['#10b981', '#3b82f6', '#f59e0b', '#a855f7', '#14b8a6'];
-    const cColor = COMPACT_COLORS[row.colorIdx % 5] || '#10b981';
+    const statusColor = col.bar || COMPACT_COLORS[row.colorIdx % 5] || '#10b981';
 
-    const barH = compact ? 16 : (baseline ? 14 : 16);
-    // Use milestone colors universally for planned bars
-    const barColor = isActual ? '#64748b' : cColor;
-    const bgColor = isActual ? '#e2e8f0' : cColor;
+    const barH = compact ? 16 : (baseline ? (isBaseline ? 10 : 16) : 18);
+    // Top bar = status color (Green/Blue/Orange/Red), Bottom bar = baseline grey (#94a3b8)
+    const barColor = isBaseline ? '#94a3b8' : statusColor;
+    const bgColor = isBaseline ? '#cbd5e1' : col.bg;
     const isActive = activeRow === row.id;
     const barW = Math.max(w * DW, 6);
-    const fillProg = (baseline && isActual) ? prog : 100; // Show progress fill only on the Actual bar in baseline mode
+    const fillProg = isBaseline ? 100 : prog;
 
     return (
       <div
-        key={isActual ? `act-${i}` : `pln-${i}`}
+        key={isBaseline ? `base-${i}` : `act-${i}`}
         style={{
           position: 'absolute',
           top: i * ROW_H + topOffset,
@@ -639,12 +645,12 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           height: barH,
           borderRadius: 3,
           cursor: 'pointer',
-          zIndex: 3,
-          outline: isActive && !isActual ? `2px solid ${barColor}` : 'none',
+          zIndex: isBaseline ? 2 : 3,
+          outline: isActive && !isBaseline ? `2px solid ${barColor}` : 'none',
           outlineOffset: 1,
         }}
         onClick={(e) => handleBarClick(e, row.id, i)}
-        title={`${row.name}\n${isActual ? 'Actual' : 'Planned'}: ${prog}%\nStart: ${row.start} | End: ${row.end}`}
+        title={`${row.name}\n${isBaseline ? `Baseline Plan: ${row.plannedStart || row.start} → ${row.plannedEnd || row.end}` : `Actual (Employee Work): ${prog}% | ${row.start} → ${row.end} | Status: ${row.status}`}`}
       >
         {/* background */}
         <div style={{ position: 'absolute', inset: 0, borderRadius: 3, background: bgColor }} />
@@ -656,20 +662,22 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
           display: 'flex', alignItems: 'center', justifyContent: row.type === 'milestone' ? 'flex-start' : 'flex-end',
           paddingRight: 2, overflow: 'hidden'
         }}>
-          {row.type === 'milestone' && (
+          {!isBaseline && row.type === 'milestone' && (
             <span style={{ paddingLeft: 4, color: 'white', fontSize: 10, fontWeight: 'bold', whiteSpace: 'nowrap' }}>
               {row.displayId}. {row.name}
             </span>
           )}
-          {prog === 100 && <span style={{ color: 'white', fontSize: 8, fontWeight: 'bold' }}>✓</span>}
+          {!isBaseline && prog === 100 && <span style={{ color: 'white', fontSize: 8, fontWeight: 'bold' }}>✓</span>}
         </div>
-        {/* % label */}
-        <span style={{
-          position: 'absolute', left: `calc(100% + 4px)`, top: '50%', transform: 'translateY(-50%)',
-          fontSize: 10, fontWeight: 600, color: '#475569', whiteSpace: 'nowrap'
-        }}>
-          {isActual ? `${prog}%` : '100%'}
-        </span>
+        {/* % label for top actual bar */}
+        {!isBaseline && (
+          <span style={{
+            position: 'absolute', left: `calc(100% + 4px)`, top: '50%', transform: 'translateY(-50%)',
+            fontSize: 10, fontWeight: 600, color: col.bar || '#475569', whiteSpace: 'nowrap'
+          }}>
+            {prog}%
+          </span>
+        )}
       </div>
     );
   };
@@ -752,19 +760,23 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         }}>
           <span style={{ fontWeight: 600, color: '#0369a1' }}>📊 Baseline Comparison Mode</span>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{ width: 24, height: 10, borderRadius: 3, background: '#3b82f6' }} />
-            <span style={{ color: '#334155' }}>Planned Schedule (Project Plan)</span>
+            <div style={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+              <div style={{ width: 8, height: 10, borderRadius: '2px 0 0 2px', background: '#10b981' }} />
+              <div style={{ width: 8, height: 10, background: '#3b82f6' }} />
+              <div style={{ width: 8, height: 10, borderRadius: '0 2px 2px 0', background: '#ef4444' }} />
+            </div>
+            <span style={{ color: '#334155', fontWeight: 500 }}>Actual Progress (Employee Work - Top Bar)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 24, height: 10, borderRadius: 3, background: '#94a3b8' }} />
-            <span style={{ color: '#334155' }}>Actual Progress (Employee Work)</span>
+            <span style={{ color: '#334155', fontWeight: 500 }}>Baseline Schedule (Project Plan - Bottom Bar)</span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <div style={{ width: 24, height: 10, borderRadius: 3, background: '#f97316' }} />
             <span style={{ color: '#f97316', fontWeight: 500 }}>Selected Date / Marker</span>
           </div>
           <span style={{ color: '#64748b', fontStyle: 'italic' }}>
-            — Compare planned vs actual to identify delays
+            — Compare planned baseline schedule vs actual employee work to identify delays
           </span>
         </div>
       )}
@@ -992,13 +1004,13 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
               <div key={`sep-${i}`} style={{ position: 'absolute', top: (i + 1) * ROW_H - 1, left: 0, right: 0, height: 1, background: '#f1f5f9', zIndex: 1 }} />
             ))}
 
-            {/* ── PLANNED bars ── */}
+            {/* ── ACTUAL / EMPLOYEE WORK bars (Top colored bars) ── */}
             {rows.map((row, i) => {
               if (row.type === 'group' || !row.w) return null;
               return renderBar(row, i, false);
             })}
 
-            {/* ── ACTUAL bars (only when baseline ON) ── */}
+            {/* ── BASELINE PLAN bars (Bottom grey bars - only when baseline ON) ── */}
             {baseline && rows.map((row, i) => {
               if (row.type === 'group' || !row.aW) return null;
               return renderBar(row, i, true);
@@ -1022,12 +1034,12 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         {baseline && (
           <>
             <div className="gc-leg-item">
-              <span style={{ display: 'inline-block', width: 14, height: 8, borderRadius: 2, background: '#3b82f6', opacity: 0.7 }} />
-              Planned (upper bar)
+              <span style={{ display: 'inline-block', width: 14, height: 8, borderRadius: 2, background: '#10b981' }} />
+              Actual / Employee Work (Upper Bar)
             </div>
             <div className="gc-leg-item">
               <span style={{ display: 'inline-block', width: 14, height: 8, borderRadius: 2, background: '#94a3b8' }} />
-              Actual / Employee (lower bar)
+              Baseline Schedule - Project Plan (Lower Bar)
             </div>
           </>
         )}

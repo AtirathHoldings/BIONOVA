@@ -420,7 +420,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   const [deactivateTargetId, setDeactivateTargetId] = useState(null);
 
   // Sorting state
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: "landCode", direction: 'asc' });
   const [tableSearchQuery, setTableSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -1091,6 +1091,34 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     setActiveDropdown(null);
   };
 
+  const compareLandCodes = (a, b, direction = 'asc') => {
+    const codeA = (a.landCode || a.landCd || a.lndCd || "").trim();
+    const codeB = (b.landCode || b.landCd || b.lndCd || "").trim();
+
+    const matchA = codeA.match(/^LN[DT]-?(\d+)$/i);
+    const matchB = codeB.match(/^LN[DT]-?(\d+)$/i);
+
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    if (matchA && matchB) {
+      const numA = parseInt(matchA[1], 10);
+      const numB = parseInt(matchB[1], 10);
+      const diff = numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+      return direction === 'desc' ? -diff : diff;
+    }
+
+    let diff = 0;
+    if (codeA && codeB) {
+      diff = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (codeA) {
+      diff = -1;
+    } else if (codeB) {
+      diff = 1;
+    }
+    return direction === 'desc' ? -diff : diff;
+  };
+
   // Sorting calculation
   const handleSort = (key) => {
     let direction = 'asc';
@@ -1121,7 +1149,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       sortable.sort((a, b) => {
         let valA = "";
         let valB = "";
-        if (sortConfig.key === "plant") {
+        if (sortConfig.key === "landCode") {
+          return compareLandCodes(a, b, sortConfig.direction);
+        } else if (sortConfig.key === "plant") {
           const plantAObj = plants.find(p => Number(p.pltId) === Number(a.pltId));
           const plantBObj = plants.find(p => Number(p.pltId) === Number(b.pltId));
           valA = (plantAObj ? plantAObj.pltNm : "").toString().toLowerCase();
@@ -1139,6 +1169,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
+    } else {
+      sortable.sort((a, b) => compareLandCodes(a, b, 'asc'));
     }
     return sortable;
   }, [allocations, sortConfig, plants, states, tableSearchQuery]);

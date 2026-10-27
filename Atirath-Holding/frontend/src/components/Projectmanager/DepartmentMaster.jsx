@@ -194,7 +194,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
   };
 
   // Sorting & Search
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: "asc" });
+  const [sortConfig, setSortConfig] = useState({ key: "code", direction: "asc" });
   const [tableSearchQuery, setTableSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [formErrors, setFormErrors] = useState({});
@@ -209,6 +209,17 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
       } else if (value.length > 10) {
         error = "Department Code cannot exceed 10 characters.";
       }
+    } else if (name === "name") {
+      const val = value ? value.trim() : "";
+      if (!val) {
+        error = "Department Name is required.";
+      } else if (/[^a-zA-Z0-9\s]/.test(val)) {
+        error = "Special characters are not allowed in Department Name.";
+      } else if (!/[a-zA-Z]/.test(val)) {
+        error = "Department Name must contain at least one letter.";
+      } else if (val.length > 100) {
+        error = "Department Name cannot exceed 100 characters.";
+      }
     }
     setFormErrors((prev) => ({ ...prev, [name]: error }));
     return error;
@@ -222,6 +233,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
       validateField("code", newValue);
     } else if (name === "name") {
       newValue = value.slice(0, 100);
+      validateField("name", newValue);
     } else if (name === "description") {
       newValue = value.slice(0, 255);
     }
@@ -311,6 +323,14 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     }
     if (form.name.trim().length > 100) {
       triggerAlert("error", "Validation Error", "Department Name cannot exceed 100 characters.");
+      return;
+    }
+    if (/[^a-zA-Z0-9\s]/.test(form.name.trim())) {
+      triggerAlert("error", "Validation Error", "Special characters are not allowed in Department Name.");
+      return;
+    }
+    if (!/[a-zA-Z]/.test(form.name.trim())) {
+      triggerAlert("error", "Validation Error", "Department Name must contain at least one letter.");
       return;
     }
 
@@ -495,6 +515,36 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
     setActiveDropdown((prev) => (prev === id ? null : id));
   };
 
+  const compareDeptCodes = (a, b, direction = 'asc') => {
+    const codeA = (a.code || a.deptCode || a.deptCd || "").trim();
+    const codeB = (b.code || b.deptCode || b.deptCd || "").trim();
+
+    const matchA = codeA.match(/^(?:DEPT|DEP)-?(\d+)$/i);
+    const matchB = codeB.match(/^(?:DEPT|DEP)-?(\d+)$/i);
+
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    if (matchA && matchB) {
+      const numA = parseInt(matchA[1], 10);
+      const numB = parseInt(matchB[1], 10);
+      const diff = numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+      return direction === 'desc' ? -diff : diff;
+    }
+
+    let diff = 0;
+    if (codeA && codeB) {
+      diff = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (codeA) {
+      diff = -1;
+    } else if (codeB) {
+      diff = 1;
+    } else {
+      diff = (a.name || a.deptNm || "").localeCompare(b.name || b.deptNm || "");
+    }
+    return direction === 'desc' ? -diff : diff;
+  };
+
   const handleSort = (key) => {
     let direction = "asc";
     if (sortConfig.key === key && sortConfig.direction === "asc") { direction = "desc"; }
@@ -502,7 +552,10 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
   };
 
   const sortedDepartments = [...departments].sort((a, b) => {
-    if (!sortConfig.key) return 0;
+    if (!sortConfig.key) return compareDeptCodes(a, b, 'asc');
+    if (sortConfig.key === "code" || sortConfig.key === "deptCode") {
+      return compareDeptCodes(a, b, sortConfig.direction);
+    }
     const aValue = a[sortConfig.key];
     const bValue = b[sortConfig.key];
     if (aValue < bValue) return sortConfig.direction === "asc" ? -1 : 1;
@@ -766,6 +819,11 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                               <span className="dept-input-prefix-icon"><Building size={16} /></span>
                               <input type="text" name="name" value={form.name} onChange={handleChange} placeholder="Enter department name" maxLength="100" required />
                             </div>
+                            {formErrors.name && (
+                              <span className="error-text" style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>
+                                {formErrors.name}
+                              </span>
+                            )}
                           </div>
 
                         </div>

@@ -83,9 +83,10 @@ const authHeaders = () => ({
 // ============================================================
 
 const getGreeting = () => {
-  const hour = new Date().getHours();
-  if (hour < 12) return "Good Morning";
-  if (hour < 17) return "Good Afternoon";
+  const now = new Date();
+  const totalMinutes = now.getHours() * 60 + now.getMinutes();
+  if (totalMinutes <= 720) return "Good Morning";
+  if (totalMinutes <= 960) return "Good Afternoon";
   return "Good Evening";
 };
 
@@ -267,7 +268,7 @@ const DonutChart = ({ data, total, centerValue, centerLabel, size = 140 }) => {
 // SECTION 5: PIE CHART COMPONENT
 // ============================================================
 
-const PieChartComponent = ({ data, size = 120 }) => {
+const PieChartComponent = ({ data, size = 120, centerValue, centerLabel }) => {
   const total = data.reduce((sum, item) => sum + item.value, 0);
   const stroke = 16;
   const radius = (size - stroke) / 2;
@@ -287,6 +288,14 @@ const PieChartComponent = ({ data, size = 120 }) => {
       </div>
     );
   }
+
+  // Calculate completion percentage from Closed / Completed item if centerValue not provided
+  const closedItem = data.find(item => item.label === "Closed" || item.label === "Completed");
+  const closedCount = closedItem ? closedItem.value : 0;
+  const computedPercentage = total > 0 ? `${((closedCount / total) * 100).toFixed(1)}%` : "0.0%";
+
+  const displayValue = centerValue !== undefined ? centerValue : computedPercentage;
+  const displayLabel = centerLabel !== undefined ? centerLabel : "Overall Completion";
 
   return (
     <div className="ud-pie-chart-wrapper">
@@ -320,7 +329,7 @@ const PieChartComponent = ({ data, size = 120 }) => {
           dominantBaseline="middle"
           className="ud-pie-center-value"
         >
-          {total}
+          {displayValue}
         </text>
         <text
           x="50%"
@@ -329,7 +338,7 @@ const PieChartComponent = ({ data, size = 120 }) => {
           dominantBaseline="middle"
           className="ud-pie-center-label"
         >
-          Total Tasks
+          {displayLabel}
         </text>
       </svg>
       <div className="ud-pie-legend">
@@ -680,8 +689,8 @@ const UserDashboard = ({ userRole, onLogout }) => {
 
       const milestoneItems = [
         { label: "Closed", count: milestoneCompleted, pct: milestoneTotal > 0 ? ((milestoneCompleted / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#10b981" },
-        { label: "In Progress", count: milestoneInProgress, pct: milestoneTotal > 0 ? ((milestoneInProgress / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
-        { label: "Not Started", count: milestoneNotStarted, pct: milestoneTotal > 0 ? ((milestoneNotStarted / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
+        { label: "In Progress", count: milestoneInProgress, pct: milestoneTotal > 0 ? ((milestoneInProgress / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
+        { label: "Not Started", count: milestoneNotStarted, pct: milestoneTotal > 0 ? ((milestoneNotStarted / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
         { label: "Delayed", count: milestoneDelayed, pct: milestoneTotal > 0 ? ((milestoneDelayed / milestoneTotal) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
       ];
 
@@ -945,7 +954,11 @@ const UserDashboard = ({ userRole, onLogout }) => {
   const portfolioItems = data.portfolioItems || [];
   const portfolioTotal = data.portfolioTotal || 0;
   const portfolioPercentage = data.portfolioPercentage || "0.00%";
-  const milestoneItems = data.milestoneItems || [];
+  const milestoneItems = (data.milestoneItems || []).map(item => {
+    if (item.label === "In Progress") return { ...item, color: "#f59e0b" };
+    if (item.label === "Not Started") return { ...item, color: "#3b82f6" };
+    return item;
+  });
   const milestoneTotal = data.milestoneTotal || 0;
   const taskStatusItems = data.taskStatusItems || [];
   const taskTotal = data.taskTotal || 0;
@@ -1190,11 +1203,16 @@ const UserDashboard = ({ userRole, onLogout }) => {
             {/* Tile 3: Task Progress - Chart Top, Data Bottom */}
             <div className="ud-card ud-progress-pie-panel">
               <div className="ud-card-header">
-                <span className="ud-card-title">Task Progress</span>
+                <span className="ud-card-title">Task Progress Overview</span>
               </div>
               <div className="ud-pie-content-vertical">
                 <div className="ud-pie-chart-top">
-                  <PieChartComponent data={pieData} size={120} />
+                  <PieChartComponent
+                    data={pieData}
+                    size={120}
+                    centerValue={totalTasks > 0 ? `${(((taskCounts.completed || 0) / totalTasks) * 100).toFixed(1)}%` : "0.0%"}
+                    centerLabel="Overall Completion"
+                  />
                 </div>
                 <div className="ud-pie-data-bottom">
                   {pieDataDetails.map((item, index) => (

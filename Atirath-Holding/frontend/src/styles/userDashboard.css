@@ -657,11 +657,16 @@ body.sidebar-collapsed .ud-shell {
 }
 
 .ud-pie-chart-top .ud-pie-center-value {
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 700;
+  fill: #0f172a;
 }
 
 .ud-pie-chart-top .ud-pie-center-label {
-  font-size: 9px;
+  font-size: 8px;
+  font-weight: 500;
+  fill: #64748b;
+  letter-spacing: -0.2px;
 }
 
 .ud-pie-chart-top .ud-pie-legend {

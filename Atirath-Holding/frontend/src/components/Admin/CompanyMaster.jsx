@@ -402,7 +402,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   };
 
   // Sorting state
-  const [sortConfig, setSortConfig] = useState({ key: null, direction: 'asc' });
+  const [sortConfig, setSortConfig] = useState({ key: "companyCode", direction: 'asc' });
   const [tableSearchQuery, setTableSearchQuery] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -975,6 +975,38 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   };
 
   // Sorting calculation
+  const compareCompanyCodes = (a, b, direction = 'asc') => {
+    const codeA = (a.coyCd || a.companyCode || "").trim();
+    const codeB = (b.coyCd || b.companyCode || "").trim();
+
+    const matchA = codeA.match(/^CMP-(\d+)$/i);
+    const matchB = codeB.match(/^CMP-(\d+)$/i);
+
+    // Proper CMP- format always comes first; non-CMP format always displayed at the last
+    if (matchA && !matchB) return -1;
+    if (!matchA && matchB) return 1;
+
+    if (matchA && matchB) {
+      const numA = parseInt(matchA[1], 10);
+      const numB = parseInt(matchB[1], 10);
+      const diff = numA !== numB ? numA - numB : codeA.localeCompare(codeB);
+      return direction === 'desc' ? -diff : diff;
+    }
+
+    // Both are non-CMP format (remaining items displayed at the last)
+    let diff = 0;
+    if (codeA && codeB) {
+      diff = codeA.localeCompare(codeB, undefined, { numeric: true, sensitivity: 'base' });
+    } else if (codeA) {
+      diff = -1;
+    } else if (codeB) {
+      diff = 1;
+    } else {
+      diff = (a.coyNm || a.companyName || "").localeCompare(b.coyNm || b.companyName || "");
+    }
+    return direction === 'desc' ? -diff : diff;
+  };
+
   const handleSort = (key) => {
     let direction = 'asc';
     if (sortConfig.key === key && sortConfig.direction === 'asc') {
@@ -1003,8 +1035,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
           valA = (a.coyNm || "").toString().toLowerCase();
           valB = (b.coyNm || "").toString().toLowerCase();
         } else if (sortConfig.key === "companyCode") {
-          valA = (a.coyCd || "").toString().toLowerCase();
-          valB = (b.coyCd || "").toString().toLowerCase();
+          return compareCompanyCodes(a, b, sortConfig.direction);
         } else if (sortConfig.key === "state") {
           const stateAObj = states.find(s => s.stId === a.stId);
           const stateBObj = states.find(s => s.stId === b.stId);
@@ -1018,6 +1049,9 @@ const CompanyCreation = ({ onLogout, userRole }) => {
         if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
         return 0;
       });
+    } else {
+      // Default: proper CMP- format first in ascending order, remaining non-CMP at the end
+      sortable.sort((a, b) => compareCompanyCodes(a, b, 'asc'));
     }
     return sortable;
   }, [companies, sortConfig, states, tableSearchQuery]);
@@ -2024,10 +2058,10 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          COMPANY NAME
+                          CODE
                         </th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          CODE
+                          COMPANY NAME
                         </th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>UNDER</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CIN NUMBER</th>
@@ -2075,12 +2109,12 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                 </div>
                               )}
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{company.coyNm}</strong></td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {company.coyCd}
                               </span>
                             </td>
+                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{company.coyNm}</strong></td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{companies.find(c => c.coyId === company.prntCoyId)?.coyNm || "Independent"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.cin || "N/A"}</td>
                             <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.gstNum || "N/A"}</td>

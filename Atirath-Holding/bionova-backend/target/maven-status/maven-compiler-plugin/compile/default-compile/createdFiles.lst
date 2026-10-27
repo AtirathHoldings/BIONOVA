@@ -1,5 +1,6 @@
 com\bionova\controller\CompanyController.class
 com\bionova\service\ProjectStatusCascadeService.class
+com\bionova\service\ProcessWorkflowService.class
 com\bionova\entity\RoleBasedEmployeeMapping.class
 com\bionova\dto\UserDashboardResponseDto$PerformanceMetricDto.class
 com\bionova\repository\TeamMemberRepository.class
@@ -39,6 +40,7 @@ com\bionova\dto\UserDashboardResponseDto.class
 com\bionova\entity\ProjectTaskExternalToken.class
 com\bionova\dto\UserDashboardResponseDto$MetricCardDto.class
 com\bionova\repository\CompanyRepository.class
+com\bionova\service\ProcessWorkflowService$ProcessStageInfo.class
 com\bionova\dto\ProjectDashboardResponse$DelayedMilestoneItem.class
 com\bionova\entity\EmployeeLoginActivity.class
 com\bionova\repository\TaskPriorityMasterRepository.class

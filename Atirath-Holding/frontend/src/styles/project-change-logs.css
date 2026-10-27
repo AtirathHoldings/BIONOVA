@@ -360,7 +360,9 @@
   flex-direction: column;
   animation: slideIn 0.3s ease;
   position: sticky;
-  top: 20px;
+  top: 80px;
+  align-self: flex-start;
+  scroll-margin-top: 90px;
 }
 
 @keyframes slideIn {

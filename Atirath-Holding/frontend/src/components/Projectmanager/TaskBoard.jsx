@@ -1449,6 +1449,38 @@ const TaskBoard = ({ userRole, onLogout }) => {
                 </div>
               </div>
 
+              {(() => {
+                const raw = selectedTask.rawTask || {};
+                const getEmpNm = (id) => {
+                  const e = (employeesList || []).find(emp => String(emp.empId || emp.id) === String(id));
+                  return e ? `${e.fstNm || e.firstName || ''} ${e.lstNm || e.lastName || ''}`.trim() : null;
+                };
+                const revNames = Array.isArray(raw.reviewerNames) && raw.reviewerNames.length > 0
+                  ? raw.reviewerNames.join(", ")
+                  : (raw.reviewerNm || (raw.reviewerId || raw.reviewer ? getEmpNm(raw.reviewerId || raw.reviewer) : null));
+                const appNames = Array.isArray(raw.approverNames) && raw.approverNames.length > 0
+                  ? raw.approverNames.join(", ")
+                  : (raw.approverNm || (raw.approverId || raw.approver ? getEmpNm(raw.approverId || raw.approver) : null));
+
+                if (!revNames && !appNames) return null;
+                return (
+                  <div className="tb-form-row">
+                    {revNames && (
+                      <div className="tb-modal-detail-row">
+                        <span className="tb-modal-detail-label">Reviewer(s)</span>
+                        <span className="tb-modal-detail-value">{revNames}</span>
+                      </div>
+                    )}
+                    {appNames && (
+                      <div className="tb-modal-detail-row">
+                        <span className="tb-modal-detail-label">Approver(s)</span>
+                        <span className="tb-modal-detail-value">{appNames}</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="tb-form-row">
                 {selectedTask.status === "Closed" || selectedTask.status === "Completed" ? (
                   <div className="tb-modal-detail-row">
