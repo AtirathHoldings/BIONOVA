@@ -1211,18 +1211,54 @@ const AdminDashboard = ({ userRole, onLogout }) => {
                           const isLate = !isDone && t.endDt && new Date(t.endDt).setHours(23, 59, 59, 999) < now.getTime();
                           const isOpen = !isDone && !isHold && !isDraft && !isInProgress;
 
-                          let rank = 1;
-                          if (isLate) rank = 6;
-                          else if (isOpen) rank = 1;
+                          // 1. Overdue at the top (rank 1), Completed at the bottom (rank 6)
+                          let rank = 3;
+                          if (isLate) rank = 1;
                           else if (isInProgress) rank = 2;
-                          else if (isHold) rank = 3;
-                          else if (isDone) rank = 4;
+                          else if (isOpen) rank = 3;
+                          else if (isHold) rank = 4;
                           else if (isDraft) rank = 5;
+                          else if (isDone) rank = 6;
 
                           return rank;
                         };
 
-                        return getInfo(a) - getInfo(b);
+                        const rankA = getInfo(a);
+                        const rankB = getInfo(b);
+                        if (rankA !== rankB) {
+                          return rankA - rankB;
+                        }
+
+                        // 2. Secondary sort: Date-wise (earliest due date first)
+                        const getTime = (t) => {
+                          if (!t || !t.endDt) return Infinity;
+                          try {
+                            const str = String(t.endDt).trim().split('T')[0];
+                            const ymd = str.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/);
+                            if (ymd) {
+                              return new Date(parseInt(ymd[1], 10), parseInt(ymd[2], 10) - 1, parseInt(ymd[3], 10)).getTime();
+                            }
+                            const dmy = str.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})$/);
+                            if (dmy) {
+                              return new Date(parseInt(dmy[3], 10), parseInt(dmy[2], 10) - 1, parseInt(dmy[1], 10)).getTime();
+                            }
+                            const dObj = new Date(t.endDt);
+                            return isNaN(dObj.getTime()) ? Infinity : dObj.getTime();
+                          } catch {
+                            return Infinity;
+                          }
+                        };
+
+                        const timeA = getTime(a);
+                        const timeB = getTime(b);
+                        if (timeA !== timeB) {
+                          return timeA - timeB;
+                        }
+
+                        // 3. Fallback: alphabetical by task title/name
+                        const nameA = (a.taskNm || a.name || "").toLowerCase();
+                        const nameB = (b.taskNm || b.name || "").toLowerCase();
+                        return nameA.localeCompare(nameB);
                       })
                       .map((t, idx) => {
                         const raw = (t.taskSts?.statusNm || t.taskSts || t.tasksts || t.status || "OPEN").toString().toUpperCase().trim();

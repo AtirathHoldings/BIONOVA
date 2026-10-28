@@ -7,8 +7,202 @@ import { useNavigate } from 'react-router-dom';
 import '../../styles/PublicHoliday.css';
 import { apiGet, apiPost, apiPut, apiDelete } from "../../utils/api";
 import { getScreenPermission } from "../../utils/permissions";
-import DatePicker from "react-datepicker";
-import "react-datepicker/dist/react-datepicker.css";
+const CustomDateInput = ({ value, onChange }) => {
+  const [displayValue, setDisplayValue] = useState(() => {
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [y, m, d] = value.split('-');
+      return `${d}-${m}-${y}`;
+    }
+    return '';
+  });
+  const hiddenDateRef = useRef(null);
+
+  useEffect(() => {
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [y, m, d] = value.split('-');
+      const formatted = `${d}-${m}-${y}`;
+      if (displayValue !== formatted) {
+        setDisplayValue(formatted);
+      }
+    } else if (!value) {
+      setDisplayValue('');
+    }
+  }, [value]);
+
+  const parseAndValidate = (inputStr) => {
+    if (!inputStr) return null;
+    const clean = inputStr.trim().replace(/[^0-9\-\/]/g, '').replace(/\//g, '-');
+    const parts = clean.split('-');
+
+    if (parts.length === 3) {
+      const dStr = parts[0];
+      const mStr = parts[1];
+      const yStr = parts[2];
+      if (dStr.length >= 1 && dStr.length <= 2 && mStr.length >= 1 && mStr.length <= 2 && yStr.length === 4) {
+        const d = parseInt(dStr, 10);
+        const m = parseInt(mStr, 10);
+        const y = parseInt(yStr, 10);
+        if (m >= 1 && m <= 12 && y >= 1900 && y <= 9999) {
+          const maxDays = new Date(y, m, 0).getDate();
+          if (d >= 1 && d <= maxDays) {
+            return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+          }
+        }
+      }
+    }
+
+    const digitsOnly = clean.replace(/\D/g, '').slice(0, 8);
+    if (digitsOnly.length === 8) {
+      const d = parseInt(digitsOnly.slice(0, 2), 10);
+      const m = parseInt(digitsOnly.slice(2, 4), 10);
+      const y = parseInt(digitsOnly.slice(4, 8), 10);
+      if (m >= 1 && m <= 12 && y >= 1900 && y <= 9999) {
+        const maxDays = new Date(y, m, 0).getDate();
+        if (d >= 1 && d <= maxDays) {
+          return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        }
+      }
+    }
+    return null;
+  };
+
+  const handleInputChange = (e) => {
+    const raw = e.target.value;
+    const isDeleting = raw.length < displayValue.length;
+    let clean = raw.replace(/[^0-9\-\/]/g, '').replace(/\//g, '-');
+    const digitsOnly = clean.replace(/\D/g, '').slice(0, 8);
+
+    let formatted = clean;
+    if (!isDeleting && digitsOnly.length > 0) {
+      if (digitsOnly.length <= 2) {
+        formatted = digitsOnly.length === 2 && !clean.includes('-') ? `${digitsOnly}-` : digitsOnly;
+      } else if (digitsOnly.length <= 4) {
+        const d = digitsOnly.slice(0, 2);
+        const m = digitsOnly.slice(2);
+        formatted = m.length === 2 && clean.split('-').length <= 2 ? `${d}-${m}-` : `${d}-${m}`;
+      } else {
+        const d = digitsOnly.slice(0, 2);
+        const m = digitsOnly.slice(2, 4);
+        const y = digitsOnly.slice(4);
+        formatted = `${d}-${m}-${y}`;
+      }
+    }
+
+    formatted = formatted.slice(0, 10);
+    setDisplayValue(formatted);
+
+    if (!formatted.trim() || digitsOnly.length === 0) {
+      onChange('');
+      return;
+    }
+
+    const validIso = parseAndValidate(formatted);
+    if (validIso) {
+      onChange(validIso);
+    } else {
+      if (value) {
+        onChange('');
+      }
+    }
+  };
+
+  const handleBlur = () => {
+    if (value && /^\d{4}-\d{2}-\d{2}$/.test(value)) {
+      const [y, m, d] = value.split('-');
+      setDisplayValue(`${d}-${m}-${y}`);
+    } else {
+      const validIso = parseAndValidate(displayValue);
+      if (validIso) {
+        onChange(validIso);
+        const [y, m, d] = validIso.split('-');
+        setDisplayValue(`${d}-${m}-${y}`);
+      } else {
+        setDisplayValue('');
+        onChange('');
+      }
+    }
+  };
+
+  const handlePickerChange = (e) => {
+    const isoVal = e.target.value;
+    if (isoVal) {
+      onChange(isoVal);
+      const [y, m, d] = isoVal.split('-');
+      setDisplayValue(`${d}-${m}-${y}`);
+    } else {
+      onChange('');
+      setDisplayValue('');
+    }
+  };
+
+  const openPicker = () => {
+    if (hiddenDateRef.current) {
+      if (typeof hiddenDateRef.current.showPicker === 'function') {
+        try {
+          hiddenDateRef.current.showPicker();
+          return;
+        } catch {
+          // fallback
+        }
+      }
+      hiddenDateRef.current.focus();
+    }
+  };
+
+  return (
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
+      <input
+        type="text"
+        placeholder="dd-mm-yyyy"
+        value={displayValue}
+        onChange={handleInputChange}
+        onBlur={handleBlur}
+        className="ph-input"
+        maxLength={10}
+        style={{ width: '100%', paddingRight: '40px' }}
+      />
+      <button
+        type="button"
+        onClick={openPicker}
+        style={{
+          position: 'absolute',
+          right: '8px',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          padding: '6px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#64748b',
+          transition: 'color 0.2s'
+        }}
+        onMouseEnter={(e) => (e.currentTarget.style.color = '#1d4ed8')}
+        onMouseLeave={(e) => (e.currentTarget.style.color = '#64748b')}
+        title="Open calendar"
+        tabIndex={-1}
+      >
+        <Calendar size={18} />
+      </button>
+      <input
+        ref={hiddenDateRef}
+        type="date"
+        value={value || ''}
+        onChange={handlePickerChange}
+        tabIndex={-1}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0,
+          pointerEvents: 'none'
+        }}
+      />
+    </div>
+  );
+};
 
 const formatDateDisplay = (dateStr) => {
   if (!dateStr) return "";
@@ -437,16 +631,10 @@ const PublicHoliday = ({ userRole, onLogout }) => {
                 <div className="ph-drawer-body">
                   <div className="ph-form-group">
                     <label>Holiday Date <span>*</span></label>
-                    <div style={{ position: 'relative', display: 'flex', alignItems: 'center', width: '100%' }}>
-                      <input
-                        type="date"
-                        max="9999-12-31"
-                        value={formData.date || ""}
-                        onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-                        className="ph-input"
-                        style={{ width: '100%', cursor: 'pointer' }}
-                      />
-                    </div>
+                    <CustomDateInput
+                      value={formData.date || ""}
+                      onChange={(newDate) => setFormData({ ...formData, date: newDate })}
+                    />
                   </div>
 
                   <div className="ph-form-group">

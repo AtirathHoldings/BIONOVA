@@ -444,6 +444,20 @@ const Assignment = ({ userRole, onLogout }) => {
     }
   }, [location.state]);
 
+  // Ensure fresh next task code from DB whenever opening create task form
+  useEffect(() => {
+    if (view === "form" && !editId && (!taskCode || taskCode === "INDTSK-001")) {
+      fetch(`${apiBaseUrl}/api/assignments/next-code`, { headers: getAuthHeaders() })
+        .then(res => res.ok ? res.json() : null)
+        .then(data => {
+          if (data && data.nextTaskCode) {
+            setTaskCode(data.nextTaskCode);
+          }
+        })
+        .catch(err => console.warn("Could not auto-fetch next-code:", err));
+    }
+  }, [view, editId, taskCode]);
+
   // Scroll to top when view switches (especially to 'form')
   useEffect(() => {
     window.scrollTo(0, 0);

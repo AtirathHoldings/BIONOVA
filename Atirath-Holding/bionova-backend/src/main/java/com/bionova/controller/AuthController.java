@@ -141,6 +141,24 @@ public class AuthController {
      * Body: { "token": "uuid-token", "newPassword": "NewPass@123" }
      * Validates token and updates the password.
      */
+        /**
+     * Step 1.5 - GET /api/auth/validate-reset-token?token=XYZ
+     * Checks if token is valid and unexpired before showing the form.
+     */
+    @GetMapping("/validate-reset-token")
+    public ResponseEntity<Map<String, Object>> validateResetToken(@RequestParam(value = "token", required = false) String token) {
+        if (token == null || token.trim().isEmpty()) {
+            return ResponseEntity.badRequest().body(Map.of("valid", false, "error", "Invalid or missing reset token. Please request a new one."));
+        }
+        String result = passwordResetService.validateToken(token);
+        return switch (result) {
+            case "VALID" -> ResponseEntity.ok(Map.of("valid", true));
+            case "TOKEN_EXPIRED" -> ResponseEntity.badRequest().body(Map.of("valid", false, "error", "Reset link has expired. Please request a new one."));
+            case "TOKEN_USED" -> ResponseEntity.badRequest().body(Map.of("valid", false, "error", "This reset link has already been used. Please request a new one."));
+            default -> ResponseEntity.badRequest().body(Map.of("valid", false, "error", "Invalid or expired reset link. Please request a new one."));
+        };
+    }
+
     @PostMapping("/reset-password")
     public ResponseEntity<Map<String, String>> resetPassword(
             @RequestBody ResetPasswordRequest request) {

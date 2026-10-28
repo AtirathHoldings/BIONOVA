@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import '../styles/login.css';
 
@@ -18,6 +18,42 @@ const ResetPassword = () => {
   const [error, setError] = useState('');
   const [successMsg, setSuccessMsg] = useState('');
   const [loading, setLoading] = useState(false);
+
+  const [isValidating, setIsValidating] = useState(true);
+  const [tokenExpiredError, setTokenExpiredError] = useState('');
+
+  useEffect(() => {
+    if (!token) {
+      setIsValidating(false);
+      setTokenExpiredError("Invalid or missing reset token. Please request a new one.");
+      return;
+    }
+
+    const validateToken = async () => {
+      try {
+        const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+        const response = await fetch(`${apiBaseUrl}/api/auth/validate-reset-token?token=${encodeURIComponent(token)}`, {
+          method: 'GET',
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        const data = await response.json();
+
+        if (!response.ok || !data.valid) {
+          setTokenExpiredError(data.error || "Reset link has expired. Please request a new one.");
+        }
+      } catch (err) {
+        console.error("Token validation error:", err);
+        setTokenExpiredError("Could not verify reset link. Please check your connection or request a new link.");
+      } finally {
+        setIsValidating(false);
+      }
+    };
+
+    validateToken();
+  }, [token]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -99,73 +135,100 @@ const ResetPassword = () => {
               <div className="reset-icon-wrapper">
                 <img src={resetIcon} alt="Reset Icon" className="header-icon" />
               </div>
-              <h2 className="reset-title">Create New Password</h2>
-              <p className="reset-subtitle">Please choose a strong password</p>
+              <h2 className="reset-title">
+                {tokenExpiredError ? "Link Expired" : "Create New Password"}
+              </h2>
+              <p className="reset-subtitle">
+                {tokenExpiredError ? "This password reset link is no longer valid" : "Please choose a strong password"}
+              </p>
             </div>
 
-            {error && (
-              <div className="error-message">
-                <i className="fas fa-exclamation-circle"></i> <span>{error}</span>
+            {isValidating ? (
+              <div style={{ textAlign: 'center', padding: '30px 0' }}>
+                <div className="spinner" style={{ borderColor: '#06092c transparent #06092c transparent', width: '32px', height: '32px', margin: '0 auto 14px' }}></div>
+                <p style={{ color: '#666', fontSize: '14px', fontWeight: 500 }}>Validating reset link...</p>
               </div>
-            )}
-
-            {successMsg && (
-              <div className="success-message">
-                <i className="fas fa-check-circle"></i> <span>{successMsg}</span>
-              </div>
-            )}
-
-            <form onSubmit={handleSubmit}>
-              <div className="input-group">
-                <label>New Password</label>
-                <div className="input-wrapper password-wrapper">
-                  <i className="fas fa-lock input-icon"></i>
-                  <input
-                    type={showPassword ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => { setPassword(e.target.value); setError(''); }}
-                    placeholder="Enter new password"
-                    className="password-input"
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowPassword(!showPassword)}
-                  >
-                    <i className={showPassword ? 'far fa-eye-slash' : 'far fa-eye'}></i>
-                  </button>
+            ) : tokenExpiredError ? (
+              <div>
+                <div className="error-message" style={{ marginBottom: '24px' }}>
+                  <i className="fas fa-exclamation-circle"></i> <span>{tokenExpiredError}</span>
                 </div>
-              </div>
 
-              <div className="input-group">
-                <label>Confirm Password</label>
-                <div className="input-wrapper password-wrapper">
-                  <i className="fas fa-lock input-icon"></i>
-                  <input
-                    type={showConfirmPassword ? 'text' : 'password'}
-                    value={confirmPassword}
-                    onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
-                    placeholder="Confirm new password"
-                    className="password-input"
-                  />
-                  <button
-                    type="button"
-                    className="password-toggle-btn"
-                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  >
-                    <i className={showConfirmPassword ? 'far fa-eye-slash' : 'far fa-eye'}></i>
+                <button
+                  type="button"
+                  className="login-btn"
+                  onClick={() => navigate('/', { replace: true })}
+                >
+                  <i className="fas fa-arrow-left" style={{ marginRight: '8px' }}></i> Back to Login
+                </button>
+              </div>
+            ) : (
+              <>
+                {error && (
+                  <div className="error-message">
+                    <i className="fas fa-exclamation-circle"></i> <span>{error}</span>
+                  </div>
+                )}
+
+                {successMsg && (
+                  <div className="success-message">
+                    <i className="fas fa-check-circle"></i> <span>{successMsg}</span>
+                  </div>
+                )}
+
+                <form onSubmit={handleSubmit}>
+                  <div className="input-group">
+                    <label>New Password</label>
+                    <div className="input-wrapper password-wrapper">
+                      <i className="fas fa-lock input-icon"></i>
+                      <input
+                        type={showPassword ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => { setPassword(e.target.value); setError(''); }}
+                        placeholder="Enter new password"
+                        className="password-input"
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle-btn"
+                        onClick={() => setShowPassword(!showPassword)}
+                      >
+                        <i className={showPassword ? 'far fa-eye-slash' : 'far fa-eye'}></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="input-group">
+                    <label>Confirm Password</label>
+                    <div className="input-wrapper password-wrapper">
+                      <i className="fas fa-lock input-icon"></i>
+                      <input
+                        type={showConfirmPassword ? 'text' : 'password'}
+                        value={confirmPassword}
+                        onChange={(e) => { setConfirmPassword(e.target.value); setError(''); }}
+                        placeholder="Confirm new password"
+                        className="password-input"
+                      />
+                      <button
+                        type="button"
+                        className="password-toggle-btn"
+                        onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      >
+                        <i className={showConfirmPassword ? 'far fa-eye-slash' : 'far fa-eye'}></i>
+                      </button>
+                    </div>
+                  </div>
+
+                  <button type="submit" className="login-btn" disabled={loading}>
+                    {loading ? <><i className="fas fa-spinner fa-spin" style={{ marginRight: '8px' }}></i> Resetting...</> : "Update Password"}
                   </button>
-                </div>
-              </div>
 
-              <button type="submit" className="login-btn" disabled={loading}>
-                {loading ? <><i className="fas fa-spinner fa-spin" style={{ marginRight: '8px' }}></i> Resetting...</> : "Update Password"}
-              </button>
-
-              <div className="back-link" onClick={() => navigate('/', { replace: true })}>
-                <i className="fas fa-arrow-left" style={{ marginRight: '5px' }}></i> Back to Login
-              </div>
-            </form>
+                  <div className="back-link" onClick={() => navigate('/', { replace: true })}>
+                    <i className="fas fa-arrow-left" style={{ marginRight: '5px' }}></i> Back to Login
+                  </div>
+                </form>
+              </>
+            )}
 
           </div>
         </div>

@@ -385,7 +385,7 @@ public class AssignmentController {
         int maxNum = 0;
         for (String cd : codes) {
             if (cd != null) {
-                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("INDTSK-?(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(cd);
+                java.util.regex.Matcher matcher = java.util.regex.Pattern.compile("INDTSK-?(\\d+)", java.util.regex.Pattern.CASE_INSENSITIVE).matcher(cd.trim());
                 if (matcher.find()) {
                     try {
                         int num = Integer.parseInt(matcher.group(1));
@@ -395,11 +395,6 @@ public class AssignmentController {
                     } catch (NumberFormatException ignored) {}
                 }
             }
-        }
-        
-        Long maxId = repository.findMaxEmpTaskId();
-        if (maxId != null && maxId > maxNum) {
-            maxNum = maxId.intValue();
         }
 
         int nextNum = maxNum + 1;

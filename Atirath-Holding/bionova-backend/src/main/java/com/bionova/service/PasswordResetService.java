@@ -159,7 +159,7 @@ public class PasswordResetService {
                 "<div style='max-width: 500px; margin: 0 auto; background: #ffffff; padding: 30px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1);'>" +
                 "<h2 style='color: #2563EB; margin-top: 0;'>BIONOVA</h2>" +
                 "<p>Hello <strong>" + name + "</strong>,</p>" +
-                "<p>You requested to reset your BIONOVA account password. Click below to reset your password (valid for 30 minutes):</p>" +
+                "<p>You requested to reset your BIONOVA account password. Click below to reset your password :</p>" +
                 "<p style='margin: 25px 0; text-align: center;'>" +
                 "<a href='" + resetLink + "' style='background-color: #2563EB; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;'>Reset Password " + (isApp ? "in App" : "on Website") + "</a>" +
                 "</p>" +
@@ -199,6 +199,27 @@ public class PasswordResetService {
                 log.log(Level.SEVERE, "Failed to send SimpleMailMessage for password reset: " + ex.getMessage(), ex);
             }
         }
+    }
+
+    /**
+     * Validate token without resetting password (used on page load)
+     */
+    public String validateToken(String token) {
+        if (token == null || token.trim().isEmpty()) {
+            return "INVALID_TOKEN";
+        }
+        PasswordResetToken resetToken = tokenRepository.findByToken(token.trim()).orElse(null);
+
+        if (resetToken == null) {
+            return "INVALID_TOKEN";
+        }
+        if (resetToken.isUsed()) {
+            return "TOKEN_USED";
+        }
+        if (resetToken.getExpiresAt().isBefore(LocalDateTime.now())) {
+            return "TOKEN_EXPIRED";
+        }
+        return "VALID";
     }
 
     /**
