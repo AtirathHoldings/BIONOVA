@@ -20,11 +20,14 @@ public class CompanyController {
     @Autowired
     private StateRepository stateRepository;
 
+    @Autowired
+    private com.bionova.service.MasterDataService masterDataService;
+
 
 
     @GetMapping("/companies")
     public List<CompanyMaster> getCompanies() {
-        return companyRepository.findAll();
+        return masterDataService.getAllCompanies();
     }
 
     @GetMapping("/companies/{id}")
@@ -63,6 +66,7 @@ public class CompanyController {
         }
 
         CompanyMaster saved = companyRepository.save(company);
+        masterDataService.evictCompanyCache();
         return ResponseEntity.ok(saved);
     }
 
@@ -126,6 +130,7 @@ public class CompanyController {
     @DeleteMapping("/companies/{id}")
     public ResponseEntity<?> deleteCompany(@PathVariable Long id) {
         companyRepository.deleteById(id);
+        masterDataService.evictCompanyCache();
         return ResponseEntity.ok().build();
     }
 

@@ -15,14 +15,18 @@ public class DesignationController {
     @Autowired
     private DesignationRepository designationRepository;
 
+    @Autowired
+    private com.bionova.service.MasterDataService masterDataService;
+
     @GetMapping("/designations")
     public List<DesignationMaster> getDesignations() {
-        return designationRepository.findAll();
+        return masterDataService.getAllDesignations();
     }
 
     @PostMapping("/designations")
     public ResponseEntity<DesignationMaster> saveDesignation(@RequestBody DesignationMaster designation) {
         DesignationMaster saved = designationRepository.save(designation);
+        masterDataService.evictDesignationCache();
         return ResponseEntity.ok(saved);
     }
 
@@ -34,12 +38,14 @@ public class DesignationController {
         desig.setDesigNm(details.getDesigNm());
         desig.setDesigDesc(details.getDesigDesc());
         DesignationMaster saved = designationRepository.save(desig);
+        masterDataService.evictDesignationCache();
         return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/designations/{id}")
     public ResponseEntity<?> deleteDesignation(@PathVariable Integer id) {
         designationRepository.deleteById(id);
+        masterDataService.evictDesignationCache();
         return ResponseEntity.ok().build();
     }
 }

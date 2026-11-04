@@ -51,6 +51,9 @@ public class NotificationService {
     private JavaMailSender mailSender;
 
     @Autowired
+    private RealtimePublisherService realtimePublisherService;
+
+    @Autowired
     private ProjectStatusCascadeService projectStatusCascadeService;
 
     @Autowired

@@ -48,6 +48,7 @@ public class ProjectLiveController {
     @Autowired private com.bionova.repository.PlantRepository plantRepository;
     @Autowired private com.bionova.repository.CompanyRepository companyRepository;
     @Autowired private com.bionova.service.ProcessWorkflowService processWorkflowService;
+    @Autowired private com.bionova.service.MasterDataService masterDataService;
 
     /**
      * Determines if the employee has access to the Project module.
@@ -135,9 +136,88 @@ public class ProjectLiveController {
     }
 
     private void enrichProjects(List<ProjectLive> projects) {
-        if (projects == null) return;
+        if (projects == null || projects.isEmpty()) return;
+
+        List<com.bionova.entity.CompanyMaster> allCompanies = masterDataService.getAllCompanies();
+        Map<Long, com.bionova.entity.CompanyMaster> coyMap = allCompanies.stream()
+                .filter(c -> c.getCoyId() != null)
+                .collect(java.util.stream.Collectors.toMap(com.bionova.entity.CompanyMaster::getCoyId, c -> c, (v1, v2) -> v1));
+        String defaultClientName = !allCompanies.isEmpty() ? allCompanies.get(0).getCoyNm() : "";
+        String defaultLocation = !allCompanies.isEmpty() ? allCompanies.get(0).getCtVlg() : "";
+
+        List<com.bionova.entity.PlantMaster> allPlants = masterDataService.getAllPlants();
+        Map<Long, com.bionova.entity.PlantMaster> pltMap = allPlants.stream()
+                .filter(p -> p.getPltId() != null)
+                .collect(java.util.stream.Collectors.toMap(com.bionova.entity.PlantMaster::getPltId, p -> p, (v1, v2) -> v1));
+        String defaultPlantName = !allPlants.isEmpty() ? allPlants.get(0).getPltNm() : "";
+
+        List<MilestoneLive> allMilestones = milestoneLiveRepository.findAll();
+        Map<Long, List<MilestoneLive>> milestonesByPrj = allMilestones.stream()
+                .filter(m -> m.getPrjId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(MilestoneLive::getPrjId));
+
+        List<TaskLive> allTasks = taskLiveRepository.findAll();
+        Map<Long, List<TaskLive>> tasksByMilestone = allTasks.stream()
+                .filter(t -> t.getMId() != null)
+                .collect(java.util.stream.Collectors.groupingBy(TaskLive::getMId));
+
         for (ProjectLive prj : projects) {
-            enrichProject(prj);
+            String clientName = "";
+            String location = "";
+            if (prj.getCoyId() != null && coyMap.containsKey(prj.getCoyId().longValue())) {
+                var coy = coyMap.get(prj.getCoyId().longValue());
+                clientName = coy.getCoyNm();
+                location = coy.getCtVlg();
+            }
+            if (clientName == null || clientName.isEmpty()) {
+                clientName = defaultClientName;
+                location = defaultLocation;
+            }
+            prj.setClientName(clientName);
+
+            String plantName = "";
+            if (prj.getPltId() != null && pltMap.containsKey(prj.getPltId().longValue())) {
+                plantName = pltMap.get(prj.getPltId().longValue()).getPltNm();
+            }
+            if (plantName == null || plantName.isEmpty()) {
+                plantName = defaultPlantName;
+            }
+            prj.setPlantName(plantName);
+            prj.setLocation(location);
+
+            List<MilestoneLive> milestones = milestonesByPrj.getOrDefault(prj.getPrjId(), java.util.Collections.emptyList());
+            double totalWeight = 0.0;
+            double completedWeight = 0.0;
+            for (MilestoneLive ms : milestones) {
+                List<TaskLive> tasks = tasksByMilestone.getOrDefault(ms.getMId(), java.util.Collections.emptyList());
+                for (TaskLive t : tasks) {
+                    double weight = t.getWrkDays() != null && t.getWrkDays() > 0
+                            ? t.getWrkDays()
+                            : (t.getNoOfDays() != null && t.getNoOfDays() > 0 ? t.getNoOfDays() : 1.0);
+
+                    String sts = t.getTaskSts() != null ? t.getTaskSts().getStatusNm() : "Open";
+                    String subSts = t.getSubStatus() != null ? t.getSubStatus() : "";
+                    double taskPct = 0.0;
+                    if ("Closed".equalsIgnoreCase(sts)) {
+                        taskPct = 100.0;
+                    } else if ("WIP".equalsIgnoreCase(sts)) {
+                        if ("Under Review".equalsIgnoreCase(subSts)) {
+                            taskPct = 80.0;
+                        } else if ("Rework".equalsIgnoreCase(subSts)) {
+                            taskPct = 20.0;
+                        } else {
+                            taskPct = 50.0;
+                        }
+                    }
+                    totalWeight += weight;
+                    completedWeight += (taskPct / 100.0) * weight;
+                }
+            }
+            int progressPct = 0;
+            if (totalWeight > 0) {
+                progressPct = (int) Math.round((completedWeight / totalWeight) * 100.0);
+            }
+            prj.setProgress(progressPct);
         }
     }
 

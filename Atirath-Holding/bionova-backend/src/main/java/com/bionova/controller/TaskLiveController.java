@@ -317,6 +317,31 @@ public class TaskLiveController {
                 .filter(tm -> tm.getTaskId() != null)
                 .collect(java.util.stream.Collectors.groupingBy(TeamMember::getTaskId));
 
+        // Pre-fetch sequential prerequisite dependencies in batch to eliminate N+1 queries
+        java.util.Set<Long> depTaskIds = tasks.stream()
+                .map(TaskLive::getDepTaskId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Map<Long, TaskLive> predTaskMap = depTaskIds.isEmpty() ? java.util.Collections.emptyMap() :
+                taskLiveRepository.findAllById(depTaskIds).stream()
+                .collect(java.util.stream.Collectors.toMap(TaskLive::getTaskId, t -> t, (a, b) -> a));
+
+        java.util.Set<Long> allMIds = tasks.stream()
+                .map(TaskLive::getMId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Map<Long, MilestoneLive> milestoneMap = allMIds.isEmpty() ? java.util.Collections.emptyMap() :
+                milestoneLiveRepository.findAllById(allMIds).stream()
+                .collect(java.util.stream.Collectors.toMap(MilestoneLive::getMId, m -> m, (a, b) -> a));
+
+        java.util.Set<Long> predMIds = milestoneMap.values().stream()
+                .map(MilestoneLive::getMlstnDepMId)
+                .filter(java.util.Objects::nonNull)
+                .collect(java.util.stream.Collectors.toSet());
+        java.util.Map<Long, MilestoneLive> predMilestoneMap = predMIds.isEmpty() ? java.util.Collections.emptyMap() :
+                milestoneLiveRepository.findAllById(predMIds).stream()
+                .collect(java.util.stream.Collectors.toMap(MilestoneLive::getMId, m -> m, (a, b) -> a));
+
         for (TaskLive task : tasks) {
             if (task.getExtEmpId() != null) {
                 task.setExtEmpNm(extEmpNameMap.get(task.getExtEmpId()));
@@ -375,20 +400,37 @@ public class TaskLiveController {
             task.setApproverNames(appNames);
             processWorkflowService.populateTaskWorkflowState(task);
 
-            if (!projectStatusCascadeService.isTaskPrerequisitesMet(task)) {
+            // In-memory prerequisite check using pre-fetched batch maps (Zero DB calls!)
+            boolean taskPrereqMet = true;
+            TaskLive predTask = null;
+            if (Boolean.TRUE.equals(task.getTaskDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(task.getTaskDepTyp()) && task.getDepTaskId() != null) {
+                predTask = predTaskMap.get(task.getDepTaskId());
+                if (predTask != null) {
+                    String pSts = predTask.getTaskSts() != null ? predTask.getTaskSts().getStatusNm() : "";
+                    if (!"Closed".equalsIgnoreCase(pSts) && !"Completed".equalsIgnoreCase(pSts)) {
+                        taskPrereqMet = false;
+                    }
+                }
+            }
+
+            boolean msPrereqMet = true;
+            MilestoneLive predMs = null;
+            if (task.getMId() != null) {
+                MilestoneLive ms = milestoneMap.get(task.getMId());
+                if (ms != null && Boolean.TRUE.equals(ms.getMlstnDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(ms.getMlstnDepTyp()) && ms.getMlstnDepMId() != null) {
+                    predMs = predMilestoneMap.get(ms.getMlstnDepMId());
+                    if (predMs != null && !"CLOSED".equalsIgnoreCase(predMs.getMlstnSts())) {
+                        msPrereqMet = false;
+                    }
+                }
+            }
+
+            if (!taskPrereqMet || !msPrereqMet) {
                 task.setIsSequentialLocked(true);
-                if (Boolean.TRUE.equals(task.getTaskDepFlg()) && "SEQUENTIAL".equalsIgnoreCase(task.getTaskDepTyp()) && task.getDepTaskId() != null) {
-                    taskLiveRepository.findById(task.getDepTaskId()).ifPresent(pred -> {
-                        task.setLockReason("Waiting for predecessor task " + (pred.getTaskCd() != null ? pred.getTaskCd() : "") + " to be completed.");
-                    });
-                } else if (task.getMId() != null) {
-                    milestoneLiveRepository.findById(task.getMId()).ifPresent(ms -> {
-                        if (ms.getMlstnDepMId() != null) {
-                            milestoneLiveRepository.findById(ms.getMlstnDepMId()).ifPresent(predMs -> {
-                                task.setLockReason("Waiting for predecessor milestone " + (predMs.getMlstnCd() != null ? predMs.getMlstnCd() : "") + " to be closed.");
-                            });
-                        }
-                    });
+                if (!taskPrereqMet && predTask != null) {
+                    task.setLockReason("Waiting for predecessor task " + (predTask.getTaskCd() != null ? predTask.getTaskCd() : "") + " to be completed.");
+                } else if (!msPrereqMet && predMs != null) {
+                    task.setLockReason("Waiting for predecessor milestone " + (predMs.getMlstnCd() != null ? predMs.getMlstnCd() : "") + " to be closed.");
                 }
             } else {
                 task.setIsSequentialLocked(false);

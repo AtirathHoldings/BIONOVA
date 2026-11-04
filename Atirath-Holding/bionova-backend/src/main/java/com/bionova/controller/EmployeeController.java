@@ -10,6 +10,8 @@ import java.util.List;
 import java.util.Map;
 import com.bionova.service.EmailService;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 
 @RestController
 @RequestMapping("/api")
@@ -33,6 +35,9 @@ public class EmployeeController {
     @Autowired
     private EmailService emailService;
 
+    @Autowired
+    private com.bionova.service.MasterDataService masterDataService;
+
     @Value("${app.base-url:https://bionova-sable.vercel.app}")
     private String websiteUrl;
 
@@ -47,7 +52,7 @@ public class EmployeeController {
     }
 
     private void populateDesignations(List<Employee> employees) {
-        List<com.bionova.entity.DesignationMaster> designations = designationRepository.findAll();
+        List<com.bionova.entity.DesignationMaster> designations = masterDataService.getAllDesignations();
         Map<Integer, String> desigMap = designations.stream()
             .collect(java.util.stream.Collectors.toMap(
                 com.bionova.entity.DesignationMaster::getDesigId,
@@ -92,7 +97,7 @@ public class EmployeeController {
     private void populateCompanyAndPlantNames(List<Employee> employees) {
         if (employees == null || employees.isEmpty()) return;
 
-        List<com.bionova.entity.CompanyMaster> companies = companyRepository.findAll();
+        List<com.bionova.entity.CompanyMaster> companies = masterDataService.getAllCompanies();
         Map<Long, String> coyMap = companies.stream()
             .collect(java.util.stream.Collectors.toMap(
                 com.bionova.entity.CompanyMaster::getCoyId,
@@ -100,7 +105,7 @@ public class EmployeeController {
                 (v1, v2) -> v1
             ));
 
-        List<com.bionova.entity.PlantMaster> plants = plantRepository.findAll();
+        List<com.bionova.entity.PlantMaster> plants = masterDataService.getAllPlants();
         Map<Long, String> pltMap = plants.stream()
             .collect(java.util.stream.Collectors.toMap(
                 com.bionova.entity.PlantMaster::getPltId,
@@ -108,7 +113,7 @@ public class EmployeeController {
                 (v1, v2) -> v1
             ));
 
-        List<com.bionova.entity.DepartmentMaster> departments = departmentRepository.findAll();
+        List<com.bionova.entity.DepartmentMaster> departments = masterDataService.getAllDepartments();
         Map<Long, String> deptMap = departments.stream()
             .collect(java.util.stream.Collectors.toMap(
                 com.bionova.entity.DepartmentMaster::getDeptId,
@@ -263,6 +268,7 @@ public class EmployeeController {
         }
 
         Employee saved = employeeRepository.save(employee);
+        masterDataService.evictEmployeeCache();
         populateDesignation(saved);
         populateCompanyAndPlant(saved);
         
@@ -336,6 +342,7 @@ public class EmployeeController {
         }
 
         Employee updated = employeeRepository.save(employee);
+        masterDataService.evictEmployeeCache();
         populateDesignation(updated);
         populateCompanyAndPlant(updated);
         return ResponseEntity.ok(updated);
@@ -344,6 +351,7 @@ public class EmployeeController {
     @DeleteMapping("/employees/{id}")
     public ResponseEntity<?> deleteEmployee(@PathVariable Long id) {
         employeeRepository.deleteById(id);
+        masterDataService.evictEmployeeCache();
         return ResponseEntity.ok().build();
     }
 }

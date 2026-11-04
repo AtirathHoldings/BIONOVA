@@ -16,9 +16,12 @@ public class ExternalEmployeeController {
     @Autowired
     private ExternalEmployeeRepository externalEmployeeRepository;
 
+    @Autowired
+    private com.bionova.service.MasterDataService masterDataService;
+
     @GetMapping("/external-employees")
     public List<ExternalEmployee> getExternalEmployees() {
-        return externalEmployeeRepository.findAll();
+        return masterDataService.getAllExternalEmployees();
     }
 
     @PostMapping("/external-employees")
@@ -63,6 +66,7 @@ public class ExternalEmployeeController {
 
         try {
             ExternalEmployee saved = externalEmployeeRepository.save(employee);
+            masterDataService.evictExternalEmployeeCache();
             return ResponseEntity.ok(saved);
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("message", "Failed to save external employee: " + e.getMessage()));
@@ -100,12 +104,14 @@ public class ExternalEmployeeController {
         }
 
         ExternalEmployee updated = externalEmployeeRepository.save(employee);
+        masterDataService.evictExternalEmployeeCache();
         return ResponseEntity.ok(updated);
     }
 
     @DeleteMapping("/external-employees/{id}")
     public ResponseEntity<?> deleteExternalEmployee(@PathVariable Long id) {
         externalEmployeeRepository.deleteById(id);
+        masterDataService.evictExternalEmployeeCache();
         return ResponseEntity.ok().build();
     }
 

@@ -43,6 +43,9 @@ public class UserDashboardController {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Autowired
+    private com.bionova.service.UserDashboardService userDashboardService;
+
     @GetMapping
     public ResponseEntity<?> getDashboardData() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();

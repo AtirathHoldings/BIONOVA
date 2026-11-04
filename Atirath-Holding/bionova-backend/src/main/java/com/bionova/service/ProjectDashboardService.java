@@ -5,7 +5,9 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
+import com.bionova.config.CacheConfig;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -26,6 +28,7 @@ public class ProjectDashboardService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Cacheable(CacheConfig.CACHE_PM_DASHBOARD)
     public ProjectDashboardResponse getProjectManagerMetrics() {
         // Single stored procedure call — replaces all previous repository iteration
         Object result = entityManager

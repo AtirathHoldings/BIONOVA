@@ -17,9 +17,12 @@ public class DepartmentController {
     @Autowired
     private DepartmentRepository departmentRepository;
 
+    @Autowired
+    private com.bionova.service.MasterDataService masterDataService;
+
     @GetMapping("/departments")
     public List<DepartmentMaster> getDepartments() {
-        return departmentRepository.findAll();
+        return masterDataService.getAllDepartments();
     }
 
     @PostMapping("/departments")
@@ -42,6 +45,7 @@ public class DepartmentController {
             return ResponseEntity.badRequest().body(Map.of("message", "Department name already exists."));
         }
         DepartmentMaster saved = departmentRepository.save(department);
+        masterDataService.evictDepartmentCache();
         return ResponseEntity.ok(saved);
     }
 
@@ -76,6 +80,7 @@ public class DepartmentController {
     @DeleteMapping("/departments/{id}")
     public ResponseEntity<?> deleteDepartment(@PathVariable Long id) {
         departmentRepository.deleteById(id);
+        masterDataService.evictDepartmentCache();
         return ResponseEntity.ok().build();
     }
 }

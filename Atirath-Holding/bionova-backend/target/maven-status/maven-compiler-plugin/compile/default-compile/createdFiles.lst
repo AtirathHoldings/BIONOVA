@@ -85,6 +85,7 @@ com\bionova\dto\GanttTaskDto.class
 com\bionova\dto\UserDashboardResponseDto$EmployeeAvatarDto.class
 com\bionova\service\RbacService.class
 com\bionova\dto\AssignmentRequest.class
+com\bionova\config\CacheConfig.class
 com\bionova\controller\ProcessController.class
 com\bionova\repository\ReviewerMasterRepository.class
 com\bionova\entity\ProcessMaster.class
@@ -106,6 +107,7 @@ com\bionova\controller\AssignmentController.class
 com\bionova\dto\ProjectRequest.class
 com\bionova\dto\AdminDashboardResponse$ActivityDto$ActivityDtoBuilder.class
 com\bionova\dto\RoleDto.class
+com\bionova\service\RealtimePublisherService.class
 com\bionova\BionovaBackendApplication.class
 com\bionova\enums\TimeStatus.class
 com\bionova\config\AuditListener.class
@@ -137,6 +139,8 @@ com\bionova\controller\ProjectForecastingController.class
 com\bionova\entity\Assignment.class
 com\bionova\controller\StorageController.class
 com\bionova\controller\ExternalEmployeeController$ExternalSecurityHelper.class
+com\bionova\config\WebSocketConfig.class
+com\bionova\service\MasterDataService.class
 com\bionova\security\RbacGuardFilter.class
 com\bionova\controller\MilestoneLiveController.class
 com\bionova\repository\AttachmentMasterRepository.class
@@ -189,6 +193,7 @@ com\bionova\repository\ProjectDraftRepository.class
 com\bionova\controller\CalendarViewController.class
 com\bionova\dto\PacTaskRowDto.class
 com\bionova\entity\ActivityLog.class
+com\bionova\service\UserDashboardService.class
 com\bionova\security\JwtAuthFilter.class
 com\bionova\dto\AdminDashboardResponse$ActivityDto.class
 com\bionova\entity\PasswordResetToken.class

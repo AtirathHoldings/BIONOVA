@@ -18,9 +18,12 @@ public class PlantController {
     @Autowired
     private com.bionova.repository.StateRepository stateRepository;
 
+    @Autowired
+    private com.bionova.service.MasterDataService masterDataService;
+
     @GetMapping("/plants")
     public List<PlantMaster> getPlants() {
-        return plantRepository.findAll();
+        return masterDataService.getAllPlants();
     }
     
     @GetMapping("/plants/{id}")
@@ -99,12 +102,14 @@ public class PlantController {
         plant.setAddlRem(details.getAddlRem());
         plant.setSts(details.getSts());
         PlantMaster saved = plantRepository.save(plant);
+        masterDataService.evictPlantCache();
         return ResponseEntity.ok(saved);
     }
 
     @DeleteMapping("/plants/{id}")
     public ResponseEntity<Void> deletePlant(@PathVariable("id") Long id) {
         plantRepository.deleteById(id);
+        masterDataService.evictPlantCache();
         return ResponseEntity.ok().build();
     }
 }

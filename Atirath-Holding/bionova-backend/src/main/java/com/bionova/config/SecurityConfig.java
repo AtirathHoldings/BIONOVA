@@ -47,6 +47,7 @@ public class SecurityConfig {
             .authorizeHttpRequests(auth -> auth
                 // Public endpoints – no token needed
                 .requestMatchers(
+                    "/ws/**",
                     "/api/auth/**",
                     "/api/external-tasks/**",
                     "/api/storage/view",

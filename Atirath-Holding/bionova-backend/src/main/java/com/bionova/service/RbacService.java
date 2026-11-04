@@ -10,6 +10,8 @@ import com.bionova.repository.*;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.*;
@@ -50,6 +52,7 @@ public class RbacService {
      * When false → no RBAC configured yet → show all screens (full_access mode).
      * When true  → RBAC is set up → filter screens based on permissions.
      */
+    @Cacheable(value = "rbacHasRbac", key = "#empId")
     public boolean hasRbacConfigured(Long empId) {
         return !employeeMappingRepository.findByEmpId(empId).isEmpty();
     }
@@ -84,6 +87,7 @@ public class RbacService {
         }).collect(Collectors.toList());
     }
 
+    @Cacheable(value = "rbacPermissions", key = "#empId")
     public List<ScreenPermissionDto> getEmployeePermissions(Long empId) {
         List<RoleBasedEmployeeMapping> mappings = employeeMappingRepository.findByEmpId(empId);
         if (mappings.isEmpty()) {
@@ -117,6 +121,7 @@ public class RbacService {
     }
 
     @Transactional
+    @CacheEvict(value = {"rbacHasRbac", "rbacPermissions"}, allEntries = true)
     public void saveAccess(SaveAccessRequest request) {
         if (request.getEmpIds() == null || request.getEmpIds().isEmpty()) {
             throw new IllegalArgumentException("At least one employee must be selected.");
@@ -285,6 +290,7 @@ public class RbacService {
     }
 
     @Transactional
+    @CacheEvict(value = {"rbacHasRbac", "rbacPermissions"}, allEntries = true)
     public void updateEmployeePermissions(Long empId, UpdateEmployeePermissionsRequest request) {
         List<RoleBasedEmployeeMapping> oldMappings = employeeMappingRepository.findByEmpId(empId);
 

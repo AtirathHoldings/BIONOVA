@@ -1,10 +1,13 @@
 package com.bionova.service;
 
+import com.bionova.config.CacheConfig;
 import com.bionova.dto.AdminDashboardResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -17,15 +20,7 @@ import java.util.Map;
  * Calls the Supabase stored procedure get_admin_dashboard()
  * which replaces 6 separate repository queries with a single DB round-trip.
  *
- * Procedure returns JSON:
- *   employeeCount, departmentCount, companyCount, plantCount,
- *   activeProjectsCount, criticalAlertsCount,
- *   projectStatus   { total, onTrack, atRisk, delayed, completed }
- *   milestoneProgress { total, completed, progress, overdue }
- *   taskOverview    { total, completed, progress, todo, overdue }
- *   topProjects     [ { projectId, projectName, projectCode, progressPercent } ]
- *   upcomingDeadlines [ { title, projectName, dueDate, timeLeft, isCritical } ]
- *   systemActivities  [ { description, actor, timestamp } ]
+ * Results are cached in Caffeine in-memory cache for fast dashboard loading.
  */
 @Service
 public class AdminDashboardService {
@@ -35,8 +30,8 @@ public class AdminDashboardService {
 
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    @Cacheable(value = CacheConfig.CACHE_ADMIN_DASHBOARD)
     public AdminDashboardResponse getDashboardData() {
-        // Single stored procedure call — replaces all previous repository calls
         Object result = entityManager
                 .createNativeQuery("SELECT get_admin_dashboard()")
                 .getSingleResult();
@@ -49,6 +44,10 @@ public class AdminDashboardService {
         }
     }
 
+    @CacheEvict(value = CacheConfig.CACHE_ADMIN_DASHBOARD, allEntries = true)
+    public void evictAdminDashboardCache() {
+    }
+
     private AdminDashboardResponse mapToResponse(JsonNode root) {
         JsonNode projStatus = root.path("projectStatus");
         JsonNode msProgress = root.path("milestoneProgress");
@@ -58,76 +57,71 @@ public class AdminDashboardService {
         Map<String, Long> projectStatusOverview = new HashMap<>();
         projectStatusOverview.put("Total Projects", projStatus.path("total").asLong());
         projectStatusOverview.put("On Track",       projStatus.path("onTrack").asLong());
-        projectStatusOverview.put("At Risk",         projStatus.path("atRisk").asLong());
-        projectStatusOverview.put("Delayed",         projStatus.path("delayed").asLong());
-        projectStatusOverview.put("Completed",       projStatus.path("completed").asLong());
+        projectStatusOverview.put("At Risk",        projStatus.path("atRisk").asLong());
+        projectStatusOverview.put("Delayed",        projStatus.path("delayed").asLong());
+        projectStatusOverview.put("Completed",      projStatus.path("completed").asLong());
 
         // milestoneProgress map
-        Map<String, Object> milestoneProgress = new HashMap<>();
-        milestoneProgress.put("total",     msProgress.path("total").asLong());
-        milestoneProgress.put("completed", msProgress.path("completed").asLong());
-        milestoneProgress.put("progress",  msProgress.path("progress").asLong());
-        milestoneProgress.put("overdue",   msProgress.path("overdue").asLong());
-        milestoneProgress.put("percentage",      msProgress.path("percentage").asDouble());
-        milestoneProgress.put("progressPercent", msProgress.path("progressPercent").asDouble());
+        Map<String, Object> milestoneProgressSummary = new HashMap<>();
+        milestoneProgressSummary.put("Total",     msProgress.path("total").asLong());
+        milestoneProgressSummary.put("Completed", msProgress.path("completed").asLong());
+        milestoneProgressSummary.put("Progress",  msProgress.path("progress").asLong());
+        milestoneProgressSummary.put("Overdue",   msProgress.path("overdue").asLong());
 
         // taskOverview map
         Map<String, Object> taskOverview = new HashMap<>();
-        taskOverview.put("total",     taskOv.path("total").asLong());
-        taskOverview.put("completed", taskOv.path("completed").asLong());
-        taskOverview.put("progress",  taskOv.path("progress").asLong());
-        taskOverview.put("todo",      taskOv.path("todo").asLong());
-        taskOverview.put("overdue",   taskOv.path("overdue").asLong());
+        taskOverview.put("Total",     taskOv.path("total").asLong());
+        taskOverview.put("Completed", taskOv.path("completed").asLong());
+        taskOverview.put("Progress",  taskOv.path("progress").asLong());
+        taskOverview.put("Todo",      taskOv.path("todo").asLong());
+        taskOverview.put("Overdue",   taskOv.path("overdue").asLong());
 
-        // topProjects list
-        List<AdminDashboardResponse.ProjectProgressDto> topProjects = new ArrayList<>();
-        for (JsonNode p : root.path("topProjects")) {
-            topProjects.add(AdminDashboardResponse.ProjectProgressDto.builder()
-                    .projectId(p.path("projectId").asLong())
-                    .projectName(p.path("projectName").asText())
-                    .projectCode(p.path("projectCode").asText())
-                    .progressPercent(p.path("progressPercent").asDouble())
-                    .build());
+        // systemActivities list
+        List<AdminDashboardResponse.ActivityDto> systemActivities = new ArrayList<>();
+        for (JsonNode a : root.path("systemActivities")) {
+            systemActivities.add(new AdminDashboardResponse.ActivityDto(
+                    a.path("description").asText(),
+                    a.path("actor").asText(),
+                    a.path("timestamp").asText()
+            ));
         }
 
         // upcomingDeadlines list
         List<AdminDashboardResponse.DeadlineDto> upcomingDeadlines = new ArrayList<>();
         for (JsonNode d : root.path("upcomingDeadlines")) {
-            String dueDateStr = d.path("dueDate").asText(null);
-            LocalDate dueDate = (dueDateStr != null && !dueDateStr.isBlank())
-                    ? LocalDate.parse(dueDateStr) : null;
-            upcomingDeadlines.add(AdminDashboardResponse.DeadlineDto.builder()
-                    .title(d.path("title").asText())
-                    .projectName(d.path("projectName").asText())
-                    .dueDate(dueDate)
-                    .timeLeft(d.path("timeLeft").asText())
-                    .isCritical(d.path("isCritical").asBoolean())
-                    .build());
+            upcomingDeadlines.add(new AdminDashboardResponse.DeadlineDto(
+                    d.path("title").asText(),
+                    d.path("projectName").asText(),
+                    LocalDate.parse(d.path("dueDate").asText()),
+                    d.path("timeLeft").asText(),
+                    d.path("isCritical").asBoolean()
+            ));
         }
 
-        // systemActivities list
-        List<AdminDashboardResponse.ActivityDto> systemActivities = new ArrayList<>();
-        for (JsonNode a : root.path("systemActivities")) {
-            systemActivities.add(AdminDashboardResponse.ActivityDto.builder()
-                    .description(a.path("description").asText())
-                    .actor(a.path("actor").asText())
-                    .timestamp(a.path("timestamp").asText())
-                    .build());
+        // topProjects list
+        List<AdminDashboardResponse.ProjectProgressDto> topProjects = new ArrayList<>();
+        for (JsonNode p : root.path("topProjects")) {
+            topProjects.add(new AdminDashboardResponse.ProjectProgressDto(
+                    p.path("projectId").asLong(),
+                    p.path("projectName").asText(),
+                    p.path("projectCode").asText(),
+                    p.path("progressPercent").asDouble()
+            ));
         }
 
-        return AdminDashboardResponse.builder()
-                .employeeCount(root.path("employeeCount").asLong())
-                .departmentCount(root.path("departmentCount").asLong())
-                .companyCount(root.path("companyCount").asLong())
-                .plantCount(root.path("plantCount").asLong())
-                .activeProjectsCount(root.path("activeProjectsCount").asLong())
-                .criticalAlertsCount(root.path("criticalAlertsCount").asLong())
-                .projectStatusOverview(projectStatusOverview)
-                .milestoneProgress(milestoneProgress)
-                .taskOverview(taskOverview)
-                .topProjects(topProjects)
-                .upcomingDeadlines(upcomingDeadlines)
-                .systemActivities(systemActivities)
-                .build();
+        return new AdminDashboardResponse(
+                root.path("employeeCount").asLong(),
+                root.path("departmentCount").asLong(),
+                root.path("companyCount").asLong(),
+                root.path("plantCount").asLong(),
+                root.path("activeProjectsCount").asLong(),
+                root.path("criticalAlertsCount").asLong(),
+                projectStatusOverview,
+                milestoneProgressSummary,
+                taskOverview,
+                systemActivities,
+                upcomingDeadlines,
+                topProjects
+        );
     }
 }
