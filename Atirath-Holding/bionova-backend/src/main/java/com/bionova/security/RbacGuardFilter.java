@@ -109,6 +109,10 @@ public class RbacGuardFilter extends OncePerRequestFilter {
         mapPath("visitor",              "VISITOR_MANAGEMENT");
         mapPath("visitors",             "VISITOR_MANAGEMENT");
         mapPath("executive",            "EXECUTIVE_MODULE");
+        mapPath("procurement",          "PROCUREMENT_MANAGEMENT");
+        mapPath("asset-maintenance",    "ASSET_MAINTENANCE");
+        mapPath("dispatch-logistics",   "FLEET_DISPATCH");
+        mapPath("logistics",            "FLEET_DISPATCH");
     }
 
     /**

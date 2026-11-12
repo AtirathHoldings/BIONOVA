@@ -159,30 +159,60 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
         const start = parseLocalDate(item.startDate);
         if (start && (!minDate || start < minDate)) minDate = start;
       }
+      if (item.plannedStartDate) {
+        const pStart = parseLocalDate(item.plannedStartDate);
+        if (pStart && (!minDate || pStart < minDate)) minDate = pStart;
+      }
       if (item.endDate) {
         const end = parseLocalDate(item.endDate);
         if (end && (!maxDate || end > maxDate)) maxDate = end;
+      }
+      if (item.plannedEndDate) {
+        const pEnd = parseLocalDate(item.plannedEndDate);
+        if (pEnd && (!maxDate || pEnd > maxDate)) maxDate = pEnd;
       }
     });
 
     if (!minDate) minDate = new Date();
     if (!maxDate) maxDate = new Date(minDate.getTime() + 180 * 24 * 60 * 60 * 1000);
 
-    const tStart = new Date(minDate.getFullYear(), minDate.getMonth(), 1, 12, 0, 0);
-
-    let monthCount = (maxDate.getFullYear() - tStart.getFullYear()) * 12 + (maxDate.getMonth() - tStart.getMonth()) + 2;
-    if (monthCount < 6) monthCount = 6;
-    if (monthCount > 36) monthCount = 36;
+    // Exact start date where the task / milestone starts (no starting gap)
+    const tStart = new Date(minDate.getFullYear(), minDate.getMonth(), minDate.getDate(), 12, 0, 0);
 
     const list = [];
-    let current = new Date(tStart);
+    let currentYear = tStart.getFullYear();
+    let currentMonth = tStart.getMonth();
+    const startDay = tStart.getDate();
+
+    const endTargetYear = maxDate.getFullYear();
+    const endTargetMonth = maxDate.getMonth();
+    let monthCount = (endTargetYear - currentYear) * 12 + (endTargetMonth - currentMonth) + 2;
+    if (monthCount < 3) monthCount = 3;
+    if (monthCount > 36) monthCount = 36;
+
     for (let i = 0; i < monthCount; i++) {
-      const year = current.getFullYear();
-      const month = current.getMonth();
-      const label = current.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
-      const days = new Date(year, month + 1, 0).getDate();
-      list.push({ label, days, year, month });
-      current.setMonth(current.getMonth() + 1);
+      const year = currentYear;
+      const month = currentMonth;
+      const totalDaysInMonth = new Date(year, month + 1, 0).getDate();
+      const currentStartDay = i === 0 ? startDay : 1;
+      const daysCount = totalDaysInMonth - currentStartDay + 1;
+      const currentD = new Date(year, month, currentStartDay, 12, 0, 0);
+      const label = currentD.toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
+
+      list.push({
+        label,
+        days: daysCount,
+        startDay: currentStartDay,
+        totalDays: totalDaysInMonth,
+        year,
+        month
+      });
+
+      currentMonth++;
+      if (currentMonth > 11) {
+        currentMonth = 0;
+        currentYear++;
+      }
     }
 
     return { timelineStart: tStart, monthsList: list };
@@ -567,7 +597,14 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
 
   const totalDays = months.reduce((s, m) => s + m.days, 0);
   const timelineW = totalDays * DW;
-  const todayOffFixed = getDayOffset(new Date(), timelineStart) * DW;
+  const isTodayInTimeline = (() => {
+    const today = new Date();
+    const tS = new Date(timelineStart.getFullYear(), timelineStart.getMonth(), timelineStart.getDate(), 0, 0, 0);
+    const totalD = months.reduce((s, m) => s + m.days, 0);
+    const tE = new Date(tS.getTime() + totalD * 24 * 60 * 60 * 1000);
+    return today >= tS && today <= tE;
+  })();
+  const todayOffFixed = isTodayInTimeline ? getDayOffset(new Date(), timelineStart) * DW : -9999;
   const currentMarkerOff = markerOff !== null ? markerOff : todayOffFixed;
 
   /* ── format marker date string ── */
@@ -911,8 +948,9 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
               {months.map((m, mi) => {
                 const prevDays = months.slice(0, mi).reduce((s, mm) => s + mm.days, 0);
                 const numDays = m.days;
+                const startDay = m.startDay || 1;
                 return Array.from({ length: numDays }, (_, di) => {
-                  const dayNum = di + 1;
+                  const dayNum = startDay + di;
                   const leftPx = (prevDays + di) * DW;
                   const isMajor = dayNum === 1 || dayNum % 5 === 0;
                   const isToday =
@@ -993,11 +1031,13 @@ export default function ProjectGanttChart({ project, userRole, compact = false }
             </svg>
 
             {/* Marker / Today line */}
-            <div className="gc-today-line" style={{ left: currentMarkerOff, height: rows.length * ROW_H, pointerEvents: 'none', zIndex: 5 }}>
-              <span className="gc-today-tag" style={{ background: markerOff !== null ? '#f59e0b' : '#3b82f6', transition: 'background 0.2s' }}>
-                {markerOff !== null ? getMarkerDateStr(markerOff) : 'Today'}
-              </span>
-            </div>
+            {(markerOff !== null || isTodayInTimeline) && (
+              <div className="gc-today-line" style={{ left: currentMarkerOff, height: rows.length * ROW_H, pointerEvents: 'none', zIndex: 5 }}>
+                <span className="gc-today-tag" style={{ background: markerOff !== null ? '#f59e0b' : '#3b82f6', transition: 'background 0.2s' }}>
+                  {markerOff !== null ? getMarkerDateStr(markerOff) : 'Today'}
+                </span>
+              </div>
+            )}
 
             {/* Row separators */}
             {rows.map((_, i) => (

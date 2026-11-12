@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Menu, Search, Bell, User, ExternalLink, X, FolderOpen, CheckSquare, Flag, Trash2, CheckCheck } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
+import { connectWebSocket } from "../utils/websocket";
 
 const STATUS_COLORS = {
   'Closed':      { bar: '#10b981', bg: '#d1fae5' },
@@ -117,6 +118,7 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
 
     // Fetch notifications from backend
     fetchNotifications();
+    try { connectWebSocket({ onNotification: () => fetchNotifications(), onDashboardRefresh: () => fetchNotifications() }); } catch (err) { console.warn("WS init error", err); }
 
     // Fetch latest profile info from API to get designation and photo if not fully cached
     const fetchProfile = async () => {

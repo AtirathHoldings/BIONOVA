@@ -1,0 +1,587 @@
+/* ==========================================================================
+   BioNova Executive C-Suite Module Styling
+   ========================================================================== */
+
+.exec-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #0f172a;
+  overflow-x: hidden;
+}
+
+.exec-main {
+  flex: 1;
+  margin-left: 260px;
+  width: calc(100% - 260px);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: #f8fafc;
+}
+
+body.sidebar-collapsed .exec-main {
+  margin-left: 76px !important;
+  width: calc(100% - 76px) !important;
+}
+
+@media (max-width: 1024px) {
+  .exec-main {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+.exec-content {
+  padding: 24px 32px;
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* Header & Controls */
+.exec-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.exec-title-area h1 {
+  font-size: 26px;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: -0.5px;
+}
+
+.exec-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+.exec-controls {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.exec-select {
+  padding: 8px 30px 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #1e293b;
+  background: #ffffff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2364748b' viewBox='0 0 16 16'%3E%3Cpath d='M7.247 11.14 2.451 5.658C1.885 5.013 2.345 4 3.204 4h9.592a1 1 0 0 1 .753 1.659l-4.796 5.48a1 1 0 0 1-1.506 0z'/%3E%3C/svg%3E") no-repeat right 10px center;
+  appearance: none;
+  cursor: pointer;
+  outline: none;
+}
+
+.exec-btn-print {
+  background: linear-gradient(135deg, #1677ff 0%, #2563eb 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(22, 119, 255, 0.25);
+  transition: all 0.2s ease;
+}
+
+.exec-btn-print:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+/* Strategic Top Highlights Bar */
+.exec-hero-banner {
+  background: linear-gradient(135deg, #02153f 0%, #002b80 60%, #1e40af 100%);
+  color: #ffffff;
+  border-radius: 14px;
+  padding: 24px 28px;
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 20px;
+  box-shadow: 0 8px 24px rgba(2, 21, 63, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.exec-hero-left h2 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 6px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.exec-hero-left p {
+  font-size: 14px;
+  opacity: 0.9;
+  margin: 0;
+  max-width: 600px;
+}
+
+.exec-hero-stats {
+  display: flex;
+  gap: 28px;
+  flex-wrap: wrap;
+}
+
+.exec-stat-item {
+  text-align: right;
+  border-left: 1px solid rgba(255, 255, 255, 0.2);
+  padding-left: 20px;
+}
+
+.exec-stat-num {
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.exec-stat-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  opacity: 0.85;
+}
+
+/* 4 Core Pillars Grid (Financials, Velocity, Land, Depts) */
+.exec-sections-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.exec-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.exec-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.exec-card-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.exec-card-title h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.exec-tag {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  letter-spacing: 0.5px;
+}
+
+.exec-tag-green {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.exec-tag-blue {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.exec-tag-amber {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.exec-tag-purple {
+  background: #f3e8ff;
+  color: #7e22ce;
+}
+
+/* Financials Sub-Grid */
+.exec-fin-metrics {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.exec-fin-tile {
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 14px;
+  border: 1px solid #e2e8f0;
+}
+
+.exec-fin-tile-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.exec-fin-tile-val {
+  font-size: 20px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.exec-fin-tile-sub {
+  font-size: 11px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Progress Bars & Velocity */
+.exec-bar-group {
+  margin-bottom: 14px;
+}
+
+.exec-bar-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.exec-bar-track {
+  height: 8px;
+  background-color: #f1f5f9;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.exec-bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.4s ease;
+}
+
+/* Velocity KPI Strip */
+.exec-velocity-kpis {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin-top: 16px;
+  text-align: center;
+}
+
+.exec-velocity-box {
+  background: #f8fafc;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+}
+
+.exec-velocity-num {
+  font-size: 18px;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.exec-velocity-lbl {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+/* Land Utilization Table & Grid */
+.exec-land-breakdown {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.exec-land-tile {
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 14px;
+  border-left: 4px solid #10b981;
+}
+
+/* Department Summaries Table */
+.exec-dept-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.exec-dept-table th {
+  background: #f8fafc;
+  padding: 10px 12px;
+  text-align: left;
+  font-weight: 600;
+  color: #475569;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.exec-dept-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+}
+
+/* Strategic Risk & Next Steps */
+.exec-risks-card {
+  grid-column: span 2;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 24px;
+}
+
+.exec-risks-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.exec-risk-tile {
+  border-radius: 10px;
+  padding: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+}
+
+.exec-risk-tile.high {
+  border-left: 4px solid #ef4444;
+}
+
+.exec-risk-tile.medium {
+  border-left: 4px solid #f59e0b;
+}
+
+.exec-risk-tile.low {
+  border-left: 4px solid #10b981;
+}
+
+.exec-risk-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: #0f172a;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.exec-risk-desc {
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .exec-sections-grid {
+    grid-template-columns: 1fr;
+  }
+  .exec-risks-card {
+    grid-column: span 1;
+  }
+  .exec-risks-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ==========================================================================
+   Executive Modals & Forms System
+   ========================================================================== */
+
+.exec-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(15, 23, 42, 0.65);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 20px;
+}
+
+.exec-modal,
+.exec-modal-content,
+.exec-modal-card {
+  background: #ffffff !important;
+  border-radius: 14px;
+  width: 95% !important;
+  max-width: 1150px !important;
+  max-height: 92vh !important;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border: 1px solid #e2e8f0;
+  animation: execModalScale 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+  z-index: 10000;
+}
+
+.exec-modal form,
+.exec-modal-content form,
+.exec-modal-card form {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  margin: 0;
+}
+
+@keyframes execModalScale {
+  from {
+    transform: scale(0.96);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.exec-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: #ffffff;
+  border-top-left-radius: 14px;
+  border-top-right-radius: 14px;
+  flex-shrink: 0;
+}
+
+.exec-modal-header h2,
+.exec-modal-header h3 {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.exec-modal-close {
+  background: transparent;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+}
+
+.exec-modal-close:hover {
+  background-color: #f1f5f9;
+  color: #0f172a;
+}
+
+.exec-modal-body {
+  padding: 24px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  background-color: #ffffff;
+}
+
+.exec-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  background-color: #f8fafc;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  border-bottom-left-radius: 14px;
+  border-bottom-right-radius: 14px;
+  flex-shrink: 0;
+}
+
+.exec-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.exec-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.exec-form-group.full-width {
+  grid-column: span 2;
+}
+
+.exec-form-group label {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 2px;
+}
+
+/* Form inputs & controls in Executive module */
+.exec-container input:not([type="checkbox"]):not([type="radio"]),
+.exec-container select,
+.exec-container textarea,
+.exec-input,
+.exec-select-input {
+  box-sizing: border-box !important;
+  font-family: inherit;
+  transition: all 0.2s ease;
+}
+
+.exec-container input:not([type="checkbox"]):not([type="radio"]):focus,
+.exec-container select:focus,
+.exec-container textarea:focus,
+.exec-input:focus,
+.exec-select-input:focus {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15) !important;
+  outline: none !important;
+}

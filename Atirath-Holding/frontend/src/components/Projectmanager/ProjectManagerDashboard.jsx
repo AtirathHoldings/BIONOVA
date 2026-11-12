@@ -219,43 +219,64 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     };
 
     loadAllDashboardData();
+    const handleRefresh = () => loadAllDashboardData();
+    window.addEventListener('bionova:refresh', handleRefresh);
+    return () => window.removeEventListener('bionova:refresh', handleRefresh);
   }, []);
 
+  const getProjectOptionKey = (p) => {
+    if (!p) return "";
+    const code = p.prjCd || p.prjcd || p.projectCd || p.code || "";
+    const name = p.prjNm || p.prjnm || p.projectNm || p.name || "";
+    if (code && name) return `${code} - ${name}`;
+    return name || code || "";
+  };
+
   const getUniqueProjectOptions = (projects) => {
-    const uniqueProjects = new Map();
-    projects.forEach(p => {
-      const code = p.prjCd || p.prjcd;
-      const name = p.prjNm || p.prjnm;
-      if (code && name) {
-        const key = `${code} - ${name}`;
-        if (!uniqueProjects.has(key)) {
-          uniqueProjects.set(key, { code, name, projectId: p.prjId || p.prjid || p.id });
-        }
+    const uniqueProjects = new Set();
+    (projects || []).forEach(p => {
+      const key = getProjectOptionKey(p);
+      if (key) {
+        uniqueProjects.add(key);
       }
     });
-    return Array.from(uniqueProjects.keys()).sort();
+    return Array.from(uniqueProjects).sort();
+  };
+
+  const findProjectByDisplay = (displayValue) => {
+    if (!displayValue || displayValue === "All Projects") return null;
+    return projectsList.find(p => getProjectOptionKey(p) === displayValue);
   };
 
   const getProjectDetailsFromDisplay = (displayValue) => {
     if (displayValue === "All Projects") return null;
-    const parts = displayValue.split(" - ");
-    if (parts.length === 2) {
-      return { code: parts[0], name: parts[1] };
+    const project = findProjectByDisplay(displayValue);
+    if (project) {
+      return {
+        code: project.prjCd || project.prjcd || project.projectCd || project.code || "",
+        name: project.prjNm || project.prjnm || project.projectNm || project.name || ""
+      };
+    }
+    const parts = String(displayValue).split(" - ");
+    if (parts.length >= 2) {
+      return { code: parts[0], name: parts.slice(1).join(" - ") };
     }
     return null;
   };
 
   const getProjectIdFromDisplay = (displayValue) => {
     if (displayValue === "All Projects") return null;
-    const parts = displayValue.split(" - ");
-    if (parts.length === 2) {
-      const code = parts[0];
-      const name = parts[1];
-      const project = projectsList.find(p =>
-        (p.prjCd || p.prjcd || "").toLowerCase() === code.toLowerCase() &&
-        (p.prjNm || p.prjnm || "").toLowerCase() === name.toLowerCase()
+    const project = findProjectByDisplay(displayValue);
+    if (project) {
+      return project.prjId || project.prjid || project.id || project.projectId;
+    }
+    const details = getProjectDetailsFromDisplay(displayValue);
+    if (details) {
+      const p = projectsList.find(proj =>
+        (proj.prjCd || proj.prjcd || "").toLowerCase() === details.code.toLowerCase() &&
+        (proj.prjNm || proj.prjnm || "").toLowerCase() === details.name.toLowerCase()
       );
-      return project ? (project.prjId || project.prjid || project.id) : null;
+      return p ? (p.prjId || p.prjid || p.id || p.projectId) : null;
     }
     return null;
   };
@@ -370,34 +391,44 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
   const calculateProjectStats = (project) => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
-    const pId = String(project.prjId || project.prjid || project.id || project.projectId);
+    const pId = String(project.prjId || project.prjid || project.id || project.projectId || "").trim();
+    const pCd = String(project.prjCd || project.prjcd || project.projectCd || project.code || "").trim().toLowerCase();
 
-    const projectMilestones = milestonesList.filter(m => String(m.prjId || m.prjid || m.projectId || m.prj_id) === pId);
-    const milestoneIds = projectMilestones.map(m => String(m.mId || m.mid || m.id));
+    const projectMilestones = milestonesList.filter(m => {
+      const mPrjId = String(m.prjId || m.prjid || m.projectId || m.prj_id || m.drftPrjId || "").trim();
+      const mPrjCd = String(m.prjCd || m.prjcd || m.projectCd || "").trim().toLowerCase();
+      return (pId && mPrjId === pId) || (pCd && mPrjCd === pCd);
+    });
+    const milestoneIds = projectMilestones.map(m => String(m.mId || m.mid || m.id || m.mlstnId || "").trim()).filter(Boolean);
 
     const projectTasks = tasksList.filter(t => {
-      const tPrjId = String(t.prjId || t.prjid || t.projectId || t.prj_id || "");
-      if (tPrjId && tPrjId === pId) return true;
-      const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || "");
-      return milestoneIds.includes(tMId);
+      const tPrjId = String(t.prjId || t.prjid || t.projectId || t.prj_id || "").trim();
+      const tPrjCd = String(t.prjCd || t.prjcd || t.projectCd || "").trim().toLowerCase();
+      if ((pId && tPrjId === pId) || (pCd && tPrjCd === pCd)) return true;
+      const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || t.mlstnId || "").trim();
+      return tMId && milestoneIds.includes(tMId);
     });
 
     const totalTasks = projectTasks.length;
     const completedTasks = projectTasks.filter(t => getTaskStatusStr(t) === "CLOSED").length;
     const inProgressTasks = projectTasks.filter(t => getTaskStatusStr(t) === "WIP").length;
+    const underReviewTasks = projectTasks.filter(t => {
+      const s = getTaskStatusStr(t);
+      return s === "UNDER_REVIEW" || s === "SUBMIT_REVIEW";
+    }).length;
     const overdueTasks = projectTasks.filter(t => {
       if (getTaskStatusStr(t) === "CLOSED") return false;
       const end = t.endDt || t.enddt || t.endDate ? new Date(t.endDt || t.enddt || t.endDate) : null;
       return end && end < now;
     }).length;
-    const notStartedTasks = Math.max(0, totalTasks - completedTasks - inProgressTasks - overdueTasks);
+    const notStartedTasks = Math.max(0, totalTasks - completedTasks - inProgressTasks - underReviewTasks - overdueTasks);
 
     const isMilestoneDone = (m) => {
       if (getMilestoneStatusStr(m) === "CLOSED") return true;
-      const mId = String(m.mId || m.mid || m.id);
+      const mId = String(m.mId || m.mid || m.id || m.mlstnId || "").trim();
       const mTasks = projectTasks.filter(t => {
-        const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || "");
-        return tMId === mId;
+        const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || t.mlstnId || "").trim();
+        return tMId && tMId === mId;
       });
       return mTasks.length > 0 && mTasks.every(t => getTaskStatusStr(t) === "CLOSED");
     };
@@ -405,10 +436,10 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     const isMilestoneActive = (m) => {
       if (isMilestoneDone(m)) return false;
       if (getMilestoneStatusStr(m) === "WIP") return true;
-      const mId = String(m.mId || m.mid || m.id);
+      const mId = String(m.mId || m.mid || m.id || m.mlstnId || "").trim();
       const mTasks = projectTasks.filter(t => {
-        const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || "");
-        return tMId === mId;
+        const tMId = String(t.mId || t.mid || t.milestoneId || t.drftMId || t.drft_m_id || t.mlstnId || "").trim();
+        return tMId && tMId === mId;
       });
       const hasClosedOrWip = mTasks.some(t => getTaskStatusStr(t) === "CLOSED" || getTaskStatusStr(t) === "WIP");
       const start = m.stDt || m.stdt || m.startDate ? new Date(m.stDt || m.stdt || m.startDate) : null;
@@ -433,21 +464,24 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       overallProgress = (completedTasks / totalTasks) * 100;
     } else if (totalMilestones > 0) {
       overallProgress = (completedMilestones / totalMilestones) * 100;
+    } else if (project.progress != null) {
+      overallProgress = Number(project.progress) || 0;
     }
 
-    const next60Days = new Date();
-    next60Days.setDate(now.getDate() + 60);
+    const next30Days = new Date();
+    next30Days.setDate(now.getDate() + 30);
     const upcomingMilestones = projectMilestones.filter(m => {
       if (getMilestoneStatusStr(m) === "CLOSED") return false;
       const start = m.stDt || m.stdt || m.startDate ? new Date(m.stDt || m.stdt || m.startDate) : null;
       const end = m.endDt || m.enddt || m.endDate ? new Date(m.endDt || m.enddt || m.endDate) : null;
       const targetDate = start || end;
-      return targetDate && targetDate >= now && targetDate <= next60Days;
+      return targetDate && targetDate >= now && targetDate <= next30Days;
     });
 
     const taskStatusItems = [
       { label: "Closed", count: completedTasks, pct: totalTasks > 0 ? ((completedTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#10b981" },
       { label: "In Progress", count: inProgressTasks, pct: totalTasks > 0 ? ((inProgressTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#3b82f6" },
+      { label: "Under Review", count: underReviewTasks, pct: totalTasks > 0 ? ((underReviewTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#8b5cf6" },
       { label: "Not Started", count: notStartedTasks, pct: totalTasks > 0 ? ((notStartedTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#f59e0b" },
       { label: "Overdue", count: overdueTasks, pct: totalTasks > 0 ? ((overdueTasks / totalTasks) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
     ];
@@ -466,6 +500,8 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       { label: "Delayed", count: overdueMilestones, pct: totalMilestones > 0 ? ((overdueMilestones / totalMilestones) * 100).toFixed(1) + "%" : "0.0%", color: "#ef4444" },
     ];
 
+    const prjDisplay = project.prjCd || project.prjcd || project.projectCd || "N/A";
+
     const delayedMilestonesList = projectMilestones.filter(m => {
       if (isMilestoneDone(m)) return false;
       const end = m.endDt || m.enddt || m.endDate ? new Date(m.endDt || m.enddt || m.endDate) : null;
@@ -475,16 +511,16 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       const delayDays = Math.ceil((now - new Date(mEnd)) / (1000 * 60 * 60 * 24));
       return {
         name: m.mlstnTtl || m.mlstnttl || m.title || "Milestone",
-        project: project.prjCd || project.prjcd || "N/A",
+        project: prjDisplay,
         delay: delayDays > 0 ? delayDays : 0
       };
     }).sort((a, b) => b.delay - a.delay).slice(0, 5);
 
     const upcomingMilestonesList = upcomingMilestones.map(m => ({
       name: m.mlstnTtl || m.mlstnttl || m.title || "Milestone",
-      project: project.prjCd || project.prjcd || "N/A",
-      date: formatDateStr(m.stDt || m.stdt || m.endDt || m.enddt),
-      status: m.mlstnSts || m.mlstnsts || "Pending"
+      project: prjDisplay,
+      date: formatDateStr(m.stDt || m.stdt || m.startDate || m.endDt || m.enddt || m.endDate),
+      status: m.mlstnSts || m.mlstnsts || m.status || "Pending"
     })).slice(0, 5);
 
     const highPriorityTasksList = projectTasks.filter(t => getTaskStatusStr(t) !== "CLOSED").map(t => {
@@ -492,33 +528,45 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       const emp = employeesList.find(e => String(e.empId || e.empid || e.emp_id) === String(empId));
       return {
         task: t.taskNm || t.tasknm || t.name,
-        project: project.prjCd || project.prjcd || "N/A",
+        project: prjDisplay,
         assignee: resolveExecutorName(t, emp, tasksList, employeesList),
         due: formatDateStr(t.endDt || t.enddt || t.endDate),
-        urgent: getTaskStatusStr(t) === "WIP" || ((t.endDt || t.enddt) && new Date(t.endDt || t.enddt) < now)
+        urgent: getTaskStatusStr(t) === "WIP" || ((t.endDt || t.enddt || t.endDate) && new Date(t.endDt || t.enddt || t.endDate) < now)
       };
     }).slice(0, 5);
+
+    const sts = String(project.prjSts || project.prjsts || project.status || "").toUpperCase();
+    const isOngoing = sts === "LIVE" || sts === "ONGOING" || sts === "IN_PROGRESS" || sts === "WIP" || (overallProgress > 0 && overallProgress < 100);
+    const endProject = project.endDt || project.enddt || project.endDate ? new Date(project.endDt || project.enddt || project.endDate) : null;
+    const isDelayed = (endProject && endProject < now && overallProgress < 100) || overdueMilestones > 0;
 
     return {
       stats: [
         {
-          label: "Total Milestones",
-          value: totalMilestones,
-          sub: `${completedMilestones} Closed`,
-          icon: Flag,
-          color: "pm-purple"
+          label: "Total Projects",
+          value: 1,
+          sub: isOngoing ? "Ongoing" : (sts || "All Status"),
+          icon: FolderOpen,
+          color: "pm-blue"
         },
         {
-          label: "Milestone Progress",
-          value: totalMilestones > 0 ? `${((completedMilestones / totalMilestones) * 100).toFixed(1)}%` : "0.0%",
-          sub: "Overall Progress",
-          icon: BarChart2,
+          label: "Ongoing Projects",
+          value: isOngoing ? 1 : 0,
+          sub: isOngoing ? "100.00%" : "0.00%",
+          icon: Play,
           color: "pm-green"
         },
         {
-          label: "Delayed Milestones",
-          value: overdueMilestones,
-          sub: totalMilestones > 0 ? `${((overdueMilestones / totalMilestones) * 100).toFixed(1)}% of Milestones` : "0.0%",
+          label: "Overall Progress",
+          value: overallProgress.toFixed(2) + "%",
+          sub: "Project Progress",
+          icon: BarChart2,
+          color: "pm-purple"
+        },
+        {
+          label: "Delayed Projects",
+          value: isDelayed ? 1 : 0,
+          sub: isDelayed ? "100.00%" : "0.00%",
           icon: Clock,
           color: "pm-orange"
         },
@@ -530,16 +578,9 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
           color: "pm-teal"
         },
         {
-          label: "Total Tasks",
-          value: totalTasks,
-          sub: `${completedTasks} Closed`,
-          icon: CheckSquare,
-          color: "pm-blue"
-        },
-        {
-          label: "Delayed Tasks",
+          label: "Overdue Tasks",
           value: overdueTasks,
-          sub: totalTasks > 0 ? `${((overdueTasks / totalTasks) * 100).toFixed(1)}% of Tasks` : "0.0%",
+          sub: totalTasks > 0 ? `${((overdueTasks / totalTasks) * 100).toFixed(1)}%` : "0.0%",
           icon: AlertTriangle,
           color: "pm-red"
         },
@@ -578,14 +619,19 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
     if (!projectDisplayValue || projectDisplayValue === "All Projects") {
       forecastProjects = projectsList;
     } else {
-      const projectDetails = getProjectDetailsFromDisplay(projectDisplayValue);
-      if (projectDetails) {
-        forecastProjects = projectsList.filter(p =>
-          (p.prjCd || p.prjcd || "").toLowerCase() === projectDetails.code.toLowerCase() &&
-          (p.prjNm || p.prjnm || "").toLowerCase() === projectDetails.name.toLowerCase()
-        );
+      const selectedProject = findProjectByDisplay(projectDisplayValue);
+      if (selectedProject) {
+        forecastProjects = [selectedProject];
       } else {
-        forecastProjects = [];
+        const projectDetails = getProjectDetailsFromDisplay(projectDisplayValue);
+        if (projectDetails) {
+          forecastProjects = projectsList.filter(p =>
+            (p.prjCd || p.prjcd || "").toLowerCase() === projectDetails.code.toLowerCase() &&
+            (p.prjNm || p.prjnm || "").toLowerCase() === projectDetails.name.toLowerCase()
+          );
+        } else {
+          forecastProjects = [];
+        }
       }
     }
 
@@ -838,28 +884,25 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
   const getActiveMetrics = () => {
     const isFiltered = currentProject !== "All Projects";
 
-    const uniqueProjectOptions = getUniqueProjectOptions(projectsList);
+    // ===== IF A SPECIFIC PROJECT IS SELECTED =====
+    if (isFiltered) {
+      const selectedProject = findProjectByDisplay(currentProject) || projectsList.find(p => {
+        const details = getProjectDetailsFromDisplay(currentProject);
+        if (!details) return false;
+        return (p.prjCd || p.prjcd || "").toLowerCase() === details.code.toLowerCase() &&
+          (p.prjNm || p.prjnm || "").toLowerCase() === details.name.toLowerCase();
+      });
 
-    // ===== CHECK IF A SPECIFIC PROJECT IS SELECTED =====
-    if (currentProject !== "All Projects" && !isFiltered) {
-      const projectDetails = getProjectDetailsFromDisplay(currentProject);
-      if (projectDetails) {
-        const selectedProject = projectsList.find(p =>
-          (p.prjCd || p.prjcd || "").toLowerCase() === projectDetails.code.toLowerCase() &&
-          (p.prjNm || p.prjnm || "").toLowerCase() === projectDetails.name.toLowerCase()
-        );
-        if (selectedProject) {
-          const projectStats = calculateProjectStats(selectedProject);
+      if (selectedProject) {
+        const projectStats = calculateProjectStats(selectedProject);
+        const minDate = selectedProject.stDt || selectedProject.stdt || selectedProject.startDate;
+        const maxDate = selectedProject.endDt || selectedProject.enddt || selectedProject.endDate;
+        const dateRangeStr = minDate && maxDate ? `${formatDateStr(minDate)} ~ ${formatDateStr(maxDate)}` : "All Dates";
 
-          const minDate = selectedProject.stDt || selectedProject.stdt;
-          const maxDate = selectedProject.endDt || selectedProject.enddt;
-          const dateRangeStr = minDate && maxDate ? `${formatDateStr(minDate)} ~ ${formatDateStr(maxDate)}` : "All Dates";
-
-          return {
-            dateRange: dateRangeStr,
-            ...projectStats
-          };
-        }
+        return {
+          dateRange: dateRangeStr,
+          ...projectStats
+        };
       }
     }
 
@@ -874,7 +917,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
         dateRange: dateRangeStr,
         stats: [
           { label: "Total Projects", value: dashboardData.summary?.totalProjects || 0, sub: "All Status", icon: FolderOpen, color: "pm-blue" },
-          { label: "Live Projects", value: dashboardData.summary?.liveProjects || 0, sub: (dashboardData.summary?.liveProjectsPercentage || 0).toFixed(2) + "%", icon: Play, color: "pm-green" },
+          { label: "Ongoing Projects", value: dashboardData.summary?.liveProjects || 0, sub: (dashboardData.summary?.liveProjectsPercentage || 0).toFixed(2) + "%", icon: Play, color: "pm-green" },
           { label: "Overall Progress", value: (dashboardData.summary?.overallProgress || 0).toFixed(2) + "%", sub: "Avg. Project Progress", icon: BarChart2, color: "pm-purple" },
           { label: "Delayed Projects", value: dashboardData.summary?.delayedProjects || 0, sub: (dashboardData.summary?.delayedProjectsPercentage || 0).toFixed(2) + "%", icon: Clock, color: "pm-orange" },
           { label: "Upcoming Milestones", value: dashboardData.summary?.upcomingMilestonesCount || 0, sub: "Next 30 Days", icon: CalendarCheck, color: "pm-teal" },
@@ -927,7 +970,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
           due: t.dueDate,
           urgent: true
         })),
-        forecast: getForecastData(currentProject)
+        forecast: getForecastData("All Projects")
       };
     }
 
@@ -1061,7 +1104,7 @@ const ProjectManagerDashboard = ({ userRole, onLogout }) => {
       dateRange: dateRangeStr,
       stats: [
         { label: "Total Projects", value: filteredProjects.length, sub: "All Status", icon: FolderOpen, color: "pm-blue" },
-        { label: "Live Projects", value: liveProjectsCount, sub: filteredProjects.length > 0 ? ((liveProjectsCount / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%", icon: Play, color: "pm-green" },
+        { label: "Ongoing Projects", value: liveProjectsCount, sub: filteredProjects.length > 0 ? ((liveProjectsCount / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%", icon: Play, color: "pm-green" },
         { label: "Overall Progress", value: avgProgress.toFixed(2) + "%", sub: "Avg. Project Progress", icon: BarChart2, color: "pm-purple" },
         { label: "Delayed Projects", value: delayedProjectsCount, sub: filteredProjects.length > 0 ? ((delayedProjectsCount / filteredProjects.length) * 100).toFixed(1) + "%" : "0.0%", icon: Clock, color: "pm-orange" },
         { label: "Upcoming Milestones", value: upcomingMs.length, sub: "Next 30 Days", icon: CalendarCheck, color: "pm-teal" },

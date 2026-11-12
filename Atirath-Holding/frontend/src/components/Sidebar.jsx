@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { House, Building, Flag, Users, Calendar, Settings, Factory, MapPinned, FolderPlus, ChevronDown, ChevronRight, ChevronLeft, LogOut, ClipboardCheck, User, X, PanelLeftOpen, PanelLeftClose, FileText, Briefcase, Lock } from "lucide-react";
+import { House, Building, Flag, Boxes, ShieldCheck, TrendingUp, Users, Calendar, Settings, Factory, MapPinned, FolderPlus, Folder, ChevronDown, ChevronRight, ChevronLeft, LogOut, ClipboardCheck, User, X, PanelLeftOpen, PanelLeftClose, FileText, Briefcase, Lock, Truck, Wrench, ShoppingCart } from "lucide-react";
 import "../styles/sidebar.css";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -25,6 +25,11 @@ const Sidebar = ({ onLogout }) => {
   const [menuItems, setMenuItems] = useState([]);
   const [singleItems, setSingleItems] = useState([]);
   const [openDropdowns, setOpenDropdowns] = useState({});
+  const [openSubDropdowns, setOpenSubDropdowns] = useState({
+    gateManagement: false,
+    securityManagement: false,
+    visitorTracking: false
+  });
   const [hasNoAccess, setHasNoAccess] = useState(false);
   const [isRouteForbidden, setIsRouteForbidden] = useState(false);
 
@@ -64,12 +69,18 @@ const Sidebar = ({ onLogout }) => {
         'INDIVIDUAL_TASK': { path: '/assignment', icon: FileText, displayName: "Assignment" },
 
         'ASSIGN_ACCESS': { path: '/assign-access', icon: ClipboardCheck },
-        'PROJECT_ACCESS': { path: '/project-access', icon: FolderPlus }
+        'PROJECT_ACCESS': { path: '/project-access', icon: FolderPlus },
+        'INVENTORY_MANAGEMENT': { path: '/inventory', icon: Boxes, displayName: "Inventory" },
+        'VISITOR_MANAGEMENT': { path: '/visitor-management', icon: ShieldCheck, displayName: "Visitor Management" },
+        'EXECUTIVE_MODULE': { path: '/executive', icon: TrendingUp, displayName: "Executive Overview" },
+        'PROCUREMENT_MANAGEMENT': { path: '/procurement', icon: ShoppingCart, displayName: "Procurement & PO" },
+        'ASSET_MAINTENANCE': { path: '/asset-maintenance', icon: Wrench, displayName: "Asset Maintenance (CMMS)" },
+        'FLEET_DISPATCH': { path: '/dispatch-logistics', icon: Truck, displayName: "Fleet & Dispatch Logistics" }
       };
 
       const buildMenuFromScreens = (allowedScreens) => {
         const groups = {};
-        const standalone = [];
+        let standalone = [];
 
         allowedScreens.forEach(screen => {
           const mapped = SCREEN_MAPPING[screen.screenCode];
@@ -84,6 +95,10 @@ const Sidebar = ({ onLogout }) => {
           };
 
           const dropdownGroups = ['Company Master', 'Project', 'User'];
+          if (screen.screenCode === 'INVENTORY_MANAGEMENT' || screen.screenCode === 'EXECUTIVE_MODULE' || screen.screenCode === 'VISITOR_MANAGEMENT' || screen.screenCode === 'PROCUREMENT_MANAGEMENT' || screen.screenCode === 'ASSET_MAINTENANCE' || screen.screenCode === 'FLEET_DISPATCH') {
+            // Inventory, Executive, Visitor Management, and Supply Chain are rendered below as dedicated dropdown groups
+            return;
+          }
           if (dropdownGroups.includes(screen.groupNm)) {
             if (!groups[screen.groupNm]) {
               groups[screen.groupNm] = [];
@@ -94,16 +109,123 @@ const Sidebar = ({ onLogout }) => {
           }
         });
 
+        // Add Inventory dropdown group (just like Company Master) with all six submodules
+        const hasInventoryAccess = isAdmin || allowedScreens.some(s => s.screenCode === 'INVENTORY_MANAGEMENT' && (s.viewFlg !== false));
+        if (hasInventoryAccess || (allowedScreens.length === 0 && !empId)) {
+          groups['Inventory'] = [
+            { name: "Agri & Feedstock Stock", path: "/inventory", code: "INVENTORY_MANAGEMENT" },
+            { name: "Plant Construction BOM", path: "/inventory/civil-bom", code: "INVENTORY_MANAGEMENT" },
+            { name: "Fasteners & Hardware", path: "/inventory/fasteners", code: "INVENTORY_MANAGEMENT" },
+            { name: "Piping & Instrumentation", path: "/inventory/piping", code: "INVENTORY_MANAGEMENT" },
+            { name: "Equipment Warranty", path: "/inventory/warranty", code: "INVENTORY_MANAGEMENT" },
+            { name: "Alerts & Expiry Center", path: "/inventory/alerts", code: "INVENTORY_MANAGEMENT" },
+            { name: "Warehouse & Weighbridge", path: "/inventory/weightbridge", code: "INVENTORY_MANAGEMENT" },
+            { name: "Vendor Management", path: "/inventory/vendors", code: "INVENTORY_MANAGEMENT" }
+          ];
+        }
+
+        // Add Visitor Management dropdown group with all four categories and submodules
+        const hasVisitorAccess = isAdmin || allowedScreens.some(s => s.screenCode === 'VISITOR_MANAGEMENT' && (s.viewFlg !== false));
+        if (hasVisitorAccess || (allowedScreens.length === 0 && !empId)) {
+          groups['Visitor Management'] = [
+            { name: "Visitor Dashboard", path: "/visitor-management/dashboard", code: "VISITOR_MANAGEMENT" },
+            { name: "Visitor Registration", path: "/visitor-management/registration", code: "VISITOR_MANAGEMENT" },
+            { name: "Visitor List", path: "/visitor-management/list", code: "VISITOR_MANAGEMENT" },
+            { name: "Visit Request", path: "/visitor-management/request", code: "VISITOR_MANAGEMENT" },
+            { name: "Appointment Management", path: "/visitor-management/appointments", code: "VISITOR_MANAGEMENT" },
+            { name: "Visitor Approval", path: "/visitor-management/approvals", code: "VISITOR_MANAGEMENT" },
+
+            // Gate Management (Folder Inside Folder)
+            {
+              name: "Gate Management",
+              key: "gateManagement",
+              isSubFolder: true,
+              code: "VISITOR_MANAGEMENT",
+              children: [
+                { name: "Visitor Check-In", path: "/visitor-management/gate-checkin" },
+                { name: "Visitor Check-Out", path: "/visitor-management/gate-checkout" },
+                { name: "Gate Pass Management", path: "/visitor-management/gate-pass" },
+                { name: "QR Code Verification", path: "/visitor-management/qr-verification", badge: "Soon" }
+              ]
+            },
+
+            // Security Management (Folder Inside Folder)
+            {
+              name: "Security Management",
+              key: "securityManagement",
+              isSubFolder: true,
+              code: "VISITOR_MANAGEMENT",
+              children: [
+                { name: "Vehicle Management", path: "/visitor-management/security-vehicles" },
+                { name: "Material Inward", path: "/visitor-management/material-inward" },
+                { name: "Material Outward", path: "/visitor-management/material-outward" },
+                { name: "Safety Clearance", path: "/visitor-management/safety-clearance" },
+                { name: "Visitor Access Management", path: "/visitor-management/access-management" }
+              ]
+            },
+
+            // Visitor Tracking (Folder Inside Folder)
+            {
+              name: "Visitor Tracking",
+              key: "visitorTracking",
+              isSubFolder: true,
+              code: "VISITOR_MANAGEMENT",
+              children: [
+                { name: "Currently Inside Visitors", path: "/visitor-management/live-tracking" },
+                { name: "Visitor History", path: "/visitor-management/history" },
+                { name: "Overdue Visitor Tracking", path: "/visitor-management/overdue-tracking" },
+                { name: "Visitor Configuration", path: "/visitor-management/configuration" }
+              ]
+            }
+          ];
+        }
+
+        // Add Executive Overview dropdown group (just like Company Master and Inventory) with all 8 submodules
+        const hasExecutiveAccess = isAdmin || allowedScreens.some(s => s.screenCode === 'EXECUTIVE_MODULE' && (s.viewFlg !== false));
+        if (hasExecutiveAccess || (allowedScreens.length === 0 && !empId)) {
+          groups['Executive Overview'] = [
+            { name: "Executive Cockpit", path: "/executive", code: "EXECUTIVE_MODULE" },
+            { name: "Expansion Pipeline", path: "/executive/pipeline", code: "EXECUTIVE_MODULE" },
+            { name: "Budget vs Actual Tracker", path: "/executive/budget-variance", code: "EXECUTIVE_MODULE" },
+            { name: "Multi-Stream Revenue", path: "/executive/revenue", code: "EXECUTIVE_MODULE" },
+            { name: "Compliance & ESG Registry", path: "/executive/compliance-esg", code: "EXECUTIVE_MODULE" },
+            { name: "Treasury & Sourcing", path: "/executive/treasury", code: "EXECUTIVE_MODULE" },
+            { name: "Project Financing & Escrow", path: "/executive/escrow", code: "EXECUTIVE_MODULE" },
+            { name: "Executive Alert Center", path: "/executive/alerts", code: "EXECUTIVE_MODULE" },
+            { name: "CapEx & Project Analytics", path: "/executive/capex-analytics", code: "EXECUTIVE_MODULE" }
+          ];
+        }
+
+        // Add Supply Chain, Fleet & Plant Operations dropdown group with 3 core modules (matching Inventory access)
+        const hasSupplyChainAccess = isAdmin || allowedScreens.length === 0 || allowedScreens.some(s =>
+          (s.screenCode === 'PROCUREMENT_MANAGEMENT' || s.screenCode === 'ASSET_MAINTENANCE' || s.screenCode === 'FLEET_DISPATCH' || s.screenCode === 'INVENTORY_MANAGEMENT') && (s.viewFlg !== false)
+        );
+        if (hasSupplyChainAccess || (allowedScreens.length === 0 && !empId)) {
+          groups['Supply Chain & Operations'] = [
+            { name: "Procurement & PO", path: "/procurement", code: "PROCUREMENT_MANAGEMENT" },
+            { name: "Asset Maintenance (CMMS)", path: "/asset-maintenance", code: "ASSET_MAINTENANCE" },
+            { name: "Fleet & Dispatch Logistics", path: "/dispatch-logistics", code: "FLEET_DISPATCH" }
+          ];
+        }
+
         const config = [];
         const groupIcons = {
           'Company Master': Building,
           'Project': FolderPlus,
-          'User': Users
+          'User': Users,
+          'Inventory': Boxes,
+          'Visitor Management': ShieldCheck,
+          'Executive Overview': TrendingUp,
+          'Supply Chain & Operations': Truck
         };
         const groupKeys = {
           'Company Master': 'company',
           'Project': 'project',
-          'User': 'userMaster'
+          'User': 'userMaster',
+          'Inventory': 'inventory',
+          'Visitor Management': 'visitorManagement',
+          'Executive Overview': 'executive',
+          'Supply Chain & Operations': 'supplyChain'
         };
 
         const PROJECT_ORDER = [
@@ -126,15 +248,28 @@ const Sidebar = ({ onLogout }) => {
           });
         }
 
-        Object.keys(groups).forEach(groupNm => {
-          config.push({
-            key: groupKeys[groupNm],
-            name: groupNm,
-            icon: groupIcons[groupNm] || FolderPlus,
-            isActive: groups[groupNm].some(sub => location.pathname === sub.path || (sub.path !== '/' && location.pathname.startsWith(sub.path))),
-            subItems: groups[groupNm]
-          });
+        const GROUP_ORDER = ['Company Master', 'Project', 'User', 'Inventory', 'Visitor Management', 'Executive Overview', 'Supply Chain & Operations'];
+        GROUP_ORDER.forEach(groupNm => {
+          if (groups[groupNm] && groups[groupNm].length > 0) {
+            config.push({
+              key: groupKeys[groupNm],
+              name: groupNm,
+              icon: groupIcons[groupNm] || FolderPlus,
+              isActive: groups[groupNm].some(sub => location.pathname === sub.path || (sub.path !== '/' && location.pathname.startsWith(sub.path))),
+              subItems: groups[groupNm]
+            });
+          }
         });
+
+        // Ensure Company Master ONLY contains core company/plant/dept/emp master screens
+        if (groups['Company Master']) {
+          groups['Company Master'] = groups['Company Master'].filter(
+            item => !item.path.startsWith('/inventory') && item.path !== '/visitor-management' && item.path !== '/executive' && !item.path.startsWith('/procurement') && !item.path.startsWith('/asset-maintenance') && !item.path.startsWith('/dispatch-logistics')
+          );
+        }
+
+        // Ensure standalone never contains dedicated dropdown sub-items
+        standalone = standalone.filter(item => !item.path.startsWith('/inventory') && !item.path.startsWith('/visitor-management') && !item.path.startsWith('/executive') && !item.path.startsWith('/procurement') && !item.path.startsWith('/asset-maintenance') && !item.path.startsWith('/dispatch-logistics'));
 
         return { config, standalone };
       };
@@ -151,12 +286,10 @@ const Sidebar = ({ onLogout }) => {
         }
       }
 
-      if (currentAllowed.length > 0) {
-        const { config, standalone } = buildMenuFromScreens(currentAllowed);
-        setMenuItems(config);
-        setSingleItems(standalone);
-        setHasNoAccess(false);
-      }
+      const { config, standalone } = buildMenuFromScreens(currentAllowed);
+      setMenuItems(config);
+      setSingleItems(standalone);
+      setHasNoAccess(false);
 
       if (!empId) {
         if (currentAllowed.length === 0 && !isAdmin) {
@@ -192,14 +325,7 @@ const Sidebar = ({ onLogout }) => {
           const permissions = await permsRes.json().catch(() => []);
           sessionStorage.setItem("userPermissions", JSON.stringify(permissions));
 
-          let allowedScreens = [];
-          if (isAdmin) {
-            allowedScreens = permissions;
-          } else if (hasRbac) {
-            allowedScreens = permissions.filter(p => p.viewFlg);
-          } else {
-            allowedScreens = [];
-          }
+          let allowedScreens = isAdmin ? [...permissions] : (hasRbac ? permissions.filter(p => p.viewFlg) : [...permissions]);
 
           if (!isAdmin && allowedScreens.length === 0) {
             setHasNoAccess(true);
@@ -226,13 +352,44 @@ const Sidebar = ({ onLogout }) => {
       setOpenDropdowns(prev => {
         const next = { ...prev };
         menuItems.forEach(item => {
-          const hasActiveSub = item.subItems.some(sub => location.pathname === sub.path);
+          const hasActiveSub = item.subItems.some(sub => {
+            if (sub.isSubFolder && sub.children) {
+              return sub.children.some(c => location.pathname === c.path || (c.path !== '/' && location.pathname.startsWith(c.path)));
+            }
+            return location.pathname === sub.path || (sub.path !== '/' && location.pathname.startsWith(sub.path));
+          });
           if (hasActiveSub) {
             next[item.key] = true;
           }
         });
         return next;
       });
+    }
+
+    if (location.pathname.startsWith('/visitor-management/gate-') || location.pathname === '/visitor-management/qr-verification') {
+      setOpenSubDropdowns(prev => ({ ...prev, gateManagement: true }));
+    } else if (
+      location.pathname.startsWith('/visitor-management/security-') ||
+      location.pathname.startsWith('/visitor-management/material-') ||
+      location.pathname.startsWith('/visitor-management/safety-') ||
+      location.pathname.startsWith('/visitor-management/access-')
+    ) {
+      setOpenSubDropdowns(prev => ({ ...prev, securityManagement: true }));
+    } else if (
+      location.pathname.startsWith('/visitor-management/live-') ||
+      location.pathname.startsWith('/visitor-management/history') ||
+      location.pathname.startsWith('/visitor-management/overdue-') ||
+      location.pathname.startsWith('/visitor-management/configuration')
+    ) {
+      setOpenSubDropdowns(prev => ({ ...prev, visitorTracking: true }));
+    }
+
+    if (
+      location.pathname.startsWith('/procurement') ||
+      location.pathname.startsWith('/asset-maintenance') ||
+      location.pathname.startsWith('/dispatch-logistics')
+    ) {
+      setOpenDropdowns(prev => ({ ...prev, supplyChain: true }));
     }
   }, [location.pathname, menuItems]);
 
@@ -257,6 +414,14 @@ const Sidebar = ({ onLogout }) => {
   const handleNavigate = (path) => {
     navigate(path);
     closeMobileSidebar();
+  };
+
+  const toggleSubDropdown = (key, e) => {
+    if (e) e.stopPropagation();
+    setOpenSubDropdowns(prev => ({
+      ...prev,
+      [key]: !prev[key]
+    }));
   };
 
   const toggleDropdown = (key) => {
@@ -414,23 +579,86 @@ const Sidebar = ({ onLogout }) => {
                     className="dropdown-header"
                     onClick={() => toggleDropdown(item.key)}
                   >
-                    <div className="d-flex align-items-center gap-2">
-                      <item.icon size={20} /> <span className="m-0">{item.name}</span>
+                    <div
+                      className="d-flex align-items-center gap-2"
+                      style={{ minWidth: 0, flex: 1, overflow: "hidden", marginRight: "6px" }}
+                    >
+                      <item.icon size={20} style={{ flexShrink: 0 }} />
+                      <span
+                        className="m-0"
+                        style={{
+                          fontSize: item.name.length > 18 ? "13.5px" : "15px",
+                          lineHeight: "1.25",
+                          whiteSpace: "normal",
+                          wordBreak: "break-word"
+                        }}
+                      >
+                        {item.name}
+                      </span>
                     </div>
-                    {openDropdowns[item.key] ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
+                    <span className="dropdown-arrow-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginLeft: "auto" }}>
+                      {openDropdowns[item.key] ? <ChevronDown size={18} style={{ flexShrink: 0 }} /> : <ChevronRight size={18} style={{ flexShrink: 0 }} />}
+                    </span>
                   </div>
 
                   {!isCollapsed && openDropdowns[item.key] && (
                     <ul className="submenu-list">
-                      {item.subItems.map((sub, sIdx) => (
-                        <li
-                          key={sIdx}
-                          onClick={() => handleNavigate(sub.path)}
-                          className={location.pathname === sub.path ? "submenu-active" : ""}
-                        >
-                          {sub.name}
-                        </li>
-                      ))}
+                      {item.subItems.map((sub, sIdx) => {
+                        if (sub.isSubFolder) {
+                          const isSubOpen = openSubDropdowns[sub.key] ?? false;
+                          const isChildActive = sub.children?.some(c => location.pathname === c.path);
+                          return (
+                            <li key={sIdx} className={`nested-subfolder-container ${isChildActive ? 'nested-active-parent' : ''}`}>
+                              <div
+                                className="nested-subfolder-header"
+                                onClick={(e) => toggleSubDropdown(sub.key, e)}
+                              >
+                                <div className="d-flex align-items-center gap-2">
+                                  <Folder size={14} className="nested-subfolder-icon" />
+                                  <span>{sub.name}</span>
+                                </div>
+                                {isSubOpen ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+                              </div>
+                              {isSubOpen && (
+                                <ul className="nested-subfolder-list">
+                                  {sub.children.map((child, cIdx) => (
+                                    <li
+                                      key={cIdx}
+                                      onClick={() => handleNavigate(child.path)}
+                                      className={`nested-subfolder-item ${location.pathname === child.path ? "submenu-active" : ""}`}
+                                    >
+                                      <span>{child.name}</span>
+                                      {child.badge && <span className="submenu-badge">{child.badge}</span>}
+                                    </li>
+                                  ))}
+                                </ul>
+                              )}
+                            </li>
+                          );
+                        }
+
+                        if (sub.isHeader) {
+                          return (
+                            <li key={sIdx} className="submenu-category-header">
+                              {sub.name}
+                            </li>
+                          );
+                        }
+                        const isSubActive =
+                          location.pathname === sub.path ||
+                          (sub.path !== '/' && location.pathname.startsWith(sub.path)) ||
+                          (sub.path === '/visitor-management/dashboard' && location.pathname === '/visitor-management');
+                        return (
+                          <li
+                            key={sIdx}
+                            onClick={() => handleNavigate(sub.path)}
+                            className={`${isSubActive ? "submenu-active" : ""} ${sub.isSubItem ? "submenu-child" : ""}`}
+                          >
+                            <span>{sub.name}</span>
+                            {sub.badge && <span className="submenu-badge">{sub.badge}</span>}
+                          </li>
+                        );
+                      })}
                     </ul>
                   )}
                 </li>

@@ -10,7 +10,7 @@ const ScrollToTop = () => {
     window.scrollTo(0, 0);
     document.documentElement.scrollTop = 0;
     document.body.scrollTop = 0;
-    const scrollContainers = document.querySelectorAll('.cc-shell, .cc-main, .proj-shell, .proj-main, .main-content, .ud-main, .cit-container, .cit-card');
+    const scrollContainers = document.querySelectorAll('.cc-shell, .cc-main, .proj-shell, .proj-main, .main-content, .ud-main, .cit-container, .cit-card, .sco-main, .sco-container, .sco-content, .inv-main, .vm-main, .main-layout');
     scrollContainers.forEach(el => { if (el) el.scrollTop = 0; });
   }, [pathname, search, state]);
   return null;
@@ -43,6 +43,12 @@ import ProjectAccess from "./components/Projectmanager/ProjectAccess";
 import Assignment from "./components/Assignment";
 import ResetPassword from "./components/ResetPassword";
 import AllProjectGanttChart from "./components/Projectmanager/AllProjectGanttChart";
+import InventoryManagement from "./components/Admin/InventoryManagement";
+import ExecutiveModule from "./components/Executive/ExecutiveModule";
+import VisitorManagement from "./components/Admin/VisitorManagement";
+import ProcurementManagement from "./components/Admin/ProcurementManagement";
+import AssetMaintenance from "./components/Admin/AssetMaintenance";
+import DispatchLogistics from "./components/Admin/DispatchLogistics";
 
 const AppContent = () => {
   const navigate = useNavigate();
@@ -125,7 +131,13 @@ const AppContent = () => {
             'PROFILE': '/profile',
             'INDIVIDUAL_TASK': '/assignment',
             'ASSIGN_ACCESS': '/assign-access',
-            'PROJECT_ACCESS': '/project-access'
+            'PROJECT_ACCESS': '/project-access',
+            'INVENTORY_MANAGEMENT': '/inventory',
+            'EXECUTIVE_MODULE': '/executive',
+            'VISITOR_MANAGEMENT': '/visitor-management',
+            'PROCUREMENT_MANAGEMENT': '/procurement',
+            'ASSET_MAINTENANCE': '/asset-maintenance',
+            'FLEET_DISPATCH': '/dispatch-logistics'
           };
           if (SCREEN_PATHS[firstAllowed.screenCode]) {
             return SCREEN_PATHS[firstAllowed.screenCode];
@@ -186,6 +198,18 @@ const AppContent = () => {
       <Route path="/agriland-allocation" element={isLoggedIn ? <AgriLandAllocation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/department-mapping" element={isLoggedIn ? <DepartmentMapping userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/designation-creation" element={isLoggedIn ? <DesignationCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/inventory" element={isLoggedIn ? <InventoryManagement userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/inventory/:submodule" element={isLoggedIn ? <InventoryManagement userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/executive" element={isLoggedIn ? <ExecutiveModule userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/executive/:submodule" element={isLoggedIn ? <ExecutiveModule userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/visitor-management" element={isLoggedIn ? <VisitorManagement userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/visitor-management/:submodule" element={isLoggedIn ? <VisitorManagement userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/procurement" element={isLoggedIn ? <ProcurementManagement userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/procurement/:tab" element={isLoggedIn ? <ProcurementManagement userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/asset-maintenance" element={isLoggedIn ? <AssetMaintenance userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/asset-maintenance/:tab" element={isLoggedIn ? <AssetMaintenance userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/dispatch-logistics" element={isLoggedIn ? <DispatchLogistics userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/dispatch-logistics/:tab" element={isLoggedIn ? <DispatchLogistics userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
 
       {/* Project Manager Features */}
       <Route path="/project-creation" element={isLoggedIn ? <ProjectCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />

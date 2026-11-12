@@ -1,0 +1,633 @@
+/* ==========================================================================
+   Supply Chain, Fleet & Plant Operations Styling (BioNova Enterprise)
+   ========================================================================== */
+
+.sco-container {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  background-color: #f8fafc;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #0f172a;
+  overflow-x: hidden;
+  position: relative;
+}
+
+.sco-main {
+  flex: 1;
+  margin-left: 260px;
+  width: calc(100% - 260px);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1), width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  background-color: #f8fafc;
+  box-sizing: border-box;
+  scroll-behavior: smooth;
+}
+
+body.sidebar-collapsed .sco-main {
+  margin-left: 76px !important;
+  width: calc(100% - 76px) !important;
+}
+
+.sco-content {
+  padding: 24px 32px;
+  max-width: 1600px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
+  flex: 1;
+}
+
+/* Header & Tagline row */
+.sco-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.sco-tagline {
+  margin: 0;
+  color: #64748b;
+  font-size: 14px;
+  flex: 1;
+  min-width: 260px;
+  line-height: 1.5;
+}
+
+/* KPI Cards Grid */
+.sco-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.sco-kpi-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.sco-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+}
+
+.sco-kpi-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.sco-kpi-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.sco-kpi-val {
+  font-size: 22px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.2;
+}
+
+.sco-kpi-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+  margin-top: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* Navigation Tabs */
+.sco-tabs-nav {
+  display: flex;
+  gap: 8px;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.sco-tabs-nav::-webkit-scrollbar {
+  height: 4px;
+}
+.sco-tabs-nav::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.sco-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  border-radius: 6px 6px 0 0;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  margin-bottom: -6px;
+  user-select: none;
+}
+
+.sco-tab-btn:hover {
+  color: #1e293b;
+  background-color: #f1f5f9;
+}
+
+.sco-tab-btn.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+  background-color: #eff6ff;
+}
+
+.sco-tab-btn .badge-count {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 9999px;
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.sco-tab-btn.active .badge-count {
+  background: #2563eb;
+  color: #ffffff;
+}
+
+/* Card Container */
+.sco-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
+  overflow: hidden;
+}
+
+.sco-card-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sco-card-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sco-card-body {
+  padding: 20px;
+}
+
+/* Filter & Controls Toolbar */
+.sco-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.sco-search-box {
+  position: relative;
+  flex: 1;
+  min-width: 260px;
+  max-width: 450px;
+}
+
+.sco-search-box input {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: #ffffff;
+  color: #0f172a;
+  box-sizing: border-box;
+}
+
+.sco-search-box input:focus {
+  outline: none;
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.sco-search-box .search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.sco-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.sco-select {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  background-color: #ffffff;
+  color: #0f172a;
+  cursor: pointer;
+  min-width: 150px;
+  box-sizing: border-box;
+}
+
+.sco-select:focus {
+  outline: none;
+  border-color: #3b82f6;
+}
+
+/* Modern Data Table with Responsive Scroll */
+.sco-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  width: 100%;
+  max-width: 100%;
+  background: #ffffff;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 #f8fafc;
+}
+
+.sco-table-wrapper::-webkit-scrollbar {
+  height: 6px;
+}
+
+.sco-table-wrapper::-webkit-scrollbar-track {
+  background: #f8fafc;
+}
+
+.sco-table-wrapper::-webkit-scrollbar-thumb {
+  background-color: #cbd5e1;
+  border-radius: 9999px;
+}
+
+.sco-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: left;
+  min-width: 650px;
+}
+
+.sco-table thead th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  padding: 12px 14px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+  font-size: 12.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.sco-table tbody td {
+  padding: 12px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.sco-table tbody tr:hover {
+  background-color: #f8fafc;
+}
+
+/* Badges */
+.sco-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.badge-green { background: #dcfce7; color: #15803d; }
+.badge-blue { background: #dbeafe; color: #1d4ed8; }
+.badge-amber { background: #fef3c7; color: #b45309; }
+.badge-red { background: #fee2e2; color: #b91c1c; }
+.badge-purple { background: #f3e8ff; color: #7e22ce; }
+.badge-slate { background: #f1f5f9; color: #475569; }
+
+/* Buttons */
+.sco-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 1px 2px rgba(37, 99, 235, 0.2);
+  white-space: nowrap;
+}
+
+.sco-btn-primary:hover {
+  background: #1d4ed8;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 6px rgba(37, 99, 235, 0.3);
+}
+
+.sco-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.sco-btn-secondary:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  color: #0f172a;
+}
+
+.sco-btn-icon {
+  background: transparent;
+  border: none;
+  padding: 6px;
+  border-radius: 6px;
+  color: #64748b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+
+.sco-btn-icon:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.sco-btn-icon.danger:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Full-Page Form Card */
+.sco-form-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 24px 28px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  margin-bottom: 24px;
+  box-sizing: border-box;
+}
+
+.sco-form-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #0f172a;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sco-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 18px;
+  margin-bottom: 24px;
+}
+
+.sco-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.sco-form-group.col-span-full {
+  grid-column: 1 / -1;
+}
+
+.sco-form-group label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+}
+
+.sco-form-group label .required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.sco-form-group input,
+.sco-form-group select,
+.sco-form-group textarea {
+  padding: 9px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 14px;
+  color: #0f172a;
+  background-color: #ffffff;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+  width: 100%;
+}
+
+.sco-form-group input:focus,
+.sco-form-group select:focus,
+.sco-form-group textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.sco-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding-top: 16px;
+  border-top: 1px solid #e2e8f0;
+  flex-wrap: wrap;
+}
+
+/* Empty State */
+.sco-empty-state {
+  text-align: center;
+  padding: 48px 20px;
+  color: #64748b;
+}
+
+.sco-empty-state .icon {
+  margin-bottom: 12px;
+  color: #94a3b8;
+}
+
+.sco-empty-state h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.sco-empty-state p {
+  font-size: 13.5px;
+  margin-bottom: 16px;
+  max-width: 400px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+/* ==========================================================================
+   Responsive Breakpoints & Auto Screen Adjustments
+   ========================================================================== */
+
+@media (max-width: 1280px) {
+  .sco-content {
+    padding: 20px 24px;
+  }
+  .sco-kpi-grid {
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 14px;
+  }
+}
+
+@media (max-width: 1024px) {
+  .sco-main {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  .sco-content {
+    padding: 18px 16px;
+  }
+  .sco-tabs-nav {
+    gap: 4px;
+    scrollbar-width: thin;
+  }
+  .sco-tab-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 768px) {
+  .sco-content {
+    padding: 14px 12px;
+  }
+  .sco-header-row {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .sco-tagline {
+    min-width: 100%;
+    font-size: 13.5px;
+  }
+  .sco-header-row .d-flex {
+    width: 100%;
+    flex-wrap: wrap;
+    margin-left: 0 !important;
+  }
+  .sco-header-row .sco-btn-primary {
+    width: 100%;
+    justify-content: center;
+  }
+  .sco-kpi-grid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .sco-kpi-card {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .sco-kpi-val {
+    font-size: 18px;
+  }
+  .sco-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .sco-search-box {
+    max-width: 100%;
+    min-width: 100%;
+  }
+  .sco-filter-group {
+    width: 100%;
+  }
+  .sco-select {
+    width: 100%;
+  }
+  .sco-form-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .sco-form-card {
+    padding: 18px 16px;
+  }
+}
+
+@media (max-width: 480px) {
+  .sco-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}

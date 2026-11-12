@@ -21,6 +21,8 @@ import {
   Map,
   Upload,
   Image as ImageIcon,
+  Camera,
+  Maximize2,
   Info,
   Building2,
   Factory,
@@ -245,6 +247,60 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     return `LND-${String(maxNum + 1).padStart(3, '0')}`;
   };
 
+  const isValidPhotoUrl = (url) => {
+    if (!url || typeof url !== 'string') return false;
+    const trimmed = url.trim();
+    if (!trimmed || trimmed === 'null' || trimmed === 'undefined' || trimmed === '[object Object]') return false;
+    if (trimmed.startsWith('blob:')) return false;
+    const lower = trimmed.toLowerCase();
+    if (lower.includes('dummy') || lower.includes('placeholder')) return false;
+    if (trimmed.startsWith('data:image/')) return true;
+    if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) return true;
+    if (trimmed.startsWith('/api/storage/') || trimmed.startsWith('/uploads/')) return true;
+    if (/\.(jpg|jpeg|png|webp|gif|svg)($|\?)/i.test(trimmed)) return true;
+    return false;
+  };
+
+  const getPhotoUrl = (url) => {
+    if (!isValidPhotoUrl(url)) return '';
+    if (url.startsWith('data:') || url.startsWith('blob:') || url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    if (url.startsWith('/')) {
+      return `${apiBaseUrl}${url}`;
+    }
+    return `${apiBaseUrl}/${url}`;
+  };
+
+  const parseLandPhotos = (rawLogo, rawPhotos, landId, landCode) => {
+    let list = [];
+
+    // 1. Check rawPhotos from backend
+    if (rawPhotos) {
+      if (Array.isArray(rawPhotos)) {
+        list = rawPhotos.filter(isValidPhotoUrl);
+      } else if (typeof rawPhotos === 'string') {
+        try {
+          const parsed = JSON.parse(rawPhotos);
+          if (Array.isArray(parsed)) list = parsed.filter(isValidPhotoUrl);
+        } catch (_) {
+          list = rawPhotos.split(',').map(s => s.trim()).filter(isValidPhotoUrl);
+        }
+      }
+    }
+
+    // 2. Check rawLogo ONLY if it is a genuine valid image URL and list is empty
+    if (list.length === 0 && rawLogo) {
+      if (typeof rawLogo === 'string' && isValidPhotoUrl(rawLogo)) {
+        list = [rawLogo.trim()];
+      } else if (Array.isArray(rawLogo)) {
+        list = rawLogo.filter(isValidPhotoUrl);
+      }
+    }
+
+    return list;
+  };
+
   const fetchLands = async () => {
     setLoading(true);
     try {
@@ -281,7 +337,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
             landType: land.ownershipType && land.ownershipType !== "null" ? land.ownershipType : "",
             leaseStartDate: land.leaseDt && land.leaseDt !== "null" ? land.leaseDt.split('T')[0] : "",
             leaseEndDate: land.leaseEndDt && land.leaseEndDt !== "null" ? land.leaseEndDt.split('T')[0] : "",
-            leaseDuration: calculateDuration(land.leaseDt && land.leaseDt !== "null" ? land.leaseDt : null, land.leaseEndDt && land.leaseEndDt !== "null" ? land.leaseEndDt : null)
+            leaseDuration: calculateDuration(land.leaseDt && land.leaseDt !== "null" ? land.leaseDt : null, land.leaseEndDt && land.leaseEndDt !== "null" ? land.leaseEndDt : null),
+            photos: parseLandPhotos(land.logo, land.photos, land.landId, land.landCd),
+            logo: (parseLandPhotos(land.logo, land.photos, land.landId, land.landCd)[0]) || land.logo || null
           };
         });
         setAllocations(enriched);
@@ -344,6 +402,15 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   const [activeOverviewTab, setActiveOverviewTab] = useState(null);
 
   useEffect(() => {
+    // Clear any stale test dummy photos from localStorage for production
+    try {
+      Object.keys(localStorage).forEach(key => {
+        if (key.startsWith('land_photos_')) {
+          localStorage.removeItem(key);
+        }
+      });
+    } catch (_) {}
+
     fetch(`${apiBaseUrl}/api/companies`, { headers: getAuthHeaders() })
       .then(res => res.ok ? res.json() : [])
       .then(data => setCompanies(data))
@@ -375,6 +442,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     longitude: '',
     status: 'Active',
     logo: null,
+    photos: [],
     landType: '',
     leaseStartDate: '',
     leaseEndDate: '',
@@ -387,6 +455,13 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   const [activeDropdown, setActiveDropdown] = useState(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, right: 0 });
   const [logoFile, setLogoFile] = useState(null);
+  const [dragOverPhoto, setDragOverPhoto] = useState(false);
+  const [lightboxState, setLightboxState] = useState({
+    isOpen: false,
+    photos: [],
+    currentIndex: 0,
+    title: ""
+  });
 
   // Scroll handler to reposition dropdown dynamically
   useEffect(() => {
@@ -614,20 +689,108 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     setForm(prev => ({ ...prev, status: e.target.checked ? "Active" : "Inactive" }));
   };
 
-  const handleLogoChange = (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    setLogoFile(file);
-    const reader = new FileReader();
-    reader.onloadend = () => setForm((prev) => ({ ...prev, logo: reader.result }));
-    reader.readAsDataURL(file);
+  const handlePhotoUploadFiles = (files) => {
+    if (!files || files.length === 0) return;
+    const validFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+    if (validFiles.length === 0) {
+      triggerAlert("error", "Invalid File", "Please select valid image files (JPG, PNG, WEBP).");
+      return;
+    }
+
+    const readers = validFiles.map((file, idx) => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          resolve({
+            id: `new_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+            url: e.target.result,
+            file: file,
+            name: file.name,
+            size: (file.size / 1024).toFixed(1) + ' KB'
+          });
+        };
+        reader.onerror = () => {
+          resolve({
+            id: `new_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
+            url: URL.createObjectURL(file),
+            file: file,
+            name: file.name,
+            size: (file.size / 1024).toFixed(1) + ' KB'
+          });
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(readers).then((newItems) => {
+      setForm(prev => {
+        const existing = prev.photos || [];
+        const isFirst = existing.length === 0;
+        const updatedItems = newItems.map((item, idx) => ({
+          ...item,
+          isPrimary: isFirst && idx === 0
+        }));
+        const combined = [...existing, ...updatedItems];
+        if (!combined.some(p => p.isPrimary) && combined.length > 0) {
+          combined[0].isPrimary = true;
+        }
+        const primaryPhoto = combined.find(p => p.isPrimary) || combined[0];
+        return {
+          ...prev,
+          photos: combined,
+          logo: primaryPhoto ? primaryPhoto.url : null
+        };
+      });
+    });
   };
 
-  const handleDeleteLogo = () => {
-    setLogoFile(null);
-    setForm((prev) => ({ ...prev, logo: "" }));
-    const fileInput = document.getElementById("logoUploadHidden");
-    if (fileInput) fileInput.value = "";
+  const handleSetPrimaryPhoto = (photoId) => {
+    setForm(prev => {
+      const updated = (prev.photos || []).map(p => ({
+        ...p,
+        isPrimary: p.id === photoId
+      }));
+      const primary = updated.find(p => p.id === photoId);
+      return {
+        ...prev,
+        photos: updated,
+        logo: primary ? primary.url : prev.logo
+      };
+    });
+  };
+
+  const handleDeletePhoto = (photoId) => {
+    setForm(prev => {
+      const remaining = (prev.photos || []).filter(p => p.id !== photoId);
+      if (remaining.length > 0 && !remaining.some(p => p.isPrimary)) {
+        remaining[0].isPrimary = true;
+      }
+      const primary = remaining.length > 0 ? remaining.find(p => p.isPrimary) || remaining[0] : null;
+      return {
+        ...prev,
+        photos: remaining,
+        logo: primary ? primary.url : null
+      };
+    });
+    // Remove from localStorage if editing
+    if (editingId) {
+      try { localStorage.removeItem(`land_photos_${editingId}`); } catch (_) {}
+    }
+  };
+
+  const openLightbox = (photosList, initialIndex = 0, title = "Land Site Photo") => {
+    const urls = (photosList || []).map(p => typeof p === 'string' ? p : p.url).filter(Boolean);
+    if (urls.length === 0) return;
+    setLightboxState({
+      isOpen: true,
+      photos: urls,
+      currentIndex: Math.max(0, Math.min(initialIndex, urls.length - 1)),
+      title
+    });
+  };
+
+  const closeLightbox = () => {
+    setLightboxState(prev => ({ ...prev, isOpen: false }));
   };
 
   const handleResetForm = (lList = allocations) => {
@@ -652,6 +815,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       longitude: '',
       status: 'Active',
       logo: null,
+      photos: [],
       landType: '',
       leaseStartDate: '',
       leaseEndDate: '',
@@ -848,30 +1012,47 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
     setLoading(true);
 
-    let finalLogoUrl = form.logo;
-    if (logoFile) {
-      const uploadForm = new FormData();
-      uploadForm.append("file", logoFile);
-      try {
-        const uploadRes = await fetch(`${apiBaseUrl}/api/storage/upload/land-logo`, {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
-          },
-          body: uploadForm
-        });
-        if (uploadRes.ok) {
-          const uploadData = await uploadRes.json();
-          finalLogoUrl = uploadData.url;
-        } else {
-          throw new Error("Failed to upload logo.");
+    // Process photos: upload any newly selected files
+    const currentPhotos = form.photos || [];
+    const uploadedPhotoUrls = [];
+    let primaryUrl = null;
+
+    for (let i = 0; i < currentPhotos.length; i++) {
+      const item = currentPhotos[i];
+      let itemUrl = item.url;
+      if (item.file) {
+        try {
+          const uploadForm = new FormData();
+          uploadForm.append("file", item.file);
+          const uploadRes = await fetch(`${apiBaseUrl}/api/storage/upload/land-logo`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+            },
+            body: uploadForm
+          });
+          if (uploadRes.ok) {
+            const uploadData = await uploadRes.json();
+            itemUrl = uploadData.url;
+          } else {
+            console.warn("Photo upload failed for:", item.name);
+          }
+        } catch (uploadErr) {
+          console.error("Photo upload error:", uploadErr);
         }
-      } catch (err) {
-        // setLoading(false);
-        console.error("Logo upload failed:", err);
-        triggerAlert("error", "Error", "Could not upload land logo.");
-        return;
       }
+      if (itemUrl && !itemUrl.startsWith('blob:')) {
+        uploadedPhotoUrls.push(itemUrl);
+        if (item.isPrimary || !primaryUrl) {
+          primaryUrl = itemUrl;
+        }
+      }
+    }
+
+    if (currentPhotos.length === 0) {
+      primaryUrl = null;
+    } else if (!primaryUrl && uploadedPhotoUrls.length > 0) {
+      primaryUrl = uploadedPhotoUrls[0];
     }
 
     let alcTypVal = "AGL";
@@ -899,7 +1080,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       ownershipType: form.landType,
       leaseDt: form.landType === 'Lease' ? (form.leaseStartDate || null) : null,
       leaseEndDt: form.landType === 'Lease' ? (form.leaseEndDate || null) : null,
-      logo: finalLogoUrl || null,
+      logo: primaryUrl || null,
+      photos: uploadedPhotoUrls.length > 0 ? uploadedPhotoUrls.join(",") : null,
       sts: form.status === "Active"
     };
 
@@ -918,6 +1100,14 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
           throw new Error(errorText || "Failed to save land record.");
         }
         triggerAlert("success", "Success", isEditing ? "Land record updated successfully!" : "Land record created successfully!");
+        if (uploadedPhotoUrls.length > 0) {
+          if (editingId) {
+            try { localStorage.setItem(`land_photos_${editingId}`, JSON.stringify(uploadedPhotoUrls)); } catch (_) {}
+          }
+          if (form.landCode) {
+            try { localStorage.setItem(`land_photos_${form.landCode.trim()}`, JSON.stringify(uploadedPhotoUrls)); } catch (_) {}
+          }
+        }
         fetchLands();
         handleResetForm();
         setIsEditing(false);
@@ -936,6 +1126,14 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   const handleView = (land) => {
     const targetId = land.lndId || land.id || land.landId;
     const pltIdVal = land.plant || land.pltId;
+    const landPhotos = parseLandPhotos(land.logo, land.photos, targetId, land.landCd || land.landCode);
+    const photoObjects = landPhotos.map((url, idx) => ({
+      id: `view_${idx}`,
+      url: url,
+      isPrimary: idx === 0,
+      name: `Photo ${idx + 1}`
+    }));
+
     setForm({
       ...land,
       landCode: land.landCode || land.lndCd || '',
@@ -949,7 +1147,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       district: land.district || land.dist || '',
       village: land.village || land.vlg || '',
       mandal: land.mandal || land.mdl || '',
-      state: land.state || land.stId || ''
+      state: land.state || land.stId || '',
+      photos: photoObjects,
+      logo: landPhotos[0] || land.logo || null
     });
     setFormErrors({});
     setIsViewing(true);
@@ -962,12 +1162,23 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
   const handleEdit = (land) => {
     setLogoFile(null);
+    const targetId = land.lndId || land.id || land.landId;
+    const landPhotos = parseLandPhotos(land.logo, land.photos, targetId, land.landCd || land.landCode);
+    const photoObjects = landPhotos.map((url, idx) => ({
+      id: `edit_${idx}`,
+      url: url,
+      isPrimary: idx === 0,
+      name: `Photo ${idx + 1}`
+    }));
+
     setForm({
       ...land,
       surveyNo: Array.isArray(land.surveyNo) ? land.surveyNo : (land.surveyNo ? [land.surveyNo] : []),
       surveyInput: '',
       landOwnerName: Array.isArray(land.landOwnerName) ? land.landOwnerName : (land.landOwnerName ? [land.landOwnerName] : []),
-      ownerInput: ''
+      ownerInput: '',
+      photos: photoObjects,
+      logo: landPhotos[0] || land.logo || null
     });
     setFormErrors({});
     setIsEditing(true);
@@ -1492,14 +1703,46 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Alloted For :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.allotedFor || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
-                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Land Image :</span>
+                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '16px 0', borderBottom: '1px dashed #e2e8f0', alignItems: 'start' }}>
+                              <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', paddingTop: '6px' }}>Land Photos Gallery :</span>
                               <div>
-                                 {form.logo ? (
-                                   <img src={form.logo} alt="Logo" style={{ width: '48px', height: '48px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
-                                 ) : (
-                                   <div style={{ width: '48px', height: '48px', borderRadius: '6px', background: '#f8fafc', border: '1px dashed #cbd5e1', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><ImageIcon size={20} style={{ color: '#94a3b8' }} /></div>
-                                 )}
+                                {form.photos && form.photos.length > 0 ? (
+                                  <div className="al-photos-grid">
+                                    {form.photos.map((photo, pIdx) => (
+                                      <div
+                                        key={photo.id || pIdx}
+                                        className="al-photo-card"
+                                        style={{ cursor: 'pointer' }}
+                                        onClick={() => openLightbox(form.photos, pIdx, `${form.landCode || 'Land'} - Photo ${pIdx + 1}`)}
+                                      >
+                                        <div className="al-photo-thumb-wrap">
+                                          <img src={getPhotoUrl(photo.url)} alt={`Land photo ${pIdx + 1}`} className="al-photo-img" />
+                                          {photo.isPrimary && <span className="al-photo-primary-badge">★ Primary</span>}
+                                          <div className="al-photo-overlay always-show-eye">
+                                            <span className="al-view-pill"><Eye size={13} /> View</span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : form.logo ? (
+                                  <div
+                                    className="al-photo-card"
+                                    style={{ width: '130px', cursor: 'pointer' }}
+                                    onClick={() => openLightbox([form.logo], 0, form.landCode || 'Land Photo')}
+                                  >
+                                    <div className="al-photo-thumb-wrap">
+                                      <img src={getPhotoUrl(form.logo)} alt="Land" className="al-photo-img" />
+                                      <div className="al-photo-overlay always-show-eye">
+                                        <span className="al-view-pill"><Eye size={13} /> View</span>
+                                      </div>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#94a3b8', fontSize: '13px' }}>
+                                    <ImageIcon size={20} /> No photos uploaded for this land.
+                                  </div>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -1567,45 +1810,6 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                 placeholder="Select Plant"
                                 options={plants.map(p => ({ value: p.pltId, label: p.pltNm }))}
                               />
-                            </label>
-                            <label className="al-field-item" style={{ gridColumn: 'span 2' }}>
-                              <span>Land Image</span>
-                              <div className="al-logo-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <div className="al-logo-box" style={{ width: '48px', height: '48px', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', overflow: 'hidden', flexShrink: 0 }}>
-                                  {form.logo ? <img src={form.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={22} style={{ color: '#94a3b8' }} />}
-                                </div>
-                                <input id="logoUploadHidden" type="file" accept="image/*" onChange={handleLogoChange} disabled={isViewing} hidden />
-                                {!isViewing && (
-                                  <>
-                                    <button type="button" onClick={() => document.getElementById("logoUploadHidden").click()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', color: '#0f172a', cursor: 'pointer', height: '38px', whiteSpace: 'nowrap' }}>
-                                      <Upload size={14} /> Upload Image
-                                    </button>
-                                    <button
-                                      type="button"
-                                      onClick={handleDeleteLogo}
-                                      disabled={!form.logo}
-                                      style={{
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        gap: '6px',
-                                        padding: '8px 12px',
-                                        background: form.logo ? '#fef2f2' : '#f8fafc',
-                                        border: form.logo ? '1px solid #fca5a5' : '1px solid #e2e8f0',
-                                        borderRadius: '6px',
-                                        fontSize: '13px',
-                                        color: form.logo ? '#dc2626' : '#94a3b8',
-                                        cursor: form.logo ? 'pointer' : 'not-allowed',
-                                        height: '38px',
-                                        whiteSpace: 'nowrap',
-                                        opacity: form.logo ? 1 : 0.6
-                                      }}
-                                      title="Delete image"
-                                    >
-                                      <Trash2 size={14} /> Delete
-                                    </button>
-                                  </>
-                                )}
-                              </div>
                             </label>
                           </div>
                         </section>
@@ -1834,6 +2038,157 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                             </label>
                           </div>
                         </section>
+
+                        {/* 6. Land Photos & Site Gallery */}
+                        <section className="al-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '14px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <Camera size={18} style={{ color: '#2563eb' }} />
+                              <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
+                                Land Photos & Site Gallery
+                              </h3>
+                            </div>
+                            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+                              {form.photos?.length || 0} Photos Added
+                            </span>
+                          </div>
+
+                          <input
+                            id="landPhotosInput"
+                            type="file"
+                            multiple
+                            accept="image/*"
+                            onChange={(e) => {
+                              handlePhotoUploadFiles(e.target.files);
+                              e.target.value = '';
+                            }}
+                            style={{ display: 'none' }}
+                          />
+
+                          {/* Photos Grid with small upload tile beside photos */}
+                          <div className="al-photos-grid">
+                            {form.photos && form.photos.map((photo, pIdx) => (
+                              <div key={photo.id || pIdx} className="al-photo-card">
+                                <div className="al-photo-thumb-wrap">
+                                  <img
+                                    src={getPhotoUrl(photo.url)}
+                                    alt={`Land photo ${pIdx + 1}`}
+                                    className="al-photo-img"
+                                    onError={(e) => {
+                                      e.target.style.display = 'none';
+                                      if (e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
+                                    }}
+                                  />
+                                  <div
+                                    style={{
+                                      display: 'none',
+                                      width: '100%',
+                                      height: '100%',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      background: '#f1f5f9',
+                                      color: '#94a3b8'
+                                    }}
+                                  >
+                                    <ImageIcon size={24} />
+                                  </div>
+                                  {photo.isPrimary && (
+                                    <span className="al-photo-primary-badge">★ Primary</span>
+                                  )}
+                                  <div className="al-photo-overlay">
+                                    <button
+                                      type="button"
+                                      className="al-photo-action-btn"
+                                      title="Preview full photo"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        openLightbox(form.photos, pIdx, `${form.landCode || 'Land'} - Photo ${pIdx + 1}`);
+                                      }}
+                                    >
+                                      <Maximize2 size={14} />
+                                    </button>
+                                    <button
+                                      type="button"
+                                      className="al-photo-action-btn delete"
+                                      title="Delete photo"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDeletePhoto(photo.id);
+                                      }}
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </div>
+                                <div className="al-photo-info">
+                                  <div className="al-photo-name" title={photo.name || `Photo ${pIdx + 1}`}>
+                                    {photo.name || `Photo ${pIdx + 1}`}
+                                  </div>
+                                  <div className="al-photo-meta">
+                                    <span>{photo.size || `#${pIdx + 1}`}</span>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      {!photo.isPrimary ? (
+                                        <button
+                                          type="button"
+                                          className="al-btn-set-primary"
+                                          onClick={() => handleSetPrimaryPhoto(photo.id)}
+                                        >
+                                          Set Primary
+                                        </button>
+                                      ) : (
+                                        <span style={{ color: '#16a34a', fontWeight: '700', fontSize: '11px' }}>
+                                          ✓ Main
+                                        </span>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          handleDeletePhoto(photo.id);
+                                        }}
+                                        style={{
+                                          background: 'none',
+                                          border: 'none',
+                                          color: '#ef4444',
+                                          cursor: 'pointer',
+                                          padding: '2px',
+                                          display: 'flex',
+                                          alignItems: 'center'
+                                        }}
+                                        title="Delete photo"
+                                      >
+                                        <Trash2 size={13} />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+
+                            {/* Small Upload Tile beside the uploaded photos */}
+                            <div
+                              className={`al-upload-tile ${dragOverPhoto ? 'drag-over' : ''}`}
+                              onClick={() => document.getElementById("landPhotosInput").click()}
+                              onDragOver={(e) => { e.preventDefault(); setDragOverPhoto(true); }}
+                              onDragLeave={(e) => { e.preventDefault(); setDragOverPhoto(false); }}
+                              onDrop={(e) => {
+                                e.preventDefault();
+                                setDragOverPhoto(false);
+                                if (e.dataTransfer.files) handlePhotoUploadFiles(e.dataTransfer.files);
+                              }}
+                            >
+                              <div className="al-upload-tile-icon">
+                                <Plus size={20} />
+                              </div>
+                              <span className="al-upload-tile-text">
+                                {form.photos && form.photos.length > 0 ? "Add More Photos" : "Upload Photo"}
+                              </span>
+                              <span className="al-upload-tile-sub">
+                                Click or drag image
+                              </span>
+                            </div>
+                          </div>
+                        </section>
                       </>
                     )}
                   </div>
@@ -1924,7 +2279,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
                         <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
+                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LAND PHOTO</th>
                         <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           LAND CODE
                         </th>
@@ -1968,12 +2323,60 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         currentItems.map((land, index) => (
                           <tr key={land.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
                             <td data-label="#" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
-                            <td data-label="LOGO" style={{ padding: '14px 20px' }}>
-                              {land.logo ? (
-                                <img src={land.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
+                            <td data-label="LAND PHOTO" style={{ padding: '14px 20px' }}>
+                              {land.photos && land.photos.length > 0 ? (
+                                <div
+                                  style={{ position: 'relative', display: 'inline-block', cursor: 'pointer' }}
+                                  title="Click to view site photos"
+                                  onClick={() => openLightbox(land.photos, 0, `${land.landCode} Site Photos`)}
+                                >
+                                  <img
+                                    src={land.photos[0]}
+                                    alt="Land"
+                                    style={{
+                                      width: '38px',
+                                      height: '38px',
+                                      borderRadius: '6px',
+                                      objectFit: 'cover',
+                                      border: '1px solid #cbd5e1',
+                                      boxShadow: '0 1px 3px rgba(0,0,0,0.1)'
+                                    }}
+                                  />
+                                  {land.photos.length > 1 && (
+                                    <span
+                                      style={{
+                                        position: 'absolute',
+                                        bottom: '-4px',
+                                        right: '-4px',
+                                        background: '#2563eb',
+                                        color: '#fff',
+                                        fontSize: '10px',
+                                        fontWeight: '700',
+                                        padding: '1px 5px',
+                                        borderRadius: '10px',
+                                        border: '1.5px solid #fff',
+                                        lineHeight: 1.2
+                                      }}
+                                    >
+                                      +{land.photos.length - 1}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : land.logo ? (
+                                <div
+                                  style={{ cursor: 'pointer' }}
+                                  title="Click to view photo"
+                                  onClick={() => openLightbox([land.logo], 0, `${land.landCode} Photo`)}
+                                >
+                                  <img
+                                    src={land.logo}
+                                    alt="Logo"
+                                    style={{ width: '38px', height: '38px', borderRadius: '6px', objectFit: 'cover', border: '1px solid #cbd5e1' }}
+                                  />
+                                </div>
                               ) : (
-                                <div style={{ width: '32px', height: '32px', borderRadius: '4px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
-                                  <MapPin size={16} style={{ color: '#94a3b8' }} />
+                                <div style={{ width: '38px', height: '38px', borderRadius: '6px', background: '#f1f5f9', display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px solid #e2e8f0' }}>
+                                  <MapPin size={18} style={{ color: '#94a3b8' }} />
                                 </div>
                               )}
                             </td>
@@ -2223,6 +2626,181 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
         confirmText={alertConfig.confirmText}
         cancelText={alertConfig.cancelText}
       />
+
+      {/* Full-screen Photo Lightbox Modal */}
+      {lightboxState.isOpen && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            background: 'rgba(15, 23, 42, 0.88)',
+            backdropFilter: 'blur(5px)',
+            zIndex: 9999,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '20px'
+          }}
+          onClick={closeLightbox}
+        >
+          {/* Header */}
+          <div
+            style={{
+              position: 'absolute',
+              top: '16px',
+              left: '20px',
+              right: '20px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              color: 'white',
+              zIndex: 10001
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <Camera size={20} style={{ color: '#60a5fa' }} />
+              <span style={{ fontSize: '15px', fontWeight: '600' }}>{lightboxState.title}</span>
+              <span style={{ fontSize: '12px', background: 'rgba(255, 255, 255, 0.2)', padding: '2px 8px', borderRadius: '12px' }}>
+                {lightboxState.currentIndex + 1} / {lightboxState.photos.length}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={closeLightbox}
+              style={{
+                background: 'rgba(255, 255, 255, 0.15)',
+                border: 'none',
+                borderRadius: '50%',
+                width: '36px',
+                height: '36px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: 'white',
+                cursor: 'pointer'
+              }}
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          {/* Main Photo with Nav Buttons */}
+          <div
+            style={{
+              position: 'relative',
+              maxWidth: '90vw',
+              maxHeight: '75vh',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {lightboxState.photos.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setLightboxState(prev => ({
+                  ...prev,
+                  currentIndex: (prev.currentIndex - 1 + prev.photos.length) % prev.photos.length
+                }))}
+                style={{
+                  position: 'absolute',
+                  left: '-48px',
+                  background: 'rgba(255, 255, 255, 0.25)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                <ChevronLeft size={24} />
+              </button>
+            )}
+
+            <img
+              src={lightboxState.photos[lightboxState.currentIndex]}
+              alt="Land preview"
+              style={{
+                maxWidth: '85vw',
+                maxHeight: '72vh',
+                objectFit: 'contain',
+                borderRadius: '8px',
+                boxShadow: '0 20px 40px rgba(0, 0, 0, 0.5)'
+              }}
+            />
+
+            {lightboxState.photos.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setLightboxState(prev => ({
+                  ...prev,
+                  currentIndex: (prev.currentIndex + 1) % prev.photos.length
+                }))}
+                style={{
+                  position: 'absolute',
+                  right: '-48px',
+                  background: 'rgba(255, 255, 255, 0.25)',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: '44px',
+                  height: '44px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  cursor: 'pointer'
+                }}
+              >
+                <ChevronRight size={24} />
+              </button>
+            )}
+          </div>
+
+          {/* Thumbnail Strip */}
+          {lightboxState.photos.length > 1 && (
+            <div
+              style={{
+                position: 'absolute',
+                bottom: '16px',
+                display: 'flex',
+                gap: '8px',
+                maxWidth: '90vw',
+                overflowX: 'auto',
+                padding: '8px 12px',
+                background: 'rgba(0, 0, 0, 0.5)',
+                borderRadius: '12px'
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              {lightboxState.photos.map((p, idx) => (
+                <img
+                  key={idx}
+                  src={p}
+                  alt={`Thumb ${idx + 1}`}
+                  onClick={() => setLightboxState(prev => ({ ...prev, currentIndex: idx }))}
+                  style={{
+                    width: '50px',
+                    height: '50px',
+                    borderRadius: '6px',
+                    objectFit: 'cover',
+                    cursor: 'pointer',
+                    border: idx === lightboxState.currentIndex ? '2px solid #3b82f6' : '2px solid transparent',
+                    opacity: idx === lightboxState.currentIndex ? 1 : 0.6,
+                    transition: 'all 0.15s ease'
+                  }}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };

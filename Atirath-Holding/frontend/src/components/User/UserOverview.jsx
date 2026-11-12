@@ -31,7 +31,7 @@ const DonutChart = ({ completedPct, inProgressPct, yetToStartPct, overallPct }) 
       </text>
       <text x="50%" y="60%" textAnchor="middle" dominantBaseline="middle"
         style={{ transform: "rotate(90deg)", transformOrigin: "center", fontSize: "11px", fill: "#6b7280" }}>
-        Closed
+        Progress
       </text>
     </svg>
   );

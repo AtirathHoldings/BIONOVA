@@ -30,4 +30,11 @@ INSERT INTO screen_master (screen_nm, group_nm, screen_code, sts) VALUES
 ('Assign Access',   'Other Settings', 'ASSIGN_ACCESS',   true),
 ('Project Access',  'Other Settings', 'PROJECT_ACCESS',  true),
 ('Profile',         'Other Settings', 'PROFILE',         true),
+-- Operations & Supply Chain
+('Inventory Management',                  'Inventory',                 'INVENTORY_MANAGEMENT',   true),
+('Visitor Management',                    'Visitor Management',        'VISITOR_MANAGEMENT',     true),
+('Executive Overview',                    'Executive',                 'EXECUTIVE_MODULE',       true),
+('Procurement & Purchase Order (PO)',     'Supply Chain & Operations', 'PROCUREMENT_MANAGEMENT', true),
+('Equipment & Asset Maintenance (CMMS)', 'Supply Chain & Operations', 'ASSET_MAINTENANCE',      true),
+('Fleet & Dispatch Logistics',           'Supply Chain & Operations', 'FLEET_DISPATCH',         true)
 ON CONFLICT (screen_code) DO NOTHING;

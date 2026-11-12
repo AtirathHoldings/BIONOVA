@@ -244,6 +244,9 @@ const AdminDashboard = ({ userRole, onLogout }) => {
       }
     }
     fetchMetrics();
+    const handleRefresh = () => fetchMetrics();
+    window.addEventListener('bionova:refresh', handleRefresh);
+    return () => window.removeEventListener('bionova:refresh', handleRefresh);
   }, []);
 
   const projectDataMap = { "All Projects": {}, "This Month": {}, "This Year": {} };
@@ -455,8 +458,15 @@ const AdminDashboard = ({ userRole, onLogout }) => {
 
   const wipStatuses = ["WIP", "IN_PROGRESS", "IN PROGRESS", "SUBMIT_REVIEW", "UNDER_REVIEW", "UNDER REVIEW"];
   
+  const isTaskInactive = (t) => {
+    const s = ((t.taskSts?.statusNm || t.taskSts || t.status || "").toString()).toUpperCase().trim();
+    return s === "COMPLETED" || s === "CLOSED" || s === "HOLD" || s === "ON_HOLD" || s === "ON HOLD" || s === "INACTIVE" || s === "4" || s === "5" || t.sts === false || t.sts === "Inactive";
+  };
+
   const td = {
     total: filteredTasks.length,
+    active: filteredTasks.filter(t => !isTaskInactive(t)).length,
+    inactive: filteredTasks.filter(t => isTaskInactive(t)).length,
     completed: filteredTasks.filter(t => { const s = (t.taskSts || "").toUpperCase(); return s === "COMPLETED" || s === "CLOSED"; }).length,
     progress: filteredTasks.filter(t => wipStatuses.includes((t.taskSts || "").toUpperCase())).length,
     todo: filteredTasks.filter(t => !["COMPLETED", "CLOSED", ...wipStatuses].includes((t.taskSts || "").toUpperCase())).length,
@@ -778,13 +788,6 @@ const AdminDashboard = ({ userRole, onLogout }) => {
           
           <div className="erp-kpi-grid">
             <div className="erp-kpi-card">
-              <div className="kpi-icon-box bg-green"><Building2 size={26} color="#ffffff"/></div>
-              <div className="kpi-content">
-                <span className="kpi-title">Total Companies</span>
-                <h2>{companyCount}</h2>
-              </div>
-            </div>
-            <div className="erp-kpi-card">
               <div className="kpi-icon-box bg-blue"><Factory size={26} color="#ffffff"/></div>
               <div className="kpi-content">
                 <span className="kpi-title">Total Plants</span>
@@ -809,7 +812,14 @@ const AdminDashboard = ({ userRole, onLogout }) => {
               <div className="kpi-icon-box bg-cyan"><ClipboardList size={26} color="#ffffff"/></div>
               <div className="kpi-content">
                 <span className="kpi-title">Active Tasks</span>
-                <h2>{td.total}</h2>
+                <h2>{td.active}</h2>
+              </div>
+            </div>
+            <div className="erp-kpi-card">
+              <div className="kpi-icon-box bg-green"><CheckSquare size={26} color="#ffffff"/></div>
+              <div className="kpi-content">
+                <span className="kpi-title">Inactive Tasks</span>
+                <h2>{td.inactive}</h2>
               </div>
             </div>
             <div className="erp-kpi-card">

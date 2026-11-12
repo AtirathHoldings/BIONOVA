@@ -745,6 +745,9 @@ const UserDashboard = ({ userRole, onLogout }) => {
 
   useEffect(() => {
     fetchDashboardData();
+    const handleRefresh = () => fetchDashboardData();
+    window.addEventListener('bionova:refresh', handleRefresh);
+    return () => window.removeEventListener('bionova:refresh', handleRefresh);
   }, []);
 
   // 7.3: Event Handlers

@@ -164,7 +164,9 @@ const AssignAccess = ({ userRole, onLogout }) => {
           'Project': Folder,
           'User': Users,
           'Access Control': Settings,
-          'Individual Screens': User
+          'Individual Screens': User,
+          'Executive': BarChart2,
+          'Operations': Folder
         };
 
         const groupsMap = {};

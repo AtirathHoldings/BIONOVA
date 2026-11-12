@@ -49,6 +49,7 @@
   .sidebar.mobile-open .menu-list li span,
   .sidebar.mobile-open .dropdown-header span,
   .sidebar.mobile-open .dropdown-header svg:last-child,
+  .sidebar.mobile-open .dropdown-arrow-icon,
   .sidebar.mobile-open .logout-button span {
     display: flex !important;
   }
@@ -77,6 +78,7 @@
   .sidebar .menu-list li span,
   .sidebar .dropdown-header span,
   .sidebar .dropdown-header svg:last-child,
+  .sidebar .dropdown-arrow-icon,
   .sidebar .logout-button span,
   .sidebar .bottom-logo-text-container {
     display: flex !important;

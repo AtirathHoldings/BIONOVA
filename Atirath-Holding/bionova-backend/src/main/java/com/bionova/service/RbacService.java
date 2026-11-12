@@ -37,7 +37,31 @@ public class RbacService {
 
 
     public List<ScreenMaster> getAllScreens() {
+        ensureOperationalScreens();
         return screenMasterRepository.findAll();
+    }
+
+    private void ensureOperationalScreens() {
+        try {
+            ensureScreen("PROCUREMENT_MANAGEMENT", "Procurement & PO Management", "Supply Chain & Operations");
+            ensureScreen("ASSET_MAINTENANCE", "Equipment & Asset Maintenance (CMMS)", "Supply Chain & Operations");
+            ensureScreen("FLEET_DISPATCH", "Fleet & Dispatch Logistics", "Supply Chain & Operations");
+            ensureScreen("INVENTORY_MANAGEMENT", "Inventory Management", "Inventory");
+            ensureScreen("VISITOR_MANAGEMENT", "Visitor Management", "Visitor Management");
+            ensureScreen("EXECUTIVE_MODULE", "Executive Overview", "Executive");
+        } catch (Exception e) {
+            // Silently continue if DB temporarily read-only
+        }
+    }
+
+    private void ensureScreen(String code, String name, String group) {
+        if (screenMasterRepository.findByScreenCode(code).isEmpty()) {
+            ScreenMaster sm = new ScreenMaster();
+            sm.setScreenCode(code);
+            sm.setScreenNm(name);
+            sm.setGroupNm(group);
+            screenMasterRepository.save(sm);
+        }
     }
 
     public List<RoleDto> getAllRoles() {
@@ -49,8 +73,8 @@ public class RbacService {
 
     /**
      * Returns true if the employee has at least one RBAC mapping in the database.
-     * When false → no RBAC configured yet → show all screens (full_access mode).
-     * When true  → RBAC is set up → filter screens based on permissions.
+     * When false â†’ no RBAC configured yet â†’ show all screens (full_access mode).
+     * When true  â†’ RBAC is set up â†’ filter screens based on permissions.
      */
     @Cacheable(value = "rbacHasRbac", key = "#empId")
     public boolean hasRbacConfigured(Long empId) {
