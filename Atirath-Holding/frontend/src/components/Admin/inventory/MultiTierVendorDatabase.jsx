@@ -207,6 +207,7 @@ const MultiTierVendorDatabase = ({ screenPerm: propPerm }) => {
 
   const handleDelete = (id) => {
     if (!window.confirm("Are you sure you want to remove this vendor from the database?")) return;
+    deleteInventoryVendor(id).catch(err => console.warn(err));
     setVendors(vendors.filter(v => v.id !== id));
   };
 
@@ -217,25 +218,25 @@ const MultiTierVendorDatabase = ({ screenPerm: propPerm }) => {
       return;
     }
 
+    const cleanItem = {
+      ...formData,
+      ratingStars: Number(formData.ratingStars),
+      onTimeDeliveryRate: Number(formData.onTimeDeliveryRate),
+      qualityAcceptanceRate: Number(formData.qualityAcceptanceRate),
+      creditLimit: Number(formData.creditLimit)
+    };
+
     if (modalMode === "add") {
-      const newItem = {
-        ...formData,
-        id: Date.now(),
-        ratingStars: Number(formData.ratingStars),
-        onTimeDeliveryRate: Number(formData.onTimeDeliveryRate),
-        qualityAcceptanceRate: Number(formData.qualityAcceptanceRate),
-        creditLimit: Number(formData.creditLimit)
-      };
+      const newItem = { ...cleanItem, id: Date.now() };
+      saveInventoryVendor(cleanItem).then(res => {
+        if (res) setVendors(prev => [res, ...prev.filter(v => v.id !== newItem.id)]);
+      }).catch(err => console.warn(err));
       setVendors([newItem, ...vendors]);
     } else {
-      setVendors(vendors.map(v => v.id === selectedVendor.id ? {
-        ...formData,
-        id: selectedVendor.id,
-        ratingStars: Number(formData.ratingStars),
-        onTimeDeliveryRate: Number(formData.onTimeDeliveryRate),
-        qualityAcceptanceRate: Number(formData.qualityAcceptanceRate),
-        creditLimit: Number(formData.creditLimit)
-      } : v));
+      saveInventoryVendor(cleanItem, selectedVendor.id).then(res => {
+        if (res) setVendors(prev => prev.map(v => v.id === selectedVendor.id ? res : v));
+      }).catch(err => console.warn(err));
+      setVendors(vendors.map(v => v.id === selectedVendor.id ? { ...cleanItem, id: selectedVendor.id } : v));
     }
     setIsModalOpen(false);
   };

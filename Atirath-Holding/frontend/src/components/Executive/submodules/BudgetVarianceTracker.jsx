@@ -133,10 +133,16 @@ const BudgetVarianceTracker = () => {
     };
 
     if (editingItem) {
+      saveBudgetItem(cleanItem, editingItem.id).then(res => {
+        if (res) setCostCenters(prev => prev.map(c => c.id === editingItem.id ? res : c));
+      }).catch(err => console.warn(err));
       setCostCenters((prev) =>
         prev.map((c) => (c.id === editingItem.id ? cleanItem : c))
       );
     } else {
+      saveBudgetItem(cleanItem).then(res => {
+        if (res) setCostCenters(prev => [res, ...prev.filter(c => c.id !== cleanItem.id)]);
+      }).catch(err => console.warn(err));
       setCostCenters((prev) => [cleanItem, ...prev]);
     }
     setIsModalOpen(false);
@@ -185,7 +191,7 @@ const BudgetVarianceTracker = () => {
 
       {/* If isModalOpen is true, render the Full-Page Form Card. Otherwise, render the List & KPIs */}
       {isModalOpen ? (
-        <div style={{
+        <div className="exec-form-card" style={{
           backgroundColor: "#ffffff",
           borderRadius: "14px",
           border: "1px solid #e2e8f0",
@@ -194,7 +200,7 @@ const BudgetVarianceTracker = () => {
           marginTop: "10px"
         }}>
           {/* Form Header with Back Button */}
-          <div style={{
+          <div className="exec-form-header" style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -233,9 +239,9 @@ const BudgetVarianceTracker = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSave} style={{ padding: "28px" }}>
+          <form onSubmit={handleSave} className="exec-form-body" style={{ padding: "28px" }}>
             {/* Section 1: Cost Center Identification */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -246,7 +252,7 @@ const BudgetVarianceTracker = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <Building size={18} color="#059669" /> 1. Cost Center & Department Mapping
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Cost Center Code *
@@ -319,7 +325,7 @@ const BudgetVarianceTracker = () => {
             </div>
 
             {/* Section 2: Financial Metrics */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -330,7 +336,7 @@ const BudgetVarianceTracker = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <PieChart size={18} color="#2563eb" /> 2. Budget Allocations & Commitments
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Baseline Approved Budget (₹ Cr) *
@@ -388,7 +394,7 @@ const BudgetVarianceTracker = () => {
             </div>
 
             {/* Bottom Action Bar */}
-            <div style={{
+            <div className="exec-form-footer" style={{
               display: "flex",
               justifyContent: "flex-end",
               alignItems: "center",
@@ -491,7 +497,7 @@ const BudgetVarianceTracker = () => {
       )}
 
       {/* KPI Stats */}
-      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: "24px" }}>
+      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "24px" }}>
         <div className="exec-fin-tile">
           <div className="exec-fin-tile-label">APPROVED BASELINE BUDGET</div>
           <div className="exec-fin-tile-val">₹{totalBaseline.toFixed(1)} Cr</div>
@@ -536,19 +542,19 @@ const BudgetVarianceTracker = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{
+      <div className="exec-filter-bar" style={{
         background: "#ffffff",
         borderRadius: "12px",
         padding: "16px 20px",
         border: "1px solid #e2e8f0",
         marginBottom: "20px",
         display: "flex",
-        flexWrap: "wrap",
+        flexWrap: "nowrap",
         gap: "14px",
         alignItems: "center",
         justifyContent: "space-between"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "260px" }}>
+        <div className="exec-search-wrapper" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -576,11 +582,12 @@ const BudgetVarianceTracker = () => {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="exec-filter-selects" style={{ display: "flex", gap: "10px", flexWrap: "nowrap", flexShrink: 0 }}>
           <select
             className="exec-select"
             value={natureFilter}
             onChange={(e) => setNatureFilter(e.target.value)}
+            style={{ minWidth: "150px" }}
           >
             <option value="All">All Expenses (CapEx & OpEx)</option>
             <option value="CapEx">CapEx Only</option>
@@ -591,6 +598,7 @@ const BudgetVarianceTracker = () => {
             className="exec-select"
             value={plantFilter}
             onChange={(e) => setPlantFilter(e.target.value)}
+            style={{ minWidth: "150px" }}
           >
             <option value="All">All Plants & Facilities</option>
             <option value="Hyderabad">Hyderabad East</option>
@@ -602,6 +610,7 @@ const BudgetVarianceTracker = () => {
             className="exec-select"
             value={varianceFilter}
             onChange={(e) => setVarianceFilter(e.target.value)}
+            style={{ minWidth: "150px" }}
           >
             <option value="All">All Variances</option>
             <option value="Overrun">Overruns (&gt; 5%)</option>
@@ -621,7 +630,7 @@ const BudgetVarianceTracker = () => {
           </span>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        <div className="exec-table-responsive" style={{ overflowX: "auto" }}>
           <table className="exec-dept-table" style={{ margin: 0 }}>
             <thead>
               <tr>

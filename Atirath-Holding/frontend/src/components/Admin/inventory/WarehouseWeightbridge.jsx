@@ -43,6 +43,12 @@ const SAMPLE_SCAN_TAGS = [];
 const WarehouseWeightbridge = ({ screenPerm }) => {
   const [slips, setSlips] = useState([]);
 
+  useEffect(() => {
+    getWeighbridgeSlips().then(res => {
+      if (Array.isArray(res) && res.length > 0) setSlips(res);
+    }).catch(err => console.warn(err));
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
@@ -160,6 +166,9 @@ const WarehouseWeightbridge = ({ screenPerm }) => {
       weighbridgeOperator: formData.weighbridgeOperator,
       notes: formData.notes
     };
+    saveWeighbridgeSlip(newSlip).then(res => {
+      if (res) setSlips(prev => [res, ...prev.filter(s => s.id !== newSlip.id)]);
+    }).catch(err => console.warn(err));
     setSlips([newSlip, ...slips]);
     setIsInwardModalOpen(false);
   };
@@ -181,9 +190,9 @@ const WarehouseWeightbridge = ({ screenPerm }) => {
     const net = selectedSlip.grossWeightKg - tare;
     const dry = Math.round(net * (1 - (selectedSlip.moisturePercent / 100)));
 
-    setSlips(slips.map(s => {
+    const updated = slips.map(s => {
       if (s.id === selectedSlip.id) {
-        return {
+        const itemObj = {
           ...s,
           tareWeightKg: tare,
           netWeightKg: net,
@@ -191,9 +200,12 @@ const WarehouseWeightbridge = ({ screenPerm }) => {
           status: "Completed",
           outTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
         };
+        saveWeighbridgeSlip(itemObj, s.id).catch(err => console.warn(err));
+        return itemObj;
       }
       return s;
-    }));
+    });
+    setSlips(updated);
     setIsTareModalOpen(false);
   };
 

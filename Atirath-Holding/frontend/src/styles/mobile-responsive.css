@@ -16,6 +16,110 @@
 }
 
 /* ───────────────────────────────────────────────
+   MASTER LIST HEADERS & ACTION BUTTONS (BASE / DESKTOP)
+─────────────────────────────────────────────── */
+.master-list-header,
+.pc-list-header,
+.al-list-header,
+.dept-list-header,
+.dept-map-list-header,
+.emp-list-header,
+.desig-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  box-sizing: border-box;
+}
+
+.master-list-actions,
+.pc-list-actions,
+.al-list-actions,
+.dept-list-actions,
+.dept-map-list-actions,
+.emp-list-actions,
+.desig-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.master-search-box,
+.pc-search-box,
+.al-search-box,
+.dept-search-box,
+.dept-map-search-box,
+.emp-search-box,
+.desig-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.master-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.master-search-input,
+.pc-search-input,
+.al-search-input,
+.dept-search-input,
+.dept-map-search-input,
+.emp-search-input,
+.desig-search-input {
+  padding: 8px 12px 8px 36px !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: 6px !important;
+  font-size: 14px !important;
+  outline: none !important;
+  width: 250px;
+  box-sizing: border-box !important;
+  background-color: #ffffff !important;
+  color: #0f172a !important;
+  height: 38px;
+}
+
+.master-btn-add-new,
+.pc-btn-add-new,
+.al-btn-add-new,
+.dept-btn-add-new,
+.emp-btn-add-new,
+.desig-btn-add-new {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 0.2s ease;
+  height: 38px;
+  box-sizing: border-box;
+}
+
+.master-btn-add-new:hover,
+.pc-btn-add-new:hover,
+.al-btn-add-new:hover,
+.dept-btn-add-new:hover,
+.emp-btn-add-new:hover,
+.desig-btn-add-new:hover {
+  background-color: #1d4ed8;
+}
+
+/* ───────────────────────────────────────────────
    TABLET + MOBILE (≤ 1024px)
 ─────────────────────────────────────────────── */
 @media screen and (max-width: 1024px) {
@@ -120,13 +224,23 @@
     background: #e2e8f0 !important;
   }
 
+    /* ─── HIDE HEADER SPACER ON MOBILE ─── */
+  .header-spacer {
+    display: none !important;
+    height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
   /* ─── HIDE desktop-only header items ─── */
   .header-desktop-items {
     display: none !important;
   }
 
-  /* ─── ALL PAGE SHELLS: reset left margin ─── */
+  /* ─── ALL PAGE SHELLS: reset left margin & offset for fixed header ─── */
   .cc-shell,
+  .cm-shell,
+  .company-master-shell,
   .db-shell,
   .db-shell-container .db-shell,
   .dashboard-main,
@@ -141,13 +255,78 @@
   .tb-shell,
   .emp-shell,
   .dept-shell,
+  .dm-shell,
   .dept-map-shell,
+  .desig-shell,
   .ts-shell,
   .task-shell,
-  .ud-shell {
+  .ud-shell,
+  .utb-shell,
+  .mp-shell,
+  .calendar-content,
+  .exec-main,
+  .gc-shell,
+  .inv-main,
+  .mc-shell,
+  .ph-shell,
+  .pl-shell,
+  .pm-shell,
+  .proc-main,
+  .sco-main,
+  .vm-main,
+  .dr-shell {
     margin-left: 0 !important;
     width: 100% !important;
-    padding-bottom: 24px;
+    max-width: 100% !important;
+    padding-top: 60px !important;
+    padding-bottom: 24px !important;
+    box-sizing: border-box !important;
+  }
+
+  body.sidebar-collapsed .cc-shell,
+  body.sidebar-collapsed .cm-shell,
+  body.sidebar-collapsed .company-master-shell,
+  body.sidebar-collapsed .db-shell,
+  body.sidebar-collapsed .db-shell-container .db-shell,
+  body.sidebar-collapsed .dashboard-main,
+  body.sidebar-collapsed .dashboard-shell,
+  body.sidebar-collapsed .pf-shell,
+  body.sidebar-collapsed .projects-shell,
+  body.sidebar-collapsed .pjs-shell,
+  body.sidebar-collapsed .ms-shell,
+  body.sidebar-collapsed .mc-shell,
+  body.sidebar-collapsed .calendar-layout,
+  body.sidebar-collapsed .calendar-main,
+  body.sidebar-collapsed .pc-shell,
+  body.sidebar-collapsed .al-shell,
+  body.sidebar-collapsed .proj-shell,
+  body.sidebar-collapsed .tb-shell,
+  body.sidebar-collapsed .emp-shell,
+  body.sidebar-collapsed .dept-shell,
+  body.sidebar-collapsed .dm-shell,
+  body.sidebar-collapsed .dept-map-shell,
+  body.sidebar-collapsed .desig-shell,
+  body.sidebar-collapsed .ts-shell,
+  body.sidebar-collapsed .task-shell,
+  body.sidebar-collapsed .ud-shell,
+  body.sidebar-collapsed .utb-shell,
+  body.sidebar-collapsed .mp-shell,
+  body.sidebar-collapsed .calendar-content,
+  body.sidebar-collapsed .exec-main,
+  body.sidebar-collapsed .gc-shell,
+  body.sidebar-collapsed .inv-main,
+  body.sidebar-collapsed .mc-shell,
+  body.sidebar-collapsed .ph-shell,
+  body.sidebar-collapsed .pl-shell,
+  body.sidebar-collapsed .pm-shell,
+  body.sidebar-collapsed .proc-main,
+  body.sidebar-collapsed .sco-main,
+  body.sidebar-collapsed .vm-main,
+  body.sidebar-collapsed .dr-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    padding-top: 60px !important;
   }
 
   /* ─── Admin/DB shell sidebar hide via CSS ─── */
@@ -155,21 +334,104 @@
     display: none !important;
   }
 
-  /* ─── STICKY HEADER on mobile ─── */
+  /* ─── FIXED HEADER on mobile ─── */
   header,
+  .main-header,
   .top-header,
   .ms-topbar,
-  .calendar-top-bar {
-    position: sticky !important;
+  .calendar-top-bar,
+  .cc-topbar,
+  .pc-topbar,
+  .al-topbar,
+  .dept-topbar,
+  body.sidebar-collapsed header,
+  body.sidebar-collapsed .main-header,
+  body.sidebar-collapsed .top-header,
+  body.sidebar-collapsed .ms-topbar,
+  body.sidebar-collapsed .calendar-top-bar {
+    position: fixed !important;
     top: 0 !important;
     left: 0 !important;
+    right: 0 !important;
     width: 100% !important;
-    background: rgba(255, 255, 255, 0.95) !important;
+    min-height: 60px !important;
+    height: 60px !important;
+    background: rgba(255, 255, 255, 0.98) !important;
     backdrop-filter: blur(10px) !important;
     -webkit-backdrop-filter: blur(10px) !important;
-    z-index: 50 !important;
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06) !important;
-    padding: 10px 14px !important;
+    z-index: 1000 !important;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08) !important;
+    padding: 8px 14px !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: space-between !important;
+  }
+
+  /* Compact header inner items on mobile */
+  header > div:first-child,
+  .main-header > div:first-child {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    min-width: 0 !important;
+    flex: 1 1 auto !important;
+  }
+
+  header h1,
+  .main-header h1,
+  .top-header h1 {
+    font-size: 16px !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 180px !important;
+    line-height: 1.2 !important;
+    margin: 0 !important;
+  }
+
+  .header-subtitle {
+    display: none !important;
+  }
+
+  header > div:last-child,
+  .main-header > div:last-child {
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    flex-shrink: 0 !important;
+  }
+
+  header img[alt="Company Logo"],
+  .main-header img[alt="Company Logo"] {
+    width: 34px !important;
+    height: 34px !important;
+    object-fit: contain !important;
+  }
+
+  /* ─── MODAL OVERLAYS on mobile: above fixed header (z-index 1000) ─── */
+  .cc-modal-overlay,
+  .pc-modal-overlay,
+  .al-modal-overlay,
+  .dept-modal-overlay,
+  .desig-modal-overlay,
+  .emp-modal-overlay,
+  .exec-modal-overlay,
+  .exec-details-modal-overlay,
+  .proj-modal-overlay,
+  .tb-modal-overlay,
+  .ud-modal-overlay,
+  .inv-modal-overlay,
+  .vm-modal-overlay,
+  .dr-modal-overlay,
+  .cit-modal-overlay,
+  .event-modal-overlay,
+  .mc-modal-overlay,
+  .utb-modal-overlay,
+  .aa-modal-overlay,
+  .sco-modal-overlay,
+  [class*="-modal-overlay"] {
+    z-index: 1200 !important;
   }
 
   /* ─── FOOTER bars: full width ─── */
@@ -182,8 +444,9 @@
     box-shadow: 0 -4px 15px rgba(0, 0, 0, 0.05) !important;
   }
 
-  /* ─── MAIN CONTENT inner padding ─── */
+  /* ─── MAIN CONTENT inner padding (Compact responsive spacing) ─── */
   .cc-main,
+  .company-master-main,
   .dashboard-main,
   .pf-main,
   .pjs-main,
@@ -197,8 +460,66 @@
   .dept-map-content,
   .ts-main,
   .task-main,
-  .db-main {
-    padding: 16px !important;
+  .db-main,
+  .ud-main,
+  .utb-main,
+  .mp-main,
+  .mp-body,
+  .calendar-content,
+  .exec-content,
+  .ph-main,
+  .sco-main,
+  .inv-main,
+  .vm-main,
+  .dr-main {
+    padding: 10px 12px 20px 12px !important;
+    padding-top: 8px !important;
+    margin-top: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Remove excessive starting gap from inner content cards */
+  .cc-content,
+  .cc-table-panel,
+  .pc-content,
+  .pc-table-panel,
+  .pc-form-card,
+  .al-content,
+  .al-table-panel,
+  .dept-content,
+  .dept-table-panel,
+  .dept-form-card,
+  .dept-map-content,
+  .dept-map-table-panel,
+  .desig-content,
+  .desig-table-panel,
+  .desig-form-card,
+  .mp-content,
+  .mp-body,
+  .mp-card-list,
+  .myt-table-card,
+  .myt-detail-card,
+  .company-list-header,
+  .master-list-header,
+  .emp-content,
+  .emp-form-card,
+  .emp-table-card,
+  .company-form-content,
+  .company-form-body,
+  .cc-form-body,
+  .pc-form-body,
+  .al-form-body,
+  .cit-container,
+  .cit-card,
+  .ph-container,
+  .ph-card,
+  .ph-header-row,
+  .proj-content,
+  .mc-content,
+  .tb-container,
+  .db-card,
+  .erp-stats-container {
+    margin-top: 0 !important;
   }
 
   /* ─── GRID LAYOUTS: Stack to single column ─── */
@@ -251,103 +572,798 @@
     min-height: 44px;
   }
 
-  /* ─── PREMIUM TABLE → CARD TRANSFORMATION ─── */
-  .cc-table-container,
+  /* ─── PREMIUM TABLE → CARD TRANSFORMATION (2nd Screenshot Style) ─── */
   .table-container,
   .pjs-table-wrap,
-  .ms-table-wrap {
+  .ms-table-wrap,
+  .cc-table-container,
+  .pc-table-container,
+  .al-table-container,
+  .dept-table-container,
+  .emp-table-container,
+  .desig-table-container,
+  .cit-table-container {
     border: none !important;
     overflow-x: hidden !important;
     background: transparent !important;
     box-shadow: none !important;
     padding: 0 !important;
+    width: 100% !important;
   }
 
-  .cc-list-table,
   .custom-table,
   .pjs-data-table,
   .ms-task-table {
     display: flex !important;
-    flex-direction: column;
-    gap: 14px;
-    width: 100%;
+    flex-direction: column !important;
+    gap: 14px !important;
+    width: 100% !important;
     min-width: unset !important;
   }
 
-  .cc-list-table thead,
   .custom-table thead,
   .pjs-data-table thead,
   .ms-task-table thead {
     display: none !important;
   }
 
-  .cc-list-table tbody,
   .custom-table tbody,
   .pjs-data-table tbody,
   .ms-task-table tbody {
-    display: contents;
+    display: contents !important;
   }
 
-  .cc-list-table tr,
   .custom-table tr,
   .pjs-data-table tr,
   .ms-task-table tr {
-    display: flex;
-    flex-direction: column;
-    background: #ffffff;
-    border: 1px solid #e2e8f0;
-    border-radius: 14px;
-    padding: 14px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    transition: box-shadow 0.2s;
+    display: flex !important;
+    flex-direction: column !important;
+    background: #ffffff !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 14px !important;
+    padding: 14px 16px !important;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04) !important;
+    margin-bottom: 12px !important;
+    width: 100% !important;
   }
 
-  .cc-list-table tr:hover,
-  .custom-table tr:hover {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  .custom-table tr:hover,
+  .pjs-data-table tr:hover,
+  .ms-task-table tr:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
   }
 
-  .cc-list-table td,
   .custom-table td,
   .pjs-data-table td,
   .ms-task-table td {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    padding: 9px 0;
-    border-bottom: 1px solid #f1f5f9;
-    text-align: right;
-    width: 100%;
-    word-break: break-word;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 9px 0 !important;
+    border: none !important;
+    border-bottom: 1px dashed #e2e8f0 !important;
+    text-align: right !important;
+    width: 100% !important;
+    word-break: break-word !important;
     white-space: normal !important;
-    font-size: 14px;
-    color: #0f172a;
+    font-size: 13px !important;
+    color: #0f172a !important;
   }
 
-  .cc-list-table td:last-child,
   .custom-table td:last-child,
   .pjs-data-table td:last-child {
-    border-bottom: none;
-    justify-content: center;
-    padding-top: 14px;
-    margin-top: 6px;
-    border-top: 1px dashed #e2e8f0;
+    border-bottom: none !important;
+    justify-content: center !important;
+    padding-top: 14px !important;
+    margin-top: 6px !important;
+    border-top: 1px solid #f1f5f9 !important;
   }
 
-  .cc-list-table td::before,
   .custom-table td::before,
   .pjs-data-table td::before,
   .ms-task-table td::before {
-    content: attr(data-label);
-    font-weight: 600;
-    font-size: 12px;
-    color: #64748b;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    text-align: left;
-    margin-right: 12px;
-    min-width: 90px;
-    flex-shrink: 0;
+    content: attr(data-label) !important;
+    font-weight: 600 !important;
+    font-size: 11px !important;
+    color: #64748b !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.5px !important;
+    text-align: left !important;
+    margin-right: 12px !important;
+    min-width: 90px !important;
+    flex-shrink: 0 !important;
+  }
+
+  /* ─── Company Creation List: Mobile 3-Column View (Only Code, Name, Action) ─── */
+  .company-master-table,
+  .cc-list-table.company-master-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+  }
+
+  .company-master-table thead,
+  .cc-list-table.company-master-table thead {
+    display: table-header-group !important;
+  }
+
+  .company-master-table thead tr,
+  .cc-list-table.company-master-table thead tr {
+    display: table-row !important;
+    background: #f8fafc !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .company-master-table tbody,
+  .cc-list-table.company-master-table tbody {
+    display: table-row-group !important;
+  }
+
+  .company-master-table tbody tr,
+  .cc-list-table.company-master-table tbody tr {
+    display: table-row !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .company-master-table tbody tr:hover,
+  .cc-list-table.company-master-table tbody tr:hover {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide all columns except CODE, COMPANY NAME, and ACTIONS */
+  .company-master-table th,
+  .company-master-table td,
+  .cc-list-table.company-master-table th,
+  .cc-list-table.company-master-table td {
+    display: none !important;
+  }
+
+  .company-master-table td::before,
+  .cc-list-table.company-master-table td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* 1. Company Code Column */
+  .company-master-table th.col-coy-code,
+  .company-master-table td.col-coy-code,
+  .cc-list-table.company-master-table th.col-coy-code,
+  .cc-list-table.company-master-table td.col-coy-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .company-master-table td.col-coy-code span,
+  .cc-list-table.company-master-table td.col-coy-code span {
+    display: inline-block !important;
+    font-size: 12px !important;
+    padding: 4px 6px !important;
+    word-break: break-all !important;
+  }
+
+  /* 2. Company Name Column */
+  .company-master-table th.col-coy-name,
+  .company-master-table td.col-coy-name,
+  .cc-list-table.company-master-table th.col-coy-name,
+  .cc-list-table.company-master-table td.col-coy-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  /* 3. Actions Column (Right next to company name) */
+  .company-master-table th.col-coy-actions,
+  .company-master-table td.col-coy-actions,
+  .cc-list-table.company-master-table th.col-coy-actions,
+  .cc-list-table.company-master-table td.col-coy-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .company-master-table td.col-coy-empty,
+  .cc-list-table.company-master-table td.col-coy-empty {
+    display: table-cell !important;
+    text-align: center !important;
+    padding: 40px 16px !important;
+    width: 100% !important;
+  }
+
+  /* ─── Land Creation List: Mobile 3-Column View (Only Code, Name, Action) ─── */
+  .land-master-table,
+  .al-list-table.land-master-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+  }
+
+  .land-master-table thead,
+  .al-list-table.land-master-table thead {
+    display: table-header-group !important;
+  }
+
+  .land-master-table thead tr,
+  .al-list-table.land-master-table thead tr {
+    display: table-row !important;
+    background: #f8fafc !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .land-master-table tbody,
+  .al-list-table.land-master-table tbody {
+    display: table-row-group !important;
+  }
+
+  .land-master-table tbody tr,
+  .al-list-table.land-master-table tbody tr {
+    display: table-row !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .land-master-table tbody tr:hover,
+  .al-list-table.land-master-table tbody tr:hover {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide all columns except CODE, PLANT, and ACTIONS */
+  .land-master-table th,
+  .land-master-table td,
+  .al-list-table.land-master-table th,
+  .al-list-table.land-master-table td {
+    display: none !important;
+  }
+
+  .land-master-table th.land-col-hide-mobile,
+  .land-master-table td.land-col-hide-mobile,
+  .al-list-table.land-master-table th.land-col-hide-mobile,
+  .al-list-table.land-master-table td.land-col-hide-mobile {
+    display: none !important;
+  }
+
+  .land-master-table td::before,
+  .al-list-table.land-master-table td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* 1. Land Code Column */
+  .land-master-table th.col-land-code,
+  .land-master-table td.col-land-code,
+  .al-list-table.land-master-table th.col-land-code,
+  .al-list-table.land-master-table td.col-land-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .land-master-table td.col-land-code span,
+  .al-list-table.land-master-table td.col-land-code span {
+    display: inline-block !important;
+    font-size: 12px !important;
+    padding: 4px 6px !important;
+    word-break: break-all !important;
+  }
+
+  /* 2. Plant / Land Name Column */
+  .land-master-table th.col-land-name,
+  .land-master-table td.col-land-name,
+  .al-list-table.land-master-table th.col-land-name,
+  .al-list-table.land-master-table td.col-land-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  /* 3. Actions Column (Right next to Plant name) */
+  .land-master-table th.col-land-actions,
+  .land-master-table td.col-land-actions,
+  .al-list-table.land-master-table th.col-land-actions,
+  .al-list-table.land-master-table td.col-land-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .land-master-table td.col-land-empty,
+  .al-list-table.land-master-table td.col-land-empty {
+    display: table-cell !important;
+    text-align: center !important;
+    padding: 40px 16px !important;
+    width: 100% !important;
+  }
+
+  .al-pagination-bar {
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
+    align-items: center !important;
+  }
+
+  /* ─── Plant, Land, Department, Mapping, Employee, Designation & Assignment: Mobile 3-Column View ─── */
+  .plant-master-table,
+  .land-master-table,
+  .al-list-table.land-master-table,
+  .department-master-table,
+  .department-mapping-table,
+  .employee-master-table,
+  .designation-master-table,
+  .assignment-master-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+  }
+
+  .plant-master-table thead,
+  .land-master-table thead,
+  .al-list-table.land-master-table thead,
+  .department-master-table thead,
+  .department-mapping-table thead,
+  .employee-master-table thead,
+  .designation-master-table thead,
+  .assignment-master-table thead {
+    display: table-header-group !important;
+  }
+
+  .plant-master-table thead tr,
+  .land-master-table thead tr,
+  .al-list-table.land-master-table thead tr,
+  .department-master-table thead tr,
+  .department-mapping-table thead tr,
+  .employee-master-table thead tr,
+  .designation-master-table thead tr,
+  .assignment-master-table thead tr {
+    display: table-row !important;
+    background: #f8fafc !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .plant-master-table tbody,
+  .land-master-table tbody,
+  .al-list-table.land-master-table tbody,
+  .department-master-table tbody,
+  .department-mapping-table tbody,
+  .employee-master-table tbody,
+  .designation-master-table tbody,
+  .assignment-master-table tbody {
+    display: table-row-group !important;
+  }
+
+  .plant-master-table tbody tr,
+  .land-master-table tbody tr,
+  .al-list-table.land-master-table tbody tr,
+  .department-master-table tbody tr,
+  .department-mapping-table tbody tr,
+  .employee-master-table tbody tr,
+  .designation-master-table tbody tr,
+  .assignment-master-table tbody tr {
+    display: table-row !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .plant-master-table tbody tr:hover,
+  .land-master-table tbody tr:hover,
+  .al-list-table.land-master-table tbody tr:hover,
+  .department-master-table tbody tr:hover,
+  .department-mapping-table tbody tr:hover,
+  .employee-master-table tbody tr:hover,
+  .designation-master-table tbody tr:hover,
+  .assignment-master-table tbody tr:hover {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide all columns by default on mobile for these tables */
+  .plant-master-table th,
+  .plant-master-table td,
+  .land-master-table th,
+  .land-master-table td,
+  .al-list-table.land-master-table th,
+  .al-list-table.land-master-table td,
+  .department-master-table th,
+  .department-master-table td,
+  .department-mapping-table th,
+  .department-mapping-table td,
+  .employee-master-table th,
+  .employee-master-table td,
+  .designation-master-table th,
+  .designation-master-table td,
+  .assignment-master-table th,
+  .assignment-master-table td {
+    display: none !important;
+  }
+
+  .plant-master-table th.plant-col-hide-mobile,
+  .plant-master-table td.plant-col-hide-mobile,
+  .land-master-table th.land-col-hide-mobile,
+  .land-master-table td.land-col-hide-mobile,
+  .al-list-table.land-master-table th.land-col-hide-mobile,
+  .al-list-table.land-master-table td.land-col-hide-mobile,
+  .department-master-table th.dept-col-hide-mobile,
+  .department-master-table td.dept-col-hide-mobile,
+  .department-mapping-table th.deptmap-col-hide-mobile,
+  .department-mapping-table td.deptmap-col-hide-mobile,
+  .employee-master-table th.emp-col-hide-mobile,
+  .employee-master-table td.emp-col-hide-mobile,
+  .designation-master-table th.desig-col-hide-mobile,
+  .designation-master-table td.desig-col-hide-mobile,
+  .assignment-master-table th.asgn-col-hide-mobile,
+  .assignment-master-table td.asgn-col-hide-mobile {
+    display: none !important;
+  }
+
+  .plant-master-table td::before,
+  .land-master-table td::before,
+  .al-list-table.land-master-table td::before,
+  .department-master-table td::before,
+  .department-mapping-table td::before,
+  .employee-master-table td::before,
+  .designation-master-table td::before,
+  .assignment-master-table td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* 1. Code Column */
+  .plant-master-table th.col-plant-code,
+  .plant-master-table td.col-plant-code,
+  .land-master-table th.col-land-code,
+  .land-master-table td.col-land-code,
+  .al-list-table.land-master-table th.col-land-code,
+  .al-list-table.land-master-table td.col-land-code,
+  .department-master-table th.col-dept-code,
+  .department-master-table td.col-dept-code,
+  .department-mapping-table th.col-deptmap-code,
+  .department-mapping-table td.col-deptmap-code,
+  .employee-master-table th.col-emp-code,
+  .employee-master-table td.col-emp-code,
+  .designation-master-table th.col-desig-code,
+  .designation-master-table td.col-desig-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .plant-master-table td.col-plant-code span,
+  .land-master-table td.col-land-code span,
+  .al-list-table.land-master-table td.col-land-code span,
+  .department-master-table td.col-dept-code span,
+  .department-mapping-table td.col-deptmap-code span,
+  .employee-master-table td.col-emp-code span,
+  .designation-master-table td.col-desig-code span {
+    display: inline-block !important;
+    font-size: 12px !important;
+    padding: 4px 6px !important;
+    word-break: break-all !important;
+  }
+
+  /* 2. Name Column */
+  .plant-master-table th.col-plant-name,
+  .plant-master-table td.col-plant-name,
+  .land-master-table th.col-land-name,
+  .land-master-table td.col-land-name,
+  .al-list-table.land-master-table th.col-land-name,
+  .al-list-table.land-master-table td.col-land-name,
+  .department-master-table th.col-dept-name,
+  .department-master-table td.col-dept-name,
+  .department-mapping-table th.col-deptmap-name,
+  .department-mapping-table td.col-deptmap-name,
+  .employee-master-table th.col-emp-name,
+  .employee-master-table td.col-emp-name,
+  .designation-master-table th.col-desig-name,
+  .designation-master-table td.col-desig-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  /* 3. Actions Column */
+  .plant-master-table th.col-plant-actions,
+  .plant-master-table td.col-plant-actions,
+  .land-master-table th.col-land-actions,
+  .land-master-table td.col-land-actions,
+  .al-list-table.land-master-table th.col-land-actions,
+  .al-list-table.land-master-table td.col-land-actions,
+  .department-master-table th.col-dept-actions,
+  .department-master-table td.col-dept-actions,
+  .department-mapping-table th.col-deptmap-actions,
+  .department-mapping-table td.col-deptmap-actions,
+  .employee-master-table th.col-emp-actions,
+  .employee-master-table td.col-emp-actions,
+  .designation-master-table th.col-desig-actions,
+  .designation-master-table td.col-desig-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+    /* ─── Assignment Master Specific Column Proportions (INDTSK-xxx fits without clipping) ─── */
+  .assignment-master-table th.col-asgn-code,
+  .assignment-master-table td.col-asgn-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 6px 12px 10px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table th.col-asgn-code {
+    font-size: 11px !important;
+    letter-spacing: 0.5px !important;
+    white-space: nowrap !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+  }
+
+  .assignment-master-table td.col-asgn-code span,
+  .col-asgn-code-badge {
+    display: inline-block !important;
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+    font-weight: 600 !important;
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+  }
+
+  .assignment-master-table th.col-asgn-name,
+  .assignment-master-table td.col-asgn-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    line-height: 1.35 !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table th.col-asgn-name {
+    font-size: 11px !important;
+    letter-spacing: 0.5px !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+  }
+
+  .assignment-master-table th.col-asgn-actions,
+  .assignment-master-table td.col-asgn-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table th.col-asgn-actions {
+    font-size: 11px !important;
+    letter-spacing: 0.5px !important;
+    padding: 12px 4px !important;
+    text-align: center !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+  }
+
+  .assignment-master-table td.col-asgn-code span,
+  .col-asgn-code-badge {
+    display: inline-block !important;
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+    font-weight: 600 !important;
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+  }
+
+  .assignment-master-table th.col-asgn-name,
+  .assignment-master-table td.col-asgn-name {
+    display: table-cell !important;
+    width: 52% !important;
+    padding: 12px 6px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    line-height: 1.35 !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table th.col-asgn-name {
+    font-size: 11px !important;
+    letter-spacing: 0.3px !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+  }
+
+  .assignment-master-table th.col-asgn-actions,
+  .assignment-master-table td.col-asgn-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table th.col-asgn-actions {
+    font-size: 11px !important;
+    letter-spacing: 0.3px !important;
+    padding: 12px 4px !important;
+    text-align: center !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+  }
+
+  .plant-master-table td.col-plant-empty,
+  .land-master-table td.col-land-empty,
+  .al-list-table.land-master-table td.col-land-empty,
+  .department-master-table td.col-dept-empty,
+  .department-mapping-table td.col-deptmap-empty,
+  .employee-master-table td.col-emp-empty,
+  .designation-master-table td.col-desig-empty,
+  .assignment-master-table td.col-asgn-empty {
+    display: table-cell !important;
+    text-align: center !important;
+    padding: 40px 16px !important;
+    width: 100% !important;
+  }
+
+  .pc-pagination-bar,
+  .dept-pagination-bar,
+  .emp-pagination-bar,
+  .desig-pagination-bar {
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
+    align-items: center !important;
   }
 
   /* ─── FILTER ROW ─── */
@@ -403,12 +1419,864 @@
   }
 
   header h1,
+  .main-header h1,
   .top-header h1 {
-    font-size: 16px !important;
+    font-size: 15px !important;
+    max-width: 140px !important;
+  }
+
+  .notif-dropdown {
+    width: calc(100vw - 28px) !important;
+    right: -45px !important;
+    max-width: 320px !important;
   }
 
   .cc-form-layout-row,
   .form-row {
     grid-template-columns: 1fr !important;
+  }
+}
+
+/* ───────────────────────────────────────────────
+   MOBILE (≤ 768px) - MASTER PAGES CREATION & LIST ENHANCEMENTS
+   Matches Company Master reference style (Vertical Stack: Title -> Search -> + Add New Button)
+─────────────────────────────────────────────── */
+@media screen and (max-width: 768px) {
+  .master-list-header,
+  .pc-list-header,
+  .al-list-header,
+  .dept-list-header,
+  .dept-map-list-header,
+  .emp-list-header,
+  .desig-list-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 16px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .master-list-actions,
+  .pc-list-actions,
+  .al-list-actions,
+  .dept-list-actions,
+  .dept-map-list-actions,
+  .emp-list-actions,
+  .desig-list-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .master-search-box,
+  .pc-search-box,
+  .al-search-box,
+  .dept-search-box,
+  .dept-map-search-box,
+  .emp-search-box,
+  .desig-search-box {
+    width: 100% !important;
+    position: relative !important;
+    box-sizing: border-box !important;
+  }
+
+  .master-search-input,
+  .pc-search-input,
+  .al-search-input,
+  .dept-search-input,
+  .dept-map-search-input,
+  .emp-search-input,
+  .desig-search-input {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: 42px !important;
+    box-sizing: border-box !important;
+    font-size: 14px !important;
+    border-radius: 6px !important;
+  }
+
+  .master-btn-add-new,
+  .pc-btn-add-new,
+  .al-btn-add-new,
+  .dept-btn-add-new,
+  .cc-btn-add-new,
+  .emp-btn-add-new,
+  .desig-btn-add-new {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: 42px !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    white-space: nowrap !important;
+  }
+
+  .emp-tabs-header {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .emp-tabs-header button {
+    flex: 1 1 auto !important;
+    text-align: center !important;
+    padding: 8px 12px !important;
+    min-height: 38px !important;
+  }
+
+  /* ─── USER MODULE: USER DASHBOARD ─── */
+  .ud-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  .ud-main {
+    padding: 14px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .ud-filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+  .ud-export-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 42px !important;
+  }
+  .ud-stats-container {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    padding: 10px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .ud-row-2-grid,
+  .ud-row-3-grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+    width: 100% !important;
+  }
+  .ud-row-2-grid .ud-card,
+  .ud-row-3-grid .ud-card {
+    min-height: auto !important;
+    max-height: none !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ─── USER MODULE: MY TASKS ─── */
+  .myt-metrics-grid {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    width: 100% !important;
+    overflow: visible !important;
+  }
+  .myt-metric-card {
+    width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .myt-tabs-container {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+  .myt-tabs-left {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+    width: 100% !important;
+  }
+  .myt-filter-btn {
+    flex: 1 1 auto !important;
+    text-align: center !important;
+    min-height: 36px !important;
+  }
+  .myt-tabs-right {
+    width: 100% !important;
+    display: flex !important;
+    gap: 8px !important;
+    margin-left: 0 !important;
+  }
+  .myt-search-box {
+    flex: 1 !important;
+    width: 100% !important;
+  }
+  .myt-search-box input {
+    width: 100% !important;
+    min-width: 100% !important;
+    height: 42px !important;
+    box-sizing: border-box !important;
+    border-radius: 8px !important;
+    font-size: 14px !important;
+  }
+
+  /* My Tasks Table Card View */
+  .cc-list-table td.myt-task-cell,
+  .myt-table td.myt-task-cell,
+  .myt-table td[data-label="TASK"] {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    max-width: 100% !important;
+    width: 100% !important;
+  }
+
+  .myt-task-col-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    text-align: right !important;
+    flex: 1 !important;
+    min-width: 0 !important;
+    max-width: calc(100% - 100px) !important;
+  }
+
+  .myt-task-code {
+    font-weight: 700 !important;
+    font-size: 13px !important;
+    color: #0f172a !important;
+    white-space: nowrap !important;
+    word-break: normal !important;
+    line-height: 1.3 !important;
+  }
+
+  .myt-task-title {
+    font-weight: 500 !important;
+    font-size: 12px !important;
+    color: #64748b !important;
+    white-space: normal !important;
+    word-break: break-word !important;
+    text-align: right !important;
+    margin-top: 3px !important;
+    line-height: 1.35 !important;
+    max-width: 100% !important;
+  }
+
+  .myt-task-milestone {
+    font-size: 11px !important;
+    font-weight: 500 !important;
+    color: #4f46e5 !important;
+    background-color: #eef2ff !important;
+    padding: 2px 8px !important;
+    border-radius: 6px !important;
+    margin-top: 4px !important;
+    display: inline-block !important;
+    word-break: break-word !important;
+    text-align: right !important;
+  }
+
+  /* Team Members in Mobile Card */
+  .cc-list-table td.myt-team-cell,
+  .myt-table td.myt-team-cell,
+  .myt-table td[data-label="TEAM"] {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    max-width: 100% !important;
+    width: 100% !important;
+    padding-top: 10px !important;
+  }
+
+  .myt-team-members-wrap {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 6px !important;
+    max-width: calc(100% - 95px) !important;
+  }
+
+  /* Due Date in Mobile Card */
+  .myt-date-col-wrapper {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: flex-end !important;
+    text-align: right !important;
+    gap: 2px !important;
+  }
+
+  /* Status in Mobile Card */
+  .myt-status-cell-wrap {
+    display: flex !important;
+    align-items: center !important;
+    justify-content: flex-end !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  /* Actions in Mobile Card */
+  .cc-list-table td.myt-actions-cell,
+  .myt-table td.myt-actions-cell,
+  .myt-table td[data-label="ACTIONS"] {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    border-bottom: none !important;
+    padding-top: 12px !important;
+    margin-top: 4px !important;
+    border-top: 1px solid #f1f5f9 !important;
+  }
+
+  /* Task Detail Screen Mobile Overrides */
+  .myt-task-detail-wrapper {
+    max-height: none !important;
+    overflow-y: visible !important;
+    border-radius: 0 !important;
+    background: transparent !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: hidden !important;
+    box-sizing: border-box !important;
+  }
+
+  .myt-detail-header {
+    padding: 12px 14px !important;
+    margin-bottom: 14px !important;
+    border-radius: 10px !important;
+    gap: 10px !important;
+    position: static !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    box-sizing: border-box !important;
+  }
+
+  .myt-detail-header-left {
+    gap: 10px !important;
+    width: 100% !important;
+    align-items: flex-start !important;
+  }
+
+  .myt-detail-back-btn {
+    padding: 6px 12px !important;
+    font-size: 13px !important;
+    flex-shrink: 0 !important;
+  }
+
+  .myt-detail-task-title {
+    font-size: 15px !important;
+    line-height: 1.35 !important;
+    word-break: break-word !important;
+  }
+
+  .myt-detail-header-right {
+    width: 100% !important;
+    justify-content: flex-start !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    padding-top: 6px !important;
+    border-top: 1px dashed #f1f5f9 !important;
+  }
+
+  /* Main Grid -> Single Column Full Width */
+  .myt-detail-main-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  .myt-detail-left-col,
+  .myt-detail-right-col {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .myt-detail-card {
+    padding: 14px 14px !important;
+    margin-bottom: 14px !important;
+    border-radius: 10px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+
+  .myt-detail-stats-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 14px 10px !important;
+  }
+
+  .myt-detail-attachments-grid {
+    grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)) !important;
+    gap: 10px !important;
+  }
+
+  .myt-detail-deny-form {
+    padding: 16px 14px !important;
+    margin-top: 14px !important;
+    border-radius: 10px !important;
+    box-sizing: border-box !important;
+    width: 100% !important;
+  }
+
+  .myt-detail-form-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    margin-bottom: 14px !important;
+  }
+
+  /* ─── USER MODULE: MY PROJECTS ─── */
+  .mp-shell,
+  body.sidebar-collapsed .mp-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .mp-shell-container {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+  .mp-body {
+    padding: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    flex-direction: column !important;
+    overflow: visible !important;
+  }
+  .mp-left-panel,
+  .mp-left-panel.full-width,
+  .mp-right-panel,
+  .mp-right-panel.full-width {
+    width: 100% !important;
+    max-width: 100% !important;
+    padding: 12px 14px !important;
+    box-sizing: border-box !important;
+    height: auto !important;
+    overflow-y: visible !important;
+  }
+  .mp-list-toolbar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 12px !important;
+    border-radius: 10px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    margin-bottom: 16px !important;
+    background: #ffffff !important;
+  }
+  .mp-search-box {
+    width: 100% !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 8px !important;
+    height: 42px !important;
+    padding: 0 12px !important;
+    box-sizing: border-box !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    background: #fff !important;
+  }
+  .mp-search-box input {
+    font-size: 14px !important;
+    border: none !important;
+    outline: none !important;
+    width: 100% !important;
+  }
+  .mp-filter-wrap {
+    border-left: none !important;
+    padding-left: 0 !important;
+    width: 100% !important;
+    position: relative !important;
+  }
+  .mp-filter-btn {
+    width: 100% !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    height: 42px !important;
+    border: 1px solid #cbd5e1 !important;
+    border-radius: 8px !important;
+    padding: 0 14px !important;
+    font-size: 13.5px !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+  }
+  .mp-filter-dropdown {
+    width: 100% !important;
+    left: 0 !important;
+    right: 0 !important;
+    box-sizing: border-box !important;
+    z-index: 100 !important;
+  }
+  .mp-left-panel.full-width .mp-card-list,
+  .mp-card-list {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .mp-project-card {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+    padding: 14px !important;
+    gap: 12px !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+  }
+  .mp-project-card .mp-card-img {
+    width: 100% !important;
+    min-width: unset !important;
+    max-width: 100% !important;
+    height: 90px !important;
+    border-radius: 8px !important;
+    align-self: stretch !important;
+  }
+  .mp-card-info {
+    padding: 0 !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .mp-card-header-row {
+    display: flex !important;
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: flex-start !important;
+    width: 100% !important;
+    margin-bottom: 12px !important;
+  }
+  .mp-card-name {
+    font-size: 15px !important;
+    font-weight: 700 !important;
+    line-height: 1.35 !important;
+    word-break: break-word !important;
+    color: #0f172a !important;
+  }
+  .mp-card-sub {
+    font-size: 12px !important;
+    color: #64748b !important;
+    line-height: 1.4 !important;
+    word-break: break-word !important;
+    margin-bottom: 8px !important;
+  }
+  .mp-card-circle {
+    width: auto !important;
+    flex-shrink: 0 !important;
+  }
+  .mp-card-footer {
+    display: flex !important;
+    flex-wrap: wrap !important;
+    gap: 12px !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    width: 100% !important;
+    padding-top: 10px !important;
+  }
+  .mp-overview-grid {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+    width: 100% !important;
+  }
+  .mp-milestones-card {
+    grid-column: span 1 !important;
+  }
+  .mp-detail-hero {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 14px !important;
+    padding: 14px !important;
+    border-radius: 12px !important;
+    background: #ffffff !important;
+  }
+  .mp-detail-img {
+    width: 100% !important;
+    min-width: unset !important;
+    max-width: 100% !important;
+    height: 90px !important;
+    border-radius: 8px !important;
+    align-self: stretch !important;
+  }
+  .mp-detail-hero-info {
+    width: 100% !important;
+  }
+  .mp-detail-hero-row {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 8px !important;
+    align-items: flex-start !important;
+    margin-bottom: 12px !important;
+  }
+  .mp-detail-meta {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr !important;
+    gap: 12px 10px !important;
+    width: 100% !important;
+  }
+  .mp-detail-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .mp-tabs,
+  .mp-detail-tabs {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    width: 100% !important;
+    flex-wrap: nowrap !important;
+    gap: 4px !important;
+    padding-bottom: 2px !important;
+  }
+  .mp-tab {
+    white-space: nowrap !important;
+    padding: 8px 14px !important;
+    font-size: 13px !important;
+    flex-shrink: 0 !important;
+  }
+  .mp-pagination {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 10px !important;
+    align-items: center !important;
+    padding-top: 14px !important;
+  }
+
+  /* ─── USER MODULE: CALENDAR ─── */
+  .calendar-main,
+  .calendar-content {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding: 12px !important;
+    box-sizing: border-box !important;
+  }
+  .calendar-header-wrapper {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+  .calendar-top-controls {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .calendar-view-toggles {
+    display: flex !important;
+    width: 100% !important;
+    gap: 4px !important;
+  }
+  .calendar-view-toggles .toggle-btn {
+    flex: 1 !important;
+    text-align: center !important;
+    height: 38px !important;
+  }
+  .calendar-nav-controls {
+    display: flex !important;
+    justify-content: space-between !important;
+    width: 100% !important;
+  }
+  .calendar-content-wrapper {
+    flex-direction: column !important;
+    gap: 16px !important;
+    width: 100% !important;
+  }
+  .calendar-grid-area {
+    width: 100% !important;
+    min-width: 0 !important;
+  }
+  .calendar-grid-container {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+  }
+  .calendar-right-sidebar {
+    width: 100% !important;
+    margin-top: 16px !important;
+  }
+
+  /* ─── USER MODULE: TASK BOARD ─── */
+  .utb-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  .utb-main {
+    padding: 14px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .utb-stats-container,
+  .utb-stats-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .utb-search-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .utb-controls-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .utb-board {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-snap-type: x mandatory !important;
+    gap: 12px !important;
+    padding-bottom: 16px !important;
+    width: 100% !important;
+  }
+  .utb-column {
+    min-width: 275px !important;
+    max-width: 300px !important;
+    flex: 0 0 275px !important;
+    scroll-snap-align: start !important;
+    box-sizing: border-box !important;
+  }
+
+  /* ─── EXECUTIVE OVERVIEW C-SUITE MODULE ─── */
+  .exec-main {
+    margin-left: 0 !important;
+    width: 100% !important;
+    min-width: 0 !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+  .exec-content {
+    padding: 12px 10px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+  .exec-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    margin-bottom: 16px !important;
+  }
+  .exec-controls {
+    flex-direction: column !important;
+    width: 100% !important;
+    margin-left: 0 !important;
+    gap: 10px !important;
+  }
+  .exec-controls select,
+  .exec-controls button,
+  .exec-select,
+  .exec-btn-print {
+    width: 100% !important;
+    min-height: 42px !important;
+    height: 42px !important;
+    box-sizing: border-box !important;
+  }
+  .exec-hero-banner {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    padding: 16px 14px !important;
+    gap: 14px !important;
+  }
+  .exec-hero-stats {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .exec-stat-item {
+    text-align: left !important;
+    border-left: none !important;
+    border-top: 1px solid rgba(255, 255, 255, 0.18) !important;
+    padding-left: 0 !important;
+    padding-top: 10px !important;
+  }
+  .exec-sections-grid,
+  .exec-fin-metrics,
+  .exec-portal-grid,
+  .exec-stream-grid {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+    width: 100% !important;
+  }
+  .exec-filter-bar {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px 12px !important;
+  }
+  .exec-filter-selects {
+    flex-direction: column !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .exec-filter-selects select,
+  .exec-filter-selects .exec-select {
+    width: 100% !important;
+  }
+  .exec-table-responsive {
+    width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    display: block !important;
+  }
+  .exec-dept-table {
+    min-width: 650px !important;
+  }
+  .exec-form-card,
+  .exec-card {
+    padding: 14px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .exec-form-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+  }
+  .exec-form-header button {
+    width: 100% !important;
+    min-height: 42px !important;
+  }
+  .exec-form-body {
+    padding: 14px 10px !important;
+  }
+  .exec-form-section {
+    padding: 14px 12px !important;
+    margin-bottom: 14px !important;
+  }
+  .exec-form-grid-inner {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+  .exec-form-footer {
+    flex-direction: column-reverse !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+  .exec-form-footer button {
+    width: 100% !important;
+    min-height: 44px !important;
   }
 }

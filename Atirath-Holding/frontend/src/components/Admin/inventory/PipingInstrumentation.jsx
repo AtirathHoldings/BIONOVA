@@ -29,6 +29,12 @@ const INITIAL_PID_SPARES = [];
 const PipingInstrumentation = ({ screenPerm }) => {
   const [spares, setSpares] = useState([]);
 
+  useEffect(() => {
+    getPipingSpares().then(res => {
+      if (Array.isArray(res) && res.length > 0) setSpares(res);
+    }).catch(err => console.warn(err));
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
 
@@ -117,28 +123,31 @@ const PipingInstrumentation = ({ screenPerm }) => {
 
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to delete this P&ID hardware record?")) {
+      deletePipingSpare(id).catch(err => console.warn(err));
       setSpares(spares.filter(s => s.id !== id));
     }
   };
 
   const handleSaveForm = (e) => {
     e.preventDefault();
+    const cleanItem = {
+      ...formData,
+      currentStock: Number(formData.currentStock),
+      reorderThreshold: Number(formData.reorderThreshold),
+      unitCost: Number(formData.unitCost)
+    };
+
     if (modalMode === "add") {
-      const newItem = {
-        ...formData,
-        id: Date.now(),
-        currentStock: Number(formData.currentStock),
-        reorderThreshold: Number(formData.reorderThreshold),
-        unitCost: Number(formData.unitCost)
-      };
+      const newItem = { ...cleanItem, id: Date.now() };
+      savePipingSpare(cleanItem).then(res => {
+        if (res) setSpares(prev => [res, ...prev.filter(s => s.id !== newItem.id)]);
+      }).catch(err => console.warn(err));
       setSpares([newItem, ...spares]);
     } else {
-      setSpares(spares.map(s => s.id === selectedSpare.id ? {
-        ...formData,
-        currentStock: Number(formData.currentStock),
-        reorderThreshold: Number(formData.reorderThreshold),
-        unitCost: Number(formData.unitCost)
-      } : s));
+      savePipingSpare(cleanItem, selectedSpare.id).then(res => {
+        if (res) setSpares(prev => prev.map(s => s.id === selectedSpare.id ? res : s));
+      }).catch(err => console.warn(err));
+      setSpares(spares.map(s => s.id === selectedSpare.id ? { ...cleanItem, id: selectedSpare.id } : s));
     }
     setIsModalOpen(false);
   };

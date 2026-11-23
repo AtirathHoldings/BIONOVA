@@ -30,6 +30,12 @@ const INITIAL_CIVIL_MATERIALS = [];
 const CivilMaterialsBOM = ({ screenPerm }) => {
   const [materials, setMaterials] = useState([]);
 
+  useEffect(() => {
+    getCivilMaterials().then(res => {
+      if (Array.isArray(res) && res.length > 0) setMaterials(res);
+    }).catch(err => console.warn(err));
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
@@ -133,32 +139,33 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
 
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to delete this civil material BOM record?")) {
+      deleteCivilMaterial(id).catch(err => console.warn(err));
       setMaterials(materials.filter(m => m.id !== id));
     }
   };
 
   const handleSaveForm = (e) => {
     e.preventDefault();
+    const cleanItem = {
+      ...formData,
+      bomRequiredQty: Number(formData.bomRequiredQty),
+      procuredQty: Number(formData.procuredQty),
+      currentStock: Number(formData.currentStock),
+      allocatedQty: Number(formData.allocatedQty),
+      unitCost: Number(formData.unitCost)
+    };
+
     if (modalMode === "add") {
-      const newItem = {
-        ...formData,
-        id: Date.now(),
-        bomRequiredQty: Number(formData.bomRequiredQty),
-        procuredQty: Number(formData.procuredQty),
-        currentStock: Number(formData.currentStock),
-        allocatedQty: Number(formData.allocatedQty),
-        unitCost: Number(formData.unitCost)
-      };
+      const newItem = { ...cleanItem, id: Date.now() };
+      saveCivilMaterial(cleanItem).then(res => {
+        if (res) setMaterials(prev => [res, ...prev.filter(m => m.id !== newItem.id)]);
+      }).catch(err => console.warn(err));
       setMaterials([newItem, ...materials]);
     } else {
-      setMaterials(materials.map(m => m.id === selectedMaterial.id ? {
-        ...formData,
-        bomRequiredQty: Number(formData.bomRequiredQty),
-        procuredQty: Number(formData.procuredQty),
-        currentStock: Number(formData.currentStock),
-        allocatedQty: Number(formData.allocatedQty),
-        unitCost: Number(formData.unitCost)
-      } : m));
+      saveCivilMaterial(cleanItem, selectedMaterial.id).then(res => {
+        if (res) setMaterials(prev => prev.map(m => m.id === selectedMaterial.id ? res : m));
+      }).catch(err => console.warn(err));
+      setMaterials(materials.map(m => m.id === selectedMaterial.id ? { ...cleanItem, id: selectedMaterial.id } : m));
     }
     setIsModalOpen(false);
   };
@@ -173,21 +180,24 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
       return;
     }
 
-    setMaterials(materials.map(m => {
+    const updated = materials.map(m => {
       if (m.id === selectedMaterial.id) {
         const newStock = m.currentStock - qty;
         const newAllocated = m.allocatedQty + qty;
         const newStatus = newStock <= 0 ? "Critical Shortage" : newStock < (m.bomRequiredQty * 0.15) ? "Reorder Needed" : "Adequate";
-        return {
+        const itemObj = {
           ...m,
           currentStock: newStock,
           allocatedQty: newAllocated,
           allocatedStructure: usageStructure,
           status: newStatus
         };
+        saveCivilMaterial(itemObj, m.id).catch(err => console.warn(err));
+        return itemObj;
       }
       return m;
-    }));
+    });
+    setMaterials(updated);
     setIsUsageModalOpen(false);
   };
 

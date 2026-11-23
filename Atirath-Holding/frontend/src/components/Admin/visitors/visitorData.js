@@ -178,12 +178,53 @@ export function getStoredData(key, fallback = []) {
   }
 }
 
+const _lastSavedMap = {};
+
 export function saveStoredData(key, data) {
   try {
     localStorage.setItem(key, JSON.stringify(data));
     window.dispatchEvent(new CustomEvent("bionova_visitor_updated", { detail: { key, data } }));
   } catch (e) {
     console.warn(`Failed to save storage item ${key}:`, e);
+  }
+
+  // Automatic live database sync
+  try {
+    const endpoint = ENDPOINT_MAP[key];
+    if (endpoint) {
+      if (key === STORAGE_KEYS.CONFIG && data && typeof data === 'object' && !Array.isArray(data)) {
+        apiPut(endpoint, data).catch(() => {});
+      } else if (Array.isArray(data)) {
+        const prev = _lastSavedMap[key] || [];
+        if (data.length > prev.length) {
+          // New items added (usually at the front or appended)
+          const newItems = data.filter(item => !prev.some(p => (p.id && item.id && p.id === item.id)));
+          const itemsToPost = newItems.length > 0 ? newItems : [data[0]];
+          itemsToPost.forEach(item => {
+            if (item) {
+              apiPost(endpoint, item).then(saved => {
+                if (saved && saved.id) item.id = saved.id;
+              }).catch(() => {});
+            }
+          });
+        } else if (data.length === prev.length) {
+          // An item was updated
+          const changed = data.find((item, idx) => JSON.stringify(item) !== JSON.stringify(prev[idx]));
+          if (changed) {
+            if (typeof changed.id === 'number') {
+              apiPut(`${endpoint}/${changed.id}`, changed).catch(() => {});
+            } else {
+              apiPost(endpoint, changed).then(saved => {
+                if (saved && saved.id) changed.id = saved.id;
+              }).catch(() => {});
+            }
+          }
+        }
+        _lastSavedMap[key] = JSON.parse(JSON.stringify(data));
+      }
+    }
+  } catch (err) {
+    console.warn(`Visitor data DB sync error for ${key}:`, err);
   }
 }
 

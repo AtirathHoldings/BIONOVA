@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Calendar, Plus, Search, Edit2, Trash2, Info, X, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Calendar, Calendar as CalendarIcon, List, Plus, Search, Edit2, Trash2, Info, X, ChevronLeft, ChevronRight } from 'lucide-react';
 import Sidebar from "../Sidebar.jsx";
 import Header from "../Header.jsx";
 import AlertModal from "../AlertModal.jsx";
@@ -266,6 +266,11 @@ const PublicHoliday = ({ userRole, onLogout }) => {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear().toString());
+  const [viewMode, setViewMode] = useState("calendar"); // 'calendar' | 'list'
+  const [calendarDate, setCalendarDate] = useState(() => {
+    const curYear = new Date().getFullYear();
+    return new Date(curYear, new Date().getMonth(), 1);
+  });
   const [editId, setEditId] = useState(null);
   const datePickerRef = useRef(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -370,6 +375,149 @@ const PublicHoliday = ({ userRole, onLogout }) => {
   // Pagination calculations
   const totalPages = Math.ceil(filteredHolidays.length / rowsPerPage) || 1;
   const paginatedHolidays = filteredHolidays.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
+
+  // Calendar calculations & helpers
+  const months = [
+    "January", "February", "March", "April", "May", "June",
+    "July", "August", "September", "October", "November", "December"
+  ];
+
+  const calYear = calendarDate.getFullYear();
+  const calMonth = calendarDate.getMonth();
+
+  const handleYearSelectChange = (e) => {
+    const val = e.target.value;
+    setSelectedYear(val);
+    setCurrentPage(1);
+    if (val !== "All Years") {
+      const y = parseInt(val, 10);
+      if (!isNaN(y)) {
+        setCalendarDate(new Date(y, calendarDate.getMonth(), 1));
+      }
+    }
+  };
+
+  const handlePrevMonth = () => {
+    setCalendarDate(prev => {
+      const newD = new Date(prev.getFullYear(), prev.getMonth() - 1, 1);
+      if (selectedYear !== "All Years" && newD.getFullYear().toString() !== selectedYear) {
+        setSelectedYear(newD.getFullYear().toString());
+      }
+      return newD;
+    });
+  };
+
+  const handleNextMonth = () => {
+    setCalendarDate(prev => {
+      const newD = new Date(prev.getFullYear(), prev.getMonth() + 1, 1);
+      if (selectedYear !== "All Years" && newD.getFullYear().toString() !== selectedYear) {
+        setSelectedYear(newD.getFullYear().toString());
+      }
+      return newD;
+    });
+  };
+
+  const openAddDrawerWithDate = (dateStr) => {
+    setEditId(null);
+    setFormData({ 
+      date: dateStr, 
+      name: "", 
+      calType: "", 
+      coyId: "", 
+      pltId: "", 
+      mandatory: true,
+      isRegular: false
+    });
+    setDrawerOpen(true);
+  };
+
+  // Helper to count holidays in a month for active calYear
+  const getHolidaysCountForMonth = (year, monthIdx) => {
+    const targetY = String(year);
+    const targetM = String(monthIdx + 1).padStart(2, '0');
+    return filteredHolidays.filter(h => {
+      if (!h.date) return false;
+      const [hY, hM] = h.date.split('-');
+      return hY === targetY && hM === targetM;
+    }).length;
+  };
+
+  // Grid cells calculation for calendar view
+  const firstDayOfWeek = new Date(calYear, calMonth, 1).getDay();
+  const daysInCurMonth = new Date(calYear, calMonth + 1, 0).getDate();
+  const daysInPrevMonth = new Date(calYear, calMonth, 0).getDate();
+
+  const today = new Date();
+  const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+  const calendarCells = [];
+
+  // Trailing days from previous month
+  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
+    const d = daysInPrevMonth - i;
+    const prevDate = new Date(calYear, calMonth - 1, d);
+    const yyyy = prevDate.getFullYear();
+    const mm = String(prevDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const cellHolidays = filteredHolidays.filter(h => h.date === dateStr);
+
+    calendarCells.push({
+      dateStr,
+      dayNum: d,
+      isCurrentMonth: false,
+      isToday: dateStr === todayStr,
+      dayOfWeek: prevDate.getDay(),
+      holidays: cellHolidays
+    });
+  }
+
+  // Days in current month
+  for (let d = 1; d <= daysInCurMonth; d++) {
+    const curDate = new Date(calYear, calMonth, d);
+    const mm = String(calMonth + 1).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    const dateStr = `${calYear}-${mm}-${dd}`;
+    const cellHolidays = filteredHolidays.filter(h => h.date === dateStr);
+
+    calendarCells.push({
+      dateStr,
+      dayNum: d,
+      isCurrentMonth: true,
+      isToday: dateStr === todayStr,
+      dayOfWeek: curDate.getDay(),
+      holidays: cellHolidays
+    });
+  }
+
+  // Leading days from next month to complete the grid (multiples of 7, at least 35)
+  const remaining = (7 - (calendarCells.length % 7)) % 7;
+  const targetTotal = calendarCells.length + remaining < 35 ? 35 : calendarCells.length + remaining;
+  const nextDaysCount = targetTotal - calendarCells.length;
+
+  for (let d = 1; d <= nextDaysCount; d++) {
+    const nextDate = new Date(calYear, calMonth + 1, d);
+    const yyyy = nextDate.getFullYear();
+    const mm = String(nextDate.getMonth() + 1).padStart(2, '0');
+    const dd = String(d).padStart(2, '0');
+    const dateStr = `${yyyy}-${mm}-${dd}`;
+    const cellHolidays = filteredHolidays.filter(h => h.date === dateStr);
+
+    calendarCells.push({
+      dateStr,
+      dayNum: d,
+      isCurrentMonth: false,
+      isToday: dateStr === todayStr,
+      dayOfWeek: nextDate.getDay(),
+      holidays: cellHolidays
+    });
+  }
+
+  const monthHolidays = filteredHolidays.filter(h => {
+    if (!h.date) return false;
+    const [hY, hM] = h.date.split('-');
+    return hY === String(calYear) && hM === String(calMonth + 1).padStart(2, '0');
+  });
 
   const openAddDrawer = () => {
     setEditId(null);
@@ -477,7 +625,7 @@ const PublicHoliday = ({ userRole, onLogout }) => {
       <div className="ph-shell">
         <Header 
           title="Define Public Holidays" 
-          subtitle="Add, edit or delete public holidays. These holidays will be used during project live for calendar integration."
+          
           showSearch={false} 
         />
         
@@ -497,16 +645,41 @@ const PublicHoliday = ({ userRole, onLogout }) => {
             {/* Main Card */}
             <div className="ph-card" style={{ marginTop: '0' }}>
               <div className="ph-filters">
-                <div className="ph-year-select">
-                  <span>Select Year</span>
-                  <select 
-                    className="ph-select" 
-                    value={selectedYear} 
-                    onChange={(e) => { setSelectedYear(e.target.value); setCurrentPage(1); }}
-                  >
-                    {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
-                  </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '16px', flexWrap: 'wrap' }}>
+                  <div className="ph-year-select">
+                    <span>Select Year</span>
+                    <select 
+                      className="ph-select" 
+                      value={selectedYear} 
+                      onChange={handleYearSelectChange}
+                    >
+                      {yearsList.map(y => <option key={y} value={y}>{y}</option>)}
+                    </select>
+                  </div>
+
+                  {/* View Mode Toggle: Calendar View | List View */}
+                  <div className="ph-view-toggle">
+                    <button 
+                      type="button" 
+                      className={`ph-view-btn ${viewMode === 'calendar' ? 'active' : ''}`}
+                      onClick={() => setViewMode('calendar')}
+                      title="Calendar View"
+                    >
+                      <CalendarIcon size={15} />
+                      <span>Calendar</span>
+                    </button>
+                    <button 
+                      type="button" 
+                      className={`ph-view-btn ${viewMode === 'list' ? 'active' : ''}`}
+                      onClick={() => setViewMode('list')}
+                      title="List View"
+                    >
+                      <List size={15} />
+                      <span>List</span>
+                    </button>
+                  </div>
                 </div>
+
                 <div className="ph-search">
                   <Search className="ph-search-icon" size={16} />
                   <input 
@@ -519,91 +692,280 @@ const PublicHoliday = ({ userRole, onLogout }) => {
                 </div>
               </div>
 
-              <div className="ph-table-wrapper">
-                <table className="ph-table">
-                  <thead>
-                    <tr>
-                      <th>Date</th>
-                      <th>Holiday Name</th>
-                      <th>Scope / Description</th>
-                      <th>Added By</th>
-                      <th>Mandatory <Info size={12} color="#64748b" style={{marginLeft: 4, verticalAlign: 'middle'}}/></th>
-                      <th>Actions</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {isLoading ? (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading holidays...</td>
-                      </tr>
-                    ) : paginatedHolidays.length === 0 ? (
-                      <tr>
-                        <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No holidays found.</td>
-                      </tr>
-                    ) : paginatedHolidays.map((h) => (
-                      <tr key={h.id}>
-                        <td>
-                          <div className="ph-td-date">{formatDateDisplay(h.date)}</div>
-                          <span className="ph-td-day">({h.day})</span>
-                        </td>
-                        <td><div className="ph-td-name">{h.name}</div></td>
-                        <td><div className="ph-td-desc">{h.desc || "-"}</div></td>
-                        <td><div className="ph-td-added">{h.addedBy}</div></td>
-                        <td>
-                          <span className={`ph-badge ${h.mandatory ? 'yes' : 'no'}`}>
-                            {h.mandatory ? 'Yes' : 'No'}
-                          </span>
-                          <span className="ph-mandatory-hint">
-                            ({h.mandatory ? 'Mandatory Holiday' : 'Optional Holiday'})
-                          </span>
-                        </td>
-                        <td>
-                          <div className="ph-actions">
-                            {screenPerm.canEdit ? (
-                              <button className="ph-action-btn edit" onClick={() => openEditDrawer(h)}><Edit2 size={14} /></button>
-                            ) : (
-                              <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>View Only</span>
-                            )}
-                            {screenPerm.canDelete && (
-                              <button className="ph-action-btn delete" onClick={() => handleDelete(h.id)}><Trash2 size={14} /></button>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              {/* Pagination Section - Only shown when total holidays > 10 */}
-              {filteredHolidays.length > 10 && (
-                <div className="ph-pagination">
-                  <div className="ph-pag-left">
-                    Total Holidays: <span>{filteredHolidays.length}</span>
+              {viewMode === "calendar" ? (
+                /* ================= CALENDAR VIEW ================= */
+                <div className="ph-calendar-view">
+                  {/* Month Tabs Bar */}
+                  <div className="ph-month-strip">
+                    {months.map((mName, mIdx) => {
+                      const count = getHolidaysCountForMonth(calYear, mIdx);
+                      const isSelected = calMonth === mIdx;
+                      return (
+                        <button
+                          key={mName}
+                          type="button"
+                          className={`ph-month-tab ${isSelected ? 'active' : ''} ${count > 0 ? 'has-holidays' : ''}`}
+                          onClick={() => setCalendarDate(new Date(calYear, mIdx, 1))}
+                        >
+                          <span className="ph-month-name">{mName.slice(0, 3)}</span>
+                          {count > 0 && <span className="ph-month-badge">{count}</span>}
+                        </button>
+                      );
+                    })}
                   </div>
-                  <div className="ph-pag-right">
-                    <span>{Math.min((currentPage - 1) * rowsPerPage + 1, filteredHolidays.length)} to {Math.min(currentPage * rowsPerPage, filteredHolidays.length)} of {filteredHolidays.length}</span>
-                    <div className="ph-pag-controls">
+
+                  {/* Calendar Navigation & Legend */}
+                  <div className="ph-cal-header">
+                    <div className="ph-cal-nav">
                       <button 
-                        disabled={currentPage === 1} 
-                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                        className="ph-pag-btn"
-                        title="Previous Page"
+                        type="button" 
+                        className="ph-cal-nav-btn" 
+                        onClick={handlePrevMonth}
+                        title="Previous Month"
                       >
-                        <ChevronLeft size={16} />
+                        <ChevronLeft size={18} />
                       </button>
-                      <span className="ph-pag-num">{currentPage}</span>
+                      <h3 className="ph-cal-title">
+                        {months[calMonth]} {calYear}
+                      </h3>
                       <button 
-                        disabled={currentPage === totalPages} 
-                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                        className="ph-pag-btn"
-                        title="Next Page"
+                        type="button" 
+                        className="ph-cal-nav-btn" 
+                        onClick={handleNextMonth}
+                        title="Next Month"
                       >
-                        <ChevronRight size={16} />
+                        <ChevronRight size={18} />
+                      </button>
+                      <button 
+                        type="button" 
+                        className="ph-cal-today-btn" 
+                        onClick={() => setCalendarDate(new Date())}
+                      >
+                        Today
                       </button>
                     </div>
+
+                    <div className="ph-cal-legend">
+                      <span className="ph-legend-item">
+                        <span className="ph-legend-dot mandatory"></span> Mandatory
+                      </span>
+                      <span className="ph-legend-item">
+                        <span className="ph-legend-dot optional"></span> Optional
+                      </span>
+                      <span className="ph-cal-summary-pill">
+                        {monthHolidays.length} {monthHolidays.length === 1 ? 'Holiday' : 'Holidays'} in {months[calMonth]}
+                      </span>
+                    </div>
                   </div>
+
+                  {/* Calendar Grid Container */}
+                  <div className="ph-cal-grid-wrapper">
+                    <div className="ph-cal-weekdays">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((d, i) => (
+                        <div key={d} className={`ph-cal-weekday ${i === 0 || i === 6 ? 'weekend' : ''}`}>
+                          {d}
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="ph-cal-grid">
+                      {calendarCells.map((cell, idx) => {
+                        const isCurrentMonth = cell.isCurrentMonth;
+                        const isToday = cell.isToday;
+                        const isWeekend = cell.dayOfWeek === 0 || cell.dayOfWeek === 6;
+                        const cellHolidays = cell.holidays;
+
+                        return (
+                          <div 
+                            key={cell.dateStr || idx}
+                            className={`ph-cal-cell ${!isCurrentMonth ? 'other-month' : ''} ${isToday ? 'today' : ''} ${isWeekend ? 'weekend' : ''}`}
+                          >
+                            <div className="ph-cal-cell-top">
+                              <span className={`ph-cal-day-num ${isToday ? 'today-badge' : ''}`}>
+                                {cell.dayNum}
+                              </span>
+                              {screenPerm.canCreate && isCurrentMonth && (
+                                <button 
+                                  type="button" 
+                                  className="ph-cal-add-btn" 
+                                  title={`Add holiday on ${cell.dateStr}`}
+                                  onClick={() => openAddDrawerWithDate(cell.dateStr)}
+                                >
+                                  <Plus size={13} />
+                                </button>
+                              )}
+                            </div>
+
+                            <div className="ph-cal-cell-events">
+                              {cellHolidays.map((h) => (
+                                <div 
+                                  key={h.id} 
+                                  className={`ph-cal-holiday-card ${h.mandatory ? 'mandatory' : 'optional'}`}
+                                  title={`${h.name} (${h.mandatory ? 'Mandatory' : 'Optional'})\nScope: ${h.desc}\nAdded By: ${h.addedBy}`}
+                                  onClick={() => screenPerm.canEdit ? openEditDrawer(h) : null}
+                                >
+                                  <div className="ph-cal-card-main">
+                                    <div className="ph-cal-card-title">
+                                      <span className="ph-cal-card-dot"></span>
+                                      <span className="ph-cal-card-name">{h.name}</span>
+                                    </div>
+                                    <div className="ph-cal-card-scope">
+                                      {h.desc || (h.mandatory ? 'Mandatory' : 'Optional')}
+                                    </div>
+                                  </div>
+
+                                  <div className="ph-cal-card-actions">
+                                    {screenPerm.canEdit && (
+                                      <button 
+                                        type="button" 
+                                        className="ph-cal-card-btn edit" 
+                                        title="Edit Holiday"
+                                        onClick={(e) => { e.stopPropagation(); openEditDrawer(h); }}
+                                      >
+                                        <Edit2 size={11} />
+                                      </button>
+                                    )}
+                                    {screenPerm.canDelete && (
+                                      <button 
+                                        type="button" 
+                                        className="ph-cal-card-btn delete" 
+                                        title="Delete Holiday"
+                                        onClick={(e) => { e.stopPropagation(); handleDelete(h.id); }}
+                                      >
+                                        <Trash2 size={11} />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {monthHolidays.length === 0 && (
+                    <div style={{
+                      textAlign: 'center',
+                      padding: '16px',
+                      color: '#64748b',
+                      fontSize: '13px',
+                      backgroundColor: '#f8fafc',
+                      borderRadius: '6px',
+                      border: '1px dashed #cbd5e1'
+                    }}>
+                      No holidays scheduled in {months[calMonth]} {calYear}.
+                      {screenPerm.canCreate && (
+                        <button
+                          type="button"
+                          onClick={() => openAddDrawerWithDate(`${calYear}-${String(calMonth + 1).padStart(2, '0')}-01`)}
+                          style={{
+                            marginLeft: '8px',
+                            background: 'none',
+                            border: 'none',
+                            color: '#1d4ed8',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            textDecoration: 'underline'
+                          }}
+                        >
+                          + Add a Holiday
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
+              ) : (
+                /* ================= LIST VIEW (TABLE) ================= */
+                <>
+                  <div className="ph-table-wrapper">
+                    <table className="ph-table">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Holiday Name</th>
+                          <th>Scope / Description</th>
+                          <th>Added By</th>
+                          <th>Mandatory <Info size={12} color="#64748b" style={{marginLeft: 4, verticalAlign: 'middle'}}/></th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {isLoading ? (
+                          <tr>
+                            <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading holidays...</td>
+                          </tr>
+                        ) : paginatedHolidays.length === 0 ? (
+                          <tr>
+                            <td colSpan="6" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>No holidays found.</td>
+                          </tr>
+                        ) : paginatedHolidays.map((h) => (
+                          <tr key={h.id}>
+                            <td>
+                              <div className="ph-td-date">{formatDateDisplay(h.date)}</div>
+                              <span className="ph-td-day">({h.day})</span>
+                            </td>
+                            <td><div className="ph-td-name">{h.name}</div></td>
+                            <td><div className="ph-td-desc">{h.desc || "-"}</div></td>
+                            <td><div className="ph-td-added">{h.addedBy}</div></td>
+                            <td>
+                              <span className={`ph-badge ${h.mandatory ? 'yes' : 'no'}`}>
+                                {h.mandatory ? 'Yes' : 'No'}
+                              </span>
+                              <span className="ph-mandatory-hint">
+                                ({h.mandatory ? 'Mandatory Holiday' : 'Optional Holiday'})
+                              </span>
+                            </td>
+                            <td>
+                              <div className="ph-actions">
+                                {screenPerm.canEdit ? (
+                                  <button className="ph-action-btn edit" onClick={() => openEditDrawer(h)}><Edit2 size={14} /></button>
+                                ) : (
+                                  <span style={{ fontSize: '12px', color: '#94a3b8', fontStyle: 'italic' }}>View Only</span>
+                                )}
+                                {screenPerm.canDelete && (
+                                  <button className="ph-action-btn delete" onClick={() => handleDelete(h.id)}><Trash2 size={14} /></button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Pagination Section - Only shown when total holidays > 10 */}
+                  {filteredHolidays.length > 10 && (
+                    <div className="ph-pagination">
+                      <div className="ph-pag-left">
+                        Total Holidays: <span>{filteredHolidays.length}</span>
+                      </div>
+                      <div className="ph-pag-right">
+                        <span>{Math.min((currentPage - 1) * rowsPerPage + 1, filteredHolidays.length)} to {Math.min(currentPage * rowsPerPage, filteredHolidays.length)} of {filteredHolidays.length}</span>
+                        <div className="ph-pag-controls">
+                          <button 
+                            disabled={currentPage === 1} 
+                            onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                            className="ph-pag-btn"
+                            title="Previous Page"
+                          >
+                            <ChevronLeft size={16} />
+                          </button>
+                          <span className="ph-pag-num">{currentPage}</span>
+                          <button 
+                            disabled={currentPage === totalPages} 
+                            onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                            className="ph-pag-btn"
+                            title="Next Page"
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
 
               <div className="ph-note">

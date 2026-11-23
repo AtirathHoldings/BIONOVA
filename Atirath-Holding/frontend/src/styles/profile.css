@@ -17,8 +17,52 @@
 }
 
 @media (max-width: 1024px) {
+  .pf-shell-container {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    position: relative !important;
+    height: auto !important;
+    min-height: 100vh !important;
+  }
+
+  .pf-shell-container .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    width: 270px !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    z-index: 1100 !important;
+    display: flex !important;
+    box-shadow: none !important;
+  }
+
+  .pf-shell-container .sidebar.mobile-open {
+    transform: translateX(0) !important;
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.18) !important;
+    z-index: 1100 !important;
+  }
+
+  .sidebar-overlay {
+    z-index: 1099 !important;
+  }
+
   .pf-shell {
-    margin-left: 0;
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding-top: 64px !important;
+    box-sizing: border-box !important;
+    height: auto !important;
+    min-height: 100vh !important;
+    overflow-y: visible !important;
+  }
+
+  body.sidebar-collapsed .pf-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
   }
 }
 
@@ -509,25 +553,156 @@
 }
 
 /* Responsive table for small screens */
-@media (max-width: 600px) {
-  .pf-table thead {
-    display: none;
+@media (max-width: 768px) {
+  .pf-main {
+    padding: 12px 10px 24px 10px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
   }
+
+  .pf-content {
+    gap: 14px !important;
+    width: 100% !important;
+  }
+
+  .pf-card {
+    padding: 14px 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .pf-card-header {
+    gap: 10px !important;
+    margin-bottom: 14px !important;
+    padding-bottom: 10px !important;
+  }
+
+  .pf-card-title-wrap h2 {
+    font-size: 16px !important;
+  }
+
+  .pf-card-title-wrap p {
+    font-size: 12px !important;
+  }
+
+  .pf-info-layout {
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 16px !important;
+    width: 100% !important;
+  }
+
+  .pf-avatar-section {
+    width: 100% !important;
+    max-width: 200px !important;
+    margin: 0 auto 10px auto !important;
+  }
+
+  .pf-details-list {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+
+  .pf-detail-row {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+    padding: 6px 0 !important;
+    border-bottom: 1px dashed #f1f5f9 !important;
+    width: 100% !important;
+  }
+
+  .pf-detail-label {
+    width: 100% !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+    gap: 8px !important;
+    color: #64748b !important;
+  }
+
+  .pf-detail-separator {
+    display: none !important;
+  }
+
+  .pf-detail-value {
+    width: 100% !important;
+    font-size: 13.5px !important;
+    color: #0f172a !important;
+    font-weight: 600 !important;
+    padding-left: 24px !important;
+    word-break: break-word !important;
+  }
+
+  .pf-security-form {
+    gap: 14px !important;
+    width: 100% !important;
+  }
+
+  .pf-form-group {
+    gap: 4px !important;
+  }
+
+  .pf-form-group label {
+    font-size: 12.5px !important;
+  }
+
+  .pf-input-wrapper input {
+    font-size: 14px !important;
+    padding: 9px 38px 9px 10px !important;
+  }
+
+  .pf-update-btn {
+    width: 100% !important;
+    min-height: 42px !important;
+    justify-content: center !important;
+    font-size: 14px !important;
+  }
+
+  .pf-table thead {
+    display: none !important;
+  }
+
   .pf-table,
   .pf-table tbody,
   .pf-table tr,
   .pf-table td {
-    display: block;
-    width: 100%;
+    display: block !important;
+    width: 100% !important;
   }
+
   .pf-table tr {
-    border: 1px solid #e2e8f0;
-    border-radius: 8px;
-    margin-bottom: 10px;
-    padding: 8px;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 8px !important;
+    margin-bottom: 10px !important;
+    padding: 8px !important;
   }
+
   .pf-table td {
-    border: none;
-    padding: 6px 4px;
+    border: none !important;
+    padding: 6px 4px !important;
+    font-size: 12.5px !important;
+  }
+
+  .pf-support-item {
+    padding: 10px 0 !important;
+    gap: 8px !important;
+  }
+
+  .pf-support-item-left {
+    gap: 10px !important;
+  }
+
+  .pf-support-item-icon {
+    width: 32px !important;
+    height: 32px !important;
+  }
+
+  .pf-support-item-text h3 {
+    font-size: 13px !important;
+  }
+
+  .pf-support-item-text p {
+    font-size: 11px !important;
   }
 }

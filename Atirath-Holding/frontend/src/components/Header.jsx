@@ -438,6 +438,13 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
             from { opacity: 0; transform: translateY(8px); }
             to { opacity: 1; transform: translateY(0); }
           }
+          @media (max-width: 1024px) {
+            .header-spacer {
+              display: none !important;
+              height: 0 !important;
+              margin: 0 !important;
+              padding: 0 !important;
+            }
           }
           .profile-hover-card {
             animation: fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
@@ -488,7 +495,8 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
             animation-play-state: paused;
           }
         `}
-      </style>
+        
+          </style>
 
       <header className="main-header" style={{
         display: "flex",
@@ -576,7 +584,7 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
               )}
             </div>
             {subtitle && (
-              <span style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
+              <span className="header-subtitle" style={{ fontSize: "12px", color: "#64748b", marginTop: "2px" }}>
                 {subtitle}
               </span>
             )}
@@ -811,7 +819,16 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
               overflow: "hidden"
             }}
             >
-              {photoUrl ? <img src={photoUrl} alt="Avatar" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : initials}
+              {photoUrl ? (
+                <img
+                  src={photoUrl}
+                  alt=""
+                  onError={() => setPhotoUrl(null)}
+                  style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                />
+              ) : (
+                initials
+              )}
             </div>
 
             {/* Profile Popover Hover Card */}
@@ -873,7 +890,7 @@ const Header = ({ title, subtitle, showSearch = false, statusBadge, progressPerc
         )}
       </header>
       {/* Spacer so content doesn't hide under the fixed header */}
-      <div style={{ height: "73px", flexShrink: 0 }} />
+      <div className="header-spacer" style={{ height: "73px", flexShrink: 0 }} />
 
       {/* ── Toast Notification (Bottom-Left) ── */}
       {toastNotif && (

@@ -101,11 +101,17 @@ const ExecutiveAlertFeed = () => {
       alert("Please provide Title and Trigger Detail.");
       return;
     }
+    saveExecutiveAlert(formData).then(res => {
+      if (res) setAlerts(prev => [res, ...prev.filter(a => a.id !== formData.id)]);
+    }).catch(err => console.warn(err));
     setAlerts((prev) => [formData, ...prev]);
     setIsModalOpen(false);
   };
 
   const handleStatusChange = (id, newStatus) => {
+    if (newStatus === "Resolved") {
+      resolveExecutiveAlert(id).catch(err => console.warn(err));
+    }
     setAlerts((prev) =>
       prev.map((a) => (a.id === id ? { ...a, status: newStatus } : a))
     );
@@ -113,6 +119,7 @@ const ExecutiveAlertFeed = () => {
 
   const handleDelete = (id) => {
     if (window.confirm(`Delete alert notice ${id}?`)) {
+      deleteExecutiveAlert(id).catch(err => console.warn(err));
       setAlerts((prev) => prev.filter((a) => a.id !== id));
     }
   };
@@ -153,7 +160,7 @@ const ExecutiveAlertFeed = () => {
 
       {/* If isModalOpen is true, render the Full-Page Form Card. Otherwise, render the Feed & KPIs */}
       {isModalOpen ? (
-        <div style={{
+        <div className="exec-form-card" style={{
           backgroundColor: "#ffffff",
           borderRadius: "14px",
           border: "1px solid #e2e8f0",
@@ -162,7 +169,7 @@ const ExecutiveAlertFeed = () => {
           marginTop: "10px"
         }}>
           {/* Form Header with Back Button */}
-          <div style={{
+          <div className="exec-form-header" style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -201,9 +208,9 @@ const ExecutiveAlertFeed = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSave} style={{ padding: "28px" }}>
+          <form onSubmit={handleSave} className="exec-form-body" style={{ padding: "28px" }}>
             {/* Section 1: Alert Classification & Impacted Plant */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -214,7 +221,7 @@ const ExecutiveAlertFeed = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <ShieldAlert size={18} color="#dc2626" /> 1. Alert Classification & Facility
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Alert Category *
@@ -288,7 +295,7 @@ const ExecutiveAlertFeed = () => {
             </div>
 
             {/* Section 2: Details & Recommended Action */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -299,7 +306,7 @@ const ExecutiveAlertFeed = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <Bell size={18} color="#ea580c" /> 2. Trigger Telemetry & Recommended Action
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "1fr", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Trigger Details & Context *
@@ -330,7 +337,7 @@ const ExecutiveAlertFeed = () => {
             </div>
 
             {/* Bottom Form Actions */}
-            <div style={{
+            <div className="exec-form-footer" style={{
               display: "flex",
               justifyContent: "flex-end",
               gap: "12px",
@@ -379,7 +386,7 @@ const ExecutiveAlertFeed = () => {
       ) : (
         <>
           {/* KPI Stats */}
-      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: "24px" }}>
+      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "24px" }}>
         <div className="exec-fin-tile">
           <div className="exec-fin-tile-label">ACTIVE CRITICAL INCIDENTS</div>
           <div className="exec-fin-tile-val" style={{ color: activeCritical > 0 ? "#dc2626" : "#059669" }}>
@@ -416,19 +423,19 @@ const ExecutiveAlertFeed = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{
+      <div className="exec-filter-bar" style={{
         background: "#ffffff",
         borderRadius: "12px",
         padding: "16px 20px",
         border: "1px solid #e2e8f0",
         marginBottom: "20px",
         display: "flex",
-        flexWrap: "wrap",
+        flexWrap: "nowrap",
         gap: "14px",
         alignItems: "center",
         justifyContent: "space-between"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "260px" }}>
+        <div className="exec-search-wrapper" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -456,11 +463,12 @@ const ExecutiveAlertFeed = () => {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="exec-filter-selects" style={{ display: "flex", gap: "10px", flexWrap: "nowrap", flexShrink: 0 }}>
           <select
             className="exec-select"
             value={catFilter}
             onChange={(e) => setCatFilter(e.target.value)}
+            style={{ minWidth: "150px" }}
           >
             {CATEGORIES.map((c, idx) => (
               <option key={idx} value={c}>{c}</option>
@@ -471,6 +479,7 @@ const ExecutiveAlertFeed = () => {
             className="exec-select"
             value={severityFilter}
             onChange={(e) => setSeverityFilter(e.target.value)}
+            style={{ minWidth: "140px" }}
           >
             <option value="All">All Severities</option>
             <option value="Critical">Critical</option>
@@ -481,6 +490,7 @@ const ExecutiveAlertFeed = () => {
             className="exec-select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ minWidth: "140px" }}
           >
             <option value="All">All Statuses</option>
             <option value="Active">Active</option>
@@ -511,6 +521,7 @@ const ExecutiveAlertFeed = () => {
             return (
               <div
                 key={a.id}
+                className="exec-alert-card"
                 style={{
                   backgroundColor: isResolved ? "#f8fafc" : isCritical ? "#fff5f5" : "#fffbeb",
                   border: `1px solid ${isResolved ? "#e2e8f0" : isCritical ? "#fecaca" : "#fef3c7"}`,

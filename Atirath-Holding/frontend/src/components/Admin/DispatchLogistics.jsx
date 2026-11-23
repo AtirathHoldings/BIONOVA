@@ -1145,7 +1145,7 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
               </div>
 
               <div className="sco-card-body">
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+                <div className="sco-routes-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
                   <div style={{ border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px", background: "#f8fafc" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
                       <span className="sco-badge badge-blue">Corridor 1: Agri Substrate</span>
@@ -1291,7 +1291,7 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
           {/* WEIGHBRIDGE SLIP PRINT MODAL                                   */}
           {/* ────────────────────────────────────────────────────────────── */}
           {viewingSlip && (
-            <div style={{
+            <div className="sco-modal-overlay" style={{
               position: "fixed",
               top: 0, left: 0, right: 0, bottom: 0,
               backgroundColor: "rgba(15, 23, 42, 0.6)",
@@ -1301,7 +1301,7 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
               zIndex: 1050,
               padding: "20px"
             }}>
-              <div style={{
+              <div className="sco-modal-card" style={{
                 background: "#ffffff",
                 borderRadius: "14px",
                 width: "100%",
@@ -1317,7 +1317,7 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
                   <button onClick={() => setViewingSlip(null)} className="sco-btn-icon"><X size={18} /></button>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px", fontSize: "13.5px" }}>
+                <div className="sco-modal-info-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "16px", marginBottom: "20px", fontSize: "13.5px" }}>
                   <div>
                     <p style={{ margin: "0 0 2px 0", color: "#64748b" }}>Slip Reference:</p>
                     <p style={{ fontWeight: "700", color: "#2563eb", margin: 0 }}>{viewingSlip.slipNumber}</p>
@@ -1347,7 +1347,7 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <div className="sco-modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                   <button onClick={() => window.print()} className="sco-btn-secondary">
                     <Printer size={16} /> Print Ticket
                   </button>

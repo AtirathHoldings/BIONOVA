@@ -432,6 +432,12 @@ body {
   white-space: nowrap;
 }
 
+@media (min-width: 769px) {
+  .employee-master-table {
+    min-width: 2200px;
+  }
+}
+
 .emp-list-table th {
   background: #f8fafc;
   color: #64748b;
@@ -567,7 +573,17 @@ body {
    ========================================================================== */
 @media (max-width: 1024px) {
   .emp-shell {
-    /* removed margin-left: 0 to respect sidebar width */
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .emp-main {
+    padding: 10px 12px !important;
+    padding-top: 8px !important;
+  }
+  .emp-content {
+    gap: 14px !important;
+    margin-top: 0 !important;
   }
   .emp-form-row-4 {
     grid-template-columns: repeat(2, 1fr);
@@ -628,8 +644,252 @@ body {
 
 /* Added globally via script for responsive sidebar */
 @media (max-width: 768px) {
-  .emp-shell { margin-left: 240px; } /* matches sidebar.css */
+  .emp-shell { margin-left: 0 !important; width: 100% !important; }
 }
 @media (max-width: 480px) {
-  .emp-shell { margin-left: 70px; } /* matches sidebar.css */
+  .emp-shell { margin-left: 0 !important; width: 100% !important; }
+}
+
+/* Employee List Header */
+.emp-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.emp-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.emp-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.emp-search-input {
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  width: 250px;
+  box-sizing: border-box;
+}
+
+.emp-tabs-header {
+  display: flex;
+  gap: 16px;
+  margin-top: 12px;
+}
+
+/* Employee Master Mobile Enhancements */
+@media (max-width: 768px) {
+  .emp-list-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+  .emp-list-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .emp-search-box {
+    width: 100% !important;
+    position: relative !important;
+  }
+  .emp-search-input {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: 42px !important;
+    box-sizing: border-box !important;
+  }
+  .emp-btn-add-new {
+    width: 100% !important;
+    min-width: 100% !important;
+    justify-content: center !important;
+    align-items: center !important;
+    height: 42px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .emp-tabs-header {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+    width: 100% !important;
+  }
+  .emp-tabs-header button {
+    flex: 1 1 auto !important;
+    text-align: center !important;
+    padding: 8px 12px !important;
+    min-height: 38px !important;
+  }
+  .emp-table-container {
+    overflow-x: hidden !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  /* ─── Employee Creation List: Mobile 3-Column View (Only Code, Name, Action) ─── */
+  .employee-master-table,
+  .emp-list-table.employee-master-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+  }
+
+  .employee-master-table thead,
+  .emp-list-table.employee-master-table thead {
+    display: table-header-group !important;
+  }
+
+  .employee-master-table thead tr,
+  .emp-list-table.employee-master-table thead tr {
+    display: table-row !important;
+    background: #f8fafc !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .employee-master-table tbody,
+  .emp-list-table.employee-master-table tbody {
+    display: table-row-group !important;
+  }
+
+  .employee-master-table tbody tr,
+  .emp-list-table.employee-master-table tbody tr {
+    display: table-row !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .employee-master-table tbody tr:hover,
+  .emp-list-table.employee-master-table tbody tr:hover {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide all columns except CODE, EMPLOYEE NAME, and ACTIONS */
+  .employee-master-table th,
+  .employee-master-table td,
+  .emp-list-table.employee-master-table th,
+  .emp-list-table.employee-master-table td {
+    display: none !important;
+  }
+
+  .employee-master-table th.emp-col-hide-mobile,
+  .employee-master-table td.emp-col-hide-mobile,
+  .emp-list-table.employee-master-table th.emp-col-hide-mobile,
+  .emp-list-table.employee-master-table td.emp-col-hide-mobile {
+    display: none !important;
+  }
+
+  .employee-master-table td::before,
+  .emp-list-table.employee-master-table td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* 1. Employee Code Column */
+  .employee-master-table th.col-emp-code,
+  .employee-master-table td.col-emp-code,
+  .emp-list-table.employee-master-table th.col-emp-code,
+  .emp-list-table.employee-master-table td.col-emp-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .employee-master-table td.col-emp-code span,
+  .emp-list-table.employee-master-table td.col-emp-code span {
+    display: inline-block !important;
+    font-size: 12px !important;
+    padding: 4px 6px !important;
+    word-break: break-all !important;
+  }
+
+  /* 2. Employee Name Column */
+  .employee-master-table th.col-emp-name,
+  .employee-master-table td.col-emp-name,
+  .emp-list-table.employee-master-table th.col-emp-name,
+  .emp-list-table.employee-master-table td.col-emp-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  /* 3. Actions Column (Right next to Employee name) */
+  .employee-master-table th.col-emp-actions,
+  .employee-master-table td.col-emp-actions,
+  .emp-list-table.employee-master-table th.col-emp-actions,
+  .emp-list-table.employee-master-table td.col-emp-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .employee-master-table td.col-emp-empty,
+  .emp-list-table.employee-master-table td.col-emp-empty {
+    display: table-cell !important;
+    text-align: center !important;
+    padding: 40px 16px !important;
+    width: 100% !important;
+  }
+
+  .emp-pagination-bar {
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
+    align-items: center !important;
+  }
+  .emp-btn-add-new {
+    width: 100% !important;
+    justify-content: center !important;
+  }
 }

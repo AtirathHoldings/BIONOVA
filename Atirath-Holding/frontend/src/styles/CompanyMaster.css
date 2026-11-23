@@ -304,6 +304,12 @@ body {
   font-size: 13px;
 }
 
+@media (min-width: 769px) {
+  .company-master-table {
+    min-width: 2200px;
+  }
+}
+
 .cc-list-table thead {
   background: #f8fafc;
 }
@@ -940,7 +946,15 @@ input:checked + .cc-slider:before { transform: translateX(16px); }
   }
   
   .cc-shell {
-    /* removed margin-left: 0 to respect sidebar width */
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  
+  .cc-main,
+  .company-master-main {
+    padding: 10px 12px !important;
+    padding-top: 8px !important;
   }
   
   .cc-footer {
@@ -983,6 +997,122 @@ input:checked + .cc-slider:before { transform: translateX(16px); }
   .cc-btn-add-new {
     width: 100%;
     justify-content: center;
+  }
+  
+  /* ─── Company Creation List: Mobile 3-Column View (Only Code, Name, Action) ─── */
+  .company-master-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+  }
+
+  .company-master-table thead {
+    display: table-header-group !important;
+  }
+
+  .company-master-table thead tr {
+    display: table-row !important;
+    background: #f8fafc !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .company-master-table tbody {
+    display: table-row-group !important;
+  }
+
+  .company-master-table tbody tr {
+    display: table-row !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .company-master-table tbody tr:hover {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide all columns except CODE, COMPANY NAME, and ACTIONS */
+  .company-master-table th,
+  .company-master-table td {
+    display: none !important;
+  }
+
+  .company-master-table td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* 1. Company Code Column */
+  .company-master-table th.col-coy-code,
+  .company-master-table td.col-coy-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .company-master-table td.col-coy-code span {
+    display: inline-block !important;
+    font-size: 12px !important;
+    padding: 4px 6px !important;
+    word-break: break-all !important;
+  }
+
+  /* 2. Company Name Column */
+  .company-master-table th.col-coy-name,
+  .company-master-table td.col-coy-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  /* 3. Actions Column (Right next to company name) */
+  .company-master-table th.col-coy-actions,
+  .company-master-table td.col-coy-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .company-master-table td.col-coy-empty {
+    display: table-cell !important;
+    text-align: center !important;
+    padding: 40px 16px !important;
+    width: 100% !important;
   }
   
   .cc-table-pagination-bar {
@@ -1091,10 +1221,10 @@ input:checked + .cc-slider:before { transform: translateX(16px); }
 
 /* Added globally via script for responsive sidebar */
 @media (max-width: 768px) {
-  .cm-shell { margin-left: 240px; } /* matches sidebar.css */
+  .cm-shell, .cc-shell { margin-left: 0 !important; width: 100% !important; }
 }
 @media (max-width: 480px) {
-  .cm-shell { margin-left: 70px; } /* matches sidebar.css */
+  .cm-shell, .cc-shell { margin-left: 0 !important; width: 100% !important; }
 }
 
 .spinning {
@@ -1113,4 +1243,285 @@ input:checked + .cc-slider:before { transform: translateX(16px); }
 .cc-overview-card:hover {
   transform: translateY(-2px);
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* ==========================================================================
+   Company Master Creation & View Pages - Dedicated Mobile Responsive Styles
+   Scoped exclusively to Company Master (.company-master-page, .company-creation-card)
+   Guaranteed not to affect any other pages or components.
+   ========================================================================== */
+
+/* Company Master Layout Elements */
+.company-master-main {
+  padding: 24px;
+}
+
+.company-form-content {
+  padding-bottom: 80px;
+}
+
+.company-creation-card {
+  background-color: white;
+  border-radius: 8px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.company-form-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background-color: #fafbfc;
+}
+
+.company-form-body {
+  padding: 24px;
+}
+
+.company-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.company-overview-detail-box {
+  margin-bottom: 32px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.02);
+}
+
+.company-profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 40px;
+}
+
+.company-profile-row {
+  display: grid;
+  grid-template-columns: 135px 1fr;
+  padding: 12px 0;
+  border-bottom: 1px dashed #e2e8f0;
+  align-items: center;
+}
+
+.company-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.company-logo-uploader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.company-form-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 16px 24px;
+  background-color: #fafbfc;
+  border-top: 1px solid #e2e8f0;
+}
+
+.company-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.company-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.company-search-box {
+  position: relative;
+}
+
+.company-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #64748b;
+  pointer-events: none;
+}
+
+.company-search-input {
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  width: 250px;
+  box-sizing: border-box;
+}
+
+/* Tablet Responsive (max-width: 1024px) */
+@media (max-width: 1024px) {
+  .company-overview-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+/* Mobile & Tablet Responsive (max-width: 768px) */
+@media (max-width: 768px) {
+  .company-master-main {
+    padding: 12px !important;
+  }
+
+  .company-form-content {
+    padding-bottom: 60px !important;
+  }
+
+  .company-form-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+
+  .company-form-header .cc-nav-view-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 40px !important;
+  }
+
+  .company-form-body {
+    padding: 16px 12px !important;
+  }
+
+  .company-creation-card .cc-form-layout-row.columns-4,
+  .company-creation-card .cc-form-layout-row.columns-3,
+  .company-creation-card .cc-form-layout-row.columns-2 {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+
+  .company-section-header {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .company-logo-uploader {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .company-logo-uploader button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .company-form-footer {
+    flex-direction: column-reverse !important;
+    padding: 16px !important;
+    gap: 10px !important;
+  }
+
+  .company-form-footer .cc-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 44px !important;
+    font-size: 14px !important;
+    margin: 0 !important;
+  }
+
+  .company-overview-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+
+  .company-overview-detail-box {
+    padding: 14px 10px;
+  }
+
+  .company-profile-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0 !important;
+  }
+
+  .company-list-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+
+  .company-list-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+
+  .company-search-box {
+    width: 100% !important;
+  }
+
+  .company-search-input {
+    width: 100% !important;
+  }
+
+  .company-list-actions .cc-btn-add-new {
+    width: 100% !important;
+    justify-content: center !important;
+    height: 40px !important;
+  }
+}
+
+/* Small Mobile Responsive (max-width: 480px) */
+@media (max-width: 480px) {
+  .company-master-main {
+    padding: 8px !important;
+  }
+
+  .company-form-body {
+    padding: 12px 8px !important;
+  }
+
+  .company-form-header h2 {
+    font-size: 17px !important;
+  }
+
+  .company-form-header p {
+    font-size: 13px !important;
+  }
+
+  .company-overview-grid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .company-profile-row {
+    grid-template-columns: 1fr !important;
+    gap: 4px !important;
+    padding: 10px 0 !important;
+  }
+
+  .company-logo-uploader button {
+    width: 100%;
+  }
+
+  .company-creation-card .cc-field-item input,
+  .company-creation-card .cc-field-item select,
+  .company-creation-card .cc-field-item textarea {
+    font-size: 14px !important;
+    min-height: 42px !important;
+  }
 }

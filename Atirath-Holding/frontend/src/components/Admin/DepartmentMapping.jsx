@@ -13,7 +13,9 @@ import {
   Trash2,
   Eye,
   Plus,
-  MoreVertical
+  MoreVertical,
+  Check,
+  X
 } from "lucide-react";
 import "../../styles/DepartmentMapping.css";
 
@@ -116,6 +118,285 @@ const SearchableSelect = ({ options, value, onChange, placeholder, name, style, 
   );
 };
 
+const MultiSearchableSelect = ({ options, value = [], onChange, placeholder, name, style, disabled, onCreate }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
+  const wrapperRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (wrapperRef.current && !wrapperRef.current.contains(e.target)) setIsOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const selectedValues = (Array.isArray(value) ? value : (value ? [value] : [])).map(String);
+  const filtered = options.filter(o => 
+    (o.label || "").toLowerCase().includes(search.toLowerCase()) ||
+    (o.code || "").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const toggleOption = (optVal) => {
+    const strVal = String(optVal);
+    let newValues;
+    if (selectedValues.includes(strVal)) {
+      newValues = selectedValues.filter(v => v !== strVal);
+    } else {
+      newValues = [...selectedValues, optVal];
+    }
+    onChange({ target: { name, value: newValues } });
+  };
+
+  const removeOption = (e, optVal) => {
+    e.stopPropagation();
+    const strVal = String(optVal);
+    const newValues = selectedValues.filter(v => v !== strVal);
+    onChange({ target: { name, value: newValues } });
+  };
+
+  const handleSelectAll = (e) => {
+    e.stopPropagation();
+    const allFilteredVals = filtered.map(o => o.value);
+    const combined = Array.from(new Set([...selectedValues, ...allFilteredVals]));
+    onChange({ target: { name, value: combined } });
+  };
+
+  const handleClearAll = (e) => {
+    e.stopPropagation();
+    onChange({ target: { name, value: [] } });
+  };
+
+  const selectedObjects = options.filter(o => selectedValues.includes(String(o.value)));
+
+  return (
+    <div ref={wrapperRef} style={{ position: 'relative', width: '100%', ...style }}>
+      <div 
+        onClick={() => !disabled && setIsOpen(!isOpen)}
+        style={{
+          padding: '6px 12px',
+          border: '1px solid #cbd5e1',
+          borderRadius: '6px',
+          background: disabled ? '#f1f5f9' : 'white',
+          cursor: disabled ? 'not-allowed' : 'pointer',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          minHeight: '40px',
+          fontSize: '14px',
+          color: '#0f172a',
+          gap: '8px',
+          boxSizing: 'border-box'
+        }}
+      >
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center', flex: 1, minWidth: 0 }}>
+          {selectedObjects.length === 0 ? (
+            <span style={{ color: '#94a3b8', fontSize: '13px' }}>{placeholder || "Select Departments..."}</span>
+          ) : (
+            selectedObjects.map(item => (
+              <span
+                key={item.value}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  backgroundColor: '#eff6ff',
+                  color: '#1e40af',
+                  border: '1px solid #bfdbfe',
+                  borderRadius: '4px',
+                  padding: '2px 8px',
+                  fontSize: '12px',
+                  fontWeight: '500',
+                  lineHeight: '18px'
+                }}
+              >
+                <span>{item.label}</span>
+                {!disabled && (
+                  <span
+                    onClick={(e) => removeOption(e, item.value)}
+                    style={{
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      color: '#60a5fa',
+                      marginLeft: '2px'
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = '#60a5fa'}
+                  >
+                    <X size={12} />
+                  </span>
+                )}
+              </span>
+            ))
+          )}
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexShrink: 0 }}>
+          {selectedObjects.length > 0 && !disabled && (
+            <span
+              onClick={handleClearAll}
+              title="Clear all"
+              style={{
+                cursor: 'pointer',
+                color: '#94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                padding: '2px'
+              }}
+              onMouseEnter={(e) => e.currentTarget.style.color = '#ef4444'}
+              onMouseLeave={(e) => e.currentTarget.style.color = '#94a3b8'}
+            >
+              <X size={14} />
+            </span>
+          )}
+          <span style={{ fontSize: '11px', color: '#64748b' }}>▼</span>
+        </div>
+      </div>
+
+      {isOpen && !disabled && (
+        <div style={{
+          position: 'absolute', top: '100%', left: 0, right: 0, 
+          background: 'white', border: '1px solid #cbd5e1', borderRadius: '6px',
+          marginTop: '4px', zIndex: 999, maxHeight: '300px', overflowY: 'auto',
+          boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)'
+        }} onClick={e => e.stopPropagation()}>
+          <div style={{ padding: '8px', position: 'sticky', top: 0, background: 'white', borderBottom: '1px solid #e2e8f0', zIndex: 2 }}>
+            <input 
+              type="text" 
+              value={search} 
+              onChange={e => setSearch(e.target.value)} 
+              placeholder="Search departments..." 
+              style={{ width: '100%', padding: '8px', border: '1px solid #cbd5e1', borderRadius: '4px', fontSize: '13px', outline: 'none', boxSizing: 'border-box' }}
+              autoFocus
+            />
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '8px', gap: '8px' }}>
+              <div style={{ display: 'flex', gap: '6px' }}>
+                <button
+                  type="button"
+                  onClick={handleSelectAll}
+                  style={{
+                    padding: '3px 8px', fontSize: '11px', fontWeight: '600',
+                    color: '#2563eb', background: '#eff6ff', border: '1px solid #bfdbfe',
+                    borderRadius: '4px', cursor: 'pointer'
+                  }}
+                >
+                  Select All
+                </button>
+                <button
+                  type="button"
+                  onClick={handleClearAll}
+                  style={{
+                    padding: '3px 8px', fontSize: '11px', fontWeight: '600',
+                    color: '#64748b', background: '#f1f5f9', border: '1px solid #cbd5e1',
+                    borderRadius: '4px', cursor: 'pointer'
+                  }}
+                >
+                  Clear All
+                </button>
+              </div>
+              {onCreate && (
+                <div 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setIsOpen(false);
+                    onCreate();
+                  }}
+                  style={{
+                    padding: '3px 8px', cursor: 'pointer', fontSize: '11px',
+                    color: '#2563eb', fontWeight: '600', display: 'flex', alignItems: 'center', gap: '4px',
+                    borderRadius: '4px', backgroundColor: '#eff6ff', border: '1px solid #bfdbfe'
+                  }}
+                  onMouseEnter={e => e.currentTarget.style.backgroundColor = '#dbeafe'}
+                  onMouseLeave={e => e.currentTarget.style.backgroundColor = '#eff6ff'}
+                >
+                  <Plus size={12} /> Create New
+                </div>
+              )}
+            </div>
+          </div>
+          <div style={{ padding: '4px 0', maxHeight: '180px', overflowY: 'auto' }}>
+            {filtered.map(opt => {
+              const isChecked = selectedValues.includes(String(opt.value));
+              return (
+                <div 
+                  key={opt.value}
+                  onClick={() => toggleOption(opt.value)}
+                  style={{
+                    padding: '8px 12px',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    gap: '10px',
+                    background: isChecked ? '#f0fdf4' : 'transparent',
+                    color: '#0f172a',
+                    borderBottom: '1px solid #f8fafc'
+                  }}
+                  onMouseEnter={e => {
+                    if (!isChecked) e.currentTarget.style.background = '#f8fafc';
+                  }}
+                  onMouseLeave={e => {
+                    if (!isChecked) e.currentTarget.style.background = 'transparent';
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', minWidth: 0, flex: 1 }}>
+                    <input 
+                      type="checkbox"
+                      checked={isChecked}
+                      onChange={() => {}} // Handled by container onClick
+                      style={{ cursor: 'pointer', width: '15px', height: '15px', accentColor: '#16a34a' }}
+                    />
+                    <span style={{ fontWeight: isChecked ? '600' : '400', fontSize: '13px', color: isChecked ? '#15803d' : '#0f172a' }}>
+                      {opt.label}
+                    </span>
+                  </div>
+                  {opt.code && (
+                    <span style={{ fontSize: '11px', color: '#64748b', background: '#f1f5f9', padding: '2px 6px', borderRadius: '4px', border: '1px solid #e2e8f0', flexShrink: 0 }}>
+                      {opt.code}
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+            {filtered.length === 0 && (
+              <div style={{ padding: '12px', fontSize: '13px', color: '#64748b', textAlign: 'center' }}>No departments found</div>
+            )}
+          </div>
+          <div style={{
+            padding: '8px 12px',
+            borderTop: '1px solid #e2e8f0',
+            backgroundColor: '#f8fafc',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>
+              {selectedValues.length} selected
+            </span>
+            <button
+              type="button"
+              onClick={() => setIsOpen(false)}
+              style={{
+                padding: '4px 12px',
+                fontSize: '12px',
+                fontWeight: '600',
+                color: 'white',
+                background: '#2563eb',
+                border: 'none',
+                borderRadius: '4px',
+                cursor: 'pointer'
+              }}
+            >
+              Done
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 const DepartmentMapping = ({ onLogout, userRole }) => {
   const screenPerm = getScreenPermission('DEPARTMENT_MAPPING');
   const navigate = useNavigate();
@@ -149,7 +430,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
             isTop,
             top: rect.top,
             bottom: rect.bottom,
-            right: window.innerWidth - rect.right
+            right: Math.max(10, window.innerWidth - rect.right)
           });
         }
       }
@@ -187,6 +468,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
     coyId: "",
     pltId: "",
     deptId: "",
+    deptIds: [],
     sts: true
   });
 
@@ -232,7 +514,15 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
   const filteredPlants = plants.filter(p => String(p.coyId) === String(formData.coyId));
 
   // Find info helper
-  const selectedDept = departments.find(d => String(d.deptId) === String(formData.deptId));
+  const currentDeptIds = Array.isArray(formData.deptIds) && formData.deptIds.length > 0
+    ? formData.deptIds
+    : (formData.deptId ? [formData.deptId] : []);
+
+  const selectedDeptsList = departments.filter(d => 
+    currentDeptIds.some(id => String(id) === String(d.deptId))
+  );
+
+  const selectedDept = selectedDeptsList[0] || null;
   const deptCode = selectedDept ? (selectedDept.deptCd || selectedDept.deptCode || "") : "";
   const deptNm = selectedDept ? selectedDept.deptNm : "";
   const deptDescr = selectedDept ? selectedDept.descr : "";
@@ -242,6 +532,8 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
     const { name, value } = e.target;
     if (name === "coyId") {
       setFormData(prev => ({ ...prev, coyId: value, pltId: "" }));
+    } else if (name === "deptIds") {
+      setFormData(prev => ({ ...prev, deptIds: value, deptId: value[0] || "" }));
     } else {
       setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -256,6 +548,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
       coyId: "",
       pltId: "",
       deptId: "",
+      deptIds: [],
       sts: true
     });
   };
@@ -316,7 +609,17 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
             return apiCode.toUpperCase() === newDeptData.deptCode.trim().toUpperCase();
           });
           if (newlyCreated) {
-            setFormData(prev => ({ ...prev, deptId: newlyCreated.deptId }));
+            setFormData(prev => {
+              const curIds = Array.isArray(prev.deptIds) ? [...prev.deptIds] : (prev.deptId ? [prev.deptId] : []);
+              if (!curIds.some(id => String(id) === String(newlyCreated.deptId))) {
+                curIds.push(newlyCreated.deptId);
+              }
+              return {
+                ...prev,
+                deptId: newlyCreated.deptId,
+                deptIds: curIds
+              };
+            });
           }
         }
         triggerAlert("success", "Success", "Department created successfully!");
@@ -346,42 +649,119 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
       triggerAlert("error", "Validation Error", "Plant selection is required.");
       return;
     }
-    if (!formData.deptId) {
+
+    const deptIdsToSave = (Array.isArray(formData.deptIds) && formData.deptIds.length > 0)
+      ? formData.deptIds
+      : (formData.deptId ? [formData.deptId] : []);
+
+    if (deptIdsToSave.length === 0) {
       triggerAlert("error", "Validation Error", "Department selection is required.");
       return;
     }
 
-    const payload = {
-      coyId: Number(formData.coyId),
-      pltId: Number(formData.pltId),
-      deptId: Number(formData.deptId),
-      sts: formData.sts
-    };
+    // Existing mappings for this company and plant
+    const existingDeptIdsForPlant = mappings
+      .filter(m => String(m.coyId) === String(formData.coyId) && String(m.pltId) === String(formData.pltId))
+      .map(m => String(m.deptId));
 
     try {
-      let url = `${API_BASE}/dept-coy-plt-maps`;
-      let method = "POST";
       if (isEditing) {
-        url = `${API_BASE}/dept-coy-plt-maps/${editingId}`;
-        method = "PUT";
-      }
+        const primaryDeptId = deptIdsToSave[0];
+        const payload = {
+          coyId: Number(formData.coyId),
+          pltId: Number(formData.pltId),
+          deptId: Number(primaryDeptId),
+          sts: formData.sts
+        };
 
-      const res = await fetch(url, {
-        method,
-        headers: authHeaders(),
-        body: JSON.stringify(payload)
-      });
+        const res = await fetch(`${API_BASE}/dept-coy-plt-maps/${editingId}`, {
+          method: "PUT",
+          headers: authHeaders(),
+          body: JSON.stringify(payload)
+        });
 
-      if (res.ok) {
-        triggerAlert("success", "Success", isEditing ? "Department mapping updated successfully!" : "Department mapping created successfully!");
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({}));
+          triggerAlert("error", "Error", errorData.message || "Failed to update mapping.");
+          return;
+        }
+
+        // If extra departments were selected while editing, create them
+        const additionalDeptIds = deptIdsToSave.slice(1).filter(id => !existingDeptIdsForPlant.includes(String(id)));
+        if (additionalDeptIds.length > 0) {
+          await Promise.all(
+            additionalDeptIds.map(dId =>
+              fetch(`${API_BASE}/dept-coy-plt-maps`, {
+                method: "POST",
+                headers: authHeaders(),
+                body: JSON.stringify({
+                  coyId: Number(formData.coyId),
+                  pltId: Number(formData.pltId),
+                  deptId: Number(dId),
+                  sts: formData.sts
+                })
+              })
+            )
+          );
+        }
+
+        triggerAlert("success", "Success", "Department mapping updated successfully!");
         fetchMappings();
         handleResetForm();
         setIsEditing(false);
         setEditingId(null);
         setView("list");
       } else {
-        const errorData = await res.json();
-        triggerAlert("error", "Error", errorData.message || "Failed to save mapping.");
+        // CREATE MODE
+        const newDeptIds = deptIdsToSave.filter(id => !existingDeptIdsForPlant.includes(String(id)));
+        const alreadyMappedCount = deptIdsToSave.length - newDeptIds.length;
+
+        if (newDeptIds.length === 0) {
+          triggerAlert("warning", "Already Mapped", "All selected department(s) are already mapped to this Company and Plant.");
+          return;
+        }
+
+        const responses = await Promise.all(
+          newDeptIds.map(dId =>
+            fetch(`${API_BASE}/dept-coy-plt-maps`, {
+              method: "POST",
+              headers: authHeaders(),
+              body: JSON.stringify({
+                coyId: Number(formData.coyId),
+                pltId: Number(formData.pltId),
+                deptId: Number(dId),
+                sts: formData.sts
+              })
+            })
+          )
+        );
+
+        const allOk = responses.every(r => r.ok);
+        const successCount = responses.filter(r => r.ok).length;
+
+        if (allOk) {
+          let msg = `${successCount} Department(s) mapped successfully!`;
+          if (alreadyMappedCount > 0) {
+            msg += ` (${alreadyMappedCount} were already mapped).`;
+          }
+          triggerAlert("success", "Success", msg);
+          fetchMappings();
+          handleResetForm();
+          setIsEditing(false);
+          setEditingId(null);
+          setView("list");
+        } else {
+          fetchMappings();
+          triggerAlert(
+            "warning",
+            "Partial Success",
+            `${successCount} of ${newDeptIds.length} departments mapped successfully. Some could not be saved.`
+          );
+          if (successCount > 0) {
+            handleResetForm();
+            setView("list");
+          }
+        }
       }
     } catch (err) {
       console.error("Error saving department mapping:", err);
@@ -394,6 +774,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
       coyId: mapping.coyId,
       pltId: mapping.pltId,
       deptId: mapping.deptId,
+      deptIds: [mapping.deptId],
       sts: mapping.sts
     });
     setIsEditing(true);
@@ -408,6 +789,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
       coyId: mapping.coyId,
       pltId: mapping.pltId,
       deptId: mapping.deptId,
+      deptIds: [mapping.deptId],
       sts: mapping.sts
     });
     setIsEditing(false);
@@ -463,7 +845,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
         isTop: spaceBelow < dropdownHeight && spaceAbove > spaceBelow,
         top: rect.top,
         bottom: rect.bottom,
-        right: window.innerWidth - rect.right
+        right: Math.max(10, window.innerWidth - rect.right)
       });
       setActiveDropdown(id);
     }
@@ -672,12 +1054,23 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
 
                         <label className="cc-field-item">
                           <span>Department <b style={{ color: "#ef4444" }}>*</b></span>
-                          <SearchableSelect 
-                            name="deptId" 
-                            value={formData.deptId} 
-                            onChange={handleInputChange} 
-                            placeholder="Select Department"
-                            options={departments.map(d => ({ value: d.deptId, label: d.deptNm }))}
+                          <MultiSearchableSelect 
+                            name="deptIds" 
+                            value={formData.deptIds && formData.deptIds.length > 0 ? formData.deptIds : (formData.deptId ? [formData.deptId] : [])} 
+                            onChange={(e) => {
+                              const selectedVals = e.target.value;
+                              setFormData(prev => ({
+                                ...prev,
+                                deptIds: selectedVals,
+                                deptId: selectedVals[0] || ""
+                              }));
+                            }} 
+                            placeholder="Select Department(s)"
+                            options={departments.map(d => ({ 
+                              value: d.deptId, 
+                              label: d.deptNm,
+                              code: d.deptCd || d.deptCode || ""
+                            }))}
                             onCreate={!isViewing ? () => setShowDeptPopup(true) : undefined}
                             disabled={isViewing}
                           />
@@ -686,28 +1079,96 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                     </div>
 
                     {/* Details Header */}
-                    <div>
-                      <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
-                        <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#1e293b", margin: 0 }}>Department Details</h3>
+                    {selectedDeptsList.length > 1 ? (
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "14px" }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#1e293b", margin: 0 }}>
+                              Selected Departments
+                            </h3>
+                            <span style={{
+                              backgroundColor: "#eff6ff", color: "#2563eb", border: "1px solid #bfdbfe",
+                              padding: "2px 8px", borderRadius: "12px", fontSize: "12px", fontWeight: "600"
+                            }}>
+                              {selectedDeptsList.length} Selected
+                            </span>
+                          </div>
+                          <span style={{ fontSize: "13px", color: "#64748b" }}>
+                            All {selectedDeptsList.length} departments will be mapped to the selected plant
+                          </span>
+                        </div>
+
+                        <div style={{ border: '1px solid #e2e8f0', borderRadius: '8px', overflow: 'hidden', backgroundColor: 'white' }}>
+                          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                            <thead>
+                              <tr style={{ backgroundColor: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left' }}>
+                                <th style={{ padding: '10px 16px', width: '60px', color: '#64748b', fontWeight: '600' }}>S.NO</th>
+                                <th style={{ padding: '10px 16px', width: '160px', color: '#64748b', fontWeight: '600' }}>DEPARTMENT CODE</th>
+                                <th style={{ padding: '10px 16px', color: '#64748b', fontWeight: '600' }}>DEPARTMENT NAME</th>
+                                <th style={{ padding: '10px 16px', color: '#64748b', fontWeight: '600' }}>DESCRIPTION</th>
+                                <th style={{ padding: '10px 16px', width: '80px', textAlign: 'center', color: '#64748b', fontWeight: '600' }}>ACTION</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {selectedDeptsList.map((dept, idx) => (
+                                <tr key={dept.deptId} style={{ borderBottom: idx < selectedDeptsList.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                                  <td style={{ padding: '12px 16px', color: '#64748b' }}>{idx + 1}</td>
+                                  <td style={{ padding: '12px 16px' }}>
+                                    <span style={{ backgroundColor: '#f1f5f9', padding: '3px 8px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '12px' }}>
+                                      {dept.deptCd || dept.deptCode || "-"}
+                                    </span>
+                                  </td>
+                                  <td style={{ padding: '12px 16px', fontWeight: '600', color: '#0f172a' }}>{dept.deptNm}</td>
+                                  <td style={{ padding: '12px 16px', color: '#64748b' }}>{dept.descr || "-"}</td>
+                                  <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        const updated = (formData.deptIds || []).filter(id => String(id) !== String(dept.deptId));
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          deptIds: updated,
+                                          deptId: updated[0] || ""
+                                        }));
+                                      }}
+                                      style={{
+                                        background: '#fee2e2', border: '1px solid #fecaca', color: '#ef4444', cursor: 'pointer', padding: '4px 8px', borderRadius: '4px', display: 'inline-flex', alignItems: 'center', gap: '4px', fontSize: '11px', fontWeight: '600'
+                                      }}
+                                      title="Remove department"
+                                    >
+                                      <X size={13} /> Remove
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
                       </div>
+                    ) : (
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "16px" }}>
+                          <h3 style={{ fontSize: "16px", fontWeight: "700", color: "#1e293b", margin: 0 }}>Department Details</h3>
+                        </div>
 
-                      <div className="cc-form-layout-row columns-3">
-                        <label className="cc-field-item">
-                          <span>Department Code</span>
-                          <input type="text" name="code" value={deptCode} readOnly style={{ backgroundColor: "#f8fafc", color: "#64748b", cursor: "not-allowed" }} placeholder="Auto-fills from Selection" />
-                        </label>
+                        <div className="cc-form-layout-row columns-3">
+                          <label className="cc-field-item">
+                            <span>Department Code</span>
+                            <input type="text" name="code" value={deptCode} readOnly style={{ backgroundColor: "#f8fafc", color: "#64748b", cursor: "not-allowed" }} placeholder="Auto-fills from Selection" />
+                          </label>
 
-                        <label className="cc-field-item">
-                          <span>Department Name</span>
-                          <input type="text" name="name" value={deptNm} readOnly style={{ backgroundColor: "#f8fafc", color: "#64748b", cursor: "not-allowed" }} placeholder="Auto-fills from Selection" />
-                        </label>
+                          <label className="cc-field-item">
+                            <span>Department Name</span>
+                            <input type="text" name="name" value={deptNm} readOnly style={{ backgroundColor: "#f8fafc", color: "#64748b", cursor: "not-allowed" }} placeholder="Auto-fills from Selection" />
+                          </label>
 
-                        <label className="cc-field-item">
-                          <span>Description</span>
-                          <textarea name="description" value={deptDescr} readOnly style={{ backgroundColor: "#f8fafc", color: "#64748b", cursor: "not-allowed" }} placeholder="Auto-fills from selection" rows={2} />
-                        </label>
+                          <label className="cc-field-item">
+                            <span>Description</span>
+                            <textarea name="description" value={deptDescr} readOnly style={{ backgroundColor: "#f8fafc", color: "#64748b", cursor: "not-allowed" }} placeholder="Auto-fills from selection" rows={2} />
+                          </label>
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </>
                 )}
 
@@ -717,7 +1178,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
               {!isViewing && (
               <div className="cc-form-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "12px", padding: "16px 24px", backgroundColor: "#fafbfc", borderTop: "1px solid #e2e8f0" }}>
                 <button type="button" className="cc-btn primary" onClick={handleSave}>
-                  <Save size={14} /> {isEditing ? "Update Mapping" : "Save Mapping"}
+                  <Save size={14} /> {isEditing ? "Update Mapping" : selectedDeptsList.length > 1 ? `Save (${selectedDeptsList.length}) Mappings` : "Save Mapping"}
                 </button>
                 <button type="button" className="cc-btn secondary" onClick={() => { setView("list"); handleResetForm(); setIsEditing(false); setIsViewing(false); setEditingId(null); }}>
                   Cancel
@@ -729,7 +1190,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
             /* ================= VIEW: LIST MODE ================= */
             <div className="cc-table-panel" style={{ backgroundColor: "white", borderRadius: "8px", border: "1px solid #e2e8f0", overflow: "hidden", boxShadow: "0 1px 3px rgba(0,0,0,0.05)" }}>
               {/* Table Title and Mapping selection Button */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px 24px", borderBottom: "1px solid #e2e8f0" }}>
+              <div className="dept-map-list-header master-list-header">
                 <div>
                   <h2 style={{ fontSize: "18px", fontWeight: "700", color: "#0f172a", margin: 0 }}>
                     Mapped Departments
@@ -738,9 +1199,9 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                     View and manage department mappings with companies and plants
                   </p>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                  <div style={{ position: 'relative' }}>
-                    <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                <div className="dept-map-list-actions master-list-actions">
+                  <div className="dept-map-search-box master-search-box">
+                    <Search size={16} className="master-search-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                     <input
                       type="text"
                       placeholder="Search mappings..."
@@ -749,20 +1210,19 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                         setTableSearchQuery(e.target.value);
                         setCurrentPage(1);
                       }}
-                      style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                      className="dept-map-search-input master-search-input"
                     />
                   </div>
                   {screenPerm.canCreate && (
                     <button
                       type="button"
-                      className="cc-btn-add-new"
+                      className="cc-btn-add-new master-btn-add-new"
                       onClick={() => {
                         handleResetForm();
                         setIsEditing(false);
                         setIsViewing(false);
                         setView("form");
                       }}
-                      style={{ display: "flex", alignItems: "center", gap: "6px", padding: "8px 20px", background: "#2563eb", color: "white", border: "none", borderRadius: "6px", cursor: "pointer", fontSize: "14px", fontWeight: "500" }}
                     >
                       <Plus size={16} /> Add Department Mapping
                     </button>
@@ -772,37 +1232,37 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
 
               {/* Data Table */}
               <div className="cc-table-container" style={{ overflowX: "auto" }}>
-                <table className="cc-list-table" style={{ width: "100%", borderCollapse: "collapse", textAlign: "left", minWidth: "1200px" }}>
+                <table className="cc-list-table department-mapping-table" style={{ width: "100%", borderCollapse: "collapse", textAlign: "left" }}>
                   <thead style={{ backgroundColor: "#f8fafc", borderBottom: "2px solid #e2e8f0" }}>
                     <tr>
-                      <th style={{ width: "50px", padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>S.NO</th>
-                      <th style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Department Code</th>
-                      <th style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Company</th>
-                      <th style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Plant</th>
-                      <th style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Department</th>
-                      <th style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Status</th>
-                      <th style={{ textAlign: "center", width: "100px", padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Actions</th>
+                      <th className="deptmap-col-hide-mobile" style={{ width: "50px", padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>S.NO</th>
+                      <th className="col-deptmap-code" style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Department Code</th>
+                      <th className="deptmap-col-hide-mobile" style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Company</th>
+                      <th className="deptmap-col-hide-mobile" style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Plant</th>
+                      <th className="col-deptmap-name" style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Department</th>
+                      <th className="deptmap-col-hide-mobile" style={{ padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Status</th>
+                      <th className="col-deptmap-actions" style={{ textAlign: "center", width: "100px", padding: "14px 20px", fontSize: "11px", color: "#64748b", fontWeight: "700", textTransform: "uppercase", letterSpacing: "0.5px" }}>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {currentItems.length > 0 ? (
                       currentItems.map((item, idx) => (
                         <tr key={item.mapId || idx} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                          <td style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>{indexOfFirstRecord + idx + 1}</td>
-                          <td style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>
+                          <td data-label="S.NO" className="deptmap-col-hide-mobile" style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>{indexOfFirstRecord + idx + 1}</td>
+                          <td data-label="DEPARTMENT CODE" className="col-deptmap-code" style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>
                             <span style={{ backgroundColor: "#f1f5f9", padding: "4px 10px", borderRadius: "4px", fontWeight: "600", color: "#0f172a", border: "1px solid #e2e8f0", fontSize: "13px" }}>
                               {getDeptCode(item.deptId)}
                             </span>
                           </td>
-                          <td style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}><strong>{getCompanyName(item.coyId)}</strong></td>
-                          <td style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>{getPlantName(item.pltId)}</td>
-                          <td style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>{getDeptName(item.deptId)}</td>
-                          <td style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>
+                          <td data-label="COMPANY NAME" className="deptmap-col-hide-mobile" style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}><strong>{getCompanyName(item.coyId)}</strong></td>
+                          <td data-label="PLANT NAME" className="deptmap-col-hide-mobile" style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>{getPlantName(item.pltId)}</td>
+                          <td data-label="DEPARTMENT NAME" className="col-deptmap-name" style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>{getDeptName(item.deptId)}</td>
+                          <td data-label="STATUS" className="deptmap-col-hide-mobile" style={{ padding: "14px 20px", fontSize: "14px", color: "#334155" }}>
                             <span style={{ padding: "4px 12px", borderRadius: "12px", fontSize: "12px", fontWeight: "600", display: "inline-block", backgroundColor: item.sts === true ? "#dcfce7" : "#fee2e2", color: item.sts === true ? "#166534" : "#991b1b" }}>
                               {item.sts === true ? "Active" : "Inactive"}
                             </span>
                           </td>
-                          <td style={{ position: "relative", padding: "14px 20px", textAlign: "center" }}>
+                          <td data-label="ACTIONS" className="col-deptmap-actions" style={{ position: "relative", padding: "14px 20px", textAlign: "center" }}>
                             <button
                               id={`action-btn-${item.mapId}`}
                               type="button"
@@ -849,7 +1309,7 @@ const DepartmentMapping = ({ onLogout, userRole }) => {
                       ))
                     ) : (
                       <tr>
-                        <td colSpan="7" style={{ textAlign: "center", padding: "60px 20px" }}>
+                        <td colSpan="7" className="col-deptmap-empty" style={{ textAlign: "center", padding: "60px 20px" }}>
                           {loading ? (
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#64748b', fontSize: '14px' }}>
                               <RefreshCcw className="spinning" style={{ animation: 'spin 1s linear infinite' }} size={16} />

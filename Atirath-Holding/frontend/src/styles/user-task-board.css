@@ -552,3 +552,140 @@ body.sidebar-collapsed .utb-shell {
   background: #f8fafc;
   border-radius: 0 0 12px 12px;
 }
+
+/* ============================================================
+   USER TASK BOARD MOBILE RESPONSIVENESS (≤ 768px & ≤ 480px)
+   ============================================================ */
+@media (max-width: 1024px) {
+  .utb-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .utb-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+  .utb-main {
+    padding: 14px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .utb-header {
+    margin-bottom: 16px;
+  }
+  .utb-title {
+    font-size: 20px;
+  }
+  .utb-subtitle {
+    font-size: 13px;
+  }
+
+  /* Top Stats Cards Row - 2 Columns */
+  .utb-stats-container,
+  .utb-stats-row {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 8px !important;
+    width: 100% !important;
+    margin-bottom: 14px !important;
+  }
+
+  .utb-stat-card {
+    padding: 10px 12px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .utb-stat-value {
+    font-size: 18px !important;
+  }
+  .utb-stat-label {
+    font-size: 11px !important;
+  }
+
+  /* Search bar */
+  .utb-search-container {
+    max-width: 100% !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+  .utb-search-wrapper,
+  .utb-control-input {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Controls row */
+  .utb-controls-row {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .utb-controls-left,
+  .utb-controls-right {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+  }
+  .utb-select,
+  .utb-btn {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+
+  /* Kanban Board: Horizontal Swiping Columns */
+  .utb-board {
+    display: flex !important;
+    flex-direction: row !important;
+    gap: 12px !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scroll-snap-type: x mandatory !important;
+    padding-bottom: 16px !important;
+    width: 100% !important;
+  }
+
+  .utb-column {
+    min-width: 275px !important;
+    max-width: 300px !important;
+    flex: 0 0 275px !important;
+    scroll-snap-align: start !important;
+    box-sizing: border-box !important;
+  }
+
+  .utb-card {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Modal */
+  .utb-modal {
+    width: 95% !important;
+    max-height: 90vh !important;
+    margin: 10px !important;
+  }
+  .utb-modal-row {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .utb-column {
+    min-width: 260px !important;
+    max-width: 280px !important;
+    flex: 0 0 260px !important;
+  }
+  .utb-stat-card {
+    padding: 8px 10px !important;
+  }
+  .utb-stat-icon-wrap {
+    width: 28px !important;
+    height: 28px !important;
+  }
+}

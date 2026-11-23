@@ -120,10 +120,16 @@ const EscrowFinancing = () => {
     };
 
     if (editingItem) {
+      saveEscrowAccount(cleanItem, editingItem.id).then(res => {
+        if (res) setEscrows(prev => prev.map(e => e.id === editingItem.id ? res : e));
+      }).catch(err => console.warn(err));
       setEscrows((prev) =>
         prev.map((e) => (e.id === editingItem.id ? cleanItem : e))
       );
     } else {
+      saveEscrowAccount(cleanItem).then(res => {
+        if (res) setEscrows(prev => [res, ...prev.filter(e => e.id !== cleanItem.id)]);
+      }).catch(err => console.warn(err));
       setEscrows((prev) => [cleanItem, ...prev]);
     }
     setIsModalOpen(false);
@@ -172,7 +178,7 @@ const EscrowFinancing = () => {
 
       {/* If isModalOpen is true, render the Full-Page Form Card. Otherwise, render the List & KPIs */}
       {isModalOpen ? (
-        <div style={{
+        <div className="exec-form-card" style={{
           backgroundColor: "#ffffff",
           borderRadius: "14px",
           border: "1px solid #e2e8f0",
@@ -181,7 +187,7 @@ const EscrowFinancing = () => {
           marginTop: "10px"
         }}>
           {/* Form Header with Back Button */}
-          <div style={{
+          <div className="exec-form-header" style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -220,9 +226,9 @@ const EscrowFinancing = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSave} style={{ padding: "28px" }}>
+          <form onSubmit={handleSave} className="exec-form-body" style={{ padding: "28px" }}>
             {/* Section 1: Escrow Identification & Trustee */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -233,7 +239,7 @@ const EscrowFinancing = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <Landmark size={18} color="#0284c7" /> 1. Escrow Account & Custodian Trustee
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Escrow ID *
@@ -331,7 +337,7 @@ const EscrowFinancing = () => {
             </div>
 
             {/* Section 2: Balances, Inflows & DSRA Covenants */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -342,7 +348,7 @@ const EscrowFinancing = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <DollarSign size={18} color="#059669" /> 2. Liquidity, Disbursal Balances & DSRA Reserve
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Available Balance (₹ Cr) *
@@ -401,7 +407,7 @@ const EscrowFinancing = () => {
             </div>
 
             {/* Bottom Form Actions */}
-            <div style={{
+            <div className="exec-form-footer" style={{
               display: "flex",
               justifyContent: "flex-end",
               gap: "12px",
@@ -450,7 +456,7 @@ const EscrowFinancing = () => {
       ) : (
         <>
           {/* KPI Stats */}
-      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: "24px" }}>
+      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "24px" }}>
         <div className="exec-fin-tile">
           <div className="exec-fin-tile-label">TOTAL ESCROW BALANCE</div>
           <div className="exec-fin-tile-val">₹{totalBalance.toFixed(1)} Cr</div>
@@ -491,19 +497,19 @@ const EscrowFinancing = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{
+      <div className="exec-filter-bar" style={{
         background: "#ffffff",
         borderRadius: "12px",
         padding: "16px 20px",
         border: "1px solid #e2e8f0",
         marginBottom: "20px",
         display: "flex",
-        flexWrap: "wrap",
+        flexWrap: "nowrap",
         gap: "14px",
         alignItems: "center",
         justifyContent: "space-between"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "260px" }}>
+        <div className="exec-search-wrapper" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -531,11 +537,12 @@ const EscrowFinancing = () => {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="exec-filter-selects" style={{ display: "flex", gap: "10px", flexWrap: "nowrap", flexShrink: 0 }}>
           <select
             className="exec-select"
             value={catFilter}
             onChange={(e) => setCatFilter(e.target.value)}
+            style={{ minWidth: "160px" }}
           >
             {CATEGORIES.map((c, idx) => (
               <option key={idx} value={c}>{c}</option>
@@ -555,7 +562,7 @@ const EscrowFinancing = () => {
           </span>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        <div className="exec-table-responsive" style={{ overflowX: "auto" }}>
           <table className="exec-dept-table" style={{ margin: 0 }}>
             <thead>
               <tr>

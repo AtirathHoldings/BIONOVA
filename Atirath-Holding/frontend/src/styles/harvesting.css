@@ -1,0 +1,1673 @@
+/* ==========================================================================
+   BioNova Harvesting Module - Unified Stylesheet
+   Path: src/styles/harvesting.css
+   Theme: Matches Enterprise Navy & Royal Blue Design System (Sidebar / Executive / SCO)
+   ========================================================================== */
+
+/* Main Page Container */
+.harvest-container {
+  padding: 24px;
+  max-width: 1600px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  box-sizing: border-box;
+  width: 100%;
+  overflow-x: hidden;
+  animation: harvestFadeIn 0.25s ease-out;
+}
+
+@keyframes harvestFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Main Hero Banner & Theme Header (Matches Sidebar, Executive Banner & Inventory Ribbon) */
+.harvest-hero {
+  background: linear-gradient(135deg, #02153f 0%, #002b80 60%, #1e40af 100%);
+  border: 1px solid rgba(59, 130, 246, 0.28);
+  box-shadow: 0 12px 28px -5px rgba(2, 21, 63, 0.3), 0 6px 12px -6px rgba(2, 21, 63, 0.2);
+  position: relative;
+  overflow: hidden;
+  border-radius: 20px;
+  padding: 24px;
+  color: #ffffff;
+}
+
+.harvest-hero::before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  right: -20%;
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.22) 0%, transparent 70%);
+  pointer-events: none;
+  border-radius: 50%;
+}
+
+.harvest-hero-header {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  position: relative;
+  z-index: 1;
+}
+
+@media (min-width: 1024px) {
+  .harvest-hero-header {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+  }
+}
+
+.harvest-hero-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.harvest-pills-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Harvesting Header Status Pills */
+.harvest-pill-green {
+  background: rgba(59, 130, 246, 0.2);
+  color: #bfdbfe;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  letter-spacing: 0.3px;
+}
+
+.harvest-pill-green svg {
+  color: #60a5fa;
+  flex-shrink: 0;
+}
+
+.harvest-pill-teal {
+  background: rgba(255, 255, 255, 0.12);
+  color: #e0f2fe;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.harvest-pill-amber {
+  background: rgba(245, 158, 11, 0.18);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.35);
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.harvest-hero h1 {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  margin: 0;
+  color: #ffffff;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  line-height: 1.25;
+}
+
+.harvest-plant-tag {
+  font-size: 11px;
+  font-weight: 600;
+  color: #dbeafe;
+  background: rgba(15, 23, 42, 0.45);
+  padding: 4px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(96, 165, 250, 0.35);
+}
+
+.harvest-hero p {
+  color: #dbeafe;
+  font-size: 12.5px;
+  max-width: 650px;
+  line-height: 1.6;
+  margin: 0;
+  opacity: 0.92;
+}
+
+/* Hero Action Buttons */
+.harvest-hero-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.harvest-btn-guide {
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(147, 197, 253, 0.35);
+  background: rgba(15, 23, 42, 0.45);
+  color: #bfdbfe;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.harvest-btn-guide:hover {
+  background: rgba(30, 58, 138, 0.75);
+  border-color: #60a5fa;
+  color: #ffffff;
+}
+
+.harvest-btn-guide.active {
+  background: linear-gradient(135deg, #1677ff 0%, #2563eb 100%);
+  color: #ffffff;
+  border-color: #60a5fa;
+  box-shadow: 0 4px 12px rgba(22, 119, 255, 0.4);
+}
+
+.harvest-btn-export {
+  padding: 9px 14px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  background: rgba(15, 23, 42, 0.4);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.harvest-btn-export:hover {
+  background: rgba(255, 255, 255, 0.14);
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
+
+.harvest-btn-add {
+  padding: 9px 16px;
+  border-radius: 10px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid #3b82f6;
+  background: linear-gradient(135deg, #1677ff 0%, #2563eb 100%);
+  color: #ffffff;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(22, 119, 255, 0.4);
+  transition: all 0.2s ease;
+}
+
+.harvest-btn-add:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(22, 119, 255, 0.48);
+}
+
+/* Operations Flowchart Container */
+.harvest-flowchart-card {
+  margin-top: 20px;
+  padding: 20px;
+  background: rgba(2, 21, 63, 0.72);
+  border-radius: 16px;
+  border: 1px solid rgba(96, 165, 250, 0.3);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  position: relative;
+  z-index: 1;
+}
+
+.harvest-flowchart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.harvest-flowchart-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.harvest-flowchart-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 9999px;
+  background: #60a5fa;
+  box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.25);
+  flex-shrink: 0;
+}
+
+.harvest-flowchart-title {
+  margin: 0;
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 14px;
+}
+
+.harvest-flowchart-close {
+  background: transparent;
+  border: none;
+  color: #cbd5e1;
+  padding: 4px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+.harvest-flowchart-close:hover {
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.12);
+}
+
+.harvest-flowchart-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 12px;
+}
+
+@media (max-width: 1024px) {
+  .harvest-flowchart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.harvest-flowchart-step {
+  background: rgba(15, 39, 98, 0.75);
+  border: 1px solid rgba(96, 165, 250, 0.25);
+  border-radius: 14px;
+  padding: 14px;
+  transition: all 0.25s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.harvest-flowchart-step:hover {
+  border-color: rgba(96, 165, 250, 0.65);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(2, 21, 63, 0.4);
+}
+
+.harvest-step-number {
+  font-size: 10px;
+  color: #93c5fd;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.harvest-step-title {
+  font-weight: 700;
+  color: #ffffff;
+  font-size: 13px;
+}
+
+.harvest-step-desc {
+  font-size: 11px;
+  color: #dbeafe;
+  line-height: 1.5;
+  margin: 0;
+  opacity: 0.88;
+}
+
+/* Harvesting Navigation Tab Bar */
+.harvest-tabs-bar {
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.16);
+  display: flex;
+  flex-wrap: nowrap !important;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.harvest-tabs-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.harvest-nav-tab {
+  flex: 1 1 0;
+  min-width: fit-content;
+  padding: 8px 12px;
+  border-radius: 10px;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  border: 1px solid transparent;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.harvest-nav-tab svg {
+  flex-shrink: 0;
+}
+
+@media (max-width: 1366px) {
+  .harvest-tabs-bar {
+    gap: 6px;
+  }
+  .harvest-nav-tab {
+    padding: 7px 8px;
+    font-size: 11px;
+    gap: 5px;
+  }
+}
+
+.harvest-nav-tab-active {
+  background: #ffffff;
+  color: #002b80;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+
+.harvest-nav-tab-active svg {
+  color: #2563eb;
+}
+
+.harvest-nav-tab-inactive {
+  background: rgba(255, 255, 255, 0.08);
+  color: #bfdbfe;
+  border-color: rgba(147, 197, 253, 0.2);
+}
+
+.harvest-nav-tab-inactive svg {
+  color: #60a5fa;
+}
+
+.harvest-nav-tab-inactive:hover {
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
+}
+
+/* KPI Cards Row */
+.harvest-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .harvest-kpi-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .harvest-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.harvest-kpi-card {
+  background: #ffffff;
+  padding: 18px 20px;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.04);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+}
+
+.harvest-kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.06);
+  border-color: rgba(37, 99, 235, 0.45);
+}
+
+.harvest-kpi-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.harvest-kpi-value {
+  font-size: 24px;
+  font-weight: 900;
+  color: #0f172a;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.harvest-kpi-badge {
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.harvest-kpi-badge-green { color: #059669; }
+.harvest-kpi-badge-blue { color: #2563eb; }
+.harvest-kpi-badge-purple { color: #7c3aed; }
+.harvest-kpi-badge-amber { color: #d97706; }
+
+/* Icon Accent Helpers */
+.harvest-icon-green { color: #059669; flex-shrink: 0; }
+.harvest-icon-blue { color: #2563eb; flex-shrink: 0; }
+.harvest-icon-purple { color: #7c3aed; flex-shrink: 0; }
+.harvest-icon-amber { color: #d97706; flex-shrink: 0; }
+
+/* Schedule Table Styling */
+.harvest-table-wrapper {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+}
+
+.harvest-table-toolbar {
+  padding: 16px 20px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #ffffff;
+}
+
+.harvest-toolbar-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.harvest-toolbar-title-group svg {
+  color: #2563eb;
+}
+
+.harvest-toolbar-title {
+  margin: 0;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.harvest-toolbar-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.harvest-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.harvest-search-icon {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.harvest-search-box input,
+.harvest-search-input {
+  padding: 7px 12px 7px 32px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #1e293b;
+  outline: none;
+  width: 220px;
+  transition: all 0.2s;
+  box-sizing: border-box;
+}
+
+.harvest-search-box input:focus,
+.harvest-search-input:focus {
+  background: #ffffff;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.harvest-select {
+  padding: 7px 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #334155;
+  outline: none;
+  cursor: pointer;
+}
+
+.harvest-select:focus {
+  border-color: #2563eb;
+}
+
+.harvest-table-container {
+  overflow-x: hidden;
+  width: 100%;
+}
+
+.harvest-table {
+  width: 100%;
+  min-width: 0;
+  table-layout: fixed;
+  text-align: left;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.harvest-table th:nth-child(1),
+.harvest-table td:nth-child(1) { width: 18%; }
+.harvest-table th:nth-child(2),
+.harvest-table td:nth-child(2) { width: 15%; }
+.harvest-table th:nth-child(3),
+.harvest-table td:nth-child(3) { width: 8.5%; }
+.harvest-table th:nth-child(4),
+.harvest-table td:nth-child(4) { width: 11%; }
+.harvest-table th:nth-child(5),
+.harvest-table td:nth-child(5) { width: 11.5%; }
+.harvest-table th:nth-child(6),
+.harvest-table td:nth-child(6) { width: 9.5%; }
+.harvest-table th:nth-child(7),
+.harvest-table td:nth-child(7) { width: 12.5%; }
+.harvest-table th:nth-child(8),
+.harvest-table td:nth-child(8) { width: 14%; }
+
+.harvest-table-header th {
+  background: #f8fafc;
+  border-bottom: 1px solid #e2e8f0;
+  font-size: 10px;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 11px 10px;
+  white-space: normal;
+  line-height: 1.3;
+  vertical-align: middle;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+.harvest-table-row {
+  border-bottom: 1px solid #f1f5f9;
+  transition: background-color 0.15s ease;
+}
+
+.harvest-table-row:hover {
+  background-color: #f8fafc;
+}
+
+.harvest-table-row td {
+  padding: 12px 10px;
+  vertical-align: middle;
+  word-break: break-word;
+  overflow-wrap: break-word;
+  box-sizing: border-box;
+}
+
+@media (max-width: 1240px) {
+  .harvest-kpi-value {
+    font-size: 20px;
+  }
+
+  .harvest-table-header th {
+    padding: 10px 6px;
+    font-size: 9.5px;
+    letter-spacing: 0.02em;
+  }
+
+  .harvest-table-row td {
+    padding: 10px 6px;
+    font-size: 11px;
+  }
+}
+
+.harvest-cell-primary {
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 12.5px;
+}
+
+.harvest-cell-code-sub {
+  font-size: 10.5px;
+  color: #1d4ed8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.harvest-cell-strong {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.harvest-cell-muted-sub {
+  font-size: 10.5px;
+  color: #94a3b8;
+  margin-top: 2px;
+}
+
+.harvest-cell-acreage {
+  font-weight: 600;
+  color: #334155;
+}
+
+.harvest-cell-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #475569;
+}
+
+.harvest-cell-yield {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.harvest-cell-moisture {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.harvest-cell-bunker {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  color: #334155;
+}
+
+/* Status Badges */
+.harvest-status-badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 3px 8px;
+  border-radius: 9999px;
+  font-size: 10px;
+  font-weight: 700;
+  border: 1px solid transparent;
+  white-space: normal;
+  text-align: center;
+  line-height: 1.25;
+  box-sizing: border-box;
+}
+
+.harvest-status-completed {
+  background: #dcfce7;
+  color: #15803d;
+  border-color: #bbf7d0;
+}
+
+.harvest-status-progress {
+  background: #dbeafe;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+  animation: harvestPulseBadge 2s infinite;
+}
+
+.harvest-status-scheduled {
+  background: #fef3c7;
+  color: #b45309;
+  border-color: #fde68a;
+}
+
+@keyframes harvestPulseBadge {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.72; }
+}
+
+/* Shared Card Sub-layout Helpers */
+.harvest-card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.harvest-card-title {
+  margin: 0;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 14px;
+}
+
+.harvest-card-title-lg {
+  margin: 0;
+  font-weight: 700;
+  color: #0f172a;
+  font-size: 15.5px;
+}
+
+.harvest-card-subtitle {
+  font-size: 12px;
+  color: #64748b;
+  margin-top: 3px;
+}
+
+.harvest-kv-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.harvest-kv-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.harvest-kv-label {
+  color: #64748b;
+}
+
+.harvest-kv-val {
+  font-weight: 600;
+  color: #1e293b;
+  text-align: right;
+}
+
+.harvest-kv-val-green {
+  font-weight: 700;
+  color: #059669;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  text-align: right;
+}
+
+.harvest-kv-val-blue {
+  font-weight: 600;
+  color: #1d4ed8;
+  text-align: right;
+}
+
+.harvest-kv-val-purple {
+  font-weight: 700;
+  color: #6d28d9;
+  text-align: right;
+}
+
+.harvest-kv-val-mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 600;
+  color: #1e293b;
+  text-align: right;
+}
+
+/* Plantation Parcel Grid */
+.harvest-parcels-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 1024px) {
+  .harvest-parcels-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .harvest-parcels-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.parcel-card {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  padding: 18px;
+  transition: all 0.2s ease;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.parcel-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.14);
+  transform: translateY(-2px);
+}
+
+.parcel-id-chip {
+  font-size: 10.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+}
+
+.parcel-area-badge {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d4ed8;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.parcel-contract-box {
+  padding: 10px 12px;
+  background: #f8fafc;
+  border-radius: 10px;
+  font-size: 11px;
+  color: #475569;
+  border: 1px solid #f1f5f9;
+  line-height: 1.45;
+}
+
+.parcel-crop-chip {
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.parcel-irrigation-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #0369a1;
+  background-color: #f0f9ff;
+  border: 1px solid #bae6fd;
+  padding: 4px 8px;
+  border-radius: 8px;
+}
+
+/* Machinery Fleet Grid */
+.harvest-fleet-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 768px) {
+  .harvest-fleet-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.fleet-card {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  padding: 18px;
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.fleet-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 10px 20px -5px rgba(37, 99, 235, 0.14);
+  transform: translateY(-2px);
+}
+
+.fleet-id-text {
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: #1e40af;
+}
+
+.fleet-status-pill {
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.fleet-badge-harvester {
+  background: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.fleet-badge-baler {
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.fleet-telemetry-strip {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+@media (min-width: 640px) {
+  .fleet-telemetry-strip {
+    grid-template-columns: repeat(4, 1fr);
+  }
+}
+
+.fleet-telemetry-item {
+  padding: 10px;
+  background-color: #f8fafc;
+  border-radius: 10px;
+  border: 1px solid #f1f5f9;
+  font-size: 11px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.fleet-telemetry-label {
+  font-size: 10px;
+  color: #94a3b8;
+  display: block;
+}
+
+.fleet-telemetry-val {
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #1e293b;
+}
+
+.fleet-telemetry-val-green {
+  font-weight: 700;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  color: #1d4ed8;
+}
+
+/* Silage Bunker Grid */
+.harvest-bunkers-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+}
+
+@media (max-width: 1024px) {
+  .harvest-bunkers-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .harvest-bunkers-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.bunker-card {
+  background: #ffffff;
+  border-radius: 14px;
+  border: 1px solid #e2e8f0;
+  padding: 18px;
+  transition: all 0.25s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.bunker-card:hover {
+  border-color: #2563eb;
+  box-shadow: 0 10px 25px -5px rgba(37, 99, 235, 0.14);
+  transform: translateY(-2px);
+}
+
+.bunker-id-badge {
+  font-size: 11.5px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: #1e40af;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.bunker-capacity-text {
+  font-size: 12px;
+  font-weight: 700;
+  color: #475569;
+}
+
+/* Bunker Fill Progress Bar */
+.bunker-progress-track {
+  width: 100%;
+  height: 8px;
+  background-color: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.bunker-progress-fill {
+  height: 100%;
+  border-radius: 9999px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+  position: relative;
+}
+
+.bunker-progress-fill.fill-optimal {
+  background: linear-gradient(90deg, #1677ff 0%, #2563eb 100%);
+}
+
+.bunker-progress-fill.fill-high {
+  background: linear-gradient(90deg, #002b80 0%, #1d4ed8 100%);
+}
+
+.bunker-progress-fill.fill-warning {
+  background: linear-gradient(90deg, #f59e0b 0%, #d97706 100%);
+}
+
+/* Fermentation & Temperature Sensors */
+.ensiling-ph-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background-color: #eff6ff;
+  color: #1e40af;
+  border: 1px solid #bfdbfe;
+  padding: 3px 8px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.bunker-temp-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+/* Active Harvest Chopper Pulse */
+@keyframes harvestPulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(37, 99, 235, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(37, 99, 235, 0);
+  }
+}
+
+.animate-harvest-pulse {
+  animation: harvestPulseGlow 2s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Mobile Responsive Adjustments */
+@media (max-width: 768px) {
+  .harvest-container {
+    padding: 14px 10px 24px 10px;
+    gap: 16px;
+  }
+
+  .harvest-hero {
+    padding: 18px 14px;
+    border-radius: 16px;
+  }
+
+  .harvest-hero h1 {
+    font-size: 20px;
+  }
+
+  .harvest-hero-actions {
+    width: 100%;
+  }
+
+  .harvest-hero-actions button {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+
+  .harvest-tabs-bar {
+    gap: 6px;
+    flex-wrap: nowrap !important;
+    overflow-x: auto;
+  }
+
+  .harvest-nav-tab {
+    font-size: 11px;
+    padding: 7px 10px;
+    flex: 0 0 auto;
+  }
+
+  .harvest-table-toolbar {
+    padding: 14px;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .harvest-toolbar-controls {
+    flex-direction: column;
+    align-items: stretch;
+    width: 100%;
+  }
+
+  .harvest-search-box,
+  .harvest-search-box input,
+  .harvest-search-input,
+  .harvest-select {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .harvest-table-container {
+    overflow-x: hidden;
+  }
+
+  .harvest-table,
+  .harvest-table thead,
+  .harvest-table tbody,
+  .harvest-table tr,
+  .harvest-table th,
+  .harvest-table td {
+    display: block;
+    width: 100% !important;
+    table-layout: auto;
+  }
+
+  .harvest-table thead {
+    display: none;
+  }
+
+  .harvest-table tbody {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    background: #f8fafc;
+  }
+
+  .harvest-table-row {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 12px;
+    padding: 12px 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  }
+
+  .harvest-table-row td {
+    display: flex !important;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 7px 0;
+    border-bottom: 1px solid #f1f5f9;
+    text-align: right;
+  }
+
+  .harvest-table-row td:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+
+  .harvest-table-row td::before {
+    content: attr(data-label);
+    font-size: 10px;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    text-align: left;
+    flex-shrink: 0;
+    max-width: 44%;
+  }
+
+  .harvest-table-row td > div,
+  .harvest-cell-stack {
+    text-align: right;
+    min-width: 0;
+  }
+}
+
+/* ==========================================================================
+   Schedule Harvest Cut Modal & Form Styles
+   ========================================================================== */
+.harvest-modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(2, 21, 63, 0.72);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+  padding: 20px;
+  box-sizing: border-box;
+  animation: harvestModalFadeIn 0.2s ease-out;
+}
+
+@keyframes harvestModalFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.harvest-modal {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 860px;
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 48px -12px rgba(2, 21, 63, 0.35), 0 12px 24px -6px rgba(2, 21, 63, 0.15);
+  border: 1px solid #e2e8f0;
+  overflow: hidden;
+  position: relative;
+  animation: harvestModalSlide 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes harvestModalSlide {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.harvest-modal-header {
+  padding: 18px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  background: linear-gradient(135deg, #02153f 0%, #002b80 100%);
+  color: #ffffff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.harvest-modal-title-wrap {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.harvest-modal-icon-badge {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  background: rgba(59, 130, 246, 0.25);
+  border: 1px solid rgba(96, 165, 250, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #bfdbfe;
+  flex-shrink: 0;
+}
+
+.harvest-modal-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  letter-spacing: -0.01em;
+}
+
+.harvest-modal-subtitle {
+  margin: 3px 0 0 0;
+  font-size: 12.5px;
+  color: #93c5fd;
+}
+
+.harvest-modal-close {
+  background: rgba(255, 255, 255, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #e2e8f0;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.harvest-modal-close:hover {
+  background: rgba(239, 68, 68, 0.85);
+  border-color: #ef4444;
+  color: #ffffff;
+}
+
+.harvest-modal-body {
+  padding: 22px 24px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  background: #f8fafc;
+}
+
+.harvest-modal-body::-webkit-scrollbar {
+  width: 6px;
+}
+
+.harvest-modal-body::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+.harvest-form-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.harvest-form-section-title {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 14px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.harvest-form-section-title svg {
+  color: #2563eb;
+}
+
+.harvest-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+@media (max-width: 640px) {
+  .harvest-form-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+}
+
+.harvest-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.harvest-form-group.full-width {
+  grid-column: 1 / -1;
+}
+
+.harvest-form-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.harvest-form-label-hint {
+  font-size: 11px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.harvest-form-input,
+.harvest-form-select,
+.harvest-form-textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  font-size: 13px;
+  color: #0f172a;
+  background: #ffffff;
+  box-sizing: border-box;
+  transition: all 0.2s ease;
+  font-family: inherit;
+}
+
+.harvest-form-input:focus,
+.harvest-form-select:focus,
+.harvest-form-textarea:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.harvest-form-input[readonly],
+.harvest-form-input:disabled {
+  background: #f1f5f9;
+  color: #64748b;
+  cursor: not-allowed;
+}
+
+.harvest-form-textarea {
+  resize: vertical;
+  min-height: 60px;
+}
+
+.harvest-form-hint-box {
+  margin-top: 4px;
+  padding: 8px 12px;
+  background: #eff6ff;
+  border-radius: 6px;
+  border-left: 3px solid #2563eb;
+  font-size: 11.5px;
+  color: #1e40af;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.harvest-modal-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  background: #ffffff;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 12px;
+  flex-shrink: 0;
+}
+
+.harvest-btn-cancel {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid #cbd5e1;
+  background: #ffffff;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.harvest-btn-cancel:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+  border-color: #94a3b8;
+}
+
+.harvest-btn-submit {
+  padding: 9px 20px;
+  border-radius: 8px;
+  border: none;
+  background: linear-gradient(135deg, #1677ff 0%, #2563eb 100%);
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 2px 6px rgba(37, 99, 235, 0.3);
+  transition: all 0.2s ease;
+}
+
+.harvest-btn-submit:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Table Action Buttons */
+.harvest-actions-cell {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.harvest-action-btn-edit {
+  padding: 5px 10px;
+  border-radius: 6px;
+  border: 1px solid #bfdbfe;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+
+.harvest-action-btn-edit:hover {
+  background: #dbeafe;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+.harvest-action-btn-delete {
+  padding: 5px 8px;
+  border-radius: 6px;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #dc2626;
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.harvest-action-btn-delete:hover {
+  background: #fee2e2;
+  border-color: #fca5a5;
+  color: #b91c1c;
+}
+
+/* Toast / Feedback Banner */
+.harvest-toast {
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 10px;
+  padding: 12px 18px;
+  color: #065f46;
+  font-size: 13px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.12);
+  animation: harvestModalFadeIn 0.3s ease;
+}
+
+.harvest-toast-close {
+  background: transparent;
+  border: none;
+  color: #059669;
+  cursor: pointer;
+  padding: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

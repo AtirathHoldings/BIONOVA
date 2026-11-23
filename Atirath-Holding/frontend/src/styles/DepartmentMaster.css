@@ -613,8 +613,235 @@ body {
 
 /* Added globally via script for responsive sidebar */
 @media (max-width: 768px) {
-  .dm-shell { margin-left: 240px; } /* matches sidebar.css */
+  .dm-shell, .dept-shell { margin-left: 0 !important; width: 100% !important; }
 }
 @media (max-width: 480px) {
-  .dm-shell { margin-left: 70px; } /* matches sidebar.css */
+  .dm-shell, .dept-shell { margin-left: 0 !important; width: 100% !important; }
+}
+
+/* Department List Header */
+.dept-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dept-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dept-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.dept-search-input {
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  width: 250px;
+  box-sizing: border-box;
+}
+
+/* Department Master Mobile Enhancements */
+@media (max-width: 768px) {
+  .dept-list-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+  .dept-list-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .dept-search-box {
+    width: 100% !important;
+    position: relative !important;
+  }
+  .dept-search-input {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: 42px !important;
+    box-sizing: border-box !important;
+  }
+  .dept-btn-add-new {
+    width: 100% !important;
+    min-width: 100% !important;
+    justify-content: center !important;
+    align-items: center !important;
+    height: 42px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .dept-table-container {
+    overflow-x: hidden !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  /* ─── Department Creation List: Mobile 3-Column View (Only Code, Name, Action) ─── */
+  .department-master-table,
+  .dept-list-table.department-master-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+  }
+
+  .department-master-table thead,
+  .dept-list-table.department-master-table thead {
+    display: table-header-group !important;
+  }
+
+  .department-master-table thead tr,
+  .dept-list-table.department-master-table thead tr {
+    display: table-row !important;
+    background: #f8fafc !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .department-master-table tbody,
+  .dept-list-table.department-master-table tbody {
+    display: table-row-group !important;
+  }
+
+  .department-master-table tbody tr,
+  .dept-list-table.department-master-table tbody tr {
+    display: table-row !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .department-master-table tbody tr:hover,
+  .dept-list-table.department-master-table tbody tr:hover {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide all columns except CODE, DEPARTMENT NAME, and ACTIONS */
+  .department-master-table th,
+  .department-master-table td,
+  .dept-list-table.department-master-table th,
+  .dept-list-table.department-master-table td {
+    display: none !important;
+  }
+
+  .department-master-table th.dept-col-hide-mobile,
+  .department-master-table td.dept-col-hide-mobile,
+  .dept-list-table.department-master-table th.dept-col-hide-mobile,
+  .dept-list-table.department-master-table td.dept-col-hide-mobile {
+    display: none !important;
+  }
+
+  .department-master-table td::before,
+  .dept-list-table.department-master-table td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* 1. Department Code Column */
+  .department-master-table th.col-dept-code,
+  .department-master-table td.col-dept-code,
+  .dept-list-table.department-master-table th.col-dept-code,
+  .dept-list-table.department-master-table td.col-dept-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .department-master-table td.col-dept-code span,
+  .dept-list-table.department-master-table td.col-dept-code span {
+    display: inline-block !important;
+    font-size: 12px !important;
+    padding: 4px 6px !important;
+    word-break: break-all !important;
+  }
+
+  /* 2. Department Name Column */
+  .department-master-table th.col-dept-name,
+  .department-master-table td.col-dept-name,
+  .dept-list-table.department-master-table th.col-dept-name,
+  .dept-list-table.department-master-table td.col-dept-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  /* 3. Actions Column (Right next to Department name) */
+  .department-master-table th.col-dept-actions,
+  .department-master-table td.col-dept-actions,
+  .dept-list-table.department-master-table th.col-dept-actions,
+  .dept-list-table.department-master-table td.col-dept-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .department-master-table td.col-dept-empty,
+  .dept-list-table.department-master-table td.col-dept-empty {
+    display: table-cell !important;
+    text-align: center !important;
+    padding: 40px 16px !important;
+    width: 100% !important;
+  }
+
+  .dept-pagination-bar {
+    flex-direction: column !important;
+    gap: 12px !important;
+    padding: 14px 16px !important;
+    align-items: center !important;
+  }
+  .dept-btn-add-new {
+    width: 100% !important;
+    justify-content: center !important;
+  }
 }

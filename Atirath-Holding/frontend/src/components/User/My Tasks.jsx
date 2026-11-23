@@ -3579,7 +3579,7 @@ const MyTasks = ({ userRole, onLogout }) => {
     };
 
     return (
-      <div style={{
+      <div className="myt-task-detail-wrapper" style={{
         width: "100%",
         background: "#f8fafc",
         borderRadius: "12px",
@@ -3589,7 +3589,7 @@ const MyTasks = ({ userRole, onLogout }) => {
         overflowY: "auto"
       }}>
         {/* Header */}
-        <div style={{
+        <div className="myt-detail-header" style={{
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -3604,10 +3604,11 @@ const MyTasks = ({ userRole, onLogout }) => {
           top: 0,
           zIndex: 10
         }}>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+          <div className="myt-detail-header-left" style={{ display: "flex", alignItems: "center", gap: "16px" }}>
             {!isExternalMode && (
               <button
                 onClick={onBack}
+                className="myt-detail-back-btn"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -3630,10 +3631,10 @@ const MyTasks = ({ userRole, onLogout }) => {
             )}
             <div>
               <div style={{ fontSize: "12px", color: "#94a3b8", fontWeight: "500" }}>{task.id}</div>
-              <div style={{ fontSize: "18px", fontWeight: "600", color: "#0f172a" }}>{task.title}</div>
+              <div className="myt-detail-task-title" style={{ fontSize: "18px", fontWeight: "600", color: "#0f172a" }}>{task.title}</div>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+          <div className="myt-detail-header-right" style={{ display: "flex", alignItems: "center", gap: "12px" }}>
             <span className="cc-status-badge" style={{
               backgroundColor: progressBadge.bg,
               color: progressBadge.color,
@@ -3697,23 +3698,23 @@ const MyTasks = ({ userRole, onLogout }) => {
         </div>
 
         {/* Main Content */}
-        <div style={{
+        <div className="myt-detail-main-grid" style={{
           display: "grid",
           gridTemplateColumns: "1fr 340px",
           gap: "24px",
           padding: "0 24px 24px 24px"
         }}>
           {/* Left Column */}
-          <div>
+          <div className="myt-detail-left-col">
             {/* Task Details Card - Shows Progress, Process, Priority, Time */}
-            <div style={{
+            <div className="myt-detail-card" style={{
               backgroundColor: "white",
               borderRadius: "12px",
               border: "1px solid #e2e8f0",
               padding: "24px",
               marginBottom: "24px"
             }}>
-              <div style={{ display: "grid", gridTemplateColumns: isCompleted ? "repeat(3, 1fr)" : "1fr 1fr", gap: "16px" }}>
+              <div className="myt-detail-stats-grid" style={{ display: "grid", gridTemplateColumns: isCompleted ? "repeat(3, 1fr)" : "1fr 1fr", gap: "16px" }}>
                 {!isCompleted && (
                   <div>
                     <div style={{ fontSize: "12px", fontWeight: "600", color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "4px" }}>
@@ -3823,7 +3824,7 @@ const MyTasks = ({ userRole, onLogout }) => {
             </div>
 
             {/* Checklist Section */}
-            <div style={{
+            <div className="myt-detail-card" style={{
               backgroundColor: "white",
               borderRadius: "12px",
               border: "1px solid #e2e8f0",
@@ -3954,7 +3955,7 @@ const MyTasks = ({ userRole, onLogout }) => {
 
             {/* Description */}
             {task.description && (
-              <div style={{
+              <div className="myt-detail-card" style={{
                 backgroundColor: "white",
                 borderRadius: "12px",
                 border: "1px solid #e2e8f0",
@@ -3972,7 +3973,7 @@ const MyTasks = ({ userRole, onLogout }) => {
             )}
 
             {/* Team Members / Contributors Card */}
-            <div style={{
+            <div className="myt-detail-card" style={{
               backgroundColor: "white",
               borderRadius: "12px",
               border: "1px solid #e2e8f0",
@@ -4122,7 +4123,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                   No attachments uploaded for this task.
                 </div>
               ) : (
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px" }}>
+                <div className="myt-detail-attachments-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px" }}>
                   {taskAttachments.map((att, idx) => {
                     const fileName = att.fileNm || att.fileName || `Attachment ${idx + 1}`;
                     let rawUrl = att.atPath || att.url || att.filePath || "#";
@@ -4372,7 +4373,7 @@ const MyTasks = ({ userRole, onLogout }) => {
               const reassignCount = validRemarks.filter(r => r.action?.toLowerCase().includes("reassign")).length;
 
               return (
-                <div style={{
+                <div className="myt-detail-card" style={{
                   backgroundColor: "white",
                   borderRadius: "12px",
                   border: "1px solid #e2e8f0",
@@ -4529,7 +4530,7 @@ const MyTasks = ({ userRole, onLogout }) => {
 
             {/* Add Remarks & Evidence */}
             {!isCompleted && isDoer && !isUnderReview && (
-              <div style={{
+              <div className="myt-detail-card" style={{
                 backgroundColor: "white",
                 borderRadius: "12px",
                 border: "1px solid #e2e8f0",
@@ -4607,9 +4608,9 @@ const MyTasks = ({ userRole, onLogout }) => {
           </div>
 
           {/* Right Column - Sidebar */}
-          <div>
+          <div className="myt-detail-right-col">
             {/* Team Members */}
-            <div style={{
+            <div className="myt-detail-card" style={{
               backgroundColor: "white",
               borderRadius: "12px",
               border: "1px solid #e2e8f0",
@@ -4771,7 +4772,7 @@ const MyTasks = ({ userRole, onLogout }) => {
             </div>
 
             {/* Status Details - Dynamic */}
-            <div style={{
+            <div className="myt-detail-card" style={{
               backgroundColor: "white",
               borderRadius: "12px",
               border: "1px solid #e2e8f0",
@@ -4831,7 +4832,7 @@ const MyTasks = ({ userRole, onLogout }) => {
 
             {/* Action Buttons - Dynamic */}
             {!isCompleted && renderActionButtons() && (
-              <div style={{
+              <div className="myt-detail-card" style={{
                 backgroundColor: "white",
                 borderRadius: "12px",
                 border: "1px solid #e2e8f0",
@@ -4849,7 +4850,7 @@ const MyTasks = ({ userRole, onLogout }) => {
 
         {/* Deny / Raise Request Form - Full Width at Bottom */}
         {showDenyForm && (
-          <div ref={denyFormRef} style={{
+          <div ref={denyFormRef} className="myt-detail-deny-form" style={{
             backgroundColor: "white",
             borderRadius: "12px",
             border: "1px solid #e2e8f0",
@@ -5092,7 +5093,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                               )}
                             </div>
 
-                            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
+                            <div className="myt-detail-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
                               <div className="myt-form-group">
                                 <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
                                 <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
@@ -5149,7 +5150,7 @@ const MyTasks = ({ userRole, onLogout }) => {
 
                       return (
                         <div key="rework-mode-form">
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "20px" }}>
+                          <div className="myt-detail-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "20px" }}>
                             <div className="myt-form-group">
                               <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>
                                 Select Target Milestone (Same Project)
@@ -5242,7 +5243,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                             )}
                           </div>
 
-                          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
+                          <div className="myt-detail-form-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "24px", marginBottom: "24px" }}>
                             <div className="myt-form-group">
                               <label style={{ display: "block", fontSize: "14px", fontWeight: "600", color: "#475569", marginBottom: "8px" }}>Attachments (optional)</label>
                               <div style={{ width: "100%", padding: "16px", border: "2px dashed #cbd5e1", borderRadius: "8px", textAlign: "center", cursor: "pointer", color: "#64748b", backgroundColor: "#f8fafc", position: "relative" }}>
@@ -5473,7 +5474,7 @@ const MyTasks = ({ userRole, onLogout }) => {
     }
 
     return (
-      <div style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
+      <div className="myt-team-members-wrap" style={{ display: "flex", alignItems: "center", gap: "6px", flexWrap: "wrap" }}>
         <style>
           {`
             .team-member-hover {
@@ -6168,18 +6169,20 @@ const MyTasks = ({ userRole, onLogout }) => {
 
                               return (
                                 <tr key={`${task.isIndividual ? 'IND' : 'LIVE'}_${task.taskId || task.id}`} onClick={() => { openTaskDetail(task); }} style={{ cursor: "pointer", backgroundColor: isOverdue ? "#FEF2F2" : "transparent" }}>
-                                  <td style={{ maxWidth: "250px" }}>
-                                    <div style={{ fontWeight: "600", color: "#0f172a", marginBottom: "4px" }}>{task.taskCode || task.id}</div>
-                                    <div style={{ fontWeight: "500", color: "#64748b", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={task.title}>{task.title}</div>
-                                    {!task.isIndividual && task.project !== "Individual Task" && task.milestone && task.milestone !== "—" && (
-                                      <div style={{ fontSize: "12px", color: "#94a3b8" }}>{task.milestone}</div>
-                                    )}
+                                  <td data-label="TASK" className="myt-task-cell">
+                                    <div className="myt-task-col-wrapper">
+                                      <div className="myt-task-code">{task.taskCode || task.id}</div>
+                                      <div className="myt-task-title" title={task.title}>{task.title}</div>
+                                      {!task.isIndividual && task.project !== "Individual Task" && task.milestone && task.milestone !== "—" && (
+                                        <div className="myt-task-milestone">{task.milestone}</div>
+                                      )}
+                                    </div>
                                   </td>
-                                  <td>
+                                  <td data-label="TEAM" className="myt-team-cell">
                                     {renderTeamMembers(task)}
                                   </td>
                                   {selectedStatus !== "Completed" && (
-                                    <td>
+                                    <td data-label="PRIORITY" className="myt-priority-cell">
                                       {!isCompleted && (
                                         <span className="cc-status-badge" style={{ backgroundColor: priorityBadge.bg, color: priorityBadge.color, padding: "4px 10px", borderRadius: "12px", fontSize: "12px", fontWeight: "600" }}>
                                           {task.priority === "ATMOST CRITICAL" ? "Atmost Critical" : task.priority}
@@ -6187,7 +6190,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                                       )}
                                     </td>
                                   )}
-                                  <td style={{ fontWeight: "600", color: isOverdue ? "#EF4444" : "#0f172a", textAlign: "center" }}>
+                                  <td data-label="DUE DATE" className="myt-duedate-cell" style={{ fontWeight: "600", color: isOverdue ? "#EF4444" : "#0f172a" }}>
                                     {(() => {
                                       const rawTaskObj = task.rawTask || task;
                                       const rawStartVal = rawTaskObj?.stDt || rawTaskObj?.stdt || rawTaskObj?.st_dt || rawTaskObj?.tentStDt || rawTaskObj?.tent_st_dt || rawTaskObj?.startDate || task.startDate || task.stDt;
@@ -6197,15 +6200,17 @@ const MyTasks = ({ userRole, onLogout }) => {
                                       if (selectedStatus === "Upcoming" || isUpcomingTab(task)) {
                                         if (startFormatted && endFormatted && startFormatted !== endFormatted) {
                                           return (
-                                            <div style={{ display: "flex", flexDirection: "column", gap: "2px", alignItems: "center" }}>
+                                            <div className="myt-date-col-wrapper">
                                               <span style={{ fontSize: "11px", fontWeight: "600", color: "#4f46e5" }}>Start: {startFormatted}</span>
                                               <span style={{ fontSize: "11px", fontWeight: "600", color: "#0f172a" }}>End: {endFormatted}</span>
                                             </div>
                                           );
                                         } else if (startFormatted) {
                                           return (
-                                            <div style={{ fontSize: "11px", fontWeight: "600", color: "#4f46e5" }}>
-                                              Start: {startFormatted}
+                                            <div className="myt-date-col-wrapper">
+                                              <span style={{ fontSize: "11px", fontWeight: "600", color: "#4f46e5" }}>
+                                                Start: {startFormatted}
+                                              </span>
                                             </div>
                                           );
                                         }
@@ -6214,8 +6219,8 @@ const MyTasks = ({ userRole, onLogout }) => {
                                       return endFormatted || formatDate(task.dueDate) || "—";
                                     })()}
                                   </td>
-                                  <td>
-                                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: "8px" }}>
+                                  <td data-label="STATUS" className="myt-status-cell">
+                                    <div className="myt-status-cell-wrap" style={{ display: "flex", alignItems: "center", gap: "8px" }}>
                                       <span className="cc-status-badge" style={{ backgroundColor: progressBadge.bg, color: progressBadge.color, minWidth: "90px", textAlign: "center", display: "inline-block", textTransform: "uppercase", fontWeight: "700", padding: "4px 12px", borderRadius: "12px", fontSize: "11px" }}>{progressBadge.label}</span>
                                       {/* Hide process icon for closed tasks — only show Lead/Lag/On Time clock */}
                                       {!isCompleted && (
@@ -6229,7 +6234,7 @@ const MyTasks = ({ userRole, onLogout }) => {
                                       <div className="myt-custom-tooltip-wrap" title={timeStatus.title} style={{ color: timeStatus.color, display: "flex", alignItems: "center", cursor: "help" }}><timeStatus.icon size={18} strokeWidth={2.5} /></div>
                                     </div>
                                   </td>
-                                  <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
+                                  <td data-label="ACTIONS" className="myt-actions-cell" onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
                                     {renderActionButton(task)}
                                   </td>
                                 </tr>

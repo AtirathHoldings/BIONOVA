@@ -29,6 +29,12 @@ const INITIAL_FASTENERS = [];
 const FastenersHardware = ({ screenPerm }) => {
   const [fasteners, setFasteners] = useState([]);
 
+  useEffect(() => {
+    getFasteners().then(res => {
+      if (Array.isArray(res) && res.length > 0) setFasteners(res);
+    }).catch(err => console.warn(err));
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [gradeFilter, setGradeFilter] = useState("All");
   const [coatingFilter, setCoatingFilter] = useState("All");
@@ -128,28 +134,31 @@ const FastenersHardware = ({ screenPerm }) => {
 
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to delete this structural fastener record?")) {
+      deleteFastener(id).catch(err => console.warn(err));
       setFasteners(fasteners.filter(f => f.id !== id));
     }
   };
 
   const handleSaveForm = (e) => {
     e.preventDefault();
+    const cleanItem = {
+      ...formData,
+      currentStock: Number(formData.currentStock),
+      reorderThreshold: Number(formData.reorderThreshold),
+      unitCost: Number(formData.unitCost)
+    };
+
     if (modalMode === "add") {
-      const newItem = {
-        ...formData,
-        id: Date.now(),
-        currentStock: Number(formData.currentStock),
-        reorderThreshold: Number(formData.reorderThreshold),
-        unitCost: Number(formData.unitCost)
-      };
+      const newItem = { ...cleanItem, id: Date.now() };
+      saveFastener(cleanItem).then(res => {
+        if (res) setFasteners(prev => [res, ...prev.filter(f => f.id !== newItem.id)]);
+      }).catch(err => console.warn(err));
       setFasteners([newItem, ...fasteners]);
     } else {
-      setFasteners(fasteners.map(f => f.id === selectedFastener.id ? {
-        ...formData,
-        currentStock: Number(formData.currentStock),
-        reorderThreshold: Number(formData.reorderThreshold),
-        unitCost: Number(formData.unitCost)
-      } : f));
+      saveFastener(cleanItem, selectedFastener.id).then(res => {
+        if (res) setFasteners(prev => prev.map(f => f.id === selectedFastener.id ? res : f));
+      }).catch(err => console.warn(err));
+      setFasteners(fasteners.map(f => f.id === selectedFastener.id ? { ...cleanItem, id: selectedFastener.id } : f));
     }
     setIsModalOpen(false);
   };

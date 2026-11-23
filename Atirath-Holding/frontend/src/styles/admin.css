@@ -414,13 +414,36 @@
 
 @media (max-width: 1024px) {
   /* Sidebar now hidden via translateX in mobile-responsive.css - do NOT use display:none */
-  .db-shell-container .db-shell { margin-left: 0 !important; width: 100% !important; }
+  .db-shell-container .db-shell { margin-left: 0 !important; width: 100% !important; max-width: 100% !important; }
+  .db-shell-container .db-main { padding: 10px 12px !important; padding-top: 8px !important; gap: 14px !important; }
   .db-shell-container .db-charts-grid, .db-shell-container .db-lists-grid { grid-template-columns: 1fr; }
+  .db-shell-container .db-card.list-card { grid-column: span 1 !important; }
   .db-shell-container .erp-welcome-toast { right: 10px; top: 70px; min-width: 280px; }
 }
 
-@media (max-width: 640px) {
-  .db-shell-container .erp-kpi-grid { grid-template-columns: 1fr; }
+@media (max-width: 768px) {
+  .db-shell-container .erp-stats-container {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+    padding: 14px !important;
+  }
+  .db-shell-container .erp-stat-divider {
+    display: none !important;
+  }
+  .db-shell-container .erp-kpi-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 10px !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .db-shell-container .erp-stats-container {
+    grid-template-columns: 1fr !important;
+  }
+  .db-shell-container .erp-kpi-grid {
+    grid-template-columns: 1fr !important;
+  }
 }
 
 /* ===== ERP STAT CARDS (Matches Project Dashboard Style) ===== */

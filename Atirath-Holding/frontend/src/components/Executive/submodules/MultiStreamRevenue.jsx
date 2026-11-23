@@ -125,10 +125,16 @@ const MultiStreamRevenue = () => {
     };
 
     if (editingItem) {
+      saveRevenueRecord(cleanItem, editingItem.id).then(res => {
+        if (res) setTransactions(prev => prev.map(t => t.id === editingItem.id ? res : t));
+      }).catch(err => console.warn(err));
       setTransactions((prev) =>
         prev.map((t) => (t.id === editingItem.id ? cleanItem : t))
       );
     } else {
+      saveRevenueRecord(cleanItem).then(res => {
+        if (res) setTransactions(prev => [res, ...prev.filter(t => t.id !== cleanItem.id)]);
+      }).catch(err => console.warn(err));
       setTransactions((prev) => [cleanItem, ...prev]);
     }
     setIsModalOpen(false);
@@ -187,7 +193,7 @@ const MultiStreamRevenue = () => {
 
       {/* If isModalOpen is true, render the Full-Page Form Card. Otherwise, render the List & KPIs */}
       {isModalOpen ? (
-        <div style={{
+        <div className="exec-form-card" style={{
           backgroundColor: "#ffffff",
           borderRadius: "14px",
           border: "1px solid #e2e8f0",
@@ -196,7 +202,7 @@ const MultiStreamRevenue = () => {
           marginTop: "10px"
         }}>
           {/* Form Header with Back Button */}
-          <div style={{
+          <div className="exec-form-header" style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -235,9 +241,9 @@ const MultiStreamRevenue = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSave} style={{ padding: "28px" }}>
+          <form onSubmit={handleSave} className="exec-form-body" style={{ padding: "28px" }}>
             {/* Section 1: Invoice & Offtaker Details */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -248,7 +254,7 @@ const MultiStreamRevenue = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <Building size={18} color="#1677ff" /> 1. Invoice Identification & Offtaker
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Invoice ID *
@@ -320,7 +326,7 @@ const MultiStreamRevenue = () => {
             </div>
 
             {/* Section 2: Financial Valuation & Settlement */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -331,7 +337,7 @@ const MultiStreamRevenue = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <DollarSign size={18} color="#059669" /> 2. Invoice Financials & Settlement Status
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Unit Rate
@@ -413,7 +419,7 @@ const MultiStreamRevenue = () => {
             </div>
 
             {/* Bottom Form Actions */}
-            <div style={{
+            <div className="exec-form-footer" style={{
               display: "flex",
               justifyContent: "flex-end",
               gap: "12px",
@@ -462,7 +468,7 @@ const MultiStreamRevenue = () => {
       ) : (
         <>
           {/* KPI Cards */}
-      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: "24px" }}>
+      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "24px" }}>
         <div className="exec-fin-tile">
           <div className="exec-fin-tile-label">TOTAL BOOKED REVENUE</div>
           <div className="exec-fin-tile-val">{formatINR(totalRevenue)}</div>
@@ -515,12 +521,12 @@ const MultiStreamRevenue = () => {
           </span>
         </div>
 
-        <div style={{
+        <div className="exec-stream-grid" style={{
           display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
+          gridTemplateColumns: "repeat(4, 1fr)",
           gap: "14px"
         }}>
-          <div style={{ background: "#eff6ff", padding: "12px 14px", borderRadius: "8px", borderLeft: "4px solid #2563eb" }}>
+          <div style={{ background: "#eff6ff", padding: "12px 14px", borderRadius: "8px", borderLeft: "4px solid #2563eb", minWidth: 0, boxSizing: "border-box" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "700", color: "#1e40af" }}>
               <Flame size={14} /> CBG Cascade Offtakes
             </div>
@@ -532,7 +538,7 @@ const MultiStreamRevenue = () => {
             </div>
           </div>
 
-          <div style={{ background: "#f0fdf4", padding: "12px 14px", borderRadius: "8px", borderLeft: "4px solid #10b981" }}>
+          <div style={{ background: "#f0fdf4", padding: "12px 14px", borderRadius: "8px", borderLeft: "4px solid #10b981", minWidth: 0, boxSizing: "border-box" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "700", color: "#166534" }}>
               <Sprout size={14} /> Organic Fertilizer (FOM)
             </div>
@@ -544,7 +550,7 @@ const MultiStreamRevenue = () => {
             </div>
           </div>
 
-          <div style={{ background: "#f5f3ff", padding: "12px 14px", borderRadius: "8px", borderLeft: "4px solid #7c3aed" }}>
+          <div style={{ background: "#f5f3ff", padding: "12px 14px", borderRadius: "8px", borderLeft: "4px solid #7c3aed", minWidth: 0, boxSizing: "border-box" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "700", color: "#5b21b6" }}>
               <Wind size={14} /> Carbon Credits (CERs)
             </div>
@@ -556,7 +562,7 @@ const MultiStreamRevenue = () => {
             </div>
           </div>
 
-          <div style={{ background: "#fffbeb", padding: "12px 14px", borderRadius: "8px", borderLeft: "4px solid #f59e0b" }}>
+          <div style={{ background: "#fffbeb", padding: "12px 14px", borderRadius: "8px", borderLeft: "4px solid #f59e0b", minWidth: 0, boxSizing: "border-box" }}>
             <div style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "700", color: "#92400e" }}>
               <Truck size={14} /> Municipal Tipping Fees
             </div>
@@ -571,19 +577,19 @@ const MultiStreamRevenue = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{
+      <div className="exec-filter-bar" style={{
         background: "#ffffff",
         borderRadius: "12px",
         padding: "16px 20px",
         border: "1px solid #e2e8f0",
         marginBottom: "20px",
         display: "flex",
-        flexWrap: "wrap",
+        flexWrap: "nowrap",
         gap: "14px",
         alignItems: "center",
         justifyContent: "space-between"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "260px" }}>
+        <div className="exec-search-wrapper" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -611,11 +617,12 @@ const MultiStreamRevenue = () => {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="exec-filter-selects" style={{ display: "flex", gap: "10px", flexWrap: "nowrap", flexShrink: 0 }}>
           <select
             className="exec-select"
             value={streamFilter}
             onChange={(e) => setStreamFilter(e.target.value)}
+            style={{ minWidth: "150px" }}
           >
             {STREAMS.map((s, idx) => (
               <option key={idx} value={s}>{s}</option>
@@ -626,6 +633,7 @@ const MultiStreamRevenue = () => {
             className="exec-select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ minWidth: "160px" }}
           >
             <option value="All">All Payment Statuses</option>
             <option value="Settled">Settled (Received)</option>
@@ -646,7 +654,7 @@ const MultiStreamRevenue = () => {
           </span>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        <div className="exec-table-responsive" style={{ overflowX: "auto" }}>
           <table className="exec-dept-table" style={{ margin: 0 }}>
             <thead>
               <tr>

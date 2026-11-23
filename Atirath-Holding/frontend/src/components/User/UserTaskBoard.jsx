@@ -577,6 +577,7 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
             <>
               {/* ===== STATS ROW – perfectly equal & aligned ===== */}
               <div
+                className="utb-stats-container"
                 style={{
                   display: 'flex',
                   flexWrap: 'wrap',
@@ -633,7 +634,7 @@ const UserTaskBoard = ({ userRole, onLogout }) => {
               </div>
 
               {/* ===== STANDALONE SEARCH BAR ===== */}
-              <div style={{
+              <div className="utb-search-container" style={{
                 display: 'flex',
                 alignItems: 'center',
                 gap: '8px',

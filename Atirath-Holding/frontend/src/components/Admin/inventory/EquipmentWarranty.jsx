@@ -31,6 +31,12 @@ const INITIAL_EQUIPMENT_WARRANTIES = [];
 const EquipmentWarranty = ({ screenPerm }) => {
   const [warranties, setWarranties] = useState([]);
 
+  useEffect(() => {
+    getEquipmentWarranties().then(res => {
+      if (Array.isArray(res) && res.length > 0) setWarranties(res);
+    }).catch(err => console.warn(err));
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
   const [oemFilter, setOemFilter] = useState("All");
@@ -145,6 +151,7 @@ const EquipmentWarranty = ({ screenPerm }) => {
 
   const handleDelete = (id) => {
     if (window.confirm("Are you sure you want to remove this equipment warranty registry entry?")) {
+      deleteEquipmentWarranty(id).catch(err => console.warn(err));
       setWarranties(warranties.filter(w => w.id !== id));
     }
   };
@@ -157,20 +164,23 @@ const EquipmentWarranty = ({ screenPerm }) => {
     else if (days <= 60) computedStatus = "Expiring Soon";
     else computedStatus = "Active";
 
+    const cleanItem = {
+      ...formData,
+      status: computedStatus,
+      slaResponseHours: Number(formData.slaResponseHours)
+    };
+
     if (modalMode === "add") {
-      const newItem = {
-        ...formData,
-        id: Date.now(),
-        status: computedStatus,
-        slaResponseHours: Number(formData.slaResponseHours)
-      };
+      const newItem = { ...cleanItem, id: Date.now() };
+      saveEquipmentWarranty(cleanItem).then(res => {
+        if (res) setWarranties(prev => [res, ...prev.filter(w => w.id !== newItem.id)]);
+      }).catch(err => console.warn(err));
       setWarranties([newItem, ...warranties]);
     } else {
-      setWarranties(warranties.map(w => w.id === selectedMachine.id ? {
-        ...formData,
-        status: computedStatus,
-        slaResponseHours: Number(formData.slaResponseHours)
-      } : w));
+      saveEquipmentWarranty(cleanItem, selectedMachine.id).then(res => {
+        if (res) setWarranties(prev => prev.map(w => w.id === selectedMachine.id ? res : w));
+      }).catch(err => console.warn(err));
+      setWarranties(warranties.map(w => w.id === selectedMachine.id ? { ...cleanItem, id: selectedMachine.id } : w));
     }
     setIsModalOpen(false);
   };
@@ -179,15 +189,21 @@ const EquipmentWarranty = ({ screenPerm }) => {
     e.preventDefault();
     if (!claimSubject.trim()) return;
 
-    setWarranties(warranties.map(w => {
+    const updated = warranties.map(w => {
       if (w.id === selectedMachine.id) {
-        return {
+        const itemObj = {
           ...w,
           status: "Claim in Progress",
           claimHistory: `Active Claim Filed (${claimSeverity}): ${claimSubject} [Logged ${new Date().toISOString().slice(0, 10)}]`
         };
+        saveEquipmentWarranty(itemObj, w.id).catch(err => console.warn(err));
+        return itemObj;
       }
       return w;
+    });
+    setWarranties(updated);
+    setIsClaimModalOpen(false);
+  };
     }));
     alert(`Warranty Claim officially lodged with OEM (${selectedMachine.oem})! Ticket #CLM-${Date.now().toString().slice(-6)} created.`);
     setIsClaimModalOpen(false);

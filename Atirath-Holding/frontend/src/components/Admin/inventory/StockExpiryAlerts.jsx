@@ -29,6 +29,12 @@ const INITIAL_ALERTS = [];
 const StockExpiryAlerts = ({ screenPerm }) => {
   const [alerts, setAlerts] = useState([]);
 
+  useEffect(() => {
+    getStockAlerts().then(res => {
+      if (Array.isArray(res) && res.length > 0) setAlerts(res);
+    }).catch(err => console.warn(err));
+  }, []);
+
   const [searchTerm, setSearchTerm] = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [severityFilter, setSeverityFilter] = useState("All");
@@ -87,21 +93,32 @@ const StockExpiryAlerts = ({ screenPerm }) => {
     e.preventDefault();
     if (!resolutionText.trim()) return;
 
-    setAlerts(alerts.map(a => {
+    const updated = alerts.map(a => {
       if (a.id === selectedAlert.id) {
-        return {
+        const itemObj = {
           ...a,
           status: "Resolved",
           resolutionNotes: resolutionText.trim()
         };
+        saveStockAlert(itemObj, a.id).catch(err => console.warn(err));
+        return itemObj;
       }
-      return m;
-    }));
+      return a;
+    });
+    setAlerts(updated);
     setIsResolveModalOpen(false);
   };
 
   const handleQuarantine = (id) => {
-    setAlerts(alerts.map(a => a.id === id ? { ...a, status: "Quarantined" } : a));
+    const updated = alerts.map(a => {
+      if (a.id === id) {
+        const itemObj = { ...a, status: "Quarantined" };
+        saveStockAlert(itemObj, id).catch(err => console.warn(err));
+        return itemObj;
+      }
+      return a;
+    });
+    setAlerts(updated);
     alert("Batch / Material has been officially moved to the Quarantine Zone and isolated from production!");
   };
 
@@ -129,6 +146,9 @@ const StockExpiryAlerts = ({ screenPerm }) => {
       status: "Active",
       resolutionNotes: ""
     };
+    saveStockAlert(newAlert).then(res => {
+      if (res) setAlerts(prev => [res, ...prev.filter(a => a.id !== newAlert.id)]);
+    }).catch(err => console.warn(err));
     setAlerts([newAlert, ...alerts]);
     setIsAddModalOpen(false);
   };

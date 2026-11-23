@@ -28,7 +28,7 @@ body {
   top: 0;
   left: 0;
   bottom: 0;
-  z-index: 99;
+  z-index: 100;
 }
 
 /* Master Right content body viewport */
@@ -709,13 +709,44 @@ body {
   background: #b91c1c;
 }
 
-/* ===== RESPONSIVE ===== */
+/* ===== RESPONSIVE STYLES ===== */
 @media (max-width: 1024px) {
-  .proj-shell-container > aside {
-    display: none;
+  .proj-shell-container {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+  }
+  .proj-shell-container .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    width: 270px !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    z-index: 1100 !important;
+    display: flex !important;
+    box-shadow: none !important;
+  }
+  .proj-shell-container .sidebar.mobile-open {
+    transform: translateX(0) !important;
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.18) !important;
+    z-index: 1100 !important;
+  }
+  .sidebar-overlay {
+    z-index: 1099 !important;
   }
   .proj-shell {
-    /* removed margin-left: 0 to respect sidebar width */
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding-top: 64px !important;
+    box-sizing: border-box !important;
+    min-height: 100vh;
+  }
+  body.sidebar-collapsed .proj-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
   }
   .proj-form-layout-row.columns-4 {
     grid-template-columns: 1fr 1fr;
@@ -729,76 +760,160 @@ body {
 }
 
 @media (max-width: 768px) {
-  .proj-form-layout-row.columns-4 {
-    grid-template-columns: 1fr;
-  }
-  .proj-filter-row {
-    grid-template-columns: 1fr;
-  }
-  .proj-filter-item.action-btns-group {
-    grid-column: span 1;
-  }
-  .proj-view-header {
-    flex-direction: column;
-    gap: 12px;
-  }
-  .proj-btn-add-new {
-    width: 100%;
-    justify-content: center;
-  }
-  .proj-table-pagination-bar {
-    flex-direction: column;
-    gap: 12px;
-  }
-  .proj-userbar .proj-usercopy {
-    display: none;
+  .proj-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+    padding-top: 64px !important;
+    padding-bottom: 70px !important;
   }
   .proj-main {
-    padding: 12px;
+    padding: 12px 10px 24px 10px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+  .proj-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding-bottom: 40px !important;
+  }
+  .proj-form-card {
+    width: 100% !important;
+    border-radius: 8px !important;
+    box-sizing: border-box !important;
+  }
+  .proj-form-card > div:first-child {
+    padding: 14px 16px !important;
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 12px !important;
+  }
+  .proj-form-card > div:first-child .proj-nav-view-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 40px !important;
+  }
+  .proj-form-card > div[style*="padding: 24px"] {
+    padding: 14px 12px !important;
+  }
+  .proj-form-layout-row,
+  .proj-form-layout-row.columns-4 {
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  .proj-field-item[style*="gridColumn"],
+  .proj-field-item[style*="span 2"] {
+    grid-column: span 1 !important;
+  }
+  .proj-logo-row {
+    flex-wrap: wrap !important;
+    gap: 10px !important;
+  }
+  .proj-logo-row button {
+    flex: 1 !important;
+    min-width: 140px !important;
+    justify-content: center !important;
   }
   .proj-form-footer {
-    flex-wrap: wrap;
-    justify-content: center;
+    flex-direction: column-reverse !important;
+    width: 100% !important;
+    gap: 10px !important;
+    padding: 14px 12px !important;
   }
   .proj-form-footer .proj-btn {
-    flex: 1;
-    justify-content: center;
-    min-width: 80px;
+    width: 100% !important;
+    min-height: 44px !important;
+    justify-content: center !important;
+    font-size: 14px !important;
+    margin: 0 !important;
+  }
+  /* List View header */
+  .proj-view-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 12px !important;
+    padding: 14px 12px !important;
+  }
+  .proj-btn-add-new {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+    font-size: 14px !important;
+  }
+  .proj-table-pagination-bar {
+    flex-direction: column !important;
+    gap: 12px !important;
+    align-items: stretch !important;
+    text-align: center !important;
+  }
+  .proj-table-pagination-bar > div {
+    justify-content: center !important;
+  }
+  /* Table container touch scroll */
+  .proj-table-container {
+    width: 100% !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    display: block !important;
+  }
+  .proj-list-table {
+    min-width: 1000px !important;
+  }
+  .proj-list-table th,
+  .proj-list-table td {
+    padding: 10px 12px !important;
+    font-size: 12px !important;
+    white-space: nowrap !important;
+  }
+  /* Modals */
+  .proj-modal-overlay {
+    z-index: 1200 !important;
+    padding: 14px !important;
+  }
+  .proj-modal {
+    width: 100% !important;
+    max-width: 100% !important;
+  }
+  .proj-modal-footer {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+  }
+  .proj-modal-footer button {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 40px !important;
   }
 }
 
 @media (max-width: 480px) {
+  .proj-main {
+    padding: 10px 8px 20px 8px !important;
+  }
   .proj-topbar h1 {
-    font-size: 16px;
+    font-size: 16px !important;
   }
   .proj-toggle-btn {
-    width: 32px;
-    height: 32px;
+    width: 32px !important;
+    height: 32px !important;
   }
   .proj-avatar {
-    width: 28px;
-    height: 28px;
-    font-size: 11px;
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 11px !important;
   }
   .proj-bell span {
-    width: 12px;
-    height: 12px;
-    font-size: 8px;
+    width: 12px !important;
+    height: 12px !important;
+    font-size: 8px !important;
   }
   .proj-filter-btn {
-    font-size: 12px;
-    padding: 4px 10px;
+    font-size: 12px !important;
+    padding: 4px 10px !important;
   }
   .proj-btn {
-    font-size: 12px;
-    padding: 6px 14px;
+    font-size: 13px !important;
+    padding: 8px 14px !important;
   }
-}
-
-/* Added globally via script for responsive sidebar */
-@media (max-width: 768px) {
-  .pc-shell { margin-left: 240px; } /* matches sidebar.css */
-}
-@media (max-width: 480px) {
-  .pc-shell { margin-left: 70px; } /* matches sidebar.css */
 }

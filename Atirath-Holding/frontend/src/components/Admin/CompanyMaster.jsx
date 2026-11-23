@@ -224,6 +224,33 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   const [logoFile, setLogoFile] = useState(null);
   const [activeOverviewTab, setActiveOverviewTab] = useState(null);
 
+  const generateCompanyCode = (cList = companies) => {
+    let maxNum = 0;
+    const existingCodes = new Set();
+    if (Array.isArray(cList)) {
+      cList.forEach(c => {
+        const rawCode = (c.coyCd || c.companyCode || "").trim();
+        if (rawCode) {
+          existingCodes.add(rawCode.replace(/\s+/g, '').toUpperCase());
+        }
+        const match = rawCode.match(/^CMP-(\d+)$/i);
+        if (match) {
+          const num = parseInt(match[1], 10);
+          if (!isNaN(num) && num > maxNum) {
+            maxNum = num;
+          }
+        }
+      });
+    }
+    let nextNum = maxNum + 1;
+    let candidate = `CMP-${String(nextNum).padStart(3, '0')}`;
+    while (existingCodes.has(candidate.replace(/\s+/g, '').toUpperCase())) {
+      nextNum++;
+      candidate = `CMP-${String(nextNum).padStart(3, '0')}`;
+    }
+    return candidate;
+  };
+
   const fetchCompanies = async () => {
     setLoading(true);
     try {
@@ -254,20 +281,12 @@ const CompanyCreation = ({ onLogout, userRole }) => {
         }));
         setCompanies(enriched);
         setFormData(prev => {
-          if (!prev.companyCode || /^CMP-\d+$/i.test(prev.companyCode)) {
-            let maxNum = 0;
-            enriched.forEach(c => {
-              const code = c.coyCd || c.companyCode || "";
-              const match = code.match(/^CMP-(\d+)$/i);
-              if (match) {
-                const num = parseInt(match[1], 10);
-                if (!isNaN(num) && num > maxNum) maxNum = num;
-              }
-            });
-            return { ...prev, companyCode: `CMP-${String(maxNum + 1).padStart(3, '0')}` };
+          if (!prev.companyCode || /^CMP-\d+$/i.test((prev.companyCode || "").trim())) {
+            return { ...prev, companyCode: generateCompanyCode(enriched) };
           }
           return prev;
         });
+        return enriched;
       }
 
       if (stateRes.ok) {
@@ -322,14 +341,14 @@ const CompanyCreation = ({ onLogout, userRole }) => {
     fetchCompanies();
   }, []);
 
-  // View toggle â€“ default is "list"
+  // View toggle – default is "list"
   const [view, setView] = useState("list");
   const [isEditing, setIsEditing] = useState(false);
   const [isViewing, setIsViewing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formErrors, setFormErrors] = useState({});
 
-  // Form state â€“ all empty by default
+  // Form state – all empty by default
   const [formData, setFormData] = useState({
     companyName: "",
     companyCode: "",
@@ -415,6 +434,17 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       if (!value.trim()) error = "Company Code is required.";
       else if (/\s/.test(value)) error = "Spaces are not allowed in Company Code.";
       else if (value.length > 10) error = "Company Code cannot exceed 10 characters.";
+      else {
+        const cleanVal = value.replace(/\s+/g, '').toLowerCase();
+        const isDuplicate = companies.some(c => {
+          const cCode = (c.coyCd || c.companyCode || "").replace(/\s+/g, '').toLowerCase();
+          const cId = c.coyId || c.id;
+          return cCode === cleanVal && (!editingId || String(cId) !== String(editingId));
+        });
+        if (isDuplicate) {
+          error = "Company code must be unique. This company code already exists.";
+        }
+      }
     } else if (name === "under") {
       if (!value) error = "Parent Company selection is required.";
     } else if (name === "cinNumber") {
@@ -599,24 +629,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
 
 
-  const generateCompanyCode = (cList = companies) => {
-    let maxNum = 0;
-    if (Array.isArray(cList)) {
-      cList.forEach(c => {
-        const code = c.coyCd || c.companyCode || "";
-        const match = code.match(/^CMP-(\d+)$/i);
-        if (match) {
-          const num = parseInt(match[1], 10);
-          if (!isNaN(num) && num > maxNum) {
-            maxNum = num;
-          }
-        }
-      });
-    }
-    const nextNum = maxNum + 1;
-    return `CMP-${String(nextNum).padStart(3, '0')}`;
-  };
-
   const handleResetForm = (cList = companies) => {
     const autoCode = generateCompanyCode(cList);
     setFormData({
@@ -670,6 +682,19 @@ const CompanyCreation = ({ onLogout, userRole }) => {
       const firstErrorKey = Object.keys(errors)[0];
       const fieldLabel = firstErrorKey.replace(/([A-Z])/g, ' $1').toLowerCase();
       triggerAlert("error", "Validation Error", `Please fix the error in ${fieldLabel}: ${errors[firstErrorKey]}`);
+      return;
+    }
+
+    // Unique Company Code check
+    const cleanFormCode = (formData.companyCode || "").replace(/\s+/g, '').toLowerCase();
+    const isDuplicate = companies.some(c => {
+      const cCode = (c.coyCd || c.companyCode || "").replace(/\s+/g, '').toLowerCase();
+      const cId = c.coyId || c.id;
+      return cCode === cleanFormCode && (!editingId || String(cId) !== String(editingId));
+    });
+
+    if (isDuplicate) {
+      triggerAlert("error", "Duplicate Error", "Company code must be unique. This company code already exists.");
       return;
     }
 
@@ -761,8 +786,8 @@ const CompanyCreation = ({ onLogout, userRole }) => {
         }
 
         triggerAlert("success", "Success", isEditing ? "Company updated successfully!" : "Company created successfully!");
-        fetchCompanies();
-        handleResetForm();
+        const freshCompanies = await fetchCompanies();
+        handleResetForm(freshCompanies || []);
         setIsEditing(false);
         setEditingId(null);
         setView("list");
@@ -1088,10 +1113,10 @@ const CompanyCreation = ({ onLogout, userRole }) => {
   const subsidiariesCount = companySubsidiaries.length;
 
   return (
-    <div className="cc-shell-container">
+    <div className="cc-shell-container company-master-page">
       <Sidebar userRole={userRole} onLogout={onLogout} />
 
-      <div className="cc-shell">
+      <div className="cc-shell company-master-shell">
 
         <Header
           title="Company Creation"
@@ -1101,28 +1126,15 @@ const CompanyCreation = ({ onLogout, userRole }) => {
           initials=""
         />
 
-        <main className="cc-main" style={{ padding: '24px' }}>
+        <main className="cc-main company-master-main">
 
           {view === "form" ? (
             <>
-              <div className="cc-content" style={{ paddingBottom: '80px' }}>
+              <div className="cc-content company-form-content">
 
-                <div className="cc-form-card" style={{
-                  backgroundColor: 'white',
-                  borderRadius: '8px',
-                  border: '1px solid #e2e8f0',
-                  overflow: 'hidden',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.05)'
-                }}>
+                <div className="cc-form-card company-creation-card">
 
-                  <div style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '20px 24px',
-                    borderBottom: '1px solid #e2e8f0',
-                    backgroundColor: '#fafbfc'
-                  }}>
+                  <div className="company-form-header">
                     <div>
                       <h2 style={{
                         fontSize: '20px',
@@ -1152,7 +1164,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                     </button>
                   </div>
 
-                  <div style={{ padding: '24px' }}>
+                  <div className="company-form-body">
                     {isViewing ? (
                       <div className="cc-view-unified" style={{ padding: '12px 0' }}>
                         {/* Company Overview Dashboard Grid */}
@@ -1164,7 +1176,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                           <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px', marginTop: 0 }}>
                             Click on any card below to view its corresponding list details.
                           </p>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, minmax(0, 1fr))', gap: '12px' }}>
+                          <div className="company-overview-grid">
                             {/* Card 1: Plants */}
                             <div 
                               className="cc-overview-card" 
@@ -1314,14 +1326,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
                         {/* Interactive Overview Detail List Container */}
                         {activeOverviewTab && (
-                          <div style={{ 
-                            marginBottom: '32px', 
-                            backgroundColor: '#f8fafc', 
-                            border: '1px solid #e2e8f0', 
-                            borderRadius: '12px', 
-                            padding: '20px',
-                            boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.02)'
-                          }}>
+                          <div className="company-overview-detail-box">
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
                               <h4 style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', margin: 0, textTransform: 'capitalize', display: 'flex', alignItems: 'center', gap: '8px' }}>
                                 {activeOverviewTab === 'plants' && <Building2 size={16} style={{ color: '#2563eb' }} />}
@@ -1615,37 +1620,37 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                           Company Profile Details
                         </h3>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' }}>
+                        <div className="company-profile-grid">
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Company Code :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.companyCode || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Parent Company :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{companies.find(c => String(c.coyId) === String(formData.under))?.coyNm || 'Independent'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>CIN Number :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.cinNumber || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>PAN Number :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.panNumber || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Incorporation Date :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formatDate(formData.incorporationDate)}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Address :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.streetAddress || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>State :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{states.find(s => String(s.stId) === String(formData.state))?.stNm || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Company Logo :</span>
                               <div>
                                  {formData.logo ? (
@@ -1655,56 +1660,56 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                  )}
                               </div>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Website :</span>
                               <span style={{ fontSize: '14px', color: '#2563eb', fontWeight: '500' }}>
                                 {formData.website ? <a href={formData.website} target="_blank" rel="noopener noreferrer" style={{ color: '#2563eb', textDecoration: 'none' }}>{formData.website}</a> : '-'}
                               </span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Remarks :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.remarks || '-'}</span>
                             </div>
                           </div>
                           
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Company Name :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.companyName || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0', alignItems: 'center' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Status :</span>
                               <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', width: 'fit-content', backgroundColor: formData.status === 'Active' ? '#dcfce7' : '#fee2e2', color: formData.status === 'Active' ? '#166534' : '#991b1b' }}>{formData.status}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>GST Number :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.gstNumber || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>TAN Number :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.tanNumber || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Email :</span>
                               <span style={{ fontSize: '14px', color: '#2563eb', fontWeight: '500' }}>{formData.email || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>City/Village :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.city || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>District :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.district || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Pincode :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.pincode || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Zone :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.zone || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '135px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="company-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Working Days :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{formData.workingDaysPerWeek ? `${formData.workingDaysPerWeek} Days/Week` : '-'}</span>
                             </div>
@@ -1715,7 +1720,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                       <>
                         <section className="cc-panel" style={{ backgroundColor: 'white', padding: 0, border: 'none', marginBottom: '32px' }}>
 
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+                      <div className="company-section-header">
                         <h3 style={{ fontSize: '16px', fontWeight: '700', color: '#1e293b', margin: 0 }}>
                           Company Details
                         </h3>
@@ -1761,7 +1766,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         </label>
                         <label className="cc-field-item">
                           <span>Company Code <b style={{ color: '#ef4444' }}>*</b></span>
-                          <input type="text" name="companyCode" value={formData.companyCode} readOnly placeholder="Auto-generated code" />
+                          <input type="text" name="companyCode" value={formData.companyCode} readOnly className="cc-readonly-input" placeholder="Auto-generated code" />
                           {formErrors.companyCode && <span style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px', display: 'block' }}>{formErrors.companyCode}</span>}
                         </label>
                         <label className="cc-field-item">
@@ -1829,14 +1834,14 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                       <div className="cc-form-layout-row columns-4" style={{ marginTop: '20px' }}>
                         <label className="cc-field-item">
                           <span>Company Logo</span>
-                          <div className="cc-logo-row" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <div className="cc-logo-row company-logo-uploader">
                             <div className="cc-logo-box" style={{ width: '48px', height: '48px', border: '1px solid #e2e8f0', borderRadius: '6px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#f8fafc', overflow: 'hidden', flexShrink: 0 }}>
                               {formData.logo ? <img src={formData.logo} alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : <ImageIcon size={22} style={{ color: '#94a3b8' }} />}
                             </div>
                             <input id="logoUploadHidden" type="file" accept="image/*" onChange={handleLogoChange} disabled={isViewing} hidden />
                             {!isViewing && (
                               <>
-                                <button type="button" onClick={() => document.getElementById("logoUploadHidden").click()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', color: '#0f172a', cursor: 'pointer', height: '38px', whiteSpace: 'nowrap' }}>
+                                <button type="button" onClick={() => document.getElementById("logoUploadHidden").click()} style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: '6px', fontSize: '13px', color: '#0f172a', cursor: 'pointer', height: '38px' }}>
                                   <Upload size={14} /> Upload Logo
                                 </button>
                                 <button
@@ -1855,7 +1860,6 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                     color: formData.logo ? '#dc2626' : '#94a3b8',
                                     cursor: formData.logo ? 'pointer' : 'not-allowed',
                                     height: '38px',
-                                    whiteSpace: 'nowrap',
                                     opacity: formData.logo ? 1 : 0.6
                                   }}
                                   title="Delete logo"
@@ -1976,14 +1980,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                   </div>
 
                   {!isViewing && (
-                  <div className="cc-form-footer" style={{
-                    display: 'flex',
-                    justifyContent: 'flex-end',
-                    gap: '12px',
-                    padding: '16px 24px',
-                    backgroundColor: '#fafbfc',
-                    borderTop: '1px solid #e2e8f0'
-                  }}>
+                  <div className="cc-form-footer company-form-footer">
                     <button type="button" className="cc-btn primary" onClick={handleSave} disabled={loading} style={loading ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>
                       <Save size={14} /> {loading ? (isEditing ? "Updating..." : "Saving...") : (isEditing ? "Update Company" : "Save Company")}
                     </button>
@@ -2006,13 +2003,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
 
               <div className="cc-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
 
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '20px 24px',
-                  borderBottom: '1px solid #e2e8f0'
-                }}>
+                <div className="company-list-header">
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
                       Company List
@@ -2021,9 +2012,9 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                       View and manage all company records
                     </p>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <div className="company-list-actions">
+                    <div className="company-search-box">
+                      <Search size={16} className="company-search-icon" />
                       <input
                         type="text"
                         placeholder="Search companies..."
@@ -2032,7 +2023,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                           setTableSearchQuery(e.target.value);
                           setCurrentPage(1); // Reset to first page on search
                         }}
-                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                        className="company-search-input"
                       />
                     </div>
                     {screenPerm.canCreate && (
@@ -2052,36 +2043,36 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                 </div>
 
                 <div className="cc-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="cc-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
+                  <table className="cc-list-table company-master-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          CODE
+                        <th className="coy-col-hide-mobile" style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LOGO</th>
+                        <th className="col-coy-code" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                          COMPANY CODE
                         </th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <th className="col-coy-name" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           COMPANY NAME
                         </th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>UNDER</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CIN NUMBER</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>GST NUMBER</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PAN NUMBER</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TAN NUMBER</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>INCORPORATION DATE</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>UNDER</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CIN NUMBER</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>GST NUMBER</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PAN NUMBER</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>TAN NUMBER</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>INCORPORATION DATE</th>
 
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STREET ADDRESS</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CITY</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DISTRICT</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ZONE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PINCODE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>EMAIL</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>REMARKS</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WEBSITE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WORKING DAYS PER WEEK</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
-                        <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STREET ADDRESS</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>CITY</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DISTRICT</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ZONE</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PINCODE</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>EMAIL</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>REMARKS</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WEBSITE</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>WORKING DAYS PER WEEK</th>
+                        <th className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
+                        <th className="col-coy-actions" style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           ACTIONS
                         </th>
                       </tr>
@@ -2089,7 +2080,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan="22" style={{ textAlign: "center", padding: "60px 20px" }}>
+                          <td colSpan="22" className="col-coy-empty" style={{ textAlign: "center", padding: "60px 20px" }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', color: '#64748b', fontSize: '14px' }}>
                               <RefreshCcw className="spinning" size={16} />
                               <span>Loading companies...</span>
@@ -2099,8 +2090,8 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                       ) : currentItems.length > 0 ? (
                         currentItems.map((company, index) => (
                           <tr key={company.coyId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
-                            <td style={{ padding: '14px 20px' }}>
+                            <td data-label="S.NO" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
+                            <td data-label="LOGO" className="coy-col-hide-mobile" style={{ padding: '14px 20px' }}>
                               {company.logo ? (
                                 <img src={company.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
                               ) : (
@@ -2109,30 +2100,30 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                 </div>
                               )}
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="COMPANY CODE" className="col-coy-code" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {company.coyCd}
                               </span>
                             </td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{company.coyNm}</strong></td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{companies.find(c => c.coyId === company.prntCoyId)?.coyNm || "Independent"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.cin || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.gstNum || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.panNum || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.tanNum || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{formatDate(company.incDt)}</td>
+                            <td data-label="COMPANY NAME" className="col-coy-name" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}><strong>{company.coyNm}</strong></td>
+                            <td data-label="UNDER" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{companies.find(c => c.coyId === company.prntCoyId)?.coyNm || "Independent"}</td>
+                            <td data-label="CIN" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.cin || "N/A"}</td>
+                            <td data-label="GST NUMBER" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.gstNum || "N/A"}</td>
+                            <td data-label="PAN NUMBER" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.panNum || "N/A"}</td>
+                            <td data-label="TAN NUMBER" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.tanNum || "N/A"}</td>
+                            <td data-label="INC DATE" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{formatDate(company.incDt)}</td>
 
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.str || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.ctVlg || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.dist || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{states.find(s => Number(s.stId) === Number(company.stId))?.stNm || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.znNm || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.pin || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.email || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.addlRem || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.webUrl || "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.workingDaysPerWeek ? `${company.workingDaysPerWeek} Days` : "N/A"}</td>
-                            <td style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="STREET" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.str || "N/A"}</td>
+                            <td data-label="CITY" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.ctVlg || "N/A"}</td>
+                            <td data-label="DISTRICT" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.dist || "N/A"}</td>
+                            <td data-label="STATE" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{states.find(s => Number(s.stId) === Number(company.stId))?.stNm || "N/A"}</td>
+                            <td data-label="ZONE" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.znNm || "N/A"}</td>
+                            <td data-label="PINCODE" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.pin || "N/A"}</td>
+                            <td data-label="EMAIL" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.email || "N/A"}</td>
+                            <td data-label="REMARKS" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.addlRem || "N/A"}</td>
+                            <td data-label="WEBSITE" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.webUrl || "N/A"}</td>
+                            <td data-label="WORKING DAYS" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{company.workingDaysPerWeek ? `${company.workingDaysPerWeek} Days` : "N/A"}</td>
+                            <td data-label="STATUS" className="coy-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span
                                 style={{
                                   padding: '4px 12px',
@@ -2147,7 +2138,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                                 {company.sts ? 'Active' : 'Inactive'}
                               </span>
                             </td>
-                            <td style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
+                            <td data-label="ACTIONS" className="col-coy-actions" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
                               <button
                                 id={`action-btn-${company.coyId}`}
                                 type="button"
@@ -2202,7 +2193,7 @@ const CompanyCreation = ({ onLogout, userRole }) => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="22" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="22" className="col-coy-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             No company records found. Add a new company using the button above.
                           </td>
                         </tr>

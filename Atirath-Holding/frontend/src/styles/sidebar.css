@@ -5,26 +5,46 @@
     color: #fff;
     display: flex;
     flex-direction: column;
-    padding: 22px 16px;
+    padding: 0 !important;
     position: fixed;
     left: 0;
     top: 0;
-    overflow-y: auto;
-    overflow-x: hidden;
+    overflow: hidden !important;
     z-index: 1000;
     transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* ========== Logo Section ========== */
+/* ========== Logo Section (Always Fixed at Top) ========== */
 .logo-section {
+    flex-shrink: 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
     gap: 12px;
-    margin-bottom: 35px;
-    padding: 0 4px;
-    width: 100%;
+    margin: 0 !important;
+    padding: 22px 16px 14px 16px;
+    width: 100% !important;
+    box-sizing: border-box;
+    background: #02153f;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    z-index: 100;
 }
+
+/* ========== Scrollable Menu Body (Only Options Scroll) ========== */
+.sidebar-scrollable-content {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 14px 16px 20px 16px;
+    box-sizing: border-box;
+}
+
+.sidebar-scrollable-content::-webkit-scrollbar { width: 4px; }
+.sidebar-scrollable-content::-webkit-scrollbar-track { background: rgba(255, 255, 255, 0.05); }
+.sidebar-scrollable-content::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.2); border-radius: 4px; }
 
 .logo-details {
     display: flex;
@@ -118,8 +138,8 @@
 .menu-list > li {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 14px 18px;
+    gap: 8px;
+    padding: 12px 14px;
     margin-bottom: 8px;
     border-radius: 12px;
     cursor: pointer;
@@ -127,6 +147,8 @@
     font-weight: 500;
     transition: all 0.2s ease;
     color: rgba(255, 255, 255, 0.85);
+    min-height: 48px;
+    box-sizing: border-box;
 }
 
 .menu-list > li:hover {
@@ -166,7 +188,6 @@
     width: 100%;
 }
 
-.dropdown-header svg:last-child,
 .dropdown-header .dropdown-arrow-icon {
     flex-shrink: 0 !important;
     margin-left: auto !important;
@@ -251,44 +272,114 @@
 /* ========== COLLAPSED SIDEBAR SUPPORT ========== */
 @media screen and (min-width: 1025px) {
     /* Slim sidebar when collapsed */
-    body.sidebar-collapsed .sidebar {
+    body.sidebar-collapsed .sidebar,
+    .sidebar.collapsed {
         width: 76px !important;
-        padding: 22px 8px !important;
+        padding: 0 !important;
+        overflow: hidden !important;
     }
 
-    body.sidebar-collapsed .sidebar .company-text {
+    body.sidebar-collapsed .sidebar .company-text,
+    .sidebar.collapsed .company-text {
         display: none !important;
     }
 
-    body.sidebar-collapsed .sidebar .logo-section {
+    body.sidebar-collapsed .sidebar .logo-section,
+    .sidebar.collapsed .logo-section {
         justify-content: center !important;
-        padding: 0 !important;
+        margin: 0 !important;
+        padding: 20px 8px 14px 8px !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        background: #02153f !important;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
 
-    body.sidebar-collapsed .sidebar .logo-details {
+    body.sidebar-collapsed .sidebar .sidebar-scrollable-content,
+    .sidebar.collapsed .sidebar-scrollable-content {
+        padding: 10px 8px 20px 8px !important;
+    }
+
+    body.sidebar-collapsed .sidebar .logo-details,
+    .sidebar.collapsed .logo-details {
         justify-content: center !important;
     }
 
     /* Hide text labels and chevrons in slim sidebar */
     body.sidebar-collapsed .sidebar .menu-list li span,
     body.sidebar-collapsed .sidebar .dropdown-header span,
-    body.sidebar-collapsed .sidebar .dropdown-header svg:last-child,
     body.sidebar-collapsed .sidebar .dropdown-header .dropdown-arrow-icon,
-    body.sidebar-collapsed .sidebar .logout-button span {
+    body.sidebar-collapsed .sidebar .logout-button span,
+    .sidebar.collapsed .menu-list li span,
+    .sidebar.collapsed .dropdown-header span,
+    .sidebar.collapsed .dropdown-arrow-icon,
+    .sidebar.collapsed .logout-button span {
         display: none !important;
     }
 
     /* Hide submenus in collapsed mode */
-    body.sidebar-collapsed .sidebar .submenu-list {
+    body.sidebar-collapsed .sidebar .submenu-list,
+    .sidebar.collapsed .submenu-list {
         display: none !important;
     }
 
-    /* Center icons inside the slim sidebar list items */
+    /* Dropdown container reset in collapsed mode (prevent double padding) */
+    body.sidebar-collapsed .sidebar .menu-list > li.dropdown-container,
+    .sidebar.collapsed .menu-list > li.dropdown-container {
+        padding: 0 !important;
+        margin-bottom: 8px !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        width: 100% !important;
+    }
+
+    /* Center icons and unify sizes inside the slim sidebar */
     body.sidebar-collapsed .sidebar .menu-list > li,
     body.sidebar-collapsed .sidebar .dropdown-header,
-    body.sidebar-collapsed .sidebar .logout-button {
+    body.sidebar-collapsed .sidebar .logout-button,
+    .sidebar.collapsed .menu-list > li,
+    .sidebar.collapsed .dropdown-header,
+    .sidebar.collapsed .logout-button {
+        display: flex !important;
+        align-items: center !important;
         justify-content: center !important;
-        padding: 14px 0 !important;
+        text-align: center !important;
+        width: 100% !important;
+        height: 48px !important;
+        min-height: 48px !important;
+        padding: 0 !important;
+        margin: 0 0 8px 0 !important;
+        border-radius: 12px !important;
+        box-sizing: border-box !important;
+    }
+
+    /* Force the inner d-flex in dropdown-header to center */
+    body.sidebar-collapsed .sidebar .dropdown-header > div,
+    .sidebar.collapsed .dropdown-header > div {
+        flex: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        gap: 0 !important;
+    }
+
+    /* Standardize and center all SVG icons in collapsed mode */
+    body.sidebar-collapsed .sidebar .sidebar-item-icon,
+    body.sidebar-collapsed .sidebar .menu-list svg,
+    body.sidebar-collapsed .sidebar .dropdown-header svg,
+    body.sidebar-collapsed .sidebar .logout-button svg,
+    .sidebar.collapsed .sidebar-item-icon,
+    .sidebar.collapsed .menu-list svg,
+    .sidebar.collapsed .dropdown-header svg,
+    .sidebar.collapsed .logout-button svg {
+        display: block !important;
+        opacity: 1 !important;
+        visibility: visible !important;
+        flex-shrink: 0 !important;
+        margin: 0 auto !important;
     }
 
     /* Transition effect for all shells */
@@ -461,10 +552,11 @@ body.sidebar-collapsed .main-header {
 }
 
 @media (max-width: 1024px) {
-    .main-header {
+    .main-header,
+    body.sidebar-collapsed .main-header {
         left: 0 !important;
         width: 100% !important;
-        padding-left: 50px !important; /* To prevent overlapping with mobile menu icon if needed */
+        padding-left: 14px !important;
     }
 }
 

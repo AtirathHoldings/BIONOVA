@@ -16,7 +16,11 @@ import {
   ChevronLeft,
   Search,
   Image as ImageIcon,
-  Calendar
+  Calendar,
+  ArrowRight,
+  Clock,
+  AlertTriangle,
+  PlayCircle
 } from "lucide-react";
 import { useNavigate, useLocation } from "react-router-dom";
 import Sidebar from "../Sidebar.jsx";
@@ -59,6 +63,29 @@ const formatListDate = (dateString) => {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const year = d.getFullYear();
   return `${day}/${month}/${year}`;
+};
+
+const getTodayStr = () => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, '0');
+  const day = String(now.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
+
+const calcEndDate = (startStr, durationDays) => {
+  if (!startStr || !durationDays) return "";
+  const parts = String(startStr).split('-');
+  if (parts.length !== 3) return "";
+  const d = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+  if (isNaN(d.getTime())) return "";
+  const daysNum = parseInt(durationDays, 10);
+  if (isNaN(daysNum) || daysNum <= 0) return startStr;
+  d.setDate(d.getDate() + (daysNum - 1));
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 };
 
 // ========== Searchable Select (unchanged) ==========
@@ -654,6 +681,13 @@ const ProjectCreation = ({ userRole, onLogout }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [goLiveProject, setGoLiveProject] = useState(null);
+  const [holdResumeModal, setHoldResumeModal] = useState({
+    isOpen: false,
+    project: null,
+    startDate: "",
+    endDate: "",
+    totalDays: ""
+  });
 
   const [alertConfig, setAlertConfig] = useState({
     isOpen: false,
@@ -787,6 +821,23 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     const isCheckingLive = e.target.checked;
     if (isCheckingLive) {
       const currentYear = new Date().getFullYear();
+      const editingProject = isEditing ? projects.find(p => p.id === editingId) : null;
+      const isOriginalHold = editingProject && (editingProject.status || "").toUpperCase() === "HOLD";
+
+      if (isOriginalHold) {
+        // If moving a HOLD project to Live, reset start date to today and recalculate end date
+        const todayStr = getTodayStr();
+        const duration = parseInt(form.totalProjectDays, 10) || 30;
+        const newEnd = calcEndDate(todayStr, duration);
+        setForm(prev => ({
+          ...prev,
+          status: "Live",
+          startDate: todayStr,
+          endDate: newEnd
+        }));
+        return;
+      }
+
       if (form.startDate) {
         const sYear = parseInt(form.startDate.split('-')[0], 10);
         if (sYear < currentYear) {
@@ -1206,6 +1257,35 @@ const ProjectCreation = ({ userRole, onLogout }) => {
   const handleStatusChange = async (project, newStatus) => {
     if (project.status === newStatus) return;
 
+    const isCurrentHold = (project.status || "").toUpperCase() === "HOLD";
+    const isMovingToLive = newStatus === "LIVE" || newStatus === "Live";
+
+    // When moving from HOLD to LIVE, prompt user with confirmation showing new schedule starting from TODAY
+    if (isCurrentHold && isMovingToLive && project._type !== "draft") {
+      const todayStr = getTodayStr();
+      let totalDays = parseInt(project.totalProjectDays || project.noOfDays || 0, 10);
+      if (!totalDays && project.startDate && project.endDate) {
+        const s = new Date(project.startDate);
+        const e = new Date(project.endDate);
+        if (!isNaN(s.getTime()) && !isNaN(e.getTime())) {
+          totalDays = Math.max(1, Math.round((e.getTime() - s.getTime()) / (1000 * 60 * 60 * 24)) + 1);
+        }
+      }
+      if (!totalDays || totalDays <= 0) totalDays = 30;
+
+      const endStr = calcEndDate(todayStr, totalDays);
+
+      setHoldResumeModal({
+        isOpen: true,
+        project,
+        startDate: todayStr,
+        endDate: endStr,
+        totalDays: String(totalDays)
+      });
+      setActiveDropdown(null);
+      return;
+    }
+
     if (newStatus === "LIVE" || newStatus === "Live") {
       const currentYear = new Date().getFullYear();
       if (project.startDate) {
@@ -1301,6 +1381,74 @@ const ProjectCreation = ({ userRole, onLogout }) => {
     } catch (err) {
       console.error("Error changing status:", err);
       triggerAlert("error", "Error", `Request failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const confirmResumeToLive = async () => {
+    const { project, startDate, endDate, totalDays } = holdResumeModal;
+    if (!project) return;
+
+    if (!startDate || !endDate) {
+      triggerAlert("warning", "Missing Dates", "Please provide valid Start and End dates.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const headers = getAuthHeaders();
+      const numDays = parseInt(totalDays, 10) || 0;
+
+      const updatePayload = {
+        prjCd: project.projectCode || project.prjCd,
+        prjNm: (project.projectName || project.prjNm || "").trim(),
+        prjDesc: (project.projectDescription || project.prjDesc || "").trim(),
+        prjObjtv: (project.projectObjective || project.prjObjtv || "N/A").trim(),
+        expDlvbls: (project.expectedDeliverables || project.expDlvbls || "").trim(),
+        prjPrty: project.rawPriority || project.priority || "MEDIUM",
+        coyId: project.companyId ? parseInt(project.companyId, 10) : null,
+        pltId: project.plantId ? parseInt(project.plantId, 10) : null,
+        deptId: project.departmentId ? parseInt(project.departmentId, 10) : null,
+        tentStDt: startDate,
+        tentEndDt: endDate,
+        stDt: startDate,
+        endDt: endDate,
+        noOfDays: numDays,
+        prjSts: "LIVE",
+        logo: project.logo || null,
+        addlRem: (project.remarks || "").trim() || null
+      };
+
+      const putRes = await fetch(`${apiBaseUrl}/api/project-live/${project.id}`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(updatePayload)
+      });
+
+      const patchRes = await fetch(`${apiBaseUrl}/api/project-live/${project.id}/status`, {
+        method: "PATCH",
+        headers,
+        body: JSON.stringify({ prjSts: "LIVE" })
+      });
+
+      const statusOverrides = JSON.parse(localStorage.getItem("project_status_overrides") || "{}");
+      statusOverrides[project.id] = "LIVE";
+      localStorage.setItem("project_status_overrides", JSON.stringify(statusOverrides));
+
+      setHoldResumeModal({
+        isOpen: false,
+        project: null,
+        startDate: "",
+        endDate: "",
+        totalDays: ""
+      });
+
+      triggerAlert("success", "Project Resumed to Live", "Project schedule has been updated starting from today and status set to LIVE!");
+      await fetchAllData();
+    } catch (err) {
+      console.error("Error resuming project to live:", err);
+      triggerAlert("error", "Error", `Failed to resume project to Live: ${err.message}`);
     } finally {
       setLoading(false);
     }
@@ -2264,6 +2412,347 @@ const ProjectCreation = ({ userRole, onLogout }) => {
           )}
         </main>
       </div>
+
+      {holdResumeModal.isOpen && holdResumeModal.project && (
+        <div
+          className="proj-modal-overlay"
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.65)',
+            backdropFilter: 'blur(3px)',
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: '16px'
+          }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setHoldResumeModal({ isOpen: false, project: null, startDate: "", endDate: "", totalDays: "" });
+            }
+          }}
+        >
+          <div
+            className="proj-modal"
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: '14px',
+              width: '520px',
+              maxWidth: '95%',
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              border: '1px solid #e2e8f0',
+              overflow: 'hidden'
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                padding: '18px 22px',
+                borderBottom: '1px solid #f1f5f9',
+                background: 'linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%)'
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <div
+                  style={{
+                    width: '36px',
+                    height: '36px',
+                    borderRadius: '8px',
+                    backgroundColor: '#dcfce7',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: '#16a34a'
+                  }}
+                >
+                  <PlayCircle size={20} />
+                </div>
+                <div>
+                  <h3 style={{ margin: 0, fontSize: '16px', fontWeight: '700', color: '#0f172a' }}>
+                    Resume Project to Live
+                  </h3>
+                  <span style={{ fontSize: '12px', color: '#64748b' }}>
+                    Hold ➔ Live confirmation &amp; schedule recalculation
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHoldResumeModal({ isOpen: false, project: null, startDate: "", endDate: "", totalDays: "" })}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94a3b8',
+                  padding: '4px',
+                  borderRadius: '6px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center'
+                }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div style={{ padding: '20px 22px' }}>
+              {/* Project Info Banner */}
+              <div
+                style={{
+                  backgroundColor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '16px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between'
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: '11px', fontWeight: '600', color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                    Project
+                  </div>
+                  <div style={{ fontSize: '14px', fontWeight: '700', color: '#1e293b', marginTop: '2px' }}>
+                    {holdResumeModal.project.projectName}
+                  </div>
+                </div>
+                <span
+                  style={{
+                    backgroundColor: '#e0f2fe',
+                    color: '#0369a1',
+                    padding: '4px 10px',
+                    borderRadius: '6px',
+                    fontSize: '12px',
+                    fontWeight: '700',
+                    border: '1px solid #bae6fd'
+                  }}
+                >
+                  {holdResumeModal.project.projectCode || holdResumeModal.project.prjCd}
+                </span>
+              </div>
+
+              {/* Previous Schedule (On Hold) */}
+              <div
+                style={{
+                  backgroundColor: '#fffbeb',
+                  border: '1px solid #fef3c7',
+                  borderRadius: '10px',
+                  padding: '12px 14px',
+                  marginBottom: '16px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
+                  <Clock size={14} color="#b45309" />
+                  <span style={{ fontSize: '12px', fontWeight: '700', color: '#92400e' }}>
+                    Previous Schedule (When Placed on HOLD)
+                  </span>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '10px', fontSize: '12px' }}>
+                  <div>
+                    <span style={{ color: '#78716c', display: 'block' }}>Old Start:</span>
+                    <strong style={{ color: '#44403c' }}>{formatListDate(holdResumeModal.project.startDate)}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#78716c', display: 'block' }}>Old End:</span>
+                    <strong style={{ color: '#44403c' }}>{formatListDate(holdResumeModal.project.endDate)}</strong>
+                  </div>
+                  <div>
+                    <span style={{ color: '#78716c', display: 'block' }}>Duration:</span>
+                    <strong style={{ color: '#44403c' }}>{holdResumeModal.project.totalProjectDays || 'N/A'} Days</strong>
+                  </div>
+                </div>
+              </div>
+
+              {/* New Schedule (From Today) */}
+              <div
+                style={{
+                  backgroundColor: '#f0fdf4',
+                  border: '1.5px solid #86efac',
+                  borderRadius: '10px',
+                  padding: '14px 16px',
+                  marginBottom: '16px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Calendar size={15} color="#16a34a" />
+                    <span style={{ fontSize: '13px', fontWeight: '700', color: '#15803d' }}>
+                      New Schedule (Resuming from Today)
+                    </span>
+                  </div>
+                  <span style={{ fontSize: '11px', backgroundColor: '#dcfce7', color: '#166534', padding: '2px 8px', borderRadius: '4px', fontWeight: '700' }}>
+                    Starts Today
+                  </span>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '14px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#1e293b', marginBottom: '4px' }}>
+                      Resumption Start Date <span style={{ color: '#16a34a' }}>(Today)</span>
+                    </label>
+                    <input
+                      type="date"
+                      value={holdResumeModal.startDate}
+                      onChange={(e) => {
+                        const newStart = e.target.value;
+                        const newEnd = calcEndDate(newStart, holdResumeModal.totalDays);
+                        setHoldResumeModal(prev => ({
+                          ...prev,
+                          startDate: newStart,
+                          endDate: newEnd
+                        }));
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #86efac',
+                        fontSize: '13px',
+                        color: '#0f172a',
+                        backgroundColor: '#ffffff',
+                        fontWeight: '600',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <small style={{ color: '#15803d', fontSize: '11px', display: 'block', marginTop: '2px' }}>
+                      Defaults to current day
+                    </small>
+                  </div>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: '600', color: '#1e293b', marginBottom: '4px' }}>
+                      Total Duration (Days)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={holdResumeModal.totalDays}
+                      onChange={(e) => {
+                        const newDays = e.target.value;
+                        const daysNum = parseInt(newDays, 10);
+                        const newEnd = daysNum > 0 ? calcEndDate(holdResumeModal.startDate, daysNum) : "";
+                        setHoldResumeModal(prev => ({
+                          ...prev,
+                          totalDays: newDays,
+                          endDate: newEnd
+                        }));
+                      }}
+                      style={{
+                        width: '100%',
+                        padding: '8px 10px',
+                        borderRadius: '6px',
+                        border: '1px solid #cbd5e1',
+                        fontSize: '13px',
+                        color: '#0f172a',
+                        backgroundColor: '#ffffff',
+                        fontWeight: '600',
+                        boxSizing: 'border-box'
+                      }}
+                    />
+                    <small style={{ color: '#64748b', fontSize: '11px', display: 'block', marginTop: '2px' }}>
+                      Recalculates End Date
+                    </small>
+                  </div>
+                </div>
+
+                <div
+                  style={{
+                    marginTop: '12px',
+                    paddingTop: '10px',
+                    borderTop: '1px dashed #bbf7d0',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}
+                >
+                  <span style={{ fontSize: '12px', fontWeight: '600', color: '#166534' }}>
+                    Recalculated End Date:
+                  </span>
+                  <span
+                    style={{
+                      fontSize: '13px',
+                      fontWeight: '700',
+                      color: '#15803d',
+                      backgroundColor: '#ffffff',
+                      padding: '4px 10px',
+                      borderRadius: '6px',
+                      border: '1px solid #86efac'
+                    }}
+                  >
+                    {formatListDate(holdResumeModal.endDate)}
+                  </span>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', backgroundColor: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                <AlertTriangle size={15} color="#0284c7" />
+                <span style={{ fontSize: '12px', color: '#334155', lineHeight: '1.4' }}>
+                  Clicking <b>"Confirm &amp; Make Live"</b> will update the project's start and end dates from today and activate it.
+                </span>
+              </div>
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                gap: '12px',
+                padding: '14px 22px',
+                backgroundColor: '#f8fafc',
+                borderTop: '1px solid #e2e8f0'
+              }}
+            >
+              <button
+                type="button"
+                onClick={() => setHoldResumeModal({ isOpen: false, project: null, startDate: "", endDate: "", totalDays: "" })}
+                style={{
+                  padding: '9px 18px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#475569',
+                  backgroundColor: '#ffffff',
+                  border: '1px solid #cbd5e1',
+                  cursor: 'pointer'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={confirmResumeToLive}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                  padding: '9px 20px',
+                  borderRadius: '8px',
+                  fontSize: '13px',
+                  fontWeight: '600',
+                  color: '#ffffff',
+                  backgroundColor: '#16a34a',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(22, 163, 74, 0.25)'
+                }}
+              >
+                <CheckCircle size={15} /> Confirm &amp; Make Live
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showDeactivateModal && (
         <div className="proj-modal-overlay" style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 99, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

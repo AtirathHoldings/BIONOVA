@@ -232,6 +232,24 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     return durationStr.join(', ');
   };
 
+  const isLeaseExpired = (leaseEndDt) => {
+    if (!leaseEndDt || leaseEndDt === "null") return false;
+    const cleanStr = String(leaseEndDt).split('T')[0].trim();
+    if (!cleanStr) return false;
+    const parts = cleanStr.split('-');
+    if (parts.length === 3) {
+      const year = parseInt(parts[0], 10);
+      const month = parseInt(parts[1], 10) - 1;
+      const day = parseInt(parts[2], 10);
+      const end = new Date(year, month, day, 23, 59, 59, 999);
+      return new Date() > end;
+    }
+    const end = new Date(cleanStr);
+    if (isNaN(end.getTime())) return false;
+    end.setHours(23, 59, 59, 999);
+    return new Date() > end;
+  };
+
   const generateLandCode = (lList = allocations) => {
     let maxNum = 0;
     if (Array.isArray(lList)) {
@@ -315,6 +333,12 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
           else if (rawAlloted === "PLT" || rawAlloted === "Plant") allotedVal = "Plant";
           else allotedVal = rawAlloted;
 
+          const lType = land.ownershipType && land.ownershipType !== "null" ? land.ownershipType : (land.landType || "");
+          const lStart = land.leaseDt && land.leaseDt !== "null" ? land.leaseDt.split('T')[0] : (land.leaseStartDate || "");
+          const lEnd = land.leaseEndDt && land.leaseEndDt !== "null" ? land.leaseEndDt.split('T')[0] : (land.leaseEndDate || "");
+          const isExpired = (lType === 'Lease' || !!lEnd) && isLeaseExpired(lEnd);
+          const computedStatus = isExpired ? "Inactive" : (land.sts ? "Active" : "Inactive");
+
           return {
             ...land,
             id: land.landId,
@@ -326,7 +350,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
             mobileNo: land.mobNum || "",
             state: land.stId ? land.stId.toString() : "",
             zone: states.find(s => Number(s.stId) === Number(land.stId))?.znNm || "",
-            status: land.sts ? "Active" : "Inactive",
+            status: computedStatus,
+            sts: isExpired ? false : (land.sts ? true : false),
+            isLeaseExpired: isExpired,
             landArea: land.landSize ? land.landSize.toString() : "",
             latitude: land.lat || "",
             longitude: land.longt || "",
@@ -334,10 +360,10 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
             mandal: land.mdl || "",
             village: land.vlg || "",
             pincode: land.pin || "",
-            landType: land.ownershipType && land.ownershipType !== "null" ? land.ownershipType : "",
-            leaseStartDate: land.leaseDt && land.leaseDt !== "null" ? land.leaseDt.split('T')[0] : "",
-            leaseEndDate: land.leaseEndDt && land.leaseEndDt !== "null" ? land.leaseEndDt.split('T')[0] : "",
-            leaseDuration: calculateDuration(land.leaseDt && land.leaseDt !== "null" ? land.leaseDt : null, land.leaseEndDt && land.leaseEndDt !== "null" ? land.leaseEndDt : null),
+            landType: lType,
+            leaseStartDate: lStart,
+            leaseEndDate: lEnd,
+            leaseDuration: calculateDuration(lStart, lEnd),
             photos: parseLandPhotos(land.logo, land.photos, land.landId, land.landCd),
             logo: (parseLandPhotos(land.logo, land.photos, land.landId, land.landCd)[0]) || land.logo || null
           };
@@ -575,10 +601,18 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
     }
     return error;
   };
-  // Auto-calculate lease duration
+  // Auto-calculate lease duration & sync expired status
   useEffect(() => {
-    setForm(prev => ({ ...prev, leaseDuration: calculateDuration(form.leaseStartDate, form.leaseEndDate) }));
-  }, [form.leaseStartDate, form.leaseEndDate]);
+    setForm(prev => {
+      const dur = calculateDuration(prev.leaseStartDate, prev.leaseEndDate);
+      const isExpired = prev.landType === 'Lease' && isLeaseExpired(prev.leaseEndDate);
+      return {
+        ...prev,
+        leaseDuration: dur,
+        status: isExpired ? 'Inactive' : prev.status
+      };
+    });
+  }, [form.leaseStartDate, form.leaseEndDate, form.landType]);
 
   // Handle standard input changes
   const handleChange = (e) => {
@@ -686,6 +720,10 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
   };
 
   const handleToggleStatus = (e) => {
+    if (e.target.checked && form.landType === 'Lease' && isLeaseExpired(form.leaseEndDate)) {
+      triggerAlert("warning", "Lease Expired", "Cannot activate land because its lease end date has passed.");
+      return;
+    }
     setForm(prev => ({ ...prev, status: e.target.checked ? "Active" : "Inactive" }));
   };
 
@@ -1082,7 +1120,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       leaseEndDt: form.landType === 'Lease' ? (form.leaseEndDate || null) : null,
       logo: primaryUrl || null,
       photos: uploadedPhotoUrls.length > 0 ? uploadedPhotoUrls.join(",") : null,
-      sts: form.status === "Active"
+      sts: (form.landType === 'Lease' && isLeaseExpired(form.leaseEndDate)) ? false : (form.status === "Active")
     };
 
     if (isEditing) {
@@ -1134,8 +1172,11 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       name: `Photo ${idx + 1}`
     }));
 
+    const isExpired = (land.landType === 'Lease' || land.ownershipType === 'Lease' || !!land.leaseEndDate || !!land.leaseEndDt) && isLeaseExpired(land.leaseEndDate || land.leaseEndDt);
+
     setForm({
       ...land,
+      status: isExpired ? 'Inactive' : (land.status || (land.sts ? 'Active' : 'Inactive')),
       landCode: land.landCode || land.lndCd || '',
       plant: pltIdVal || '',
       landArea: land.landArea || land.lndAr || land.landSize || '',
@@ -1171,8 +1212,11 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
       name: `Photo ${idx + 1}`
     }));
 
+    const isExpired = (land.landType === 'Lease' || land.ownershipType === 'Lease' || !!land.leaseEndDate || !!land.leaseEndDt) && isLeaseExpired(land.leaseEndDate || land.leaseEndDt);
+
     setForm({
       ...land,
+      status: isExpired ? 'Inactive' : (land.status || (land.sts ? 'Active' : 'Inactive')),
       surveyNo: Array.isArray(land.surveyNo) ? land.surveyNo : (land.surveyNo ? [land.surveyNo] : []),
       surveyInput: '',
       landOwnerName: Array.isArray(land.landOwnerName) ? land.landOwnerName : (land.landOwnerName ? [land.landOwnerName] : []),
@@ -1205,7 +1249,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
           isTop,
           top: rect.top,
           bottom: rect.bottom,
-          right: window.innerWidth - rect.right
+          right: Math.max(10, window.innerWidth - rect.right)
         });
       }
       setActiveDropdown(id);
@@ -1351,7 +1395,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
           (plantObj && plantObj.pltNm && plantObj.pltNm.toLowerCase().includes(q)) ||
           (land.allotedFor && land.allotedFor.toLowerCase().includes(q)) ||
           (land.district && land.district.toLowerCase().includes(q)) ||
-          (land.village && land.village.toLowerCase().includes(q))
+          (land.village && land.village.toLowerCase().includes(q)) ||
+          (land.status && land.status.toLowerCase().includes(q))
         );
       });
     }
@@ -1483,7 +1528,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                           <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px', marginTop: 0 }}>
                             Click on any card below to view its corresponding list details.
                           </p>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: '12px' }}>
+                          <div className="al-overview-grid">
                             {/* Card 1: Plant */}
                             <div 
                               onClick={() => setActiveOverviewTab(activeOverviewTab === 'plant' ? null : 'plant')}
@@ -1614,96 +1659,96 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         <h3 style={{ fontSize: '15px', fontWeight: '700', color: '#1e293b', marginBottom: '16px', borderTop: '1px solid #e2e8f0', paddingTop: '24px' }}>
                           Land Details
                         </h3>
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' }}>
+                        <div className="al-profile-grid">
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Land Code :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.landCode || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Plant :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{plants.find(p => String(p.pltId) === String(form.plant))?.pltNm || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Land Area :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.landArea ? `${form.landArea} Acres` : '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Survey Number :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{Array.isArray(form.surveyNo) ? form.surveyNo.join(', ') : (form.surveyNo || '-')}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Owner Name :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{Array.isArray(form.landOwnerName) ? form.landOwnerName.join(', ') : (form.landOwnerName || '-')}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Mobile No :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.mobileNo || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>State :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{states.find(s => String(s.stId) === String(form.state))?.stNm || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>District :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.district || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Mandal :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.mandal || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Village :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.village || '-'}</span>
                             </div>
                           </div>
                           
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0', alignItems: 'center' }}>
+                            <div className="al-profile-row" style={{ alignItems: 'center' }}>
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Status :</span>
                               <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', width: 'fit-content', backgroundColor: form.status === 'Active' ? '#dcfce7' : '#fee2e2', color: form.status === 'Active' ? '#166534' : '#991b1b' }}>{form.status}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Zone :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.zone || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Pincode :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.pincode || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Ownership Type :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.landType || '-'}</span>
                             </div>
                             {form.landType === 'Lease' && (
                               <>
-                                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                                <div className="al-profile-row">
                                   <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease Start Date :</span>
                                   <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseStartDate ? form.leaseStartDate.split('-').reverse().join('/') : '-'}</span>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                                <div className="al-profile-row">
                                   <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Lease End Date :</span>
                                   <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseEndDate ? form.leaseEndDate.split('-').reverse().join('/') : '-'}</span>
                                 </div>
-                                <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                                <div className="al-profile-row">
                                   <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Duration :</span>
                                   <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.leaseDuration || '-'}</span>
                                 </div>
                               </>
                             )}
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Latitude :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.latitude || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Longitude :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.longitude || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="al-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Alloted For :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.allotedFor || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '16px 0', borderBottom: '1px dashed #e2e8f0', alignItems: 'start' }}>
+                            <div className="al-profile-row" style={{ alignItems: 'start', padding: '16px 0' }}>
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', paddingTop: '6px' }}>Land Photos Gallery :</span>
                               <div>
                                 {form.photos && form.photos.length > 0 ? (
@@ -2228,13 +2273,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
               <div className="al-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
 
                 {/* Header with Title and Add New Button - Inside Card */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '20px 24px',
-                  borderBottom: '1px solid #e2e8f0'
-                }}>
+                <div className="al-list-header master-list-header">
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
                       Land List
@@ -2243,9 +2282,9 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                       View and manage all land records
                     </p>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <div className="al-list-actions master-list-actions">
+                    <div className="al-search-box master-search-box">
+                      <Search size={16} className="master-search-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                       <input
                         type="text"
                         placeholder="Search lands..."
@@ -2254,13 +2293,13 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                           setTableSearchQuery(e.target.value);
                           setCurrentPage(1);
                         }}
-                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                        className="al-search-input master-search-input"
                       />
                     </div>
                     {screenPerm.canCreate && (
                       <button
                         type="button"
-                        className="al-btn-add-new"
+                        className="al-btn-add-new master-btn-add-new"
                         onClick={() => {
                           handleResetForm();
                           setIsEditing(false);
@@ -2275,44 +2314,42 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
                 {/* Data Table Section Inside the Card */}
                 <div className="al-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="al-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
+                  <table className="al-list-table land-master-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LAND PHOTO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <th className="land-col-hide-mobile" style={{ width: "50px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LAND PHOTO</th>
+                        <th className="col-land-code" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           LAND CODE
                         </th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                        <th className="col-land-name" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                           PLANT
                         </th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OWNER NAME</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OWNERSHIP TYPE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MOBILE NO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SURVEY NO</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ZONE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DISTRICT</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MANDAL</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>VILLAGE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PINCODE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AREA (Acres)</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LATITUDE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LONGITUDE</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LEASE START</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LEASE END</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DURATION</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ALLOTED FOR</th>
-                        <th style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
-                        <th style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
-                          ACTIONS
-                        </th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OWNER NAME</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>OWNERSHIP TYPE</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MOBILE NO</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>SURVEY NO</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATE</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ZONE</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DISTRICT</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>MANDAL</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>VILLAGE</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>PINCODE</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>AREA (Acres)</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LATITUDE</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LONGITUDE</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LEASE START</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LEASE END</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>DURATION</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ALLOTED FOR</th>
+                        <th className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>STATUS</th>
+                        <th className="col-land-actions" style={{ textAlign: "center", width: "100px", padding: '14px 20px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTION</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan="20" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="23" className="col-land-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                               <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
                               Loading land records...
@@ -2322,8 +2359,8 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                       ) : currentItems.length > 0 ? (
                         currentItems.map((land, index) => (
                           <tr key={land.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td data-label="#" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
-                            <td data-label="LAND PHOTO" style={{ padding: '14px 20px' }}>
+                            <td data-label="S.NO" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
+                            <td data-label="LAND PHOTO" className="land-col-hide-mobile" style={{ padding: '14px 20px' }}>
                               {land.photos && land.photos.length > 0 ? (
                                 <div
                                   style={{ position: 'relative', display: 'inline-block', cursor: 'pointer' }}
@@ -2380,46 +2417,46 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                 </div>
                               )}
                             </td>
-                            <td data-label="LAND CODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="LAND CODE" className="col-land-code" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {land.landCode}
                               </span>
                             </td>
-                            <td data-label="PLANT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="PLANT" className="col-land-name" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <strong>{plants.find(p => Number(p.pltId) === Number(land.pltId))?.pltNm || "N/A"}</strong>
                             </td>
-                            <td data-label="OWNER NAME" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="OWNER NAME" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               {Array.isArray(land.landOwnerName) ? land.landOwnerName.join(', ') : land.landOwnerName}
                             </td>
-                            <td data-label="OWNERSHIP TYPE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="OWNERSHIP TYPE" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: land.landType === 'Owner' ? '#f0fdf4' : (land.landType === 'Lease' ? '#eff6ff' : '#f1f5f9'), color: land.landType === 'Owner' ? '#166534' : (land.landType === 'Lease' ? '#1e40af' : '#64748b'), padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: '600', border: land.landType === 'Owner' ? '1px solid #bbf7d0' : (land.landType === 'Lease' ? '1px solid #bfdbfe' : '1px solid #e2e8f0') }}>
                                 {land.landType || "N/A"}
                               </span>
                             </td>
-                            <td data-label="MOBILE NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.mobileNo}</td>
-                            <td data-label="SURVEY NO" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{Array.isArray(land.surveyNo) ? land.surveyNo.join(', ') : land.surveyNo}</td>
-                            <td data-label="STATE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="MOBILE NO" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.mobileNo}</td>
+                            <td data-label="SURVEY NO" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{Array.isArray(land.surveyNo) ? land.surveyNo.join(', ') : land.surveyNo}</td>
+                            <td data-label="STATE" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               {states.find(s => Number(s.stId) === Number(land.stId))?.stNm || "N/A"}
                             </td>
-                            <td data-label="ZONE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.zone || "N/A"}</td>
-                            <td data-label="DISTRICT" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.district}</td>
-                            <td data-label="MANDAL" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.mandal}</td>
-                            <td data-label="VILLAGE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.village}</td>
-                            <td data-label="PINCODE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.pincode}</td>
-                            <td data-label="AREA (Acres)" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="ZONE" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.zone || "N/A"}</td>
+                            <td data-label="DISTRICT" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.district}</td>
+                            <td data-label="MANDAL" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.mandal}</td>
+                            <td data-label="VILLAGE" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.village}</td>
+                            <td data-label="PINCODE" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.pincode}</td>
+                            <td data-label="AREA (Acres)" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ fontWeight: '600' }}>{land.landArea}</span>
                             </td>
-                            <td data-label="LATITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.latitude}</td>
-                            <td data-label="LONGITUDE" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.longitude}</td>
-                            <td data-label="LEASE START" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseStartDate ? land.leaseStartDate.split('-').reverse().join('/') : "N/A"}</td>
-                            <td data-label="LEASE END" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseEndDate ? land.leaseEndDate.split('-').reverse().join('/') : "N/A"}</td>
-                            <td data-label="DURATION" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseDuration || "N/A"}</td>
-                            <td data-label="ALLOTED FOR" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="LATITUDE" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.latitude}</td>
+                            <td data-label="LONGITUDE" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.longitude}</td>
+                            <td data-label="LEASE START" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseStartDate ? land.leaseStartDate.split('-').reverse().join('/') : "N/A"}</td>
+                            <td data-label="LEASE END" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseEndDate ? land.leaseEndDate.split('-').reverse().join('/') : "N/A"}</td>
+                            <td data-label="DURATION" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>{land.leaseDuration || "N/A"}</td>
+                            <td data-label="ALLOTED FOR" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {land.allotedFor || "N/A"}
                               </span>
                             </td>
-                            <td data-label="STATUS" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="STATUS" className="land-col-hide-mobile" style={{ padding: '14px 20px', fontSize: '14px', color: '#334155' }}>
                               <span
                                 style={{
                                   padding: '4px 12px',
@@ -2430,11 +2467,12 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                                   backgroundColor: land.status === 'Active' ? '#dcfce7' : '#fee2e2',
                                   color: land.status === 'Active' ? '#166534' : '#991b1b'
                                 }}
+                                title={land.isLeaseExpired ? `Lease expired on ${land.leaseEndDate ? land.leaseEndDate.split('-').reverse().join('/') : ''}` : ''}
                               >
                                 {land.status}
                               </span>
                             </td>
-                            <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
+                            <td data-label="ACTION" className="col-land-actions" style={{ position: "relative", padding: '14px 20px', textAlign: 'center' }}>
                               <button
                                 id={`action-btn-${land.id}`}
                                 type="button"
@@ -2494,7 +2532,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="23" className="col-land-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             No land records found. Add a new land using the button above.
                           </td>
                         </tr>
@@ -2505,7 +2543,7 @@ const AgriLandAllocation = ({ userRole, onLogout }) => {
 
                 {/* Pagination Controls */}
                 {totalPages > 0 && (
-                  <div style={{
+                  <div className="al-pagination-bar" style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',

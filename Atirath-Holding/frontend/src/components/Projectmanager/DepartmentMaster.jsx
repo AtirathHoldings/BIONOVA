@@ -170,7 +170,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
             isTop,
             top: rect.top,
             bottom: rect.bottom,
-            right: window.innerWidth - rect.right
+            right: Math.max(10, window.innerWidth - rect.right)
           });
         }
       }
@@ -510,7 +510,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
       isTop: spaceBelow < dropdownHeight && spaceAbove > spaceBelow,
       top: rect.top,
       bottom: rect.bottom,
-      right: window.innerWidth - rect.right
+      right: Math.max(10, window.innerWidth - rect.right)
     });
     setActiveDropdown((prev) => (prev === id ? null : id));
   };
@@ -892,14 +892,14 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
               <div className="dept-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
 
                 {/* Header with Title and Add New Button */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+                <div className="dept-list-header master-list-header">
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>Department List</h2>
                     <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>View and manage all departments</p>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <div className="dept-list-actions master-list-actions">
+                    <div className="dept-search-box master-search-box">
+                      <Search size={16} className="master-search-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                       <input
                         type="text"
                         placeholder="Search departments..."
@@ -908,11 +908,11 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                           setTableSearchQuery(e.target.value);
                           setCurrentPage(1);
                         }}
-                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                        className="dept-search-input master-search-input"
                       />
                     </div>
                     {screenPerm.canCreate && (
-                      <button type="button" className="dept-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setIsViewing(false); setView("form"); }}>
+                      <button type="button" className="dept-btn-add-new master-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setIsViewing(false); setView("form"); }}>
                         <Plus size={16} /> Add New Department
                       </button>
                     )}
@@ -921,21 +921,21 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
 
                 {/* Data Table */}
                 <div className="dept-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="dept-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <table className="dept-list-table department-master-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department Code</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department Name</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
-                        <th style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
+                        <th className="dept-col-hide-mobile" style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
+                        <th className="col-dept-code" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department Code</th>
+                        <th className="col-dept-name" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department Name</th>
+                        <th className="dept-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
+                        <th className="dept-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
+                        <th className="col-dept-actions" style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan={6} style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan={6} className="col-dept-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                               <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
                               Loading departments...
@@ -945,12 +945,12 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                       ) : currentItems.length > 0 ? (
                         currentItems.map((dept, index) => (
                           <tr key={dept.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td data-label="S.NO" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
-                            <td data-label="DEPARTMENT CODE" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{dept.code}</span></td>
-                            <td data-label="DEPARTMENT NAME" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><strong>{dept.name}</strong></td>
-                            <td data-label="DESCRIPTION" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{dept.description || "N/A"}</td>
-                            <td data-label="STATUS" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: dept.status === 'Active' ? '#dcfce7' : '#fee2e2', color: dept.status === 'Active' ? '#166534' : '#991b1b' }}>{dept.status}</span></td>
-                            <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 16px', textAlign: 'center' }}>
+                            <td data-label="S.NO" className="dept-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
+                            <td data-label="DEPARTMENT CODE" className="col-dept-code" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{dept.code}</span></td>
+                            <td data-label="DEPARTMENT NAME" className="col-dept-name" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><strong>{dept.name}</strong></td>
+                            <td data-label="DESCRIPTION" className="dept-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{dept.description || "N/A"}</td>
+                            <td data-label="STATUS" className="dept-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: dept.status === 'Active' ? '#dcfce7' : '#fee2e2', color: dept.status === 'Active' ? '#166534' : '#991b1b' }}>{dept.status}</span></td>
+                            <td data-label="ACTIONS" className="col-dept-actions" style={{ position: "relative", padding: '14px 16px', textAlign: 'center' }}>
                               <button id={`action-btn-${dept.id}`} type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={(e) => toggleDropdown(e, dept.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                 <MoreVertical size={18} />
                               </button>
@@ -972,7 +972,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
                           </tr>
                         ))
                       ) : (
-                        <tr><td colSpan={6} style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No department records found. Add a new department using the button above.</td></tr>
+                        <tr><td colSpan={6} className="col-dept-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No department records found. Add a new department using the button above.</td></tr>
                       )}
                     </tbody>
                   </table>
@@ -980,7 +980,7 @@ const DepartmentCreation = ({ userRole, onLogout }) => {
 
                 {/* Pagination Controls */}
                 {totalPages > 0 && (
-                  <div style={{
+                  <div className="dept-pagination-bar" style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',

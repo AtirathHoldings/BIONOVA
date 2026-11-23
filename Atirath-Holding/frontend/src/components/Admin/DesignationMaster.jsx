@@ -111,7 +111,7 @@ const DesignationCreation = ({ userRole, onLogout }) => {
             isTop,
             top: rect.top,
             bottom: rect.bottom,
-            right: window.innerWidth - rect.right
+            right: Math.max(10, window.innerWidth - rect.right)
           });
         }
       }
@@ -383,7 +383,7 @@ const DesignationCreation = ({ userRole, onLogout }) => {
       isTop,
       top: rect.top,
       bottom: rect.bottom,
-      right: window.innerWidth - rect.right
+      right: Math.max(10, window.innerWidth - rect.right)
     });
     setActiveDropdown((prev) => (prev === id ? null : id));
   };
@@ -566,14 +566,14 @@ const DesignationCreation = ({ userRole, onLogout }) => {
               <div className="desig-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
 
                 {/* Header with Title and Add New Button */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+                <div className="desig-list-header master-list-header">
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>Designation List</h2>
                     <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>View and manage all designations</p>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <div className="desig-list-actions master-list-actions">
+                    <div className="desig-search-box master-search-box">
+                      <Search size={16} className="master-search-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                       <input
                         type="text"
                         placeholder="Search designations..."
@@ -582,11 +582,11 @@ const DesignationCreation = ({ userRole, onLogout }) => {
                           setTableSearchQuery(e.target.value);
                           setCurrentPage(1);
                         }}
-                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                        className="desig-search-input master-search-input"
                       />
                     </div>
                     {screenPerm.canCreate && (
-                      <button type="button" className="desig-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setIsViewing(false); setView("form"); }}>
+                      <button type="button" className="desig-btn-add-new master-btn-add-new" onClick={() => { handleReset(); setIsEditing(false); setIsViewing(false); setView("form"); }}>
                         <Plus size={16} /> Add New Designation
                       </button>
                     )}
@@ -595,20 +595,20 @@ const DesignationCreation = ({ userRole, onLogout }) => {
 
                 {/* Data Table */}
                 <div className="desig-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="desig-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                  <table className="desig-list-table designation-master-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation Code</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation Name</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
-                        <th style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
+                        <th className="desig-col-hide-mobile" style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
+                        <th className="col-desig-code" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation Code</th>
+                        <th className="col-desig-name" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation Name</th>
+                        <th className="desig-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Description</th>
+                        <th className="col-desig-actions" style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan={5} style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan={5} className="col-desig-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                               <span className="spinner" style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
                               Loading designations...
@@ -618,11 +618,11 @@ const DesignationCreation = ({ userRole, onLogout }) => {
                       ) : currentItems.length > 0 ? (
                         currentItems.map((desig, index) => (
                           <tr key={desig.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td data-label="S.NO" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
-                            <td data-label="DESIGNATION CODE" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{desig.code}</span></td>
-                            <td data-label="DESIGNATION NAME" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><strong>{desig.name}</strong></td>
-                            <td data-label="DESCRIPTION" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{desig.description || "N/A"}</td>
-                            <td data-label="ACTIONS" style={{ position: "relative", padding: '14px 16px', textAlign: 'center' }}>
+                            <td data-label="S.NO" className="desig-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
+                            <td data-label="DESIGNATION CODE" className="col-desig-code" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{desig.code}</span></td>
+                            <td data-label="DESIGNATION NAME" className="col-desig-name" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><strong>{desig.name}</strong></td>
+                            <td data-label="DESCRIPTION" className="desig-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{desig.description || "N/A"}</td>
+                            <td data-label="ACTIONS" className="col-desig-actions" style={{ position: "relative", padding: '14px 16px', textAlign: 'center' }}>
                               <button id={`action-btn-${desig.id}`} type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={(e) => toggleDropdown(e, desig.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                 <MoreVertical size={18} />
                               </button>
@@ -644,13 +644,13 @@ const DesignationCreation = ({ userRole, onLogout }) => {
                           </tr>
                         ))
                       ) : (
-                        <tr><td colSpan={5} style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No designation records found. Add a new designation using the button above.</td></tr>
+                        <tr><td colSpan={5} className="col-desig-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No designation records found. Add a new designation using the button above.</td></tr>
                       )}
                     </tbody>
                   </table>
                 </div>
                 {totalPages > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
+                  <div className="desig-pagination-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
                     <span style={{ fontSize: '14px', color: '#64748b' }}>
                       Showing {indexOfFirstRecord + 1} to {Math.min(indexOfLastRecord, filteredItems.length)} of {filteredItems.length} entries
                     </span>

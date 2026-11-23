@@ -49,6 +49,8 @@ import VisitorManagement from "./components/Admin/VisitorManagement";
 import ProcurementManagement from "./components/Admin/ProcurementManagement";
 import AssetMaintenance from "./components/Admin/AssetMaintenance";
 import DispatchLogistics from "./components/Admin/DispatchLogistics";
+import HarvestingModule from "./components/Admin/harvesting/HarvestingModule";
+import DPRManagement from "./components/Projectmanager/DPRManagement";
 
 const AppContent = () => {
   const navigate = useNavigate();
@@ -137,7 +139,13 @@ const AppContent = () => {
             'VISITOR_MANAGEMENT': '/visitor-management',
             'PROCUREMENT_MANAGEMENT': '/procurement',
             'ASSET_MAINTENANCE': '/asset-maintenance',
-            'FLEET_DISPATCH': '/dispatch-logistics'
+            'FLEET_DISPATCH': '/dispatch-logistics',
+            'HARVESTING_MANAGEMENT': '/harvesting',
+            'HARVESTING': '/harvesting',
+            'HARVESTING_MODULE': '/harvesting',
+            'DPR_MANAGEMENT': '/dpr',
+            'DPR': '/dpr',
+            'DAILY_PROGRESS_REPORT': '/dpr'
           };
           if (SCREEN_PATHS[firstAllowed.screenCode]) {
             return SCREEN_PATHS[firstAllowed.screenCode];
@@ -210,6 +218,10 @@ const AppContent = () => {
       <Route path="/asset-maintenance/:tab" element={isLoggedIn ? <AssetMaintenance userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/dispatch-logistics" element={isLoggedIn ? <DispatchLogistics userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
       <Route path="/dispatch-logistics/:tab" element={isLoggedIn ? <DispatchLogistics userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/dpr" element={isLoggedIn ? <DPRManagement userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/dpr/:id" element={isLoggedIn ? <DPRManagement userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/harvesting" element={isLoggedIn ? <HarvestingModule userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
+      <Route path="/harvesting/:tab" element={isLoggedIn ? <HarvestingModule userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />
 
       {/* Project Manager Features */}
       <Route path="/project-creation" element={isLoggedIn ? <ProjectCreation userRole={userRole} onLogout={handleLogout} /> : <Navigate to="/" replace />} />

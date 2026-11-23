@@ -303,6 +303,18 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
   const [tableWidth, setTableWidth] = useState(300);
   const dragState = useRef({ isDragging: false, startX: 0, startW: 0 });
 
+  // Mobile responsiveness
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  const [mobileTab, setMobileTab] = useState('split'); // 'list' | 'split' | 'timeline'
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   useEffect(() => {
     setTableWidth(baseline ? 360 : 300);
   }, [baseline]);
@@ -905,6 +917,34 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
             </div>
           ) : (
             <div className="gantt-content-wrapper" style={{ display: 'flex', flexDirection: 'column', flexGrow: 1, minHeight: 0 }}>
+              
+              {/* Mobile View Switcher */}
+              {isMobile && (
+                <div className="gantt-mobile-tab-bar">
+                  <button
+                    type="button"
+                    className={`gantt-mobile-tab-btn ${mobileTab === 'list' ? 'active' : ''}`}
+                    onClick={() => { setMobileTab('list'); setTableCollapsed(false); }}
+                  >
+                    📋 Tasks
+                  </button>
+                  <button
+                    type="button"
+                    className={`gantt-mobile-tab-btn ${mobileTab === 'split' ? 'active' : ''}`}
+                    onClick={() => { setMobileTab('split'); setTableCollapsed(false); }}
+                  >
+                    ◫ Split
+                  </button>
+                  <button
+                    type="button"
+                    className={`gantt-mobile-tab-btn ${mobileTab === 'timeline' ? 'active' : ''}`}
+                    onClick={() => { setMobileTab('timeline'); setTableCollapsed(false); }}
+                  >
+                    📊 Gantt
+                  </button>
+                </div>
+              )}
+
               <div className="gantt-controls-row" style={{ flexShrink: 0 }}>
                 <div className="gantt-zoom-controls">
                   <span style={{ fontSize: '12px', color: '#64748b', fontWeight: '500' }}>Zoom</span>
@@ -951,14 +991,34 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
               
               {(() => {
                 const totalTimelineHeight = 60 + visibleRows.length * ROW_H;
+                const effectiveTableWidth = isMobile
+                  ? (mobileTab === 'list' ? '100%' : (mobileTab === 'timeline' ? 0 : 160))
+                  : tableWidth;
+                const showTable = !tableCollapsed && (!isMobile || mobileTab !== 'timeline');
+                const showTimeline = !isMobile || mobileTab !== 'list';
+                const showResizer = !isMobile && !tableCollapsed;
+
                 return (
                   <>
                   {/* Left Table Section with Collapse */}
-                  {!tableCollapsed && (
-                    <div className="gantt-table-section" style={{ width: tableWidth, flexShrink: 0, position: 'sticky', left: 0, zIndex: 40, background: '#fff', minHeight: totalTimelineHeight }}>
+                  {showTable && (
+                    <div 
+                      className="gantt-table-section" 
+                      style={{ 
+                        width: effectiveTableWidth, 
+                        flexShrink: 0, 
+                        position: isMobile && mobileTab === 'list' ? 'relative' : 'sticky', 
+                        left: 0, 
+                        zIndex: 40, 
+                        background: '#fff', 
+                        minHeight: totalTimelineHeight,
+                        borderRight: isMobile && mobileTab === 'list' ? 'none' : '1px solid #e2e8f0',
+                        overflowX: isMobile && mobileTab === 'list' ? 'auto' : 'hidden'
+                      }}
+                    >
                       <div className="gantt-thead" style={{ position: 'sticky', top: 0, zIndex: 50, background: '#fff', borderBottom: '1px solid #e2e8f0', display: 'flex' }}>
-                        <div className="gantt-th" style={{ flex: 1, minWidth: '180px' }}>Project / Task / Status</div>
-                        {baseline && <div className="gantt-th" style={{ width: '60px' }}>Act%</div>}
+                        <div className="gantt-th" style={{ flex: 1, minWidth: isMobile && mobileTab === 'split' ? '100px' : '180px' }}>Project / Task / Status</div>
+                        {baseline && <div className="gantt-th" style={{ width: '50px' }}>Act%</div>}
                       </div>
                       <div style={{ overflowY: 'hidden' }}>
                         {visibleRows.map((row, i) => (
@@ -972,39 +1032,39 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                               if (row.type === 'milestone') toggleMilestoneExpand(row.id);
                             }}
                           >
-                            <div className="gantt-td" style={{ flex: 1, minWidth: '200px', fontWeight: row.type !== 'task' ? '600' : '400', paddingLeft: row.type === 'milestone' ? '24px' : (row.type === 'task' ? '48px' : '12px'), display: 'flex', alignItems: 'center', gap: '8px', color: '#1e293b' }}>
+                            <div className="gantt-td" style={{ flex: 1, minWidth: isMobile && mobileTab === 'split' ? '100px' : '200px', fontWeight: row.type !== 'task' ? '600' : '400', paddingLeft: isMobile && mobileTab === 'split' ? (row.type === 'milestone' ? '12px' : (row.type === 'task' ? '22px' : '6px')) : (row.type === 'milestone' ? '24px' : (row.type === 'task' ? '48px' : '12px')), display: 'flex', alignItems: 'center', gap: '6px', color: '#1e293b' }}>
                               {row.type === 'project' && (
-                                <span style={{ cursor: 'pointer', paddingRight: 4 }}>
+                                <span style={{ cursor: 'pointer', paddingRight: 2 }}>
                                   {expandedProjects.has(row.id) ? <ChevronDown size={14} color="#64748b"/> : <span style={{display:'inline-block', transform:'rotate(-90deg)'}}><ChevronDown size={14} color="#64748b"/></span>}
                                 </span>
                               )}
                               {row.type === 'milestone' && (
-                                <span style={{ cursor: 'pointer', paddingRight: 4 }}>
+                                <span style={{ cursor: 'pointer', paddingRight: 2 }}>
                                   {expandedMilestones.has(row.id) ? <ChevronDown size={14} color="#64748b"/> : <span style={{display:'inline-block', transform:'rotate(-90deg)'}}><ChevronDown size={14} color="#64748b"/></span>}
                                 </span>
                               )}
-                              {row.type !== 'task' && <span style={{width: 8, height: 8, borderRadius: '50%', background: SC[row.status]?.bar || '#94a3b8', flexShrink: 0}}></span>}
+                              {row.type !== 'task' && <span style={{width: 7, height: 7, borderRadius: '50%', background: SC[row.status]?.bar || '#94a3b8', flexShrink: 0}}></span>}
                               
                               <span 
-                                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: row.type !== 'task' ? 'pointer' : 'default', padding: '4px 0' }} 
+                                style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: row.type !== 'task' ? 'pointer' : 'default', padding: '4px 0', fontSize: isMobile && mobileTab === 'split' ? '11px' : '13px' }} 
                                 title={row.name}
                               >
                                 {row.displayId ? `${row.displayId}. ` : ''}{row.name}
                               </span>
-                              <span style={{ padding: '2px 7px', borderRadius: '10px', fontWeight: 600, fontSize: '10px', background: SC[row.status]?.bg || '#f1f5f9', color: SC[row.status]?.bar || '#64748b', whiteSpace: 'nowrap', marginLeft: '8px', flexShrink: 0 }}>
+                              <span style={{ padding: '2px 5px', borderRadius: '10px', fontWeight: 600, fontSize: isMobile && mobileTab === 'split' ? '9px' : '10px', background: SC[row.status]?.bg || '#f1f5f9', color: SC[row.status]?.bar || '#64748b', whiteSpace: 'nowrap', marginLeft: 'auto', flexShrink: 0 }}>
                                 {row.status || '-'}
                               </span>
                             </div>
 
-                            {baseline && <div className="gantt-td" style={{ width: '60px', fontWeight: 600, color: '#64748b' }}>{row.prog}%</div>}
+                            {baseline && <div className="gantt-td" style={{ width: '50px', fontWeight: 600, color: '#64748b', fontSize: isMobile && mobileTab === 'split' ? '10px' : '12px' }}>{row.prog}%</div>}
                           </div>
                         ))}
                       </div>
                     </div>
                   )}
 
-                    {/* Expand button when table collapsed */}
-                    {tableCollapsed && (
+                    {/* Expand button when table collapsed (desktop only) */}
+                    {tableCollapsed && !isMobile && (
                       <div style={{ flexShrink: 0, position: 'sticky', left: 0, width: 32, zIndex: 40, background: 'white', borderRight: '1px solid #e2e8f0', minHeight: totalTimelineHeight }}>
                         <button
                           onClick={() => setTableCollapsed(false)}
@@ -1016,8 +1076,8 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                       </div>
                     )}
 
-                    {/* Resizer Handle - only when table visible */}
-                    {!tableCollapsed && (
+                    {/* Resizer Handle - desktop only */}
+                    {showResizer && (
                       <div 
                         onMouseDown={handleDragStart}
                         style={{
@@ -1053,12 +1113,20 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
               })()}
 
                 {/* Right Timeline Section */}
-                <div className="gantt-timeline-section" onClick={(e) => {
-                  const rect = e.currentTarget.getBoundingClientRect();
-                  const clickX = e.clientX - rect.left + timelineRef.current.scrollLeft;
-                  const snappedX = Math.floor(clickX / DW) * DW;
-                  setMarkerOff(snappedX);
-                }}>
+                {(!isMobile || mobileTab !== 'list') && (
+                <div 
+                  className="gantt-timeline-section" 
+                  onClick={(e) => {
+                    const rect = e.currentTarget.getBoundingClientRect();
+                    const clickX = e.clientX - rect.left + timelineRef.current.scrollLeft;
+                    const snappedX = Math.floor(clickX / DW) * DW;
+                    setMarkerOff(snappedX);
+                  }}
+                  style={{
+                    flexGrow: 1,
+                    minWidth: isMobile && mobileTab === 'split' ? '420px' : (isMobile ? '100%' : '800px')
+                  }}
+                >
                   <div style={{ width: timelineW, position: 'relative' }}>
                     <div className="gantt-timeline-header" style={{ position: 'sticky', top: 0, zIndex: 10, background: '#fff', borderBottom: '1px solid #e2e8f0' }}>
                       {/* Month row */}
@@ -1205,6 +1273,7 @@ export default function AllProjectGanttChart({ userRole, onLogout }) {
                     </div>
                   </div>
                 </div>
+                )}
               </div>
             </div>
           )}

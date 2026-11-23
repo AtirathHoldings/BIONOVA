@@ -1,6 +1,6 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { House, Building, Flag, Boxes, ShieldCheck, TrendingUp, Users, Calendar, Settings, Factory, MapPinned, FolderPlus, Folder, ChevronDown, ChevronRight, ChevronLeft, LogOut, ClipboardCheck, User, X, PanelLeftOpen, PanelLeftClose, FileText, Briefcase, Lock, Truck, Wrench, ShoppingCart } from "lucide-react";
+import { House, Building, Wheat, Boxes, ShieldCheck, TrendingUp, Users, Calendar, Settings, Factory, MapPinned, FolderPlus, Folder, ChevronDown, ChevronRight, LogOut, ClipboardCheck, ClipboardList, User, X, PanelLeftOpen, PanelLeftClose, FileText, Briefcase, Lock, Truck, Wrench, ShoppingCart } from "lucide-react";
 import "../styles/sidebar.css";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
@@ -75,7 +75,13 @@ const Sidebar = ({ onLogout }) => {
         'EXECUTIVE_MODULE': { path: '/executive', icon: TrendingUp, displayName: "Executive Overview" },
         'PROCUREMENT_MANAGEMENT': { path: '/procurement', icon: ShoppingCart, displayName: "Procurement & PO" },
         'ASSET_MAINTENANCE': { path: '/asset-maintenance', icon: Wrench, displayName: "Asset Maintenance (CMMS)" },
-        'FLEET_DISPATCH': { path: '/dispatch-logistics', icon: Truck, displayName: "Fleet & Dispatch Logistics" }
+        'FLEET_DISPATCH': { path: '/dispatch-logistics', icon: Truck, displayName: "Fleet & Dispatch Logistics" },
+        'HARVESTING_MANAGEMENT': { path: '/harvesting', icon: Wheat, displayName: "Harvesting" },
+        'HARVESTING': { path: '/harvesting', icon: Wheat, displayName: "Harvesting" },
+        'HARVESTING_MODULE': { path: '/harvesting', icon: Wheat, displayName: "Harvesting" },
+        'DPR_MANAGEMENT': { path: '/dpr', icon: ClipboardList, displayName: "Daily Progress Report" },
+        'DPR': { path: '/dpr', icon: ClipboardList, displayName: "Daily Progress Report" },
+        'DAILY_PROGRESS_REPORT': { path: '/dpr', icon: ClipboardList, displayName: "Daily Progress Report" }
       };
 
       const buildMenuFromScreens = (allowedScreens) => {
@@ -95,8 +101,8 @@ const Sidebar = ({ onLogout }) => {
           };
 
           const dropdownGroups = ['Company Master', 'Project', 'User'];
-          if (screen.screenCode === 'INVENTORY_MANAGEMENT' || screen.screenCode === 'EXECUTIVE_MODULE' || screen.screenCode === 'VISITOR_MANAGEMENT' || screen.screenCode === 'PROCUREMENT_MANAGEMENT' || screen.screenCode === 'ASSET_MAINTENANCE' || screen.screenCode === 'FLEET_DISPATCH') {
-            // Inventory, Executive, Visitor Management, and Supply Chain are rendered below as dedicated dropdown groups
+          if (screen.screenCode === 'INVENTORY_MANAGEMENT' || screen.screenCode === 'EXECUTIVE_MODULE' || screen.screenCode === 'VISITOR_MANAGEMENT' || screen.screenCode === 'PROCUREMENT_MANAGEMENT' || screen.screenCode === 'ASSET_MAINTENANCE' || screen.screenCode === 'FLEET_DISPATCH' || screen.screenCode === 'HARVESTING_MANAGEMENT' || screen.screenCode === 'HARVESTING' || screen.screenCode === 'HARVESTING_MODULE' || screen.screenCode === 'DPR_MANAGEMENT' || screen.screenCode === 'DPR' || screen.screenCode === 'DAILY_PROGRESS_REPORT') {
+            // Inventory, Executive, Visitor Management, Supply Chain, DPR, and standalone Harvesting are positioned below explicitly
             return;
           }
           if (dropdownGroups.includes(screen.groupNm)) {
@@ -208,6 +214,19 @@ const Sidebar = ({ onLogout }) => {
           ];
         }
 
+        // Add Harvesting dropdown group with all four submodules from the Harvesting Module
+        const hasHarvestingAccess = isAdmin || allowedScreens.length === 0 || allowedScreens.some(s =>
+          (s.screenCode === 'HARVESTING_MANAGEMENT' || s.screenCode === 'HARVESTING' || s.screenCode === 'HARVESTING_MODULE' || s.screenCode === 'PROCUREMENT_MANAGEMENT' || s.screenCode === 'ASSET_MAINTENANCE' || s.screenCode === 'FLEET_DISPATCH' || s.screenCode === 'INVENTORY_MANAGEMENT') && (s.viewFlg !== false)
+        );
+        if (hasHarvestingAccess || (allowedScreens.length === 0 && !empId)) {
+          groups['Harvesting'] = [
+            { name: "Active Harvesting Cycles", path: "/harvesting/harvest-cycles", code: "HARVESTING" },
+            { name: "Contracted Plantation Blocks (1,200 Ac)", path: "/harvesting/plantation-parcels", code: "HARVESTING" },
+            { name: "Forage Harvesters & Machinery Fleet", path: "/harvesting/machinery-fleet", code: "HARVESTING" },
+            { name: "Silage Bunkers & Ensiling Reserve (6,720 MT)", path: "/harvesting/silage-bunkers", code: "HARVESTING" }
+          ];
+        }
+
         const config = [];
         const groupIcons = {
           'Company Master': Building,
@@ -216,7 +235,8 @@ const Sidebar = ({ onLogout }) => {
           'Inventory': Boxes,
           'Visitor Management': ShieldCheck,
           'Executive Overview': TrendingUp,
-          'Supply Chain & Operations': Truck
+          'Supply Chain & Operations': Truck,
+          'Harvesting': Wheat
         };
         const groupKeys = {
           'Company Master': 'company',
@@ -225,7 +245,8 @@ const Sidebar = ({ onLogout }) => {
           'Inventory': 'inventory',
           'Visitor Management': 'visitorManagement',
           'Executive Overview': 'executive',
-          'Supply Chain & Operations': 'supplyChain'
+          'Supply Chain & Operations': 'supplyChain',
+          'Harvesting': 'harvesting'
         };
 
         const PROJECT_ORDER = [
@@ -248,7 +269,7 @@ const Sidebar = ({ onLogout }) => {
           });
         }
 
-        const GROUP_ORDER = ['Company Master', 'Project', 'User', 'Inventory', 'Visitor Management', 'Executive Overview', 'Supply Chain & Operations'];
+        const GROUP_ORDER = ['Company Master', 'Project', 'User', 'Inventory', 'Visitor Management', 'Executive Overview', 'Supply Chain & Operations', 'Harvesting'];
         GROUP_ORDER.forEach(groupNm => {
           if (groups[groupNm] && groups[groupNm].length > 0) {
             config.push({
@@ -264,12 +285,35 @@ const Sidebar = ({ onLogout }) => {
         // Ensure Company Master ONLY contains core company/plant/dept/emp master screens
         if (groups['Company Master']) {
           groups['Company Master'] = groups['Company Master'].filter(
-            item => !item.path.startsWith('/inventory') && item.path !== '/visitor-management' && item.path !== '/executive' && !item.path.startsWith('/procurement') && !item.path.startsWith('/asset-maintenance') && !item.path.startsWith('/dispatch-logistics')
+            item => !item.path.startsWith('/inventory') && item.path !== '/visitor-management' && item.path !== '/executive' && !item.path.startsWith('/procurement') && !item.path.startsWith('/asset-maintenance') && !item.path.startsWith('/dispatch-logistics') && !item.path.startsWith('/harvesting')
           );
         }
 
         // Ensure standalone never contains dedicated dropdown sub-items
-        standalone = standalone.filter(item => !item.path.startsWith('/inventory') && !item.path.startsWith('/visitor-management') && !item.path.startsWith('/executive') && !item.path.startsWith('/procurement') && !item.path.startsWith('/asset-maintenance') && !item.path.startsWith('/dispatch-logistics'));
+        standalone = standalone.filter(item => !item.path.startsWith('/inventory') && !item.path.startsWith('/visitor-management') && !item.path.startsWith('/executive') && !item.path.startsWith('/procurement') && !item.path.startsWith('/asset-maintenance') && !item.path.startsWith('/dispatch-logistics') && !item.path.startsWith('/harvesting'));
+
+        // Place Daily Progress Report (DPR) directly above Public Holidays in standalone
+        const hasDPRAccess = isAdmin || allowedScreens.length === 0 || allowedScreens.some(s =>
+          (s.screenCode === 'DPR_MANAGEMENT' || s.screenCode === 'DPR' || s.screenCode === 'DAILY_PROGRESS_REPORT' || s.screenCode === 'PROJECT_CREATION' || s.screenCode === 'PROJECT_DASHBOARD') && (s.viewFlg !== false)
+        );
+        if (hasDPRAccess) {
+          const dprItem = {
+            name: "Daily Progress Report",
+            path: "/dpr",
+            icon: ClipboardList,
+            code: "DPR_MANAGEMENT"
+          };
+          const targetIndex = standalone.findIndex(
+            item =>
+              item.code === 'PUBLIC_HOLIDAYS' ||
+              item.path === '/public-holidays'
+          );
+          if (targetIndex !== -1) {
+            standalone.splice(targetIndex, 0, dprItem);
+          } else {
+            standalone.push(dprItem);
+          }
+        }
 
         return { config, standalone };
       };
@@ -349,6 +393,7 @@ const Sidebar = ({ onLogout }) => {
 
   useEffect(() => {
     if (menuItems.length > 0) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setOpenDropdowns(prev => {
         const next = { ...prev };
         menuItems.forEach(item => {
@@ -390,6 +435,10 @@ const Sidebar = ({ onLogout }) => {
       location.pathname.startsWith('/dispatch-logistics')
     ) {
       setOpenDropdowns(prev => ({ ...prev, supplyChain: true }));
+    }
+
+    if (location.pathname.startsWith('/harvesting')) {
+      setOpenDropdowns(prev => ({ ...prev, harvesting: true }));
     }
   }, [location.pathname, menuItems]);
 
@@ -457,8 +506,12 @@ const Sidebar = ({ onLogout }) => {
           justifyContent: isCollapsed ? "center" : "space-between",
           gap: isCollapsed ? "20px" : "10px",
           width: "100%",
-          padding: isCollapsed ? "8px 0" : "0 4px",
-          marginBottom: isCollapsed ? "20px" : "35px"
+          margin: 0,
+          padding: isCollapsed ? "20px 8px 14px 8px" : "22px 16px 14px 16px",
+          background: "#02153f",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.08)",
+          boxSizing: "border-box",
+          flexShrink: 0
         }}>
 
           {isCollapsed ? (
@@ -533,7 +586,20 @@ const Sidebar = ({ onLogout }) => {
           </button>
         </div>
 
-        <ul className="menu-list">
+        <div
+          className="sidebar-scrollable-content"
+          style={{
+            flex: 1,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+            overflowY: "auto",
+            overflowX: "hidden",
+            padding: isCollapsed ? "10px 8px 20px 8px" : "14px 16px 20px 16px",
+            boxSizing: "border-box"
+          }}
+        >
+          <ul className="menu-list">
           {hasNoAccess ? (
             <li style={{
               padding: "20px 12px",
@@ -574,31 +640,40 @@ const Sidebar = ({ onLogout }) => {
                 <li
                   key={item.key}
                   className={`dropdown-container ${(item.isActive || openDropdowns[item.key]) ? "active-dropdown" : ""}`}
+                  title={isCollapsed ? item.name : undefined}
                 >
                   <div
                     className="dropdown-header"
                     onClick={() => toggleDropdown(item.key)}
                   >
                     <div
-                      className="d-flex align-items-center gap-2"
-                      style={{ minWidth: 0, flex: 1, overflow: "hidden", marginRight: "6px" }}
+                      className={`d-flex align-items-center ${isCollapsed ? "justify-content-center" : "gap-2"}`}
+                      style={
+                        isCollapsed
+                          ? { minWidth: 0, width: "100%", justifyContent: "center", margin: 0, padding: 0 }
+                          : { minWidth: 0, flex: 1, overflow: "hidden", marginRight: "6px" }
+                      }
                     >
-                      <item.icon size={20} style={{ flexShrink: 0 }} />
-                      <span
-                        className="m-0"
-                        style={{
-                          fontSize: item.name.length > 18 ? "13.5px" : "15px",
-                          lineHeight: "1.25",
-                          whiteSpace: "normal",
-                          wordBreak: "break-word"
-                        }}
-                      >
-                        {item.name}
-                      </span>
+                      <item.icon size={20} className="sidebar-item-icon" style={{ flexShrink: 0 }} />
+                      {!isCollapsed && (
+                        <span
+                          className="m-0"
+                          style={{
+                            fontSize: item.name.length > 18 ? "13.5px" : "15px",
+                            lineHeight: "1.25",
+                            whiteSpace: "normal",
+                            wordBreak: "break-word"
+                          }}
+                        >
+                          {item.name}
+                        </span>
+                      )}
                     </div>
-                    <span className="dropdown-arrow-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginLeft: "auto" }}>
-                      {openDropdowns[item.key] ? <ChevronDown size={18} style={{ flexShrink: 0 }} /> : <ChevronRight size={18} style={{ flexShrink: 0 }} />}
-                    </span>
+                    {!isCollapsed && (
+                      <span className="dropdown-arrow-icon" style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginLeft: "auto" }}>
+                        {openDropdowns[item.key] ? <ChevronDown size={18} style={{ flexShrink: 0 }} /> : <ChevronRight size={18} style={{ flexShrink: 0 }} />}
+                      </span>
+                    )}
                   </div>
 
                   {!isCollapsed && openDropdowns[item.key] && (
@@ -647,7 +722,8 @@ const Sidebar = ({ onLogout }) => {
                         const isSubActive =
                           location.pathname === sub.path ||
                           (sub.path !== '/' && location.pathname.startsWith(sub.path)) ||
-                          (sub.path === '/visitor-management/dashboard' && location.pathname === '/visitor-management');
+                          (sub.path === '/visitor-management/dashboard' && location.pathname === '/visitor-management') ||
+                          (sub.path === '/harvesting/harvest-cycles' && location.pathname === '/harvesting');
                         return (
                           <li
                             key={sIdx}
@@ -664,21 +740,33 @@ const Sidebar = ({ onLogout }) => {
                 </li>
               ))}
 
-              {singleItems.map((m, i) => (
-                <li
-                  key={i}
-                  onClick={() => handleNavigate(m.path)}
-                  className={location.pathname === m.path ? "active-single" : ""}
-                >
-                  <m.icon size={20} /> <span>{m.name}</span>
-                </li>
-              ))}
+              {singleItems.map((m, i) => {
+                const isSingleActive =
+                  location.pathname === m.path ||
+                  (m.path !== "/" && location.pathname.startsWith(`${m.path}/`));
+                return (
+                  <li
+                    key={m.code || m.path || i}
+                    onClick={() => handleNavigate(m.path)}
+                    className={isSingleActive ? "active-single" : ""}
+                    title={isCollapsed ? m.name : undefined}
+                  >
+                    <m.icon size={20} className="sidebar-item-icon" style={{ flexShrink: 0 }} />
+                    {!isCollapsed && <span>{m.name}</span>}
+                  </li>
+                );
+              })}
             </>
           )}
         </ul>
 
-        <div className="logout-button" onClick={() => setShowLogoutConfirm(true)}>
-          <LogOut size={20} /> <span>Logout</span>
+        <div
+          className="logout-button"
+          onClick={() => setShowLogoutConfirm(true)}
+          title={isCollapsed ? "Logout" : undefined}
+        >
+          <LogOut size={20} className="sidebar-item-icon" style={{ flexShrink: 0 }} />
+          {!isCollapsed && <span>Logout</span>}
         </div>
 
         <div className="sidebar-bottom-logo" style={{
@@ -714,6 +802,7 @@ const Sidebar = ({ onLogout }) => {
               </span>
             </div>
           )}
+        </div>
         </div>
       </div>
 

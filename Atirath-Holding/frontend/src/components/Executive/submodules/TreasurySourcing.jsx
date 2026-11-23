@@ -126,10 +126,16 @@ const TreasurySourcing = () => {
     };
 
     if (editingItem) {
+      saveFundingSource(cleanItem, editingItem.id).then(res => {
+        if (res) setFacilities(prev => prev.map(f => f.id === editingItem.id ? res : f));
+      }).catch(err => console.warn(err));
       setFacilities((prev) =>
         prev.map((f) => (f.id === editingItem.id ? cleanItem : f))
       );
     } else {
+      saveFundingSource(cleanItem).then(res => {
+        if (res) setFacilities(prev => [res, ...prev.filter(f => f.id !== cleanItem.id)]);
+      }).catch(err => console.warn(err));
       setFacilities((prev) => [cleanItem, ...prev]);
     }
     setIsModalOpen(false);
@@ -178,7 +184,7 @@ const TreasurySourcing = () => {
 
       {/* If isModalOpen is true, render the Full-Page Form Card. Otherwise, render the List & KPIs */}
       {isModalOpen ? (
-        <div style={{
+        <div className="exec-form-card" style={{
           backgroundColor: "#ffffff",
           borderRadius: "14px",
           border: "1px solid #e2e8f0",
@@ -187,7 +193,7 @@ const TreasurySourcing = () => {
           marginTop: "10px"
         }}>
           {/* Form Header with Back Button */}
-          <div style={{
+          <div className="exec-form-header" style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -226,9 +232,9 @@ const TreasurySourcing = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSave} style={{ padding: "28px" }}>
+          <form onSubmit={handleSave} className="exec-form-body" style={{ padding: "28px" }}>
             {/* Section 1: Facility Identification & Lending Institution */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -239,7 +245,7 @@ const TreasurySourcing = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <Building size={18} color="#7c3aed" /> 1. Facility Identification & Financing Partner
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Facility ID *
@@ -302,7 +308,7 @@ const TreasurySourcing = () => {
             </div>
 
             {/* Section 2: Financial Terms & Allocation */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -313,7 +319,7 @@ const TreasurySourcing = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <DollarSign size={18} color="#059669" /> 2. Financial Sizing, Rates & Tenor
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Sanctioned Amount (₹ Cr) *
@@ -384,7 +390,7 @@ const TreasurySourcing = () => {
             </div>
 
             {/* Bottom Form Actions */}
-            <div style={{
+            <div className="exec-form-footer" style={{
               display: "flex",
               justifyContent: "flex-end",
               gap: "12px",
@@ -433,7 +439,7 @@ const TreasurySourcing = () => {
       ) : (
         <>
           {/* KPI Stats */}
-      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: "24px" }}>
+      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "24px" }}>
         <div className="exec-fin-tile">
           <div className="exec-fin-tile-label">TOTAL CAPITAL SANCTIONED</div>
           <div className="exec-fin-tile-val">₹{totalSanctioned.toFixed(1)} Cr</div>
@@ -511,19 +517,19 @@ const TreasurySourcing = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{
+      <div className="exec-filter-bar" style={{
         background: "#ffffff",
         borderRadius: "12px",
         padding: "16px 20px",
         border: "1px solid #e2e8f0",
         marginBottom: "20px",
         display: "flex",
-        flexWrap: "wrap",
+        flexWrap: "nowrap",
         gap: "14px",
         alignItems: "center",
         justifyContent: "space-between"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "260px" }}>
+        <div className="exec-search-wrapper" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -551,11 +557,12 @@ const TreasurySourcing = () => {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="exec-filter-selects" style={{ display: "flex", gap: "10px", flexWrap: "nowrap", flexShrink: 0 }}>
           <select
             className="exec-select"
             value={typeFilter}
             onChange={(e) => setTypeFilter(e.target.value)}
+            style={{ minWidth: "160px" }}
           >
             {CAPITAL_TYPES.map((c, idx) => (
               <option key={idx} value={c}>{c}</option>
@@ -575,7 +582,7 @@ const TreasurySourcing = () => {
           </span>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        <div className="exec-table-responsive" style={{ overflowX: "auto" }}>
           <table className="exec-dept-table" style={{ margin: 0 }}>
             <thead>
               <tr>

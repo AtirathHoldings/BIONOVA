@@ -1553,7 +1553,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
           {/* PO PRINT / VIEW MODAL                                          */}
           {/* ────────────────────────────────────────────────────────────── */}
           {viewingItem?.type === "po" && (
-            <div style={{
+            <div className="sco-modal-overlay" style={{
               position: "fixed",
               top: 0, left: 0, right: 0, bottom: 0,
               backgroundColor: "rgba(15, 23, 42, 0.6)",
@@ -1563,7 +1563,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
               zIndex: 1050,
               padding: "20px"
             }}>
-              <div style={{
+              <div className="sco-modal-card" style={{
                 background: "#ffffff",
                 borderRadius: "14px",
                 width: "100%",
@@ -1581,7 +1581,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                   <button onClick={() => setViewingItem(null)} className="sco-btn-icon"><X size={20} /></button>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "24px", fontSize: "13.5px" }}>
+                <div className="sco-modal-info-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "20px", marginBottom: "24px", fontSize: "13.5px" }}>
                   <div>
                     <p style={{ margin: "0 0 4px 0", color: "#64748b" }}>PO Reference:</p>
                     <p style={{ fontSize: "16px", fontWeight: "700", color: "#2563eb", margin: 0 }}>{viewingItem.data.poNumber}</p>
@@ -1626,7 +1626,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                   </table>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "24px" }}>
+                <div className="sco-modal-summary-wrapper" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "24px" }}>
                   <div style={{ width: "260px", background: "#f8fafc", padding: "16px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
                     <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "13px" }}>
                       <span>Subtotal:</span>
@@ -1643,7 +1643,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                   </div>
                 </div>
 
-                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                <div className="sco-modal-footer" style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                   <button onClick={() => window.print()} className="sco-btn-secondary">
                     <Printer size={16} /> Print Voucher
                   </button>

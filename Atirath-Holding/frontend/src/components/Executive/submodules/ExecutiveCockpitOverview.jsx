@@ -214,7 +214,7 @@ const ExecutiveCockpitOverview = () => {
           </div>
         </div>
 
-        <div style={{
+        <div className="exec-portal-grid" style={{
           display: "grid",
           gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))",
           gap: "14px"
@@ -484,24 +484,26 @@ const ExecutiveCockpitOverview = () => {
             </span>
           </div>
 
-          <table className="exec-dept-table">
-            <thead>
-              <tr>
-                <th>Department</th>
-                <th>Headcount</th>
-                <th>Active Tasks</th>
-                <th>SLA %</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-      <tr>
-        <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
-          No departmental incident escalations or active compliance variances reported.
-        </td>
-      </tr>
-    </tbody>
-          </table>
+          <div className="exec-table-responsive" style={{ overflowX: "auto", WebkitOverflowScrolling: "touch" }}>
+            <table className="exec-dept-table">
+              <thead>
+                <tr>
+                  <th>Department</th>
+                  <th>Headcount</th>
+                  <th>Active Tasks</th>
+                  <th>SLA %</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colSpan="5" style={{ textAlign: "center", padding: "24px", color: "#64748b" }}>
+                    No departmental incident escalations or active compliance variances reported.
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
 
         {/* STRATEGIC RISK RADAR & DECISIONS */}

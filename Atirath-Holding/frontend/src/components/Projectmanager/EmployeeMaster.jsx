@@ -247,7 +247,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
             isTop,
             top: rect.top,
             bottom: rect.bottom,
-            right: window.innerWidth - rect.right
+            right: Math.max(10, window.innerWidth - rect.right)
           });
         }
       }
@@ -475,7 +475,10 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
             else resolvedDesignation = emp.desigId ? `Designation ${emp.desigId}` : "N/A";
           }
           const repManager = data.find(e => String(e.empId || e.id) === String(emp.repManId));
-          const repManagerName = repManager ? `${repManager.fstNm || repManager.firstName || ""} ${repManager.lstNm || repManager.lastName || ""}`.trim() : (emp.repManId ? `Employee ${emp.repManId}` : "N/A");
+          const isManagerActive = repManager && (repManager.sts === true || repManager.status === true || repManager.status === "Active");
+          const repManagerName = (isManagerActive && `${repManager.fstNm || repManager.firstName || ""} ${repManager.lstNm || repManager.lastName || ""}`.trim())
+            ? `${repManager.fstNm || repManager.firstName || ""} ${repManager.lstNm || repManager.lastName || ""}`.trim()
+            : "NA";
 
           return {
             ...emp,
@@ -1412,6 +1415,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
   // Edit Action
   const handleEdit = (emp) => {
+    const foundMgr = employees.find(e => String(e.empId || e.id) === String(emp.repManId));
+    const isRepManValid = foundMgr && (foundMgr.status === "Active" || foundMgr.sts === true);
+
     setForm({
       employeeCode: emp.empCode || emp.employeeCode || "",
       firstName: emp.firstName || "",
@@ -1436,7 +1442,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       plant: emp.pltId ? String(emp.pltId) : "",
       department: emp.deptId ? String(emp.deptId) : "",
       workLocation: emp.wloc || emp.wLoc || emp.workLocation || "",
-      reportingManager: emp.repManId ? String(emp.repManId) : "",
+      reportingManager: isRepManValid ? String(emp.repManId) : "",
       username: emp.email || emp.username || "",
       password: "********",
       confirmPassword: "********",
@@ -1456,6 +1462,9 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
 
   const handleView = (emp) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
+    const foundMgr = employees.find(e => String(e.empId || e.id) === String(emp.repManId));
+    const isRepManValid = foundMgr && (foundMgr.status === "Active" || foundMgr.sts === true);
+
     setForm({
       employeeCode: emp.empCode || emp.employeeCode || "",
       firstName: emp.firstName || "",
@@ -1480,7 +1489,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       plant: emp.pltId ? String(emp.pltId) : "",
       department: emp.deptId ? String(emp.deptId) : "",
       workLocation: emp.wloc || emp.wLoc || emp.workLocation || "",
-      reportingManager: emp.repManId ? String(emp.repManId) : "",
+      reportingManager: isRepManValid ? String(emp.repManId) : "",
       username: emp.email || emp.username || "",
       password: "********",
       confirmPassword: "********",
@@ -1501,6 +1510,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
   const generateDeleteWarningMessage = (empId, isExternal = false) => {
     const userAssignments = assignments.filter(a => String(a.empId) === String(empId) || (isExternal && String(a.extEmpId || a.ext_emp_id) === String(empId)));
     const userLiveTasks = liveTasks.filter(t => String(t.empId) === String(empId) || (isExternal && String(t.extEmpId || t.ext_emp_id) === String(empId)));
+    const subordinates = !isExternal ? employees.filter(e => String(e.repManId) === String(empId)) : [];
     
     const taskItems = [
       ...userAssignments.map(t => ({ title: t.taskNm || t.tasknm || t.taskCd || "Unnamed Task", type: "Individual Task" })),
@@ -1513,9 +1523,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
           <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#16a34a", marginBottom: "8px", borderBottom: "1px solid #bbf7d0", paddingBottom: "6px" }}>
             ✅ Safe to Delete
           </h4>
-          <p style={{ fontSize: "13px", color: "#334155", marginBottom: "12px" }}>
+          <p style={{ fontSize: "13px", color: "#334155", marginBottom: "8px" }}>
             This employee is currently assigned to <strong>0</strong> active tasks.
           </p>
+          {subordinates.length > 0 && (
+            <div style={{ margin: "8px 0", padding: "8px 10px", backgroundColor: "#fef3c7", borderRadius: "6px", border: "1px solid #fde68a", fontSize: "12px", color: "#92400e" }}>
+              👥 <strong>Reporting Note:</strong> {subordinates.length} employee(s) report to this person ({subordinates.map(s => s.employeeName || s.firstName).slice(0, 3).join(", ")}{subordinates.length > 3 ? ` +${subordinates.length - 3} more` : ""}). Their reporting manager column will automatically show <strong>NA</strong>.
+            </div>
+          )}
           <p style={{ fontSize: "13px", color: "#0f172a", marginTop: "12px", fontWeight: "600" }}>
             Are you sure you want to proceed with deletion? This action cannot be undone.
           </p>
@@ -1528,9 +1543,14 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
         <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#dc2626", marginBottom: "8px", borderBottom: "1px solid #fecaca", paddingBottom: "6px" }}>
           ⚠️ Warning: Employee has active assignments!
         </h4>
-        <p style={{ fontSize: "13px", color: "#334155", marginBottom: "12px" }}>
+        <p style={{ fontSize: "13px", color: "#334155", marginBottom: "8px" }}>
           This employee is currently assigned to <strong>{taskItems.length}</strong> tasks. Deleting them may cause these tasks to become unassigned.
         </p>
+        {subordinates.length > 0 && (
+          <div style={{ margin: "8px 0", padding: "8px 10px", backgroundColor: "#fef3c7", borderRadius: "6px", border: "1px solid #fde68a", fontSize: "12px", color: "#92400e" }}>
+            👥 <strong>Reporting Note:</strong> {subordinates.length} employee(s) report to this person ({subordinates.map(s => s.employeeName || s.firstName).slice(0, 3).join(", ")}{subordinates.length > 3 ? ` +${subordinates.length - 3} more` : ""}). Their reporting manager column will automatically show <strong>NA</strong>.
+          </div>
+        )}
         <div style={{ display: "flex", flexDirection: "column", gap: "6px", maxHeight: "200px", overflowY: "auto", paddingRight: "4px", background: "#f8fafc", padding: "8px", borderRadius: "6px", border: "1px solid #e2e8f0" }}>
           {taskItems.map((item, idx) => (
             <div key={idx} style={{ display: "flex", justifyContent: "space-between", fontSize: "12px", borderBottom: idx === taskItems.length - 1 ? "none" : "1px solid #e2e8f0", paddingBottom: "4px" }}>
@@ -1745,7 +1765,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
       isTop,
       top: rect.top,
       bottom: rect.bottom,
-      right: window.innerWidth - rect.right
+      right: Math.max(10, window.innerWidth - rect.right)
     });
     setActiveActionsMenu((prev) => (prev === id ? null : id));
   };
@@ -2005,7 +2025,13 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                       </div>
                       <div style={{ display: 'flex', flexDirection: 'column' }}>
                         <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b', marginBottom: '4px' }}>Reporting Manager</span>
-                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{employees.find(emp => String(emp.empId || emp.id) === String(form.reportingManager))?.employeeName || employees.find(emp => String(emp.empId || emp.id) === String(form.reportingManager))?.firstName || '-'}</span>
+                        <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>
+                          {(() => {
+                            const mgr = employees.find(emp => String(emp.empId || emp.id) === String(form.reportingManager));
+                            const isMgrActive = mgr && (mgr.status === "Active" || mgr.sts === true);
+                            return (isMgrActive && (mgr.employeeName || `${mgr.firstName} ${mgr.lastName}`.trim())) || 'NA';
+                          })()}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -2382,7 +2408,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                             value={form.reportingManager}
                             onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
                             placeholder="Select reporting manager"
-                            options={employees.filter(emp => String(emp.empId || emp.id) !== String(editId)).map(emp => ({ value: emp.empId || emp.id, label: emp.employeeName || `${emp.firstName} ${emp.lastName}` }))}
+                            options={employees.filter(emp => String(emp.empId || emp.id) !== String(editId) && (emp.status === "Active" || emp.sts === true)).map(emp => ({ value: emp.empId || emp.id, label: emp.employeeName || `${emp.firstName} ${emp.lastName}` }))}
                           />
                         </div>
                       </div>
@@ -2684,11 +2710,11 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
             /* ================= VIEW: EMPLOYEE LIST ================= */
             <div className="emp-content" style={{ maxWidth: '1280px', margin: '0 auto' }}>
               <div className="emp-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 24px', borderBottom: '1px solid #e2e8f0' }}>
+                <div className="emp-list-header master-list-header">
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>Employee List</h2>
                     <p style={{ color: '#64748b', margin: '4px 0 0 0', fontSize: '14px' }}>View and manage all employees</p>
-                    <div style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
+                    <div className="emp-tabs-header" style={{ display: 'flex', gap: '16px', marginTop: '12px' }}>
                       <button 
                         onClick={() => { setActiveEmployeeTab("INTERNAL"); setCurrentPage(1); }}
                         style={{ padding: '6px 12px', border: 'none', background: activeEmployeeTab === "INTERNAL" ? '#2563eb' : 'transparent', color: activeEmployeeTab === "INTERNAL" ? 'white' : '#64748b', borderRadius: '4px', cursor: 'pointer', fontWeight: '600', fontSize: '13px' }}
@@ -2703,19 +2729,19 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                       </button>
                     </div>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px', alignSelf: 'flex-start' }}>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <div className="emp-list-actions master-list-actions">
+                    <div className="emp-search-box master-search-box">
+                      <Search size={16} className="master-search-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                       <input
                         type="text"
                         placeholder={activeEmployeeTab === "INTERNAL" ? "Search employees..." : "Search external..."}
                         value={tableSearchQuery}
                         onChange={(e) => setTableSearchQuery(e.target.value)}
-                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                        className="emp-search-input master-search-input"
                       />
                     </div>
                     {screenPerm.canCreate && (
-                      <button type="button" className="emp-btn-add-new" onClick={() => { 
+                      <button type="button" className="emp-btn-add-new master-btn-add-new" onClick={() => { 
                           handleReset(); 
                           setIsEditing(false); 
                           if (activeEmployeeTab === "EXTERNAL") {
@@ -2734,34 +2760,34 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 {activeEmployeeTab === "INTERNAL" ? (
                 <>
                 <div className="emp-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="emp-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px' }}>
+                  <table className="emp-list-table employee-master-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Code</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Name</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gender</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date of Birth</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mobile</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Blood Group</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Address</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Joining Date</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employment Type</th>
+                        <th className="emp-col-hide-mobile" style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
+                        <th className="col-emp-code" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Code</th>
+                        <th className="col-emp-name" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employee Name</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Gender</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Date of Birth</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mobile</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Blood Group</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Address</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Joining Date</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Designation</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Employment Type</th>
                         {/* REPLACED Company & Plant columns with a single Working For column */}
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Working For</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Work Location</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Reporting Manager</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
-                        <th style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Working For</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Department</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Work Location</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Reporting Manager</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
+                        <th className="col-emp-actions" style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="19" className="col-emp-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                               <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
                               Loading employees...
@@ -2769,41 +2795,41 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                           </td>
                         </tr>
                       ) : currentEmployees.length === 0 ? (
-                        <tr><td colSpan="19" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No employee records found. Add a new employee using the button above.</td></tr>
+                        <tr><td colSpan="19" className="col-emp-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>No employee records found. Add a new employee using the button above.</td></tr>
                       ) : (
                         currentEmployees.map((emp, index) => (
                           <tr key={emp.id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{emp.employeeCode}</span></td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="S.NO" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{indexOfFirstRecord + index + 1}</td>
+                            <td data-label="EMPLOYEE CODE" className="col-emp-code" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>{emp.employeeCode}</span></td>
+                            <td data-label="EMPLOYEE NAME" className="col-emp-name" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
                               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                                 {emp.photoPath ? (<img src={emp.photoPath} alt="" style={{ width: '28px', height: '28px', borderRadius: '50%', objectFit: 'cover', border: '1px solid #e2e8f0' }} />) : (<div style={{ width: '28px', height: '28px', borderRadius: '50%', background: '#e2e8f0', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '12px', fontWeight: '600', color: '#475569' }}>{emp.employeeName ? emp.employeeName.charAt(0) : ''}</div>)}
                                 <strong>{emp.employeeName}</strong>
                               </div>
                             </td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.gender}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.dateOfBirth ? emp.dateOfBirth.split('T')[0].split('-').reverse().join('/') : '-'}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.email}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.mobile}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.bloodGroup || "-"}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={emp.address}>{emp.address}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.joiningDate ? emp.joiningDate.split('T')[0].split('-').reverse().join('/') : '-'}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.designation}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.employmentType || "N/A"}</td>
+                            <td data-label="GENDER" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.gender}</td>
+                            <td data-label="DATE OF BIRTH" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.dateOfBirth ? emp.dateOfBirth.split('T')[0].split('-').reverse().join('/') : '-'}</td>
+                            <td data-label="EMAIL" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.email}</td>
+                            <td data-label="MOBILE" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.mobile}</td>
+                            <td data-label="BLOOD GROUP" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.bloodGroup || "-"}</td>
+                            <td data-label="ADDRESS" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={emp.address}>{emp.address}</td>
+                            <td data-label="JOINING DATE" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.joiningDate ? emp.joiningDate.split('T')[0].split('-').reverse().join('/') : '-'}</td>
+                            <td data-label="DESIGNATION" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.designation}</td>
+                            <td data-label="EMPLOYMENT TYPE" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.employmentType || "N/A"}</td>
                             {/* Working For column: show company if workingFor === "company", else show plant */}
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="WORKING FOR" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
                               {emp.workingFor === "company" ? emp.company : emp.plant}
                               <span style={{ fontSize: '11px', color: '#94a3b8', marginLeft: '6px' }}>
                                 ({emp.workingFor === "company" ? "Company" : "Plant"})
                               </span>
                             </td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.department}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.workLocation}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.reportingManager}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
+                            <td data-label="DEPARTMENT" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.department}</td>
+                            <td data-label="WORK LOCATION" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.workLocation}</td>
+                            <td data-label="REPORTING MANAGER" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>{emp.reportingManager || "NA"}</td>
+                            <td data-label="STATUS" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px', color: '#334155' }}>
                               <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: emp.status === 'Active' ? '#dcfce7' : '#fee2e2', color: emp.status === 'Active' ? '#166534' : '#991b1b' }}>{emp.status}</span>
                             </td>
-                            <td style={{ position: "relative", padding: '14px 16px', textAlign: 'center' }}>
+                            <td data-label="ACTIONS" className="col-emp-actions" style={{ position: "relative", padding: '14px 16px', textAlign: 'center' }}>
                               <button id={`action-btn-${emp.id}`} type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={(e) => toggleDropdown(e, emp.id)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                 <MoreVertical size={18} />
                               </button>
@@ -2829,7 +2855,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                   </table>
                 </div>
                 {totalPages > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
+                  <div className="emp-pagination-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
                     <span style={{ fontSize: '14px', color: '#64748b' }}>
                       Showing {indexOfFirstRecord + 1} to {Math.min(indexOfLastRecord, filteredEmployees.length)} of {filteredEmployees.length} entries
                     </span>
@@ -2860,37 +2886,37 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                 ) : (
                 <>
                 <div className="emp-table-container" style={{ overflowX: 'auto' }}>
-                  <table className="emp-list-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '1000px' }}>
+                  <table className="emp-list-table employee-master-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ext Code</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Company</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mobile</th>
-                        <th style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
-                        <th style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
+                        <th className="emp-col-hide-mobile" style={{ width: "50px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>S.NO</th>
+                        <th className="col-emp-code" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Ext Code</th>
+                        <th className="col-emp-name" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Name</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Company</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Email</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Mobile</th>
+                        <th className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Status</th>
+                        <th className="col-emp-actions" style={{ textAlign: "center", width: "100px", padding: '14px 16px', fontSize: '11px', color: '#64748b', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>ACTIONS</th>
                       </tr>
                     </thead>
                     <tbody>
                       {loading ? (
-                        <tr><td colSpan="8" style={{ textAlign: "center", padding: "60px 20px" }}>Loading...</td></tr>
+                        <tr><td colSpan="8" className="col-emp-empty" style={{ textAlign: "center", padding: "60px 20px" }}>Loading...</td></tr>
                       ) : currentExtEmployees.length === 0 ? (
-                        <tr><td colSpan="8" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b' }}>No external employees found.</td></tr>
+                        <tr><td colSpan="8" className="col-emp-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b' }}>No external employees found.</td></tr>
                       ) : (
                         currentExtEmployees.map((emp, index) => (
                           <tr key={emp.extEmpId || index} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>{indexOfFirstRecord + index + 1}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', fontSize: '13px' }}>{emp.extEmpCode || "-"}</span></td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px' }}><strong>{emp.extEmpNm}</strong></td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.companyNm}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.email || "-"}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.mobNum || "-"}</td>
-                            <td style={{ padding: '14px 16px', fontSize: '14px' }}>
+                            <td data-label="S.NO" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px' }}>{indexOfFirstRecord + index + 1}</td>
+                            <td data-label="EMPLOYEE CODE" className="col-emp-code" style={{ padding: '14px 16px', fontSize: '14px' }}><span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', fontSize: '13px' }}>{emp.extEmpCode || "-"}</span></td>
+                            <td data-label="EMPLOYEE NAME" className="col-emp-name" style={{ padding: '14px 16px', fontSize: '14px' }}><strong>{emp.extEmpNm}</strong></td>
+                            <td data-label="COMPANY" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.companyNm}</td>
+                            <td data-label="EMAIL" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.email || "-"}</td>
+                            <td data-label="MOBILE" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px' }}>{emp.mobNum || "-"}</td>
+                            <td data-label="STATUS" className="emp-col-hide-mobile" style={{ padding: '14px 16px', fontSize: '14px' }}>
                               <span style={{ padding: '4px 12px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', display: 'inline-block', backgroundColor: emp.sts ? '#dcfce7' : '#fee2e2', color: emp.sts ? '#166534' : '#991b1b' }}>{emp.sts ? "Active" : "Inactive"}</span>
                             </td>
-                            <td style={{ padding: '14px 16px', textAlign: 'center', position: 'relative' }}>
+                            <td data-label="ACTIONS" className="col-emp-actions" style={{ padding: '14px 16px', textAlign: 'center', position: 'relative' }}>
                               <button id={`action-btn-ext-${emp.extEmpId || index}`} type="button" style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }} onClick={(e) => toggleDropdown(e, `ext-${emp.extEmpId || index}`)} onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'} onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}>
                                 <MoreVertical size={18} />
                               </button>
@@ -2918,7 +2944,7 @@ const EmployeeCreation = ({ userRole, onLogout }) => {
                   </table>
                 </div>
                 {totalExtPages > 0 && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
+                  <div className="emp-pagination-bar" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 24px', borderTop: '1px solid #e2e8f0', backgroundColor: '#fafbfc' }}>
                     <span style={{ fontSize: '14px', color: '#64748b' }}>
                       Showing {indexOfFirstRecord + 1} to {Math.min(indexOfLastRecord, filteredExternalEmployees.length)} of {filteredExternalEmployees.length} entries
                     </span>

@@ -731,7 +731,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
           isTop,
           top: rect.top,
           bottom: rect.bottom,
-          right: window.innerWidth - rect.right
+          right: Math.max(10, window.innerWidth - rect.right)
         });
       }
       setActiveDropdown(targetId);
@@ -1021,7 +1021,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           <p style={{ fontSize: '12px', color: '#64748b', marginBottom: '16px', marginTop: 0 }}>
                             Click on any card below to view its corresponding list details.
                           </p>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, minmax(0, 1fr))', gap: '12px' }}>
+                          <div className="pc-overview-grid">
                             {/* Card 1: Lands */}
                             <div 
                               onClick={() => setActiveOverviewTab(activeOverviewTab === 'lands' ? null : 'lands')}
@@ -1160,6 +1160,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                       <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>S.NO</th>
                                       <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Land Code</th>
                                       <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Owner Name(s)</th>
+                                      <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Land Type</th>
                                       <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Area (Acres)</th>
                                       <th style={{ padding: '10px 12px', color: '#64748b', fontWeight: '700' }}>Mobile No</th>
                                     </tr>
@@ -1193,17 +1194,48 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                 <tbody>
                                   {activeOverviewTab === 'lands' && (
                                     getPlantLands(editingId).length > 0 ? (
-                                      getPlantLands(editingId).map((l, idx) => (
-                                        <tr key={l.lndId || l.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{idx + 1}</td>
-                                          <td style={{ padding: '10px 12px', fontWeight: '600', color: '#16a34a' }}>{l.landCd || l.lndCd || l.landCode || 'N/A'}</td>
-                                          <td style={{ padding: '10px 12px', color: '#0f172a' }}>{Array.isArray(l.landOwners || l.lndOwnrNm || l.landOwnerName) ? (l.landOwners || l.lndOwnrNm || l.landOwnerName).join(', ') : (l.landOwners || l.lndOwnrNm || l.landOwnerName || 'N/A')}</td>
-                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{l.landSize || l.lndAr || l.landArea ? `${l.landSize || l.lndAr || l.landArea} Acres` : 'N/A'}</td>
-                                          <td style={{ padding: '10px 12px', color: '#475569' }}>{l.mobNum || l.mobNo || l.mobileNo || 'N/A'}</td>
-                                        </tr>
-                                      ))
+                                      getPlantLands(editingId).map((l, idx) => {
+                                        const rawType = l.landType || (l.ownershipType && l.ownershipType !== 'null' ? l.ownershipType : null) || l.lndTyp || l.ownership_type;
+                                        let displayType = rawType;
+                                        if (!displayType || displayType === 'null') {
+                                          const rawAlloted = l.allotedFor || l.AllotedFor || l.alcTyp;
+                                          if (rawAlloted && rawAlloted !== 'null') {
+                                            if (rawAlloted === 'AGL' || rawAlloted === 'Agriculture Land') displayType = 'Agriculture Land';
+                                            else if (rawAlloted === 'PLT' || rawAlloted === 'Plant') displayType = 'Plant';
+                                            else displayType = rawAlloted;
+                                          }
+                                        }
+                                        if (!displayType || displayType === 'null') displayType = 'N/A';
+
+                                        const isOwner = displayType === 'Owner';
+                                        const isLease = displayType === 'Lease';
+
+                                        return (
+                                          <tr key={l.lndId || l.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                            <td style={{ padding: '10px 12px', color: '#475569' }}>{idx + 1}</td>
+                                            <td style={{ padding: '10px 12px', fontWeight: '600', color: '#16a34a' }}>{l.landCd || l.lndCd || l.landCode || 'N/A'}</td>
+                                            <td style={{ padding: '10px 12px', color: '#0f172a' }}>{Array.isArray(l.landOwners || l.lndOwnrNm || l.landOwnerName) ? (l.landOwners || l.lndOwnrNm || l.landOwnerName).join(', ') : (l.landOwners || l.lndOwnrNm || l.landOwnerName || 'N/A')}</td>
+                                            <td style={{ padding: '10px 12px' }}>
+                                              <span style={{
+                                                backgroundColor: isOwner ? '#f0fdf4' : (isLease ? '#eff6ff' : '#f8fafc'),
+                                                color: isOwner ? '#166534' : (isLease ? '#1e40af' : '#475569'),
+                                                padding: '3px 8px',
+                                                borderRadius: '4px',
+                                                fontSize: '12px',
+                                                fontWeight: '600',
+                                                border: isOwner ? '1px solid #bbf7d0' : (isLease ? '1px solid #bfdbfe' : '1px solid #e2e8f0'),
+                                                display: 'inline-block'
+                                              }}>
+                                                {displayType}
+                                              </span>
+                                            </td>
+                                            <td style={{ padding: '10px 12px', color: '#475569' }}>{l.landSize || l.lndAr || l.landArea ? `${l.landSize || l.lndAr || l.landArea} Acres` : 'N/A'}</td>
+                                            <td style={{ padding: '10px 12px', color: '#475569' }}>{l.mobNum || l.mobNo || l.mobileNo || 'N/A'}</td>
+                                          </tr>
+                                        );
+                                      })
                                     ) : (
-                                      <tr><td colSpan={5} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No lands found for this plant.</td></tr>
+                                      <tr><td colSpan={6} style={{ textAlign: 'center', padding: '20px', color: '#64748b' }}>No lands found for this plant.</td></tr>
                                     )
                                   )}
                                   {activeOverviewTab === 'employees' && (
@@ -1259,39 +1291,39 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           Plant Profile Details
                         </h3>
 
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0 40px' }}>
+                        <div className="pc-profile-grid">
                           
                           {/* Left Column Fields */}
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Plant Code :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.plantCode || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Company Reference :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{companies.find(c => String(c.coyId) === String(form.company))?.coyNm || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Capacity (TPD) :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.capacity || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Address :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.addressLine1 || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>State :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{states.find(s => String(s.stId) === String(form.state))?.stNm || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>District :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.district || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Latitude :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.latitude || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Plant Image :</span>
                               <div>
                                  {form.logo ? (
@@ -1305,35 +1337,35 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           
                           {/* Right Column Fields */}
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Plant Name :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.plantName || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Email :</span>
                               <span style={{ fontSize: '14px', color: '#2563eb', fontWeight: '500' }}>{form.email || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0', alignItems: 'center' }}>
+                            <div className="pc-profile-row" style={{ alignItems: 'center' }}>
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Status :</span>
                               <span style={{ padding: '2px 10px', borderRadius: '12px', fontSize: '12px', fontWeight: '600', width: 'fit-content', backgroundColor: form.status === 'Active' ? '#dcfce7' : '#fee2e2', color: form.status === 'Active' ? '#166534' : '#991b1b' }}>{form.status}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Zone :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.zone || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Pincode :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.pincode || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Working Days Per Week :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.workingDays ? `${form.workingDays} Days` : '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Longitude :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.longitude || '-'}</span>
                             </div>
-                            <div style={{ display: 'grid', gridTemplateColumns: '160px 1fr', padding: '12px 0', borderBottom: '1px dashed #e2e8f0' }}>
+                            <div className="pc-profile-row">
                               <span style={{ fontSize: '13px', fontWeight: '600', color: '#64748b' }}>Remarks :</span>
                               <span style={{ fontSize: '14px', color: '#0f172a', fontWeight: '500' }}>{form.Remarks || '-'}</span>
                             </div>
@@ -1599,13 +1631,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
               <div className="pc-table-panel" style={{ backgroundColor: 'white', borderRadius: '8px', border: '1px solid #e2e8f0', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
 
                 {/* Header with Title and Add New Button - Inside Card */}
-                <div style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '20px 24px',
-                  borderBottom: '1px solid #e2e8f0'
-                }}>
+                <div className="pc-list-header master-list-header">
                   <div>
                     <h2 style={{ fontSize: '18px', fontWeight: '700', color: '#0f172a', margin: 0 }}>
                       Plant List
@@ -1614,9 +1640,9 @@ const PlantCreation = ({ userRole, onLogout }) => {
                       View and manage all registered plant details
                     </p>
                   </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
-                    <div style={{ position: 'relative' }}>
-                      <Search size={16} style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                  <div className="pc-list-actions master-list-actions">
+                    <div className="pc-search-box master-search-box">
+                      <Search size={16} className="master-search-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
                       <input
                         type="text"
                         placeholder="Search plants..."
@@ -1625,13 +1651,13 @@ const PlantCreation = ({ userRole, onLogout }) => {
                           setTableSearchQuery(e.target.value);
                           setCurrentPage(1);
                         }}
-                        style={{ padding: '8px 12px 8px 36px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', width: '250px' }}
+                        className="pc-search-input master-search-input"
                       />
                     </div>
                     {screenPerm.canCreate && (
                       <button
                         type="button"
-                        className="pc-btn-add-new"
+                        className="pc-btn-add-new master-btn-add-new"
                         onClick={() => {
                           handleResetForm();
                           setIsEditing(false);
@@ -1646,33 +1672,33 @@ const PlantCreation = ({ userRole, onLogout }) => {
 
                 {/* Data Table Section Inside the Card */}
                 <div className="pc-table-container" style={{ overflowX: 'auto', paddingBottom: '20px' }}>
-                  <table className="pc-list-table text-nowrap" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left', minWidth: '2200px', whiteSpace: 'nowrap' }}>
+                  <table className="pc-list-table plant-master-table" style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
                     <thead style={{ backgroundColor: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
                       <tr>
-                        <th style={{ ...thStyle, width: "50px" }}>S.NO</th>
-                        <th style={thStyle}>LOGO</th>
-                        <th style={thStyle}>
+                        <th className="plant-col-hide-mobile" style={{ ...thStyle, width: "50px" }}>S.NO</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>LOGO</th>
+                        <th className="col-plant-code" style={thStyle}>
                           PLANT CODE
                         </th>
-                        <th style={thStyle}>
+                        <th className="col-plant-name" style={thStyle}>
                           PLANT NAME
                         </th>
-                        <th style={thStyle}>
+                        <th className="plant-col-hide-mobile" style={thStyle}>
                           COMPANY
                         </th>
-                        <th style={thStyle}>EMAIL</th>
-                        <th style={thStyle}>CAPACITY (TPD)</th>
-                        <th style={thStyle}>ADDRESS</th>
-                        <th style={thStyle}>STATE</th>
-                        <th style={thStyle}>ZONE</th>
-                        <th style={thStyle}>DISTRICT</th>
-                        <th style={thStyle}>PINCODE</th>
-                        <th style={thStyle}>LATITUDE</th>
-                        <th style={thStyle}>LONGITUDE</th>
-                        <th style={thStyle}>WORKING DAYS</th>
-                        <th style={thStyle}>REMARKS</th>
-                        <th style={thStyle}>STATUS</th>
-                        <th style={{ ...thStyle, textAlign: "center", width: "100px" }}>
+                        <th className="plant-col-hide-mobile" style={thStyle}>EMAIL</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>CAPACITY (TPD)</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>ADDRESS</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>STATE</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>ZONE</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>DISTRICT</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>PINCODE</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>LATITUDE</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>LONGITUDE</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>WORKING DAYS</th>
+                        <th className="plant-col-hide-mobile" style={{ ...thStyle, minWidth: '180px', maxWidth: '240px' }}>REMARKS</th>
+                        <th className="plant-col-hide-mobile" style={thStyle}>STATUS</th>
+                        <th className="col-plant-actions" style={{ ...thStyle, textAlign: "center", width: "100px" }}>
                           ACTIONS
                         </th>
                       </tr>
@@ -1680,7 +1706,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                     <tbody>
                       {loading ? (
                         <tr>
-                          <td colSpan="8" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="18" className="col-plant-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
                               <span style={{ display: 'inline-block', width: '16px', height: '16px', border: '2px solid #cbd5e1', borderTopColor: '#2563eb', borderRadius: '50%', animation: 'spin 0.8s linear infinite' }}></span>
                               Loading plants...
@@ -1690,8 +1716,8 @@ const PlantCreation = ({ userRole, onLogout }) => {
                       ) : currentItems.length > 0 ? (
                         currentItems.map((plant, index) => (
                           <tr key={plant.pltId} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                            <td data-label="#" style={tdStyle}>{indexOfFirstRecord + index + 1}</td>
-                            <td data-label="LOGO" style={{ ...tdStyle, padding: '14px 20px' }}>
+                            <td data-label="S.NO" className="plant-col-hide-mobile" style={tdStyle}>{indexOfFirstRecord + index + 1}</td>
+                            <td data-label="LOGO" className="plant-col-hide-mobile" style={{ ...tdStyle, padding: '14px 20px' }}>
                               {plant.logo ? (
                                 <img src={plant.logo} alt="Logo" style={{ width: '32px', height: '32px', borderRadius: '4px', objectFit: 'cover', border: '1px solid #e2e8f0' }} />
                               ) : (
@@ -1700,29 +1726,57 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                 </div>
                               )}
                             </td>
-                            <td data-label="PLANT CODE" style={tdStyle}>
+                            <td data-label="PLANT CODE" className="col-plant-code" style={tdStyle}>
                               <span style={{ backgroundColor: '#f1f5f9', padding: '4px 10px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '13px' }}>
                                 {plant.pltCd}
                               </span>
                             </td>
-                            <td data-label="PLANT NAME" style={tdStyle}><strong>{plant.pltNm}</strong></td>
-                            <td data-label="COMPANY" style={tdStyle}>
+                            <td data-label="PLANT NAME" className="col-plant-name" style={tdStyle}><strong>{plant.pltNm}</strong></td>
+                            <td data-label="COMPANY" className="plant-col-hide-mobile" style={tdStyle}>
                               {companies.find(c => Number(c.coyId) === Number(plant.coyId))?.coyNm || "N/A"}
                             </td>
-                            <td data-label="EMAIL" style={tdStyle}>{plant.email}</td>
-                            <td data-label="CAPACITY (TPD)" style={tdStyle}>{plant.cap}</td>
-                            <td data-label="ADDRESS" style={tdStyle}>{plant.addr}</td>
-                            <td data-label="STATE" style={tdStyle}>
+                            <td data-label="EMAIL" className="plant-col-hide-mobile" style={tdStyle}>{plant.email}</td>
+                            <td data-label="CAPACITY (TPD)" className="plant-col-hide-mobile" style={tdStyle}>{plant.cap}</td>
+                            <td data-label="ADDRESS" className="plant-col-hide-mobile" style={tdStyle}>{plant.addr}</td>
+                            <td data-label="STATE" className="plant-col-hide-mobile" style={tdStyle}>
                               {states.find(s => Number(s.stId) === Number(plant.stId))?.stNm || "N/A"}
                             </td>
-                            <td data-label="ZONE" style={tdStyle}>{plant.znNm || "N/A"}</td>
-                            <td data-label="DISTRICT" style={tdStyle}>{plant.dist}</td>
-                            <td data-label="PINCODE" style={tdStyle}>{plant.pin}</td>
-                            <td data-label="LATITUDE" style={tdStyle}>{plant.lat || "N/A"}</td>
-                            <td data-label="LONGITUDE" style={tdStyle}>{plant.longt || "N/A"}</td>
-                            <td data-label="WORKING DAYS" style={tdStyle}>{plant.wrkDaysPerWk ? `${plant.wrkDaysPerWk} days per week` : "N/A"}</td>
-                            <td data-label="REMARKS" style={tdStyle}>{plant.addlRem || "N/A"}</td>
-                            <td data-label="STATUS" style={tdStyle}>
+                            <td data-label="ZONE" className="plant-col-hide-mobile" style={tdStyle}>{plant.znNm || "N/A"}</td>
+                            <td data-label="DISTRICT" className="plant-col-hide-mobile" style={tdStyle}>{plant.dist}</td>
+                            <td data-label="PINCODE" className="plant-col-hide-mobile" style={tdStyle}>{plant.pin}</td>
+                            <td data-label="LATITUDE" className="plant-col-hide-mobile" style={tdStyle}>{plant.lat || "N/A"}</td>
+                            <td data-label="LONGITUDE" className="plant-col-hide-mobile" style={tdStyle}>{plant.longt || "N/A"}</td>
+                            <td data-label="WORKING DAYS" className="plant-col-hide-mobile" style={tdStyle}>{plant.wrkDaysPerWk ? `${plant.wrkDaysPerWk} days per week` : "N/A"}</td>
+                            <td
+                              data-label="REMARKS"
+                              className="plant-col-hide-mobile"
+                              style={{
+                                ...tdStyle,
+                                minWidth: '180px',
+                                maxWidth: '240px',
+                                whiteSpace: 'normal',
+                                wordBreak: 'break-word',
+                                overflowWrap: 'anywhere',
+                                verticalAlign: 'middle'
+                              }}
+                              title={plant.addlRem && plant.addlRem !== "null" ? plant.addlRem : ""}
+                            >
+                              <div
+                                style={{
+                                  display: '-webkit-box',
+                                  WebkitLineClamp: 2,
+                                  WebkitBoxOrient: 'vertical',
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  lineHeight: '1.45',
+                                  maxHeight: '42px',
+                                  color: plant.addlRem && plant.addlRem !== "null" ? '#334155' : '#94a3b8'
+                                }}
+                              >
+                                {plant.addlRem && plant.addlRem !== "null" ? plant.addlRem : "N/A"}
+                              </div>
+                            </td>
+                            <td data-label="STATUS" className="plant-col-hide-mobile" style={tdStyle}>
                               <span
                                 style={{
                                   padding: '4px 12px',
@@ -1737,7 +1791,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                                 {plant.sts ? 'Active' : 'Inactive'}
                               </span>
                             </td>
-                            <td data-label="ACTIONS" style={{ ...tdStyle, position: "relative", textAlign: 'center' }}>
+                            <td data-label="ACTIONS" className="col-plant-actions" style={{ ...tdStyle, position: "relative", textAlign: 'center' }}>
                               <button
                                 id={`action-btn-${plant.pltId}`}
                                 type="button"
@@ -1797,7 +1851,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
                         ))
                       ) : (
                         <tr>
-                          <td colSpan="8" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
+                          <td colSpan="18" className="col-plant-empty" style={{ textAlign: "center", padding: "60px 20px", color: '#64748b', fontSize: '14px' }}>
                             No plant records found. Add a new plant using the button above.
                           </td>
                         </tr>
@@ -1808,7 +1862,7 @@ const PlantCreation = ({ userRole, onLogout }) => {
 
                 {/* Pagination Controls */}
                 {totalPages > 0 && (
-                  <div style={{
+                  <div className="pc-pagination-bar" style={{
                     display: 'flex',
                     justifyContent: 'space-between',
                     alignItems: 'center',

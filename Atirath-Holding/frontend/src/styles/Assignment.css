@@ -31,6 +31,49 @@
   margin: 0 0 4px 0;
 }
 
+/* List Header */
+.cit-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 20px;
+  gap: 16px;
+}
+.cit-list-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+.cit-search-input {
+  padding: 8px 12px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  min-width: 220px;
+  box-sizing: border-box;
+}
+.cit-search-input:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.1);
+}
+.cit-btn-create {
+  background: #2563eb;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.cit-btn-create:hover {
+  background: #1d4ed8;
+}
+
 /* Table */
 .cit-table-container {
   overflow-x: auto;
@@ -40,7 +83,11 @@
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
-  min-width: 900px;
+}
+@media (min-width: 769px) {
+  .cit-table {
+    min-width: 900px;
+  }
 }
 .cit-table thead {
   background-color: #f8fafc;
@@ -382,4 +429,461 @@
   border-top: 1px solid #e2e8f0;
   padding-top: 16px;
   margin-top: 20px;
+}
+
+/* ==========================================================================
+   Mobile & Tablet Responsiveness for Assignment / Individual Tasks
+   ========================================================================== */
+
+@media (max-width: 1024px) {
+  .cc-shell-container {
+    width: 100% !important;
+    max-width: 100vw !important;
+    overflow-x: hidden !important;
+    position: relative !important;
+  }
+
+  .cc-shell-container .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    width: 270px !important;
+    transform: translateX(-100%) !important;
+    transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+    z-index: 1100 !important;
+    display: flex !important;
+    box-shadow: none !important;
+  }
+
+  .cc-shell-container .sidebar.mobile-open {
+    transform: translateX(0) !important;
+    box-shadow: 8px 0 32px rgba(0, 0, 0, 0.18) !important;
+    z-index: 1100 !important;
+  }
+
+  .sidebar-overlay {
+    z-index: 1099 !important;
+  }
+
+  .cc-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    padding-top: 60px !important;
+    box-sizing: border-box !important;
+    min-height: 100vh !important;
+  }
+
+  body.sidebar-collapsed .cc-shell {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+@media (max-width: 768px) {
+  /* Main Container & Layout */
+  .cc-main {
+    padding: 12px 8px 24px 8px !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  .cit-container {
+    padding: 0 4px !important;
+    width: 100% !important;
+    max-width: 100vw !important;
+    box-sizing: border-box !important;
+    overflow-x: hidden !important;
+  }
+
+  /* Single Outer Card Panel - exactly like CompanyMaster (.cc-table-panel) */
+  .cit-card {
+    padding: 0 !important;
+    border-radius: 8px !important;
+    border: 1px solid #e2e8f0 !important;
+    overflow: hidden !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.05) !important;
+    margin-bottom: 16px !important;
+  }
+
+  /* Header inside Card */
+  .cit-list-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 16px 14px 10px 14px !important;
+    margin-bottom: 0 !important;
+  }
+
+  .cit-list-header-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    width: 100% !important;
+    gap: 10px !important;
+  }
+
+  .cit-search-box {
+    width: 100% !important;
+    max-width: 100% !important;
+    position: relative !important;
+  }
+
+  .cit-search-input {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: 42px !important;
+    font-size: 14px !important;
+    padding: 9px 12px 9px 36px !important;
+    border-radius: 6px !important;
+    border: 1px solid #cbd5e1 !important;
+    box-sizing: border-box !important;
+  }
+
+  .cit-btn-create {
+    width: 100% !important;
+    min-width: 100% !important;
+    justify-content: center !important;
+    align-items: center !important;
+    height: 42px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    background-color: #2563eb !important;
+    color: #ffffff !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+    box-shadow: none !important;
+  }
+
+  /* Tabs Switcher */
+  .cit-card div[style*="backgroundColor: #f1f5f9"],
+  .cit-card div[style*="background-color: rgb(241, 245, 249)"] {
+    margin: 4px 14px 14px 14px !important;
+    padding: 3px !important;
+    box-sizing: border-box !important;
+  }
+
+  /* Table Container - flush edge-to-edge inside card, no extra borders */
+  .cit-table-container {
+    overflow-x: hidden !important;
+    width: 100% !important;
+    display: block !important;
+    margin: 0 !important;
+    border: none !important;
+    border-radius: 0 !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+    padding: 0 !important;
+  }
+
+  /* Assignment Master Table: Mobile 3-Column View (Only Code, Name, Action) */
+  .assignment-master-table,
+  .cit-table.assignment-master-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table thead,
+  .cit-table.assignment-master-table thead {
+    display: table-header-group !important;
+  }
+
+  .assignment-master-table thead tr,
+  .cit-table.assignment-master-table thead tr {
+    display: table-row !important;
+    background: #f8fafc !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .assignment-master-table tbody,
+  .cit-table.assignment-master-table tbody {
+    display: table-row-group !important;
+  }
+
+  .assignment-master-table tbody tr,
+  .cit-table.assignment-master-table tbody tr {
+    display: table-row !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .assignment-master-table tbody tr:hover,
+  .cit-table.assignment-master-table tbody tr:hover {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide all columns except CODE, TITLE, and ACTION */
+  .assignment-master-table th,
+  .assignment-master-table td,
+  .cit-table.assignment-master-table th,
+  .cit-table.assignment-master-table td {
+    display: none !important;
+  }
+
+  .assignment-master-table th.asgn-col-hide-mobile,
+  .assignment-master-table td.asgn-col-hide-mobile,
+  .cit-table.assignment-master-table th.asgn-col-hide-mobile,
+  .cit-table.assignment-master-table td.asgn-col-hide-mobile {
+    display: none !important;
+  }
+
+  .assignment-master-table td::before,
+  .cit-table.assignment-master-table td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* 1. Task Code Column (32%) */
+  .assignment-master-table th.col-asgn-code,
+  .assignment-master-table td.col-asgn-code,
+  .cit-table.assignment-master-table th.col-asgn-code,
+  .cit-table.assignment-master-table td.col-asgn-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 6px 12px 10px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table th.col-asgn-code,
+  .cit-table.assignment-master-table th.col-asgn-code {
+    font-size: 11px !important;
+    letter-spacing: 0.5px !important;
+    white-space: nowrap !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+  }
+
+  .assignment-master-table td.col-asgn-code span,
+  .cit-table.assignment-master-table td.col-asgn-code span,
+  .col-asgn-code-badge {
+    display: inline-block !important;
+    font-size: 11px !important;
+    padding: 3px 6px !important;
+    font-weight: 600 !important;
+    background-color: #f1f5f9 !important;
+    color: #0f172a !important;
+    border: 1px solid #e2e8f0 !important;
+    border-radius: 4px !important;
+    white-space: nowrap !important;
+    box-sizing: border-box !important;
+    max-width: 100% !important;
+  }
+
+  /* 2. Task Name / Title Column (53%) */
+  .assignment-master-table th.col-asgn-name,
+  .assignment-master-table td.col-asgn-name,
+  .cit-table.assignment-master-table th.col-asgn-name,
+  .cit-table.assignment-master-table td.col-asgn-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    line-height: 1.35 !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table th.col-asgn-name,
+  .cit-table.assignment-master-table th.col-asgn-name {
+    font-size: 11px !important;
+    letter-spacing: 0.5px !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+  }
+
+  /* 3. Actions Column (15%) */
+  .assignment-master-table th.col-asgn-actions,
+  .assignment-master-table td.col-asgn-actions,
+  .cit-table.assignment-master-table th.col-asgn-actions,
+  .cit-table.assignment-master-table td.col-asgn-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+
+  .assignment-master-table th.col-asgn-actions,
+  .cit-table.assignment-master-table th.col-asgn-actions {
+    font-size: 11px !important;
+    letter-spacing: 0.5px !important;
+    padding: 12px 4px !important;
+    text-align: center !important;
+    color: #64748b !important;
+    font-weight: 700 !important;
+    text-transform: uppercase !important;
+  }
+
+  .assignment-master-table td.col-asgn-empty,
+  .cit-table.assignment-master-table td.col-asgn-empty {
+    display: table-cell !important;
+    text-align: center !important;
+    padding: 40px 16px !important;
+    width: 100% !important;
+  }
+
+  /* Form View Responsive */
+  .cc-content {
+    padding: 0 !important;
+    padding-bottom: 40px !important;
+    width: 100% !important;
+  }
+
+  .cc-form-card {
+    border-radius: 10px !important;
+  }
+
+  .cc-form-card > div[style*="justify-content: space-between"],
+  .cc-form-card > div[style*="justifyContent: space-between"],
+  .cc-form-card > div[style*="justifyContent: \"space-between\""] {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    padding: 14px 12px !important;
+  }
+
+  .cc-nav-view-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 38px !important;
+  }
+
+  .cc-form-card > div[style*="padding: 24px"],
+  .cc-form-card > div[style*="padding: \"24px\""] {
+    padding: 14px 12px !important;
+  }
+
+  .cc-panel {
+    margin-bottom: 20px !important;
+  }
+
+  .cc-form-layout-row.columns-4,
+  .cc-form-layout-row.columns-3,
+  .cc-form-layout-row.columns-2 {
+    grid-template-columns: 1fr !important;
+    gap: 12px !important;
+  }
+
+  .cc-form-layout-row {
+    margin-top: 12px !important;
+  }
+
+  .cc-field-item input,
+  .cc-field-item select,
+  .cc-field-item textarea {
+    font-size: 14px !important;
+    padding: 9px 10px !important;
+    box-sizing: border-box !important;
+  }
+
+  .cc-form-footer {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+    padding: 12px 14px !important;
+    width: 100% !important;
+  }
+
+  .cc-form-footer button,
+  .cc-form-footer .cc-btn {
+    width: 100% !important;
+    justify-content: center !important;
+    min-height: 42px !important;
+  }
+
+  /* Preview View */
+  .cc-form-card div[style*="gridTemplateColumns: 1fr 1fr"],
+  .cc-form-card div[style*="gridTemplateColumns: \"1fr 1fr\""],
+  .cc-form-card div[style*="grid-template-columns: 1fr 1fr"] {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+
+  .cc-form-card div[style*="display: flex; border-bottom: 1px solid"],
+  .cc-form-card div[style*="display: flex"][style*="borderBottom"],
+  .cc-form-card div[style*="display: flex"][style*="border-bottom"] {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+    gap: 2px !important;
+    padding: 6px 0 !important;
+  }
+
+  .cc-form-card div[style*="display: flex"][style*="borderBottom"] > span:first-child,
+  .cc-form-card div[style*="display: flex"][style*="border-bottom"] > span:first-child {
+    font-size: 12px !important;
+    color: #64748b !important;
+    width: 100% !important;
+  }
+
+  .cc-form-card div[style*="display: flex"][style*="borderBottom"] > span:last-child,
+  .cc-form-card div[style*="display: flex"][style*="border-bottom"] > span:last-child {
+    font-size: 13.5px !important;
+    color: #0f172a !important;
+    font-weight: 600 !important;
+  }
+
+  /* Modals */
+  .cit-modal-overlay {
+    padding: 10px !important;
+    z-index: 1200 !important;
+  }
+
+  .cit-modal-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    max-height: 94vh !important;
+    padding: 14px 12px !important;
+    border-radius: 10px !important;
+  }
+
+  .cit-modal-footer {
+    flex-direction: column-reverse !important;
+    gap: 8px !important;
+  }
+
+  .cit-modal-footer button {
+    width: 100% !important;
+    min-height: 40px !important;
+    justify-content: center !important;
+  }
 }

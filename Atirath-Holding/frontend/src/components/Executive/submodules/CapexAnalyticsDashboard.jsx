@@ -182,7 +182,7 @@ const CapexAnalyticsDashboard = () => {
 
       {/* If isModalOpen is true, render the Full-Page Form Card. Otherwise, render the List & KPIs */}
       {isModalOpen ? (
-        <div style={{
+        <div className="exec-form-card" style={{
           backgroundColor: "#ffffff",
           borderRadius: "14px",
           border: "1px solid #e2e8f0",
@@ -191,7 +191,7 @@ const CapexAnalyticsDashboard = () => {
           marginTop: "10px"
         }}>
           {/* Form Header with Back Button */}
-          <div style={{
+          <div className="exec-form-header" style={{
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -230,9 +230,9 @@ const CapexAnalyticsDashboard = () => {
             </button>
           </div>
 
-          <form onSubmit={handleSave} style={{ padding: "28px" }}>
+          <form onSubmit={handleSave} className="exec-form-body" style={{ padding: "28px" }}>
             {/* Section 1: Facility & Package Specifications */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -243,7 +243,7 @@ const CapexAnalyticsDashboard = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <Building size={18} color="#2563eb" /> 1. Facility & Package Specifications
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Telemetry ID *
@@ -290,7 +290,7 @@ const CapexAnalyticsDashboard = () => {
             </div>
 
             {/* Section 2: Financial Metrics & Progress */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -301,7 +301,7 @@ const CapexAnalyticsDashboard = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <DollarSign size={18} color="#059669" /> 2. CapEx Deployment & Milestone Progress
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Approved CapEx Budget (₹ Cr) *
@@ -360,7 +360,7 @@ const CapexAnalyticsDashboard = () => {
             </div>
 
             {/* Section 3: Technical Specs & Engineering Delivery */}
-            <div style={{
+            <div className="exec-form-section" style={{
               marginBottom: "28px",
               padding: "22px 24px",
               backgroundColor: "#ffffff",
@@ -371,7 +371,7 @@ const CapexAnalyticsDashboard = () => {
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
                 <Activity size={18} color="#d97706" /> 3. Technical Specs & Delivery Timeline
               </h4>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
+              <div className="exec-form-grid-inner" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
                     Digester Capacity Spec
@@ -426,7 +426,7 @@ const CapexAnalyticsDashboard = () => {
             </div>
 
             {/* Bottom Form Actions */}
-            <div style={{
+            <div className="exec-form-footer" style={{
               display: "flex",
               justifyContent: "flex-end",
               gap: "12px",
@@ -475,7 +475,7 @@ const CapexAnalyticsDashboard = () => {
       ) : (
         <>
           {/* KPI Stats */}
-      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", marginBottom: "24px" }}>
+      <div className="exec-fin-metrics" style={{ gridTemplateColumns: "repeat(4, 1fr)", marginBottom: "24px" }}>
         <div className="exec-fin-tile">
           <div className="exec-fin-tile-label">CAPEX DEPLOYED IN ENGINEERING</div>
           <div className="exec-fin-tile-val">₹{totalSpent.toFixed(1)} Cr</div>
@@ -522,19 +522,19 @@ const CapexAnalyticsDashboard = () => {
       </div>
 
       {/* Filter and Search Bar */}
-      <div style={{
+      <div className="exec-filter-bar" style={{
         background: "#ffffff",
         borderRadius: "12px",
         padding: "16px 20px",
         border: "1px solid #e2e8f0",
         marginBottom: "20px",
         display: "flex",
-        flexWrap: "wrap",
+        flexWrap: "nowrap",
         gap: "14px",
         alignItems: "center",
         justifyContent: "space-between"
       }}>
-        <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: "260px" }}>
+        <div className="exec-search-wrapper" style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1, minWidth: 0 }}>
           <div style={{
             display: "flex",
             alignItems: "center",
@@ -562,11 +562,12 @@ const CapexAnalyticsDashboard = () => {
           </div>
         </div>
 
-        <div style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}>
+        <div className="exec-filter-selects" style={{ display: "flex", gap: "10px", flexWrap: "nowrap", flexShrink: 0 }}>
           <select
             className="exec-select"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
+            style={{ minWidth: "160px" }}
           >
             <option value="All">All Health Statuses</option>
             <option value="Ahead of Schedule">Ahead of Schedule</option>
@@ -587,7 +588,7 @@ const CapexAnalyticsDashboard = () => {
           </span>
         </div>
 
-        <div style={{ overflowX: "auto" }}>
+        <div className="exec-table-responsive" style={{ overflowX: "auto" }}>
           <table className="exec-dept-table" style={{ margin: 0 }}>
             <thead>
               <tr>

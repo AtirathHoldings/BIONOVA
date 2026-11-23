@@ -4,7 +4,7 @@ import Sidebar from './Sidebar.jsx';
 import Header from './Header.jsx';
 import {
   Lock, Calendar as CalendarIcon, Flag, ChevronDown,
-  Edit3, Trash2, Plus, Info, UploadCloud, Save, Eye, X, Check, ChevronLeft
+  Edit3, Trash2, Plus, Info, UploadCloud, Save, Eye, X, Check, ChevronLeft, MoreVertical
 } from 'lucide-react';
 import '../styles/Assignment.css';
 import '../styles/CompanyMaster.css';
@@ -434,6 +434,49 @@ const Assignment = ({ userRole, onLogout }) => {
   const [activeTab, setActiveTab] = useState("checklist");
   const [goLiveTask, setGoLiveTask] = useState(null);
   const [assignmentView, setAssignmentView] = useState("my");
+  const [activeDropdown, setActiveDropdown] = useState(null);
+  const [dropdownPos, setDropdownPos] = useState({ isTop: false, top: 0, bottom: 0, right: 0, left: 0 });
+
+  const toggleDropdown = (e, id) => {
+    if (e && e.stopPropagation) e.stopPropagation();
+    const targetId = typeof e === 'object' && e !== null && !e.currentTarget ? id : (typeof e !== 'object' ? e : id);
+    const eventObj = typeof e === 'object' && e !== null && e.currentTarget ? e : null;
+
+    if (activeDropdown === targetId) {
+      setActiveDropdown(null);
+    } else {
+      if (eventObj) {
+        const btn = eventObj.currentTarget;
+        const rect = btn.getBoundingClientRect();
+        
+        const spaceBelow = window.innerHeight - rect.bottom;
+        const spaceAbove = rect.top;
+        const dropdownHeight = 160;
+        const isTop = spaceBelow < dropdownHeight && spaceAbove > spaceBelow;
+        
+        setDropdownPos({
+          isTop,
+          top: rect.top,
+          bottom: rect.bottom,
+          right: Math.max(10, window.innerWidth - rect.right),
+          left: rect.left
+        });
+      }
+      setActiveDropdown(targetId);
+    }
+  };
+
+  useEffect(() => {
+    const handleScrollOrResize = () => {
+      if (activeDropdown) setActiveDropdown(null);
+    };
+    window.addEventListener('resize', handleScrollOrResize);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    return () => {
+      window.removeEventListener('resize', handleScrollOrResize);
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+    };
+  }, [activeDropdown]);
 
   // Auto-open form if navigated with openForm state
   useEffect(() => {
@@ -1482,21 +1525,25 @@ const Assignment = ({ userRole, onLogout }) => {
             {/* --- VIEW: LIST --- */}
             {view === "list" && (
               <div className="cit-card">
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '20px' }}>
+                <div className="cit-list-header">
                   <div>
                     <h3 className="cit-card-title" style={{ margin: 0, marginBottom: '4px', fontSize: '18px', color: '#1e293b', fontWeight: 'bold' }}>Assignment List</h3>
                     <p style={{ margin: 0, color: '#64748b', fontSize: '14px' }}>View and manage all assigned task records</p>
                   </div>
-                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
-                    <input 
-                      type="text" 
-                      placeholder="Search tasks..." 
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      style={{ padding: '8px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', fontSize: '14px', outline: 'none', minWidth: '220px' }}
-                    />
+                  <div className="cit-list-header-actions">
+                    <div className="cit-search-box" style={{ position: 'relative', width: '100%' }}>
+                      <Search size={16} className="cit-search-icon" style={{ position: 'absolute', left: '12px', top: '50%', transform: 'translateY(-50%)', color: '#64748b' }} />
+                      <input 
+                        type="text" 
+                        placeholder="Search tasks..." 
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        className="cit-search-input"
+                        style={{ paddingLeft: '36px' }}
+                      />
+                    </div>
                     {screenPerm.canCreate && (
-                      <button className="cit-btn-create" style={{ background: '#2563eb', color: 'white', padding: '8px 16px', borderRadius: 6, border: 'none', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', fontWeight: '500' }} onClick={async () => { await handleResetForm(); setView("form"); }}>
+                      <button className="cit-btn-create" onClick={async () => { await handleResetForm(); setView("form"); }}>
                         <Plus size={16} /> Assign New Task
                       </button>
                     )}
@@ -1519,25 +1566,25 @@ const Assignment = ({ userRole, onLogout }) => {
                 </div>
 
                 <div className="cit-table-container">
-                  <table className="cit-table">
+                  <table className="cit-table assignment-master-table">
                     <thead>
                       <tr>
-                        <th>Task Code</th>
-                        <th>Title</th>
-                        <th>{assignmentView === "my" ? "Assigned By" : "Assigned To"}</th>
-                        <th>Priority</th>
-                        <th>Status</th>
-                        <th>Start Date</th>
-                        <th>Due Date</th>
-                        <th>Reviewer</th>
-                        <th>Approver</th>
-                        <th>Checklist</th>
-                        <th>Actions</th>
+                        <th className="col-asgn-code">TASK CODE</th>
+                        <th className="col-asgn-name">TITLE</th>
+                        <th className="asgn-col-hide-mobile">{assignmentView === "my" ? "Assigned By" : "Assigned To"}</th>
+                        <th className="asgn-col-hide-mobile">Priority</th>
+                        <th className="asgn-col-hide-mobile">Status</th>
+                        <th className="asgn-col-hide-mobile">Start Date</th>
+                        <th className="asgn-col-hide-mobile">Due Date</th>
+                        <th className="asgn-col-hide-mobile">Reviewer</th>
+                        <th className="asgn-col-hide-mobile">Approver</th>
+                        <th className="asgn-col-hide-mobile">Checklist</th>
+                        <th className="col-asgn-actions">ACTION</th>
                       </tr>
                     </thead>
                     <tbody>
                       {tasksLoading ? (
-                        <tr><td colSpan="11" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading tasks…</td></tr>
+                        <tr><td colSpan="11" className="col-asgn-empty" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>Loading tasks…</td></tr>
                       ) : filteredTasks.length > 0 ? filteredTasks.map(task => {
                         const empName = task.empNm || "N/A";
                         const assignedByName = task.assignedByNm || "N/A";
@@ -1570,10 +1617,16 @@ const Assignment = ({ userRole, onLogout }) => {
 
                         return (
                           <tr key={task.empTaskId || task.id}>
-                            <td>{formatTaskCode(task.taskCd)}</td>
-                            <td>{task.taskNm}</td>
-                            <td>{displayName}</td>
-                            <td>
+                            <td data-label="TASK CODE" className="col-asgn-code">
+                              <span className="col-asgn-code-badge" style={{ backgroundColor: '#f1f5f9', padding: '3px 6px', borderRadius: '4px', fontWeight: '600', color: '#0f172a', border: '1px solid #e2e8f0', fontSize: '11.5px', display: 'inline-block', whiteSpace: 'nowrap', maxWidth: '100%' }}>
+                                {formatTaskCode(task.taskCd)}
+                              </span>
+                            </td>
+                            <td data-label="TITLE" className="col-asgn-name">
+                              <strong>{task.taskNm}</strong>
+                            </td>
+                            <td data-label={assignmentView === "my" ? "Assigned By" : "Assigned To"} className="asgn-col-hide-mobile">{displayName}</td>
+                            <td data-label="Priority" className="asgn-col-hide-mobile">
                               {isClosedTask ? (
                                 <span style={{ color: '#64748b', fontWeight: 600, fontSize: '14px' }}>-</span>
                               ) : (() => {
@@ -1585,7 +1638,7 @@ const Assignment = ({ userRole, onLogout }) => {
                                 );
                               })()}
                             </td>
-                            <td>
+                            <td data-label="Status" className="asgn-col-hide-mobile">
                               <div style={{ display: 'inline-flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', width: 'fit-content' }}>
                                 <span style={{ 
                                   color: isClosedTask ? "#16a34a" : "#2563eb", 
@@ -1611,34 +1664,99 @@ const Assignment = ({ userRole, onLogout }) => {
                                 )}
                               </div>
                             </td>
-                            <td>{formatListDate(task.stDt)}</td>
-                            <td>{formatListDate(task.endDt)}</td>
-                            <td>{task.reviewerName || "N/A"}</td>
-                            <td>{task.approverName || "N/A"}</td>
-                            <td>{task.checklistCount || 0} Items</td>
-                            <td>
-                              <button className="cit-action-btn view" title="View" style={{ color: '#64748b', marginRight: isClosedTask ? 0 : 8 }} onClick={() => handleView(task)}>
-                                <Eye size={16} />
+                            <td data-label="Start Date" className="asgn-col-hide-mobile">{formatListDate(task.stDt)}</td>
+                            <td data-label="Due Date" className="asgn-col-hide-mobile">{formatListDate(task.endDt)}</td>
+                            <td data-label="Reviewer" className="asgn-col-hide-mobile">{task.reviewerName || "N/A"}</td>
+                            <td data-label="Approver" className="asgn-col-hide-mobile">{task.approverName || "N/A"}</td>
+                            <td data-label="Checklist" className="asgn-col-hide-mobile">{task.checklistCount || 0} Items</td>
+                            <td data-label="ACTION" className="col-asgn-actions" style={{ position: "relative" }}>
+                              <button
+                                id={`action-btn-${task.empTaskId || task.id}`}
+                                type="button"
+                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '4px 8px', borderRadius: '4px' }}
+                                onClick={(e) => toggleDropdown(e, task.empTaskId || task.id)}
+                                onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                              >
+                                <MoreVertical size={18} />
                               </button>
-                              {assignmentView === "assignedByMe" && !isClosedTask && (
+
+                              {/* Actions Dropdown menu */}
+                              {activeDropdown === (task.empTaskId || task.id) && (
                                 <>
-                                  {screenPerm.canEdit && (
-                                    <button className="cit-action-btn edit" title="Edit" style={{ color: '#3b82f6', marginRight: 8 }} onClick={() => handleEdit(task)}>
-                                      <Edit3 size={16} />
+                                  <div
+                                    className="cit-actions-dropdown-backdrop"
+                                    onClick={() => setActiveDropdown(null)}
+                                    style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, zIndex: 90 }}
+                                  />
+                                  <div className="cit-actions-dropdown-menu" style={{
+                                    position: 'fixed',
+                                    right: `${dropdownPos.right}px`,
+                                    top: dropdownPos.isTop ? 'auto' : `${dropdownPos.bottom}px`,
+                                    bottom: dropdownPos.isTop ? `${window.innerHeight - dropdownPos.top}px` : 'auto',
+                                    backgroundColor: 'white',
+                                    border: '1px solid #e2e8f0',
+                                    borderRadius: '8px',
+                                    boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                                    zIndex: 99,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    padding: '4px 0',
+                                    minWidth: '140px'
+                                  }}>
+                                    <button
+                                      type="button"
+                                      style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#334155', borderRadius: '4px', margin: '2px 4px' }}
+                                      onClick={() => {
+                                        setActiveDropdown(null);
+                                        handleView(task);
+                                      }}
+                                      onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                      onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                    >
+                                      <Eye size={16} />
+                                      <span>View</span>
                                     </button>
-                                  )}
-                                  {screenPerm.canDelete && (
-                                    <button className="cit-action-btn delete" title="Delete" style={{ color: '#ef4444' }} onClick={() => handleDelete(task.empTaskId || task.id)}>
-                                      <Trash2 size={16} />
-                                    </button>
-                                  )}
+
+                                    {assignmentView === "assignedByMe" && !isClosedTask && screenPerm.canEdit && (
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#3b82f6', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => {
+                                          setActiveDropdown(null);
+                                          handleEdit(task);
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Edit3 size={16} />
+                                        <span>Edit</span>
+                                      </button>
+                                    )}
+
+                                    {assignmentView === "assignedByMe" && !isClosedTask && screenPerm.canDelete && (
+                                      <button
+                                        type="button"
+                                        style={{ padding: '10px 16px', textAlign: 'left', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '10px', fontSize: '14px', color: '#ef4444', borderRadius: '4px', margin: '2px 4px' }}
+                                        onClick={() => {
+                                          setActiveDropdown(null);
+                                          handleDelete(task.empTaskId || task.id);
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
+                                        onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
+                                      >
+                                        <Trash2 size={16} />
+                                        <span>Delete</span>
+                                      </button>
+                                    )}
+                                  </div>
                                 </>
                               )}
                             </td>
                           </tr>
                         );
                       }) : (
-                        <tr><td colSpan="11" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
+                        <tr><td colSpan="11" className="col-asgn-empty" style={{ textAlign: 'center', padding: '40px', color: '#64748b' }}>
                           No tasks found.
                         </td></tr>
                       )}

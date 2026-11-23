@@ -304,6 +304,12 @@ body {
   font-size: 13px;
 }
 
+@media (min-width: 769px) {
+  .department-mapping-table {
+    min-width: 1200px;
+  }
+}
+
 .cc-list-table thead {
   background: #f8fafc;
 }
@@ -1091,8 +1097,252 @@ input:checked + .cc-slider:before { transform: translateX(16px); }
 
 /* Added globally via script for responsive sidebar */
 @media (max-width: 768px) {
-  .cm-shell { margin-left: 240px; } /* matches sidebar.css */
+  .cm-shell, .cc-shell, .dept-map-shell { margin-left: 0 !important; width: 100% !important; }
 }
 @media (max-width: 480px) {
-  .cm-shell { margin-left: 70px; } /* matches sidebar.css */
+  .cm-shell, .cc-shell, .dept-map-shell { margin-left: 0 !important; width: 100% !important; }
+}
+
+/* Department Mapping List Header */
+.dept-map-list-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.dept-map-list-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dept-map-search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.dept-map-search-input {
+  padding: 8px 12px 8px 36px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  font-size: 14px;
+  outline: none;
+  width: 250px;
+  box-sizing: border-box;
+}
+
+/* Department Mapping Mobile Enhancements */
+@media (max-width: 768px) {
+  .dept-map-list-header {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 14px !important;
+    padding: 16px !important;
+  }
+  .dept-map-list-actions {
+    flex-direction: column !important;
+    align-items: stretch !important;
+    gap: 10px !important;
+    width: 100% !important;
+  }
+  .dept-map-search-box {
+    width: 100% !important;
+    position: relative !important;
+  }
+  .dept-map-search-input {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    height: 42px !important;
+    box-sizing: border-box !important;
+  }
+  .cc-btn-add-new {
+    width: 100% !important;
+    min-width: 100% !important;
+    justify-content: center !important;
+    align-items: center !important;
+    height: 42px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    border-radius: 8px !important;
+    margin: 0 !important;
+    box-sizing: border-box !important;
+  }
+  .cc-table-container {
+    overflow-x: hidden !important;
+    border: none !important;
+    background: transparent !important;
+    padding: 0 !important;
+    width: 100% !important;
+  }
+  /* ─── Department Mapping List: Mobile 3-Column View (Only Code, Name, Action) ─── */
+  .department-mapping-table,
+  .dept-map-table.department-mapping-table,
+  .cc-list-table.department-mapping-table {
+    display: table !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    table-layout: fixed !important;
+    border-collapse: collapse !important;
+    background: #ffffff !important;
+  }
+
+  .department-mapping-table thead,
+  .dept-map-table.department-mapping-table thead,
+  .cc-list-table.department-mapping-table thead {
+    display: table-header-group !important;
+  }
+
+  .department-mapping-table thead tr,
+  .dept-map-table.department-mapping-table thead tr,
+  .cc-list-table.department-mapping-table thead tr {
+    display: table-row !important;
+    background: #f8fafc !important;
+    border-bottom: 2px solid #e2e8f0 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .department-mapping-table tbody,
+  .dept-map-table.department-mapping-table tbody,
+  .cc-list-table.department-mapping-table tbody {
+    display: table-row-group !important;
+  }
+
+  .department-mapping-table tbody tr,
+  .dept-map-table.department-mapping-table tbody tr,
+  .cc-list-table.department-mapping-table tbody tr {
+    display: table-row !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+  }
+
+  .department-mapping-table tbody tr:hover,
+  .dept-map-table.department-mapping-table tbody tr:hover,
+  .cc-list-table.department-mapping-table tbody tr:hover {
+    background: #f8fafc !important;
+    box-shadow: none !important;
+  }
+
+  /* Hide all columns except CODE, DEPARTMENT NAME, and ACTIONS */
+  .department-mapping-table th,
+  .department-mapping-table td,
+  .dept-map-table.department-mapping-table th,
+  .dept-map-table.department-mapping-table td,
+  .cc-list-table.department-mapping-table th,
+  .cc-list-table.department-mapping-table td {
+    display: none !important;
+  }
+
+  .department-mapping-table th.deptmap-col-hide-mobile,
+  .department-mapping-table td.deptmap-col-hide-mobile,
+  .dept-map-table.department-mapping-table th.deptmap-col-hide-mobile,
+  .dept-map-table.department-mapping-table td.deptmap-col-hide-mobile,
+  .cc-list-table.department-mapping-table th.deptmap-col-hide-mobile,
+  .cc-list-table.department-mapping-table td.deptmap-col-hide-mobile {
+    display: none !important;
+  }
+
+  .department-mapping-table td::before,
+  .dept-map-table.department-mapping-table td::before,
+  .cc-list-table.department-mapping-table td::before {
+    display: none !important;
+    content: none !important;
+  }
+
+  /* 1. Department Code Column */
+  .department-mapping-table th.col-deptmap-code,
+  .department-mapping-table td.col-deptmap-code,
+  .dept-map-table.department-mapping-table th.col-deptmap-code,
+  .dept-map-table.department-mapping-table td.col-deptmap-code,
+  .cc-list-table.department-mapping-table th.col-deptmap-code,
+  .cc-list-table.department-mapping-table td.col-deptmap-code {
+    display: table-cell !important;
+    width: 32% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .department-mapping-table td.col-deptmap-code span,
+  .dept-map-table.department-mapping-table td.col-deptmap-code span,
+  .cc-list-table.department-mapping-table td.col-deptmap-code span {
+    display: inline-block !important;
+    font-size: 12px !important;
+    padding: 4px 6px !important;
+    word-break: break-all !important;
+  }
+
+  /* 2. Department Name Column */
+  .department-mapping-table th.col-deptmap-name,
+  .department-mapping-table td.col-deptmap-name,
+  .dept-map-table.department-mapping-table th.col-deptmap-name,
+  .dept-map-table.department-mapping-table td.col-deptmap-name,
+  .cc-list-table.department-mapping-table th.col-deptmap-name,
+  .cc-list-table.department-mapping-table td.col-deptmap-name {
+    display: table-cell !important;
+    width: 53% !important;
+    padding: 12px 8px !important;
+    vertical-align: middle !important;
+    text-align: left !important;
+    font-size: 13.5px !important;
+    font-weight: 600 !important;
+    color: #0f172a !important;
+    word-break: break-word !important;
+    white-space: normal !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  /* 3. Actions Column (Right next to Department name) */
+  .department-mapping-table th.col-deptmap-actions,
+  .department-mapping-table td.col-deptmap-actions,
+  .dept-map-table.department-mapping-table th.col-deptmap-actions,
+  .dept-map-table.department-mapping-table td.col-deptmap-actions,
+  .cc-list-table.department-mapping-table th.col-deptmap-actions,
+  .cc-list-table.department-mapping-table td.col-deptmap-actions {
+    display: table-cell !important;
+    width: 15% !important;
+    padding: 12px 4px !important;
+    vertical-align: middle !important;
+    text-align: center !important;
+    position: relative !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    border-top: none !important;
+    margin: 0 !important;
+  }
+
+  .department-mapping-table td.col-deptmap-empty,
+  .dept-map-table.department-mapping-table td.col-deptmap-empty,
+  .cc-list-table.department-mapping-table td.col-deptmap-empty {
+    display: table-cell !important;
+    text-align: center !important;
+    padding: 40px 16px !important;
+    width: 100% !important;
+  }
+  .cc-btn-add-new {
+    width: 100% !important;
+    justify-content: center !important;
+  }
+  .cc-form-layout-row.columns-4,
+  .cc-form-layout-row.columns-3,
+  .cc-form-layout-row.columns-2 {
+    grid-template-columns: 1fr !important;
+  }
 }

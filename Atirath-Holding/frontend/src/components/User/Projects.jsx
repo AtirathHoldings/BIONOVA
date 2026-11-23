@@ -490,7 +490,7 @@ const MyProjects = ({ userRole, onLogout }) => {
                       {proj.image ? (
                         <img src={proj.image} alt={proj.name} className="mp-card-img" style={{ objectFit: 'contain', alignSelf: 'flex-start', height: 'auto', maxHeight: '140px', background: 'transparent', borderRadius: '8px' }} />
                       ) : (
-                        <div className="mp-card-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '110px', minWidth: '110px', height: '80px', borderRadius: '8px', background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', flexShrink: 0, alignSelf: 'flex-start' }}>
+                        <div className="mp-card-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '80px', borderRadius: '8px', background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', flexShrink: 0, alignSelf: 'flex-start' }}>
                           <span style={{ fontSize: '32px', fontWeight: '800', color: '#fff', textTransform: 'uppercase', letterSpacing: '-1px' }}>{(proj.name || 'P').charAt(0)}</span>
                         </div>
                       )}
@@ -623,7 +623,7 @@ const MyProjects = ({ userRole, onLogout }) => {
                 {selectedProject.image ? (
                   <img src={selectedProject.image} alt={selectedProject.name} className="mp-detail-img" style={{ objectFit: 'contain', alignSelf: 'flex-start', height: 'auto', maxHeight: '200px', background: 'transparent', borderRadius: '12px' }} />
                 ) : (
-                  <div className="mp-detail-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '120px', minWidth: '120px', height: '120px', borderRadius: '12px', background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', flexShrink: 0, alignSelf: 'flex-start' }}>
+                  <div className="mp-detail-img" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '120px', borderRadius: '12px', background: 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)', flexShrink: 0, alignSelf: 'flex-start' }}>
                     <span style={{ fontSize: '48px', fontWeight: '800', color: '#fff', textTransform: 'uppercase', letterSpacing: '-2px' }}>{(selectedProject.name || 'P').charAt(0)}</span>
                   </div>
                 )}
