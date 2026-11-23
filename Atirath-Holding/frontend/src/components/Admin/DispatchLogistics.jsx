@@ -182,7 +182,7 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
   const handleOpenCreateTrip = () => {
     const nextSeq = String(trips.length + 1).padStart(4, "0");
     const defaultOrigin = lands[0] ? `${lands[0].landName || "Farm Lot A"} (${lands[0].district || "Warangal"})` : "Warangal Napier Feedstock Farm Hub (Lot 1)";
-    const defaultDest = plants[0]?.plantNm || "Hyderabad East CBG Plant";
+    const defaultDest = plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant";
 
     setTripForm({
       tripNumber: `TRP-2026-${nextSeq}`,
@@ -528,16 +528,20 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
                       onChange={(e) => setTripForm({ ...tripForm, destination: e.target.value })}
                     >
                       <option value="">-- Choose Destination --</option>
-                      {plants.map(p => (
-                        <option key={p.plantId} value={p.plantNm}>
-                          {p.plantNm} ({p.location || "CBG Plant"})
-                        </option>
-                      ))}
+                      {plants.map(p => {
+                        const name = p.pltNm || p.plantNm || p.name;
+                        const id = p.pltId || p.plantId || p.id;
+                        return (
+                          <option key={id} value={name}>
+                            {name} ({p.dist || p.location || "CBG Plant"})
+                          </option>
+                        );
+                      })}
                       {!plants.length && (
                         <>
-                          <option value="Hyderabad East CBG Plant">Hyderabad East CBG Plant</option>
-                          <option value="Warangal Bio-Energy & Fertilizer Hub">Warangal Bio-Energy & Fertilizer Hub</option>
-                          <option value="IOCL CNG Retail Mother Station">IOCL CNG Retail Mother Station</option>
+                          <option value="20 TPD CBG Plant">20 TPD CBG Plant</option>
+                          <option value="CBG Plant">CBG Plant</option>
+                          <option value="Atirath CBG">Atirath CBG</option>
                         </>
                       )}
                     </select>

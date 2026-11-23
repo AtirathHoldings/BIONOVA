@@ -184,10 +184,11 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
   // --- Purchase Order Form Operations ---
   const handleOpenCreatePO = () => {
     const nextSeq = String(purchaseOrders.length + 1).padStart(4, "0");
+    const defaultPlant = plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant";
     setPoForm({
       poNumber: `PO-2026-${nextSeq}`,
       supplierName: suppliers[0]?.name || "",
-      plantFacility: plants[0]?.plantNm || "Hyderabad East CBG Plant",
+      plantFacility: defaultPlant,
       orderDate: new Date().toISOString().split("T")[0],
       deliveryDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
       paymentTerms: "Net 30 Days",
@@ -250,10 +251,11 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
   // --- Purchase Requisition Operations ---
   const handleOpenCreatePR = () => {
     const nextSeq = String(requisitions.length + 1).padStart(4, "0");
+    const defaultPlant = plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant";
     setPrForm({
       prNumber: `PR-2026-${nextSeq}`,
       department: "Biogas Operations",
-      plantFacility: plants[0]?.plantNm || "Hyderabad East CBG Plant",
+      plantFacility: defaultPlant,
       priority: "Normal",
       requiredDate: new Date(Date.now() + 7 * 86400000).toISOString().split("T")[0],
       justification: "Critical raw substrate procurement for anaerobic digester continuous feeding.",
@@ -573,8 +575,17 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                       value={poForm.plantFacility}
                       onChange={(e) => setPoForm({ ...poForm, plantFacility: e.target.value })}
                     >
-                      {plants.map(p => <option key={p.plantId} value={p.plantNm}>{p.plantNm}</option>)}
-                      {!plants.length && <option value="Plant 1 - Hyderabad East CBG">Plant 1 - Hyderabad East CBG</option>}
+                      <option value="">-- Choose Plant / Facility --</option>
+                      {plants.map(p => {
+                        const name = p.pltNm || p.plantNm || p.plantName || p.name;
+                        const id = p.pltId || p.plantId || p.id;
+                        return (
+                          <option key={id} value={name}>
+                            {name} {p.dist ? `(${p.dist})` : ""}
+                          </option>
+                        );
+                      })}
+                      {!plants.length && <option value="20 TPD CBG Plant">20 TPD CBG Plant</option>}
                     </select>
                   </div>
 
@@ -784,13 +795,23 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                   </div>
 
                   <div className="sco-form-group">
-                    <label>Target Facility</label>
+                    <label>Target Facility <span className="required">*</span></label>
                     <select
+                      required
                       value={prForm.plantFacility}
                       onChange={(e) => setPrForm({ ...prForm, plantFacility: e.target.value })}
                     >
-                      {plants.map(p => <option key={p.plantId} value={p.plantNm}>{p.plantNm}</option>)}
-                      {!plants.length && <option value="Plant 1 - Hyderabad East CBG">Plant 1 - Hyderabad East CBG</option>}
+                      <option value="">-- Choose Plant / Facility --</option>
+                      {plants.map(p => {
+                        const name = p.pltNm || p.plantNm || p.plantName || p.name;
+                        const id = p.pltId || p.plantId || p.id;
+                        return (
+                          <option key={id} value={name}>
+                            {name} {p.dist ? `(${p.dist})` : ""}
+                          </option>
+                        );
+                      })}
+                      {!plants.length && <option value="20 TPD CBG Plant">20 TPD CBG Plant</option>}
                     </select>
                   </div>
 

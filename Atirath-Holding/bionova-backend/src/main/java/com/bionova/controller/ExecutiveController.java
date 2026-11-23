@@ -75,6 +75,7 @@ public class ExecutiveController {
 
     @PostMapping("/pipeline")
     public ResponseEntity<ExecutiveProjectPipeline> createProject(@RequestBody ExecutiveProjectPipeline project) {
+        project.setId(null);
         if (project.getProjectCode() == null || project.getProjectCode().isEmpty()) {
             project.setProjectCode("EXP-" + (System.currentTimeMillis() % 10000));
         }
@@ -116,6 +117,7 @@ public class ExecutiveController {
 
     @PostMapping("/budget")
     public ResponseEntity<ExecutiveBudgetItem> createBudgetItem(@RequestBody ExecutiveBudgetItem item) {
+        item.setId(null);
         if (item.getCostCenterCode() == null || item.getCostCenterCode().isEmpty()) {
             item.setCostCenterCode("CC-" + (System.currentTimeMillis() % 10000));
         }
@@ -152,6 +154,7 @@ public class ExecutiveController {
 
     @PostMapping("/revenue")
     public ResponseEntity<ExecutiveRevenueRecord> createRevenue(@RequestBody ExecutiveRevenueRecord rev) {
+        rev.setId(null);
         if (rev.getInvoiceCode() == null || rev.getInvoiceCode().isEmpty()) {
             rev.setInvoiceCode("REV-" + (System.currentTimeMillis() % 100000));
         }
@@ -190,6 +193,7 @@ public class ExecutiveController {
 
     @PostMapping("/compliance")
     public ResponseEntity<ExecutiveComplianceRecord> createCompliance(@RequestBody ExecutiveComplianceRecord comp) {
+        comp.setId(null);
         if (comp.getComplianceCode() == null || comp.getComplianceCode().isEmpty()) {
             comp.setComplianceCode("COMP-" + (System.currentTimeMillis() % 10000));
         }
@@ -230,6 +234,7 @@ public class ExecutiveController {
 
     @PostMapping("/treasury")
     public ResponseEntity<ExecutiveFundingSource> createFundingSource(@RequestBody ExecutiveFundingSource src) {
+        src.setId(null);
         if (src.getFacilityCode() == null || src.getFacilityCode().isEmpty()) {
             src.setFacilityCode("TR-" + (System.currentTimeMillis() % 10000));
         }
@@ -268,6 +273,7 @@ public class ExecutiveController {
 
     @PostMapping("/escrow")
     public ResponseEntity<ExecutiveEscrowAccount> createEscrowAccount(@RequestBody ExecutiveEscrowAccount esc) {
+        esc.setId(null);
         if (esc.getEscrowCode() == null || esc.getEscrowCode().isEmpty()) {
             esc.setEscrowCode("ESC-" + (System.currentTimeMillis() % 10000));
         }
@@ -308,6 +314,7 @@ public class ExecutiveController {
 
     @PostMapping("/alerts")
     public ResponseEntity<ExecutiveAlert> createAlert(@RequestBody ExecutiveAlert alert) {
+        alert.setId(null);
         if (alert.getAlertCode() == null || alert.getAlertCode().isEmpty()) {
             alert.setAlertCode("ALT-" + (System.currentTimeMillis() % 10000));
         }

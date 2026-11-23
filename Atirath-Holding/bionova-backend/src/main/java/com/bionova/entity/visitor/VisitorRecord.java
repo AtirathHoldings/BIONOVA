@@ -1,5 +1,9 @@
 package com.bionova.entity.visitor;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -8,7 +12,10 @@ import lombok.Setter;
 @Table(name = "visitor_records")
 @Getter
 @Setter
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class VisitorRecord {
+
+    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -78,13 +85,35 @@ public class VisitorRecord {
     private Boolean ppeIssued;
 
     @Column(name = "ppe_items", columnDefinition = "TEXT")
-    private String ppeItems; // Stored as comma-separated or JSON string
+    private String ppeItems;
+
+    @JsonProperty("ppeItems")
+    public void setPpeItemsFromJson(JsonNode node) {
+        this.ppeItems = (node != null && !node.isNull()) ? (node.isTextual() ? node.asText() : node.toString()) : null;
+    }
+
+    @JsonProperty("ppeItems")
+    public Object getPpeItemsAsJson() {
+        if (this.ppeItems == null || this.ppeItems.trim().isEmpty()) return null;
+        try { return MAPPER.readTree(this.ppeItems); } catch (Exception e) { return this.ppeItems; }
+    }
 
     @Column(name = "badge_rfid", length = 50)
     private String badgeRfid;
 
     @Column(name = "assigned_zones", columnDefinition = "TEXT")
-    private String assignedZones; // Stored as comma-separated or JSON string
+    private String assignedZones;
+
+    @JsonProperty("assignedZones")
+    public void setAssignedZonesFromJson(JsonNode node) {
+        this.assignedZones = (node != null && !node.isNull()) ? (node.isTextual() ? node.asText() : node.toString()) : null;
+    }
+
+    @JsonProperty("assignedZones")
+    public Object getAssignedZonesAsJson() {
+        if (this.assignedZones == null || this.assignedZones.trim().isEmpty()) return null;
+        try { return MAPPER.readTree(this.assignedZones); } catch (Exception e) { return this.assignedZones; }
+    }
 
     @Column(name = "escort_required")
     private Boolean escortRequired;

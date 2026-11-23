@@ -71,6 +71,7 @@ public class VisitorController {
 
     @PostMapping("/records")
     public ResponseEntity<VisitorRecord> createRecord(@RequestBody VisitorRecord record) {
+        record.setId(null);
         if (record.getPassNo() == null || record.getPassNo().isEmpty()) {
             record.setPassNo("GP-2026-" + (System.currentTimeMillis() % 10000));
         }
@@ -148,6 +149,7 @@ public class VisitorController {
 
     @PostMapping("/requests")
     public ResponseEntity<VisitorRequest> createRequest(@RequestBody VisitorRequest req) {
+        req.setId(null);
         if (req.getReqCode() == null || req.getReqCode().isEmpty()) {
             req.setReqCode("REQ-" + (System.currentTimeMillis() % 100000));
         }
@@ -201,6 +203,7 @@ public class VisitorController {
 
     @PostMapping("/appointments")
     public ResponseEntity<VisitorAppointment> createAppointment(@RequestBody VisitorAppointment apt) {
+        apt.setId(null);
         if (apt.getAptCode() == null || apt.getAptCode().isEmpty()) {
             apt.setAptCode("APT-" + (System.currentTimeMillis() % 100000));
         }
@@ -242,6 +245,7 @@ public class VisitorController {
 
     @PostMapping("/vehicles")
     public ResponseEntity<VisitorVehicle> createVehicle(@RequestBody VisitorVehicle v) {
+        v.setId(null);
         if (v.getStatus() == null) v.setStatus("Inside");
         if (v.getGateInTime() == null) v.setGateInTime(LocalDateTime.now().format(DateTimeFormatter.ofPattern("hh:mm a")));
         return ResponseEntity.ok(vehicleRepository.save(v));
@@ -282,6 +286,7 @@ public class VisitorController {
 
     @PostMapping("/material-inward")
     public ResponseEntity<VisitorMaterialInward> createMaterialInward(@RequestBody VisitorMaterialInward mat) {
+        mat.setId(null);
         if (mat.getInwardCode() == null || mat.getInwardCode().isEmpty()) {
             mat.setInwardCode("MIN-" + (System.currentTimeMillis() % 100000));
         }
@@ -322,6 +327,7 @@ public class VisitorController {
 
     @PostMapping("/material-outward")
     public ResponseEntity<VisitorMaterialOutward> createMaterialOutward(@RequestBody VisitorMaterialOutward mat) {
+        mat.setId(null);
         if (mat.getOutwardCode() == null || mat.getOutwardCode().isEmpty()) {
             mat.setOutwardCode("MOUT-" + (System.currentTimeMillis() % 100000));
         }
@@ -362,6 +368,7 @@ public class VisitorController {
 
     @PostMapping("/safety-clearances")
     public ResponseEntity<VisitorSafetyClearance> createSafetyClearance(@RequestBody VisitorSafetyClearance sc) {
+        sc.setId(null);
         if (sc.getClearanceCode() == null || sc.getClearanceCode().isEmpty()) {
             sc.setClearanceCode("SAF-" + (System.currentTimeMillis() % 100000));
         }

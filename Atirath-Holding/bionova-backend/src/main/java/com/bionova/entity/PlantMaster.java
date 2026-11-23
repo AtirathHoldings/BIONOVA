@@ -62,4 +62,29 @@ public class PlantMaster {
 
     @Column(name = "sts")
     private Boolean sts;
+
+    @com.fasterxml.jackson.annotation.JsonProperty("plantNm")
+    public String getPlantNmAlias() {
+        return this.pltNm;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("plantName")
+    public String getPlantNameAlias() {
+        return this.pltNm;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("plantId")
+    public Long getPlantIdAlias() {
+        return this.pltId;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("id")
+    public Long getIdAlias() {
+        return this.pltId;
+    }
+
+    @com.fasterxml.jackson.annotation.JsonProperty("name")
+    public String getNameAlias() {
+        return this.pltNm;
+    }
 }

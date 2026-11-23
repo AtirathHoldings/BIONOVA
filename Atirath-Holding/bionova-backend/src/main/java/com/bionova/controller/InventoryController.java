@@ -44,6 +44,7 @@ public class InventoryController {
 
     @PostMapping("/items")
     public ResponseEntity<InventoryItem> createItem(@RequestBody InventoryItem item) {
+        item.setId(null);
         return ResponseEntity.ok(itemRepository.save(item));
     }
 
@@ -70,6 +71,7 @@ public class InventoryController {
 
     @PostMapping("/civil-bom")
     public ResponseEntity<InventoryCivilBom> createCivilBom(@RequestBody InventoryCivilBom bom) {
+        bom.setId(null);
         return ResponseEntity.ok(civilBomRepository.save(bom));
     }
 
@@ -96,6 +98,7 @@ public class InventoryController {
 
     @PostMapping("/fasteners")
     public ResponseEntity<InventoryFastener> createFastener(@RequestBody InventoryFastener fastener) {
+        fastener.setId(null);
         return ResponseEntity.ok(fastenerRepository.save(fastener));
     }
 
@@ -122,6 +125,7 @@ public class InventoryController {
 
     @PostMapping("/piping")
     public ResponseEntity<InventoryPiping> createPiping(@RequestBody InventoryPiping piping) {
+        piping.setId(null);
         return ResponseEntity.ok(pipingRepository.save(piping));
     }
 
@@ -148,6 +152,7 @@ public class InventoryController {
 
     @PostMapping("/warranties")
     public ResponseEntity<InventoryWarranty> createWarranty(@RequestBody InventoryWarranty warranty) {
+        warranty.setId(null);
         return ResponseEntity.ok(warrantyRepository.save(warranty));
     }
 
@@ -174,6 +179,7 @@ public class InventoryController {
 
     @PostMapping("/alerts")
     public ResponseEntity<InventoryAlert> createAlert(@RequestBody InventoryAlert alert) {
+        alert.setId(null);
         return ResponseEntity.ok(alertRepository.save(alert));
     }
 
@@ -192,6 +198,7 @@ public class InventoryController {
 
     @PostMapping("/weighbridge")
     public ResponseEntity<InventoryWeighbridge> createWeighbridge(@RequestBody InventoryWeighbridge wb) {
+        wb.setId(null);
         return ResponseEntity.ok(weighbridgeRepository.save(wb));
     }
 
@@ -218,6 +225,7 @@ public class InventoryController {
 
     @PostMapping("/vendors")
     public ResponseEntity<InventoryVendor> createVendor(@RequestBody InventoryVendor vendor) {
+        vendor.setId(null);
         return ResponseEntity.ok(vendorRepository.save(vendor));
     }
 

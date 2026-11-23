@@ -177,7 +177,7 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
       assetCode: `AST-2026-${nextSeq}`,
       name: "",
       category: "Anaerobic Digester & Agitators",
-      facility: plants[0]?.plantNm || "Plant 1 - Hyderabad East CBG",
+      facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant",
       oemManufacturer: "Linde / Neuman & Esser",
       modelSerial: "NEA-CBG-450",
       commissionDate: new Date().toISOString().split("T")[0],
@@ -207,7 +207,7 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
     setScheduleForm({
       scheduleCode: `PMS-2026-${nextSeq}`,
       assetName: assets[0]?.name || "High-Pressure CBG Compressor Train 1",
-      facility: plants[0]?.plantNm || "Plant 1 - Hyderabad East CBG",
+      facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant",
       frequency: "Monthly Overhaul & Calibration",
       nextDueDate: new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0],
       meterThresholdHrs: 500,
@@ -237,7 +237,7 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
     const nextSeq = String(incidents.length + 1).padStart(4, "0");
     setIncidentForm({
       ticketNumber: `INC-2026-${nextSeq}`,
-      facility: plants[0]?.plantNm || "Plant 1 - Hyderabad East CBG",
+      facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant",
       assetName: assets[0]?.name || "Primary CSTR Biogas Digester Agitator #2",
       reportedTime: new Date().toISOString().slice(0, 16),
       severity: "Major (Process Bottleneck)",
@@ -270,7 +270,7 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
     setCostForm({
       logNumber: `CST-2026-${nextSeq}`,
       assetName: assets[0]?.name || "Heavy-Duty Harvesting Biomass Tractor",
-      facility: plants[0]?.plantNm || "Plant 1 - Hyderabad East CBG",
+      facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant",
       serviceDate: new Date().toISOString().split("T")[0],
       serviceNature: "Emergency Breakdown Repair",
       sparesConsumed: "High-Pressure Hydraulic Hose & Coupling O-Rings",
@@ -513,8 +513,17 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                       value={assetForm.facility}
                       onChange={(e) => setAssetForm({ ...assetForm, facility: e.target.value })}
                     >
-                      {plants.map(p => <option key={p.plantId} value={p.plantNm}>{p.plantNm} ({p.location || "On-Site"})</option>)}
-                      {!plants.length && <option value="Plant 1 - Hyderabad East CBG">Plant 1 - Hyderabad East CBG</option>}
+                      <option value="">-- Choose Plant / Facility --</option>
+                      {plants.map(p => {
+                        const name = p.pltNm || p.plantNm || p.name;
+                        const id = p.pltId || p.plantId || p.id;
+                        return (
+                          <option key={id} value={name}>
+                            {name} ({p.dist || p.location || "On-Site"})
+                          </option>
+                        );
+                      })}
+                      {!plants.length && <option value="20 TPD CBG Plant">20 TPD CBG Plant</option>}
                     </select>
                   </div>
 

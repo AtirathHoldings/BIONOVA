@@ -1,5 +1,7 @@
 package com.bionova.entity.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -8,6 +10,7 @@ import lombok.Setter;
 @Table(name = "inventory_vendors")
 @Getter
 @Setter
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class InventoryVendor {
 
     @Id
@@ -17,8 +20,26 @@ public class InventoryVendor {
     @Column(name = "vendor_code", length = 50)
     private String vendorCode;
 
+    @JsonProperty("code")
+    public void setCode(String code) {
+        if (code != null) this.vendorCode = code;
+    }
+    @JsonProperty("code")
+    public String getCode() {
+        return this.vendorCode;
+    }
+
     @Column(name = "vendor_name", nullable = false, length = 150)
     private String vendorName;
+
+    @JsonProperty("name")
+    public void setName(String name) {
+        if (name != null) this.vendorName = name;
+    }
+    @JsonProperty("name")
+    public String getName() {
+        return this.vendorName;
+    }
 
     @Column(name = "tier", length = 30)
     private String tier;
@@ -49,14 +70,4 @@ public class InventoryVendor {
 
     @Column(name = "rating")
     private Double rating;
-
-    @Column(name = "payment_terms", length = 100)
-    private String paymentTerms;
-
-    @Column(name = "sla_status", length = 100)
-    private String slaStatus;
-
-    @Column(name = "contract_value", length = 50)
-    private String contractValue;
 }
-

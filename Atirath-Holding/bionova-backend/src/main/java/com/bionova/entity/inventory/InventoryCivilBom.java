@@ -1,5 +1,7 @@
 package com.bionova.entity.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -8,6 +10,7 @@ import lombok.Setter;
 @Table(name = "inventory_civil_bom")
 @Getter
 @Setter
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class InventoryCivilBom {
 
     @Id
@@ -17,17 +20,62 @@ public class InventoryCivilBom {
     @Column(name = "spec_code", length = 50)
     private String specCode;
 
+    @JsonProperty("code")
+    public void setCode(String code) {
+        if (code != null) this.specCode = code;
+    }
+    @JsonProperty("code")
+    public String getCode() {
+        return this.specCode;
+    }
+
     @Column(name = "material_name", nullable = false, length = 150)
     private String materialName;
+
+    @JsonProperty("name")
+    public void setName(String name) {
+        if (name != null) this.materialName = name;
+    }
+    @JsonProperty("name")
+    public String getName() {
+        return this.materialName;
+    }
 
     @Column(name = "stage", length = 100)
     private String stage;
 
+    @JsonProperty("category")
+    public void setCategory(String category) {
+        if (category != null) this.stage = category;
+    }
+    @JsonProperty("category")
+    public String getCategory() {
+        return this.stage;
+    }
+
     @Column(name = "planned_qty")
     private Double plannedQty;
 
+    @JsonProperty("bomRequiredQty")
+    public void setBomRequiredQty(Double qty) {
+        if (qty != null) this.plannedQty = qty;
+    }
+    @JsonProperty("bomRequiredQty")
+    public Double getBomRequiredQty() {
+        return this.plannedQty;
+    }
+
     @Column(name = "issued_qty")
     private Double issuedQty;
+
+    @JsonProperty("allocatedQty")
+    public void setAllocatedQty(Double qty) {
+        if (qty != null) this.issuedQty = qty;
+    }
+    @JsonProperty("allocatedQty")
+    public Double getAllocatedQty() {
+        return this.issuedQty;
+    }
 
     @Column(name = "uom", length = 20)
     private String uom;
@@ -38,10 +86,27 @@ public class InventoryCivilBom {
     @Column(name = "delivery_status", length = 50)
     private String deliveryStatus;
 
+    @JsonProperty("status")
+    public void setStatus(String status) {
+        if (status != null) this.deliveryStatus = status;
+    }
+    @JsonProperty("status")
+    public String getStatus() {
+        return this.deliveryStatus;
+    }
+
     @Column(name = "cost_per_unit")
     private Double costPerUnit;
+
+    @JsonProperty("unitCost")
+    public void setUnitCost(Double cost) {
+        if (cost != null) this.costPerUnit = cost;
+    }
+    @JsonProperty("unitCost")
+    public Double getUnitCost() {
+        return this.costPerUnit;
+    }
 
     @Column(name = "inspection_status", length = 50)
     private String inspectionStatus;
 }
-
