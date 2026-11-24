@@ -144,16 +144,22 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
 
   const fetchPlants = async () => {
     try {
+      const token = sessionStorage.getItem("authToken") || localStorage.getItem("authToken") || "";
       const res = await fetch(`${apiBaseUrl}/api/plants`, {
         headers: {
-          "Authorization": `Bearer ${sessionStorage.getItem("authToken") || ""}`
+          "Authorization": `Bearer ${token}`
         }
       });
       if (res.ok) {
         const data = await res.json();
-        setPlants(data || []);
+        if (Array.isArray(data) && data.length > 0) {
+          setPlants(data);
+          return;
+        }
       }
-    } catch (e) {}
+    } catch (e) {
+      console.warn("fetchPlants error:", e);
+    }
   };
 
   const loadAllData = async () => {
@@ -184,7 +190,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
   // --- Purchase Order Form Operations ---
   const handleOpenCreatePO = () => {
     const nextSeq = String(purchaseOrders.length + 1).padStart(4, "0");
-    const defaultPlant = plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant";
+    const defaultPlant = plants[0]?.pltNm || plants[0]?.plantNm || plants[0]?.name || "20 TPD CBG Plant (Rangareddy)";
     setPoForm({
       poNumber: `PO-2026-${nextSeq}`,
       supplierName: suppliers[0]?.name || "",
@@ -251,7 +257,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
   // --- Purchase Requisition Operations ---
   const handleOpenCreatePR = () => {
     const nextSeq = String(requisitions.length + 1).padStart(4, "0");
-    const defaultPlant = plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant";
+    const defaultPlant = plants[0]?.pltNm || plants[0]?.plantNm || plants[0]?.name || "20 TPD CBG Plant (Rangareddy)";
     setPrForm({
       prNumber: `PR-2026-${nextSeq}`,
       department: "Biogas Operations",
@@ -580,12 +586,20 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                         const name = p.pltNm || p.plantNm || p.plantName || p.name;
                         const id = p.pltId || p.plantId || p.id;
                         return (
-                          <option key={id} value={name}>
+                          <option key={id} value={name} style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>
                             {name} {p.dist ? `(${p.dist})` : ""}
                           </option>
                         );
                       })}
-                      {!plants.length && <option value="20 TPD CBG Plant">20 TPD CBG Plant</option>}
+                      {!plants.length && (
+                        <>
+                          <option value="20 TPD CBG Plant (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>20 TPD CBG Plant (Rangareddy)</option>
+                          <option value="Atirath Holdings (Mumbai)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Atirath Holdings (Mumbai)</option>
+                          <option value="Atirath CBG (Banglore)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Atirath CBG (Banglore)</option>
+                          <option value="Sivaram Industries (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Sivaram Industries (Rangareddy)</option>
+                          <option value="Main Processing Plant - Unit 1 (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Main Processing Plant - Unit 1 (Rangareddy)</option>
+                        </>
+                      )}
                     </select>
                   </div>
 
@@ -806,12 +820,20 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                         const name = p.pltNm || p.plantNm || p.plantName || p.name;
                         const id = p.pltId || p.plantId || p.id;
                         return (
-                          <option key={id} value={name}>
+                          <option key={id} value={name} style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>
                             {name} {p.dist ? `(${p.dist})` : ""}
                           </option>
                         );
                       })}
-                      {!plants.length && <option value="20 TPD CBG Plant">20 TPD CBG Plant</option>}
+                      {!plants.length && (
+                        <>
+                          <option value="20 TPD CBG Plant (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>20 TPD CBG Plant (Rangareddy)</option>
+                          <option value="Atirath Holdings (Mumbai)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Atirath Holdings (Mumbai)</option>
+                          <option value="Atirath CBG (Banglore)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Atirath CBG (Banglore)</option>
+                          <option value="Sivaram Industries (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Sivaram Industries (Rangareddy)</option>
+                          <option value="Main Processing Plant - Unit 1 (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Main Processing Plant - Unit 1 (Rangareddy)</option>
+                        </>
+                      )}
                     </select>
                   </div>
 

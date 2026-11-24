@@ -518,12 +518,20 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                         const name = p.pltNm || p.plantNm || p.name;
                         const id = p.pltId || p.plantId || p.id;
                         return (
-                          <option key={id} value={name}>
+                          <option key={id} value={name} style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>
                             {name} ({p.dist || p.location || "On-Site"})
                           </option>
                         );
                       })}
-                      {!plants.length && <option value="20 TPD CBG Plant">20 TPD CBG Plant</option>}
+                      {!plants.length && (
+                        <>
+                          <option value="20 TPD CBG Plant (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>20 TPD CBG Plant (Rangareddy)</option>
+                          <option value="Atirath Holdings (Mumbai)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Atirath Holdings (Mumbai)</option>
+                          <option value="Atirath CBG (Banglore)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Atirath CBG (Banglore)</option>
+                          <option value="Sivaram Industries (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Sivaram Industries (Rangareddy)</option>
+                          <option value="Main Processing Plant - Unit 1 (Rangareddy)" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>Main Processing Plant - Unit 1 (Rangareddy)</option>
+                        </>
+                      )}
                     </select>
                   </div>
 

@@ -23,15 +23,89 @@ import { getFasteners, saveFastener, deleteFastener } from "./inventoryApi";
 
 const STORAGE_KEY = "bionova_fasteners_hardware_v1";
 
-const INITIAL_FASTENERS = [];
+const INITIAL_FASTENERS = [
+  {
+    id: 1,
+    sku: "FST-BOLT-109-01",
+    name: "M20 x 80mm High-Tensile Flange Hex Bolts",
+    category: "High-Tensile Bolts",
+    grade: "Grade 10.9",
+    threadSpec: "M20 x 2.5mm Pitch",
+    coating: "PTFE / Teflon Coated",
+    batchNo: "BAT-2026-FST09",
+    heatNo: "HT-77210",
+    mtcCertNo: "MTC-EN10204-8841",
+    mtcFileName: "MTC_M20_Grade10.9_Cert.pdf",
+    tensileStrength: "1040 MPa",
+    yieldStrength: "940 MPa",
+    application: "Digester Gas Dome High-Pressure Flanges",
+    location: "Rack B-04 / Bin 12",
+    currentStock: 1250,
+    reorderThreshold: 300,
+    uom: "Nos",
+    unitCost: 85,
+    supplier: "Sundram Fasteners Ltd",
+    notes: "Corrosion resistant PTFE coating for aggressive H2S environments."
+  },
+  {
+    id: 2,
+    sku: "FST-STUD-B7-02",
+    name: "ASTM A193 Grade B7 Continuous Thread Stud Bolts",
+    category: "Stud Bolts",
+    grade: "ASTM A193 B7",
+    threadSpec: "M24 x 3.0mm Pitch (Length 180mm)",
+    coating: "Hot-Dip Galvanized",
+    batchNo: "BAT-2026-STB12",
+    heatNo: "HT-91045",
+    mtcCertNo: "MTC-EN10204-9122",
+    mtcFileName: "MTC_A193_B7_Studs.pdf",
+    tensileStrength: "860 MPa",
+    yieldStrength: "720 MPa",
+    application: "Biogas Compressor Skid Anchor Tie-Downs",
+    location: "Rack A-02 / Bin 05",
+    currentStock: 480,
+    reorderThreshold: 150,
+    uom: "Nos",
+    unitCost: 210,
+    supplier: "Unbrako Fasteners India",
+    notes: "High strength alloy steel for elevated temperature & pressure service."
+  },
+  {
+    id: 3,
+    sku: "FST-WSH-316-03",
+    name: "SS 316 Acid-Resistant Heavy Plain Washers",
+    category: "Industrial Washers",
+    grade: "SS 316",
+    threadSpec: "M20 ID / 37mm OD (3mm Thick)",
+    coating: "Passivated / Pickled",
+    batchNo: "BAT-2026-WSH03",
+    heatNo: "HT-33918",
+    mtcCertNo: "MTC-EN10204-3319",
+    mtcFileName: "MTC_SS316_Washers.pdf",
+    tensileStrength: "620 MPa",
+    yieldStrength: "290 MPa",
+    application: "Slurry Pipeline & Acid Dosing Pump Assemblies",
+    location: "Rack C-01 / Bin 22",
+    currentStock: 3500,
+    reorderThreshold: 800,
+    uom: "Nos",
+    unitCost: 18,
+    supplier: "Viraj Profiles Ltd",
+    notes: "Austenitic stainless steel with molybdenum for high corrosion resistance."
+  }
+];
 
 const FastenersHardware = ({ screenPerm }) => {
   const [fasteners, setFasteners] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return INITIAL_FASTENERS;
     } catch (e) {
-      return [];
+      return INITIAL_FASTENERS;
     }
   });
 

@@ -24,15 +24,74 @@ import { getCivilMaterials, saveCivilMaterial, deleteCivilMaterial } from "./inv
 
 const STORAGE_KEY = "bionova_civil_materials_bom_v1";
 
-const INITIAL_CIVIL_MATERIALS = [];
+const INITIAL_CIVIL_MATERIALS = [
+  {
+    id: 1,
+    code: "CIV-STEEL-01",
+    name: "Thermo-Mechanically Treated (TMT) Fe550D Rebar 16mm",
+    category: "Structural Steel",
+    stage: "Digester Foundation",
+    gradeSpec: "Fe550D IS 1786",
+    bomRequiredQty: 120,
+    procuredQty: 100,
+    currentStock: 45,
+    allocatedQty: 55,
+    uom: "MT",
+    unitCost: 58000,
+    targetStructure: "Anaerobic Digester Tank #1 RCC Raft",
+    supplier: "Tata Steel Ltd (Tiscon)",
+    deliveryStatus: "Stock Available",
+    inspectionStatus: "Passed 3rd-Party QC"
+  },
+  {
+    id: 2,
+    code: "CIV-CONC-02",
+    name: "Ready Mix Concrete M35 Sulfate-Resistant",
+    category: "Cement & Aggregates",
+    stage: "Gas Holder Sump RCC",
+    gradeSpec: "M35 High Durability",
+    bomRequiredQty: 450,
+    procuredQty: 380,
+    currentStock: 120,
+    allocatedQty: 260,
+    uom: "Cu.M",
+    unitCost: 4800,
+    targetStructure: "Biogas Storage Dome Foundation",
+    supplier: "UltraTech Concrete Solutions",
+    deliveryStatus: "Stock Available",
+    inspectionStatus: "Cube Test Verified (28 Days)"
+  },
+  {
+    id: 3,
+    code: "CIV-BEAM-03",
+    name: "Heavy Universal Columns / I-Beams UC 203x203",
+    category: "Structural Steel",
+    stage: "Gas Upgradation Shed",
+    gradeSpec: "IS 2062 Grade E350",
+    bomRequiredQty: 65,
+    procuredQty: 50,
+    currentStock: 22,
+    allocatedQty: 28,
+    uom: "MT",
+    unitCost: 64000,
+    targetStructure: "Membrane Purification Skid Gantry",
+    supplier: "Jindal Steel & Power Ltd (JSPL)",
+    deliveryStatus: "Stock Available",
+    inspectionStatus: "MTC & Ultrasonic Tested"
+  }
+];
 
 const CivilMaterialsBOM = ({ screenPerm }) => {
   const [materials, setMaterials] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return INITIAL_CIVIL_MATERIALS;
     } catch (e) {
-      return [];
+      return INITIAL_CIVIL_MATERIALS;
     }
   });
 

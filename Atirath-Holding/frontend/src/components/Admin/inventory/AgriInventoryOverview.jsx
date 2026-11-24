@@ -27,16 +27,81 @@ import { getInventoryItems, saveInventoryItem, deleteInventoryItem } from "./inv
 
 const STORAGE_KEY = "bionova_inventory_items_v1";
 
-const INITIAL_ITEMS = [];
+const INITIAL_ITEMS = [
+  {
+    id: 1,
+    sku: "AGR-SD-001",
+    name: "Super Napier Hybrid Grass Stem Cuttings",
+    category: "Seeds",
+    batchNo: "LOT-2026-NPR01",
+    currentStock: 25000,
+    reorderThreshold: 5000,
+    uom: "Kg",
+    plantLocation: "Plant 1 - Hyderabad East CBG",
+    unitCost: 12,
+    expiryDate: "2027-06-30",
+    supplier: "Telangana State Seeds Dev Corp",
+    notes: "High biomass yield energy crop for primary anaerobic digester feedstock."
+  },
+  {
+    id: 2,
+    sku: "AGR-CH-002",
+    name: "Anaerobic Methanogenic Bacterial Inoculant",
+    category: "Agrochemicals",
+    batchNo: "LOT-2026-BIO09",
+    currentStock: 850,
+    reorderThreshold: 200,
+    uom: "Ltr",
+    plantLocation: "Plant 1 - Hyderabad East CBG",
+    unitCost: 450,
+    expiryDate: "2027-03-15",
+    supplier: "Biochem Agrotech Solutions Ltd",
+    notes: "Specialized thermophilic culture to accelerate biogas production."
+  },
+  {
+    id: 3,
+    sku: "AGR-EQ-003",
+    name: "Heavy-Duty Biomass Forage Harvester Blades",
+    category: "Equipment",
+    batchNo: "LOT-2026-BLD14",
+    currentStock: 18,
+    reorderThreshold: 6,
+    uom: "Sets",
+    plantLocation: "Plant 2 - Medak Agri Hub",
+    unitCost: 14500,
+    expiryDate: "N/A",
+    supplier: "Claas Agriculture India Pvt Ltd",
+    notes: "High manganese steel replacement blades for Claas Jaguar harvester fleet."
+  },
+  {
+    id: 4,
+    sku: "AGR-SD-004",
+    name: "Sorghum Bicolor (Sweet Sorghum) High-Brix Seeds",
+    category: "Seeds",
+    batchNo: "LOT-2026-SRG04",
+    currentStock: 4200,
+    reorderThreshold: 1000,
+    uom: "Kg",
+    plantLocation: "Plant 3 - Nalgonda Biomass Facility",
+    unitCost: 85,
+    expiryDate: "2027-08-20",
+    supplier: "Advanta Golden Seeds India Ltd",
+    notes: "High sugar content sorghum feedstock buffer for monsoon season."
+  }
+];
 
 const AgriInventoryOverview = ({ screenPerm }) => {
   // Inventory state
   const [items, setItems] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return INITIAL_ITEMS;
     } catch (e) {
-      return [];
+      return INITIAL_ITEMS;
     }
   });
 

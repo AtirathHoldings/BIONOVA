@@ -23,15 +23,74 @@ import { getPipingSpares, savePipingSpare, deletePipingSpare } from "./inventory
 
 const STORAGE_KEY = "bionova_piping_instrumentation_v1";
 
-const INITIAL_PID_SPARES = [];
+const INITIAL_PID_SPARES = [
+  {
+    id: 1,
+    tagNo: "PID-FA-01",
+    name: "Deflagration Flame Arrestor & Thermal Sensor",
+    category: "Flame Arrestors & PRVs",
+    material: "SS 316L Flame Element / WCB Body",
+    sizeRating: "DN100 (4-Inch) ANSI 150# RF",
+    endConnection: "Flanged ANSI 150#",
+    operatingTemp: "-20°C to +150°C",
+    currentStock: 4,
+    reorderThreshold: 2,
+    uom: "Units",
+    location: "Safety Instrumentation Bay",
+    unitCost: 145000,
+    supplier: "Elmac Technologies Ltd",
+    pidLineRef: "P&ID-BG-L01-100",
+    notes: "Explosion-proof safety critical barrier on main biogas digester outlet line."
+  },
+  {
+    id: 2,
+    tagNo: "PID-PV-02",
+    name: "Pneumatic Emergency Shutdown (ESD) Ball Valve",
+    category: "Pneumatic Valves",
+    material: "Forged Steel A105 / SS316 Ball",
+    sizeRating: "DN80 (3-Inch) ANSI 300# RF",
+    endConnection: "Flanged ANSI 300#",
+    operatingTemp: "-29°C to +180°C",
+    currentStock: 6,
+    reorderThreshold: 2,
+    uom: "Units",
+    location: "Valves & Actuators Store",
+    unitCost: 68000,
+    supplier: "L&T Valves Limited",
+    pidLineRef: "P&ID-BG-L03-080",
+    notes: "Spring return fail-close ESD valve integrated into SCADA safety trip."
+  },
+  {
+    id: 3,
+    tagNo: "PID-FM-03",
+    name: "Coriolis Mass Flow Meter (High Accuracy)",
+    category: "Flow & Pressure Instruments",
+    material: "Hastelloy C-22 Measuring Tubes",
+    sizeRating: "DN50 (2-Inch) Class 300",
+    endConnection: "Flanged ANSI 300#",
+    operatingTemp: "-50°C to +200°C",
+    currentStock: 3,
+    reorderThreshold: 1,
+    uom: "Units",
+    location: "Instrument Calibration Room",
+    unitCost: 320000,
+    supplier: "Endress+Hauser India Pvt Ltd",
+    pidLineRef: "P&ID-CBG-DISP-050",
+    notes: "Fiscal custody transfer certified mass flow meter for CBG dispenser."
+  }
+];
 
 const PipingInstrumentation = ({ screenPerm }) => {
   const [spares, setSpares] = useState(() => {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
-      return raw ? JSON.parse(raw) : [];
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
+      return INITIAL_PID_SPARES;
     } catch (e) {
-      return [];
+      return INITIAL_PID_SPARES;
     }
   });
 
