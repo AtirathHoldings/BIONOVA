@@ -82,4 +82,73 @@ public class InventoryFastener {
 
     @Column(name = "standard_cert", length = 100)
     private String standardCert;
+
+    @JsonProperty("threadSpec")
+    public void setThreadSpec(String threadSpec) {
+        if (threadSpec != null) this.size = threadSpec;
+    }
+
+    @JsonProperty("threadSpec")
+    public String getThreadSpec() {
+        return this.size != null ? this.size : "";
+    }
+
+    @JsonProperty("location")
+    public void setLocation(String loc) {
+        if (loc != null) this.binLocation = loc;
+    }
+
+    @JsonProperty("location")
+    public String getLocation() {
+        return this.binLocation != null ? this.binLocation : "";
+    }
+
+    @JsonProperty("mtcCertNo")
+    public void setMtcCertNo(String cert) {
+        if (cert != null) this.standardCert = cert;
+    }
+
+    @JsonProperty("mtcCertNo")
+    public String getMtcCertNo() {
+        return this.standardCert != null ? this.standardCert : "";
+    }
+
+    @Transient
+    private String coating;
+
+    @JsonProperty("coating")
+    public void setCoating(String coating) {
+        this.coating = coating;
+    }
+
+    @JsonProperty("coating")
+    public String getCoating() {
+        return this.coating != null ? this.coating : "Hot-Dip Galvanized";
+    }
+
+    @Transient
+    private String batchNo;
+
+    @JsonProperty("batchNo")
+    public void setBatchNo(String batchNo) {
+        this.batchNo = batchNo;
+    }
+
+    @JsonProperty("batchNo")
+    public String getBatchNo() {
+        return this.batchNo != null ? this.batchNo : "";
+    }
+
+    @Transient
+    private String application;
+
+    @JsonProperty("application")
+    public void setApplication(String application) {
+        this.application = application;
+    }
+
+    @JsonProperty("application")
+    public String getApplication() {
+        return this.application != null ? this.application : "";
+    }
 }

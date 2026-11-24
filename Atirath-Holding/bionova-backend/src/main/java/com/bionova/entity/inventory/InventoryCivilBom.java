@@ -109,4 +109,59 @@ public class InventoryCivilBom {
 
     @Column(name = "inspection_status", length = 50)
     private String inspectionStatus;
+
+    @Transient
+    private String gradeSpec;
+
+    @JsonProperty("gradeSpec")
+    public void setGradeSpec(String gradeSpec) {
+        this.gradeSpec = gradeSpec;
+    }
+
+    @JsonProperty("gradeSpec")
+    public String getGradeSpec() {
+        return this.gradeSpec != null ? this.gradeSpec : "";
+    }
+
+    @Transient
+    private Double currentStock;
+
+    @JsonProperty("currentStock")
+    public void setCurrentStock(Double currentStock) {
+        this.currentStock = currentStock;
+    }
+
+    @JsonProperty("currentStock")
+    public Double getCurrentStock() {
+        if (this.currentStock != null) return this.currentStock;
+        double p = this.plannedQty != null ? this.plannedQty : 0;
+        double i = this.issuedQty != null ? this.issuedQty : 0;
+        return Math.max(0, p - i);
+    }
+
+    @Transient
+    private Double procuredQty;
+
+    @JsonProperty("procuredQty")
+    public void setProcuredQty(Double procuredQty) {
+        this.procuredQty = procuredQty;
+    }
+
+    @JsonProperty("procuredQty")
+    public Double getProcuredQty() {
+        return this.procuredQty != null ? this.procuredQty : (this.plannedQty != null ? this.plannedQty : 0.0);
+    }
+
+    @Transient
+    private String allocatedStructure;
+
+    @JsonProperty("allocatedStructure")
+    public void setAllocatedStructure(String allocatedStructure) {
+        this.allocatedStructure = allocatedStructure;
+    }
+
+    @JsonProperty("allocatedStructure")
+    public String getAllocatedStructure() {
+        return this.allocatedStructure != null ? this.allocatedStructure : (this.stage != null ? this.stage : "");
+    }
 }

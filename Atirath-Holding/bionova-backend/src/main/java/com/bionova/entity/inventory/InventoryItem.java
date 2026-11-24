@@ -1,5 +1,7 @@
 package com.bionova.entity.inventory;
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -8,6 +10,7 @@ import lombok.Setter;
 @Table(name = "inventory_items")
 @Getter
 @Setter
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class InventoryItem {
 
     @Id
@@ -49,5 +52,28 @@ public class InventoryItem {
 
     @Column(name = "remarks", length = 255)
     private String remarks;
+
+    @JsonProperty("notes")
+    public void setNotes(String notes) {
+        if (notes != null) this.remarks = notes;
+    }
+
+    @JsonProperty("notes")
+    public String getNotes() {
+        return this.remarks;
+    }
+
+    @Transient
+    private String supplier;
+
+    @JsonProperty("supplier")
+    public void setSupplier(String supplier) {
+        this.supplier = supplier;
+    }
+
+    @JsonProperty("supplier")
+    public String getSupplier() {
+        return this.supplier;
+    }
 }
 

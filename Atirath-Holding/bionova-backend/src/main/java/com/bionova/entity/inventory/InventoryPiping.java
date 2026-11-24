@@ -71,6 +71,69 @@ public class InventoryPiping {
     @Column(name = "valve_type", length = 50)
     private String valveType;
 
+    @JsonProperty("category")
+    public void setCategory(String category) {
+        if (category != null) this.valveType = category;
+    }
+
+    @JsonProperty("category")
+    public String getCategory() {
+        return this.valveType != null ? this.valveType : "Manual Valves";
+    }
+
     @Column(name = "plant_location", length = 100)
     private String plantLocation;
+
+    @JsonProperty("location")
+    public void setLocation(String loc) {
+        if (loc != null) this.plantLocation = loc;
+    }
+
+    @JsonProperty("location")
+    public String getLocation() {
+        return this.plantLocation != null ? this.plantLocation : "Instrument Store Room";
+    }
+
+    @JsonProperty("material")
+    public void setMaterial(String material) {
+        if (material != null) this.materialMoc = material;
+    }
+
+    @JsonProperty("material")
+    public String getMaterial() {
+        return this.materialMoc != null ? this.materialMoc : "";
+    }
+
+    @JsonProperty("sizeRating")
+    public void setSizeRating(String sizeRating) {
+        if (sizeRating != null) this.pressureRating = sizeRating;
+    }
+
+    @JsonProperty("sizeRating")
+    public String getSizeRating() {
+        return this.pressureRating != null ? this.pressureRating : "";
+    }
+
+    @JsonProperty("pidLineRef")
+    public void setPidLineRef(String pidLineRef) {
+        if (pidLineRef != null) this.pndRef = pidLineRef;
+    }
+
+    @JsonProperty("pidLineRef")
+    public String getPidLineRef() {
+        return this.pndRef != null ? this.pndRef : "";
+    }
+
+    @Transient
+    private String uom;
+
+    @JsonProperty("uom")
+    public void setUom(String uom) {
+        this.uom = uom;
+    }
+
+    @JsonProperty("uom")
+    public String getUom() {
+        return this.uom != null ? this.uom : "Units";
+    }
 }
