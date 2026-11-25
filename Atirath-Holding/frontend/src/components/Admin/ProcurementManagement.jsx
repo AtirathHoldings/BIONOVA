@@ -197,6 +197,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
   const [editingItem, setEditingItem] = useState(null);
   const [viewingItem, setViewingItem] = useState(null);
   const [supplierErrors, setSupplierErrors] = useState({});
+  const [grnErrors, setGrnErrors] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState({
     isOpen: false,
     title: "",
@@ -316,6 +317,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
     setEditingItem(null);
     setViewingItem(null);
     setSupplierErrors({});
+    setGrnErrors({});
     setSearchQuery("");
     setStatusFilter("All");
     navigate(`/procurement/${newTab}`);
@@ -568,16 +570,37 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
   };
 
   // --- Delivery Note Operations ---
+  const generateNextGrnNumber = (grnList = deliveryNotes) => {
+    const currentYear = new Date().getFullYear();
+    const prefix = `GRN-${currentYear}-`;
+    let maxSeq = 0;
+    (grnList || []).forEach(g => {
+      const num = g.grnNumber || g.grn_number || "";
+      if (num.startsWith(prefix)) {
+        const digits = num.substring(prefix.length).replace(/[^0-9]/g, "");
+        if (digits) {
+          const val = parseInt(digits, 10);
+          if (!isNaN(val) && val > maxSeq) {
+            maxSeq = val;
+          }
+        }
+      }
+    });
+    return `GRN-${currentYear}-${String(maxSeq + 1).padStart(4, "0")}`;
+  };
+
   const handleOpenCreateGRN = () => {
-    const nextSeq = String(deliveryNotes.length + 1).padStart(4, "0");
+    setGrnErrors({});
+    const nextGrnNumber = generateNextGrnNumber(deliveryNotes);
+    const defaultPo = purchaseOrders[0];
     setGrnForm({
-      grnNumber: `GRN-2026-${nextSeq}`,
-      poNumber: purchaseOrders[0]?.poNumber || "PO-2026-0001",
-      supplierName: suppliers[0]?.name || "Agritech Agro Bio Solutions Ltd",
+      grnNumber: nextGrnNumber,
+      poNumber: defaultPo?.poNumber || "PO-2026-0001",
+      supplierName: defaultPo?.supplierName || suppliers[0]?.name || "Atirath Bio Supplies Ltd",
       transporter: "Gati-KWE Logistics Fleet",
-      vehicleNo: "TS 08 UB 7712",
-      eWayBill: "2418-9921-0842",
-      receivedDate: new Date().toISOString().split("T")[0],
+      vehicleNo: "",
+      eWayBill: "",
+      receivedDate: formatToDDMMYYYY(new Date()),
       receivingZone: "Raw Feedstock Silo Yard",
       orderedQty: 100,
       dispatchedQty: 100,
@@ -592,15 +615,75 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleOpenEditGRN = (grn) => {
+    setGrnErrors({});
+    setEditingItem(grn);
+    setGrnForm({
+      grnNumber: grn.grnNumber,
+      poNumber: grn.poNumber || "",
+      supplierName: grn.supplierName || "",
+      transporter: grn.transporter || "",
+      vehicleNo: grn.vehicleNo || "",
+      eWayBill: grn.eWayBill || "",
+      receivedDate: grn.receivedDate || formatToDDMMYYYY(new Date()),
+      receivingZone: grn.receivingZone || "Raw Feedstock Silo Yard",
+      orderedQty: grn.orderedQty || 0,
+      dispatchedQty: grn.dispatchedQty || 0,
+      receivedQty: grn.receivedQty || 0,
+      acceptedQty: grn.acceptedQty || 0,
+      rejectedQty: grn.rejectedQty || 0,
+      inspectionStatus: grn.inspectionStatus || "Passed QC - Stock Updated",
+      remarks: grn.remarks || ""
+    });
+    setFormMode("create_grn");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSaveGRN = async (e) => {
     e.preventDefault();
+    const errors = {};
+
+    // 1. Delivery Truck / Vehicle Reg No validation (Indian standard format)
+    const vehicleRegex = /^[A-Z]{2}[ -]?[0-9]{1,2}[ -]?[A-Z]{1,3}[ -]?[0-9]{4}$/;
+    const cleanVehicle = (grnForm.vehicleNo || "").trim().toUpperCase();
+    if (!cleanVehicle) {
+      errors.vehicleNo = "Delivery truck / vehicle registration number is required";
+    } else if (!vehicleRegex.test(cleanVehicle)) {
+      errors.vehicleNo = "Invalid vehicle registration format (e.g. TS 08 UB 7712 or AP 29 TA 1234)";
+    }
+
+    // 2. E-Way Bill Number validation (no alphabets, exactly 12 numeric digits)
+    const rawEwb = (grnForm.eWayBill || "").trim();
+    const digitsOnlyEwb = rawEwb.replace(/[^0-9]/g, "");
+    if (!rawEwb) {
+      errors.eWayBill = "E-Way Bill Number is required";
+    } else if (/[a-zA-Z]/.test(rawEwb)) {
+      errors.eWayBill = "E-Way Bill Number cannot contain alphabets";
+    } else if (digitsOnlyEwb.length !== 12) {
+      errors.eWayBill = "E-Way Bill Number must be exactly 12 numeric digits (e.g. 2418-9921-0842 or 241899210842)";
+    }
+
+    // 3. Received quantity validation
+    if (grnForm.receivedQty === undefined || grnForm.receivedQty === null || Number(grnForm.receivedQty) <= 0) {
+      errors.receivedQty = "Actual inward weight received must be greater than 0";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setGrnErrors(errors);
+      return;
+    }
+
+    setGrnErrors({});
     const payload = {
       ...grnForm,
-      id: editingItem ? editingItem.id : undefined
+      id: editingItem ? editingItem.id : undefined,
+      vehicleNo: cleanVehicle,
+      eWayBill: rawEwb
     };
     await saveDeliveryNote(payload);
     await loadAllData();
     setFormMode(null);
+    setEditingItem(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1412,27 +1495,83 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
           {formMode === "create_grn" && (
             <div className="sco-form-card">
               <div className="sco-form-title">
-                <span>Record Inward Delivery Note (GRN)</span>
-                <button onClick={() => setFormMode(null)} className="sco-btn-icon"><X size={18} /></button>
+                <span>{editingItem ? "Edit Delivery Note (GRN)" : "Record Inward Delivery Note (GRN)"}</span>
+                <button onClick={() => { setFormMode(null); setEditingItem(null); setGrnErrors({}); }} className="sco-btn-icon"><X size={18} /></button>
               </div>
+
+              {Object.keys(grnErrors).length > 0 && (
+                <div style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fca5a5",
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  color: "#991b1b",
+                  fontSize: "13.5px"
+                }}>
+                  <AlertTriangle size={18} style={{ color: "#dc2626", marginTop: "2px", flexShrink: 0 }} />
+                  <div>
+                    <span style={{ fontWeight: "700" }}>Please review and fix the following errors:</span>
+                    <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: "13px" }}>
+                      {Object.values(grnErrors).map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleSaveGRN}>
                 <div className="sco-form-grid">
                   <div className="sco-form-group">
-                    <label>GRN Note # <span className="required">*</span></label>
-                    <input
-                      type="text"
-                      required
-                      value={grnForm.grnNumber}
-                      onChange={(e) => setGrnForm({ ...grnForm, grnNumber: e.target.value })}
-                    />
+                    <label>
+                      GRN Note # <span className="required">*</span>
+                      <span style={{ fontSize: "11px", color: "#64748b", marginLeft: "6px" }}>
+                        (Auto-generated: Prefix + Year + Serial, Non-editable)
+                      </span>
+                    </label>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        type="text"
+                        readOnly
+                        value={grnForm.grnNumber}
+                        style={{
+                          backgroundColor: "#f1f5f9",
+                          cursor: "not-allowed",
+                          fontWeight: "700",
+                          color: "#1e293b",
+                          paddingRight: "36px"
+                        }}
+                        title="GRN Note number is system generated (Prefix + Year + Serial) and cannot be edited"
+                      />
+                      <Lock
+                        size={16}
+                        style={{
+                          position: "absolute",
+                          right: "12px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "#94a3b8"
+                        }}
+                      />
+                    </div>
                   </div>
 
                   <div className="sco-form-group">
                     <label>Reference Purchase Order (PO) <span className="required">*</span></label>
                     <select
                       value={grnForm.poNumber}
-                      onChange={(e) => setGrnForm({ ...grnForm, poNumber: e.target.value })}
+                      onChange={(e) => {
+                        const selPo = purchaseOrders.find(p => p.poNumber === e.target.value);
+                        setGrnForm({
+                          ...grnForm,
+                          poNumber: e.target.value,
+                          supplierName: selPo?.supplierName || grnForm.supplierName
+                        });
+                      }}
                     >
                       {purchaseOrders.map(p => <option key={p.id} value={p.poNumber}>{p.poNumber} — {p.supplierName}</option>)}
                       {!purchaseOrders.length && <option value="PO-2026-0001">PO-2026-0001 (Direct PO)</option>}
@@ -1445,6 +1584,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                       type="text"
                       value={grnForm.supplierName}
                       onChange={(e) => setGrnForm({ ...grnForm, supplierName: e.target.value })}
+                      placeholder="e.g. Atirath Bio Supplies Ltd"
                     />
                   </div>
 
@@ -1454,25 +1594,75 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                       type="text"
                       value={grnForm.transporter}
                       onChange={(e) => setGrnForm({ ...grnForm, transporter: e.target.value })}
+                      placeholder="e.g. Gati-KWE Logistics Fleet"
                     />
                   </div>
 
                   <div className="sco-form-group">
-                    <label>Delivery Truck / Vehicle Reg No</label>
+                    <label>Delivery Truck / Vehicle Reg No <span className="required">*</span></label>
                     <input
                       type="text"
+                      required
                       value={grnForm.vehicleNo}
-                      onChange={(e) => setGrnForm({ ...grnForm, vehicleNo: e.target.value })}
+                      onChange={(e) => {
+                        setGrnForm({ ...grnForm, vehicleNo: e.target.value.toUpperCase() });
+                        if (grnErrors.vehicleNo) setGrnErrors({ ...grnErrors, vehicleNo: null });
+                      }}
                       placeholder="e.g. TS 08 UB 7712"
+                      style={grnErrors.vehicleNo ? { borderColor: "#dc2626" } : undefined}
+                    />
+                    {grnErrors.vehicleNo ? (
+                      <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                        {grnErrors.vehicleNo}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#64748b", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        Proper vehicle format (e.g. TS 08 UB 7712 or AP 29 TA 1234)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>E-Way Bill Number <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      value={grnForm.eWayBill}
+                      onChange={(e) => {
+                        // Strictly reject all alphabets in real-time
+                        const digitsAndHyphen = e.target.value.replace(/[a-zA-Z]/g, "").replace(/[^0-9-]/g, "").slice(0, 16);
+                        setGrnForm({ ...grnForm, eWayBill: digitsAndHyphen });
+                        if (grnErrors.eWayBill) setGrnErrors({ ...grnErrors, eWayBill: null });
+                      }}
+                      placeholder="e.g. 2418-9921-0842 (12 digits only)"
+                      style={grnErrors.eWayBill ? { borderColor: "#dc2626" } : undefined}
+                    />
+                    {grnErrors.eWayBill ? (
+                      <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                        {grnErrors.eWayBill}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#64748b", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        12 digits numeric only (no alphabets, e.g. 2418-9921-0842)
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Inward Received Date (DD-MM-YYYY)</label>
+                    <DateInputDDMMYYYY
+                      value={grnForm.receivedDate}
+                      onChange={(val) => setGrnForm({ ...grnForm, receivedDate: val })}
                     />
                   </div>
 
                   <div className="sco-form-group">
-                    <label>E-Way Bill Number</label>
+                    <label>Receiving Plant Site / Zone</label>
                     <input
                       type="text"
-                      value={grnForm.eWayBill}
-                      onChange={(e) => setGrnForm({ ...grnForm, eWayBill: e.target.value })}
+                      value={grnForm.receivingZone}
+                      onChange={(e) => setGrnForm({ ...grnForm, receivingZone: e.target.value })}
+                      placeholder="e.g. Raw Feedstock Silo Yard"
                     />
                   </div>
 
@@ -1506,8 +1696,15 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                       onChange={(e) => {
                         const val = parseFloat(e.target.value) || 0;
                         setGrnForm({ ...grnForm, receivedQty: val, acceptedQty: val });
+                        if (grnErrors.receivedQty) setGrnErrors({ ...grnErrors, receivedQty: null });
                       }}
+                      style={grnErrors.receivedQty ? { borderColor: "#dc2626" } : undefined}
                     />
+                    {grnErrors.receivedQty && (
+                      <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                        {grnErrors.receivedQty}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
@@ -1522,14 +1719,24 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                       <option value="Rejected Off-Spec">Rejected Off-Spec</option>
                     </select>
                   </div>
+
+                  <div className="sco-form-group" style={{ gridColumn: "1 / -1" }}>
+                    <label>Inspector Remarks / QC Notes</label>
+                    <input
+                      type="text"
+                      value={grnForm.remarks}
+                      onChange={(e) => setGrnForm({ ...grnForm, remarks: e.target.value })}
+                      placeholder="Material verified and cleared for unloading..."
+                    />
+                  </div>
                 </div>
 
                 <div className="sco-form-actions">
-                  <button type="button" onClick={() => setFormMode(null)} className="sco-btn-secondary">
+                  <button type="button" onClick={() => { setFormMode(null); setEditingItem(null); setGrnErrors({}); }} className="sco-btn-secondary">
                     Cancel
                   </button>
                   <button type="submit" className="sco-btn-primary">
-                    <Save size={16} /> Confirm Receipt & Update Inventory
+                    <Save size={16} /> {editingItem ? "Update Delivery Note Record" : "Confirm Receipt & Update Inventory"}
                   </button>
                 </div>
               </form>
@@ -1945,6 +2152,18 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
               </div>
 
               <div className="sco-card-body">
+                <div className="sco-toolbar">
+                  <div className="sco-search-box">
+                    <Search size={16} className="search-icon" />
+                    <input
+                      type="text"
+                      placeholder="Search by GRN #, PO #, supplier, vehicle reg, transporter..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 {deliveryNotes.length === 0 ? (
                   <div className="sco-empty-state">
                     <div className="icon"><Truck size={40} /></div>
@@ -1953,6 +2172,24 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                     <button onClick={handleOpenCreateGRN} className="sco-btn-primary">
                       <Plus size={16} /> Log Inward Delivery
                     </button>
+                  </div>
+                ) : deliveryNotes.filter((g) => {
+                    if (!searchQuery.trim()) return true;
+                    const q = searchQuery.toLowerCase().trim();
+                    return (
+                      (g.grnNumber && g.grnNumber.toLowerCase().includes(q)) ||
+                      (g.poNumber && g.poNumber.toLowerCase().includes(q)) ||
+                      (g.supplierName && g.supplierName.toLowerCase().includes(q)) ||
+                      (g.vehicleNo && g.vehicleNo.toLowerCase().includes(q)) ||
+                      (g.transporter && g.transporter.toLowerCase().includes(q)) ||
+                      (g.eWayBill && g.eWayBill.toLowerCase().includes(q)) ||
+                      (g.inspectionStatus && g.inspectionStatus.toLowerCase().includes(q))
+                    );
+                  }).length === 0 ? (
+                  <div className="sco-empty-state" style={{ padding: "32px 16px" }}>
+                    <div className="icon"><Search size={32} /></div>
+                    <h3>No Matching Delivery Notes Found</h3>
+                    <p>No delivery notes match "{searchQuery}". Try searching by another keyword.</p>
                   </div>
                 ) : (
                   <div className="sco-table-wrapper">
@@ -1970,40 +2207,70 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {deliveryNotes.map((g) => (
-                          <tr key={g.id}>
-                            <td style={{ fontWeight: "700" }}>{g.grnNumber}</td>
-                            <td style={{ color: "#2563eb", fontWeight: "600" }}>{g.poNumber}</td>
-                            <td>{g.supplierName}</td>
-                            <td style={{ fontWeight: "600" }}>{g.vehicleNo}</td>
-                            <td>{formatToDDMMYYYY(g.receivedDate)}</td>
-                            <td style={{ fontWeight: "700" }}>{g.receivedQty} MT</td>
-                            <td>
-                              <span className={`sco-badge ${g.inspectionStatus?.includes("Passed") ? "badge-green" : "badge-amber"}`}>
-                                {g.inspectionStatus}
-                              </span>
-                            </td>
-                            <td style={{ textAlign: "right" }}>
-                              <button
-                                onClick={() =>
-                                  setDeleteConfirm({
-                                    isOpen: true,
-                                    title: "Delete Delivery Note",
-                                    message: `Are you sure you want to delete Delivery Note "${g.grnNumber}"? This action cannot be undone.`,
-                                    onConfirm: async () => {
-                                      await deleteDeliveryNote(g.id);
-                                      await loadAllData();
+                        {deliveryNotes
+                          .filter((g) => {
+                            if (!searchQuery.trim()) return true;
+                            const q = searchQuery.toLowerCase().trim();
+                            return (
+                              (g.grnNumber && g.grnNumber.toLowerCase().includes(q)) ||
+                              (g.poNumber && g.poNumber.toLowerCase().includes(q)) ||
+                              (g.supplierName && g.supplierName.toLowerCase().includes(q)) ||
+                              (g.vehicleNo && g.vehicleNo.toLowerCase().includes(q)) ||
+                              (g.transporter && g.transporter.toLowerCase().includes(q)) ||
+                              (g.eWayBill && g.eWayBill.toLowerCase().includes(q)) ||
+                              (g.inspectionStatus && g.inspectionStatus.toLowerCase().includes(q))
+                            );
+                          })
+                          .map((g) => (
+                            <tr key={g.id}>
+                              <td style={{ fontWeight: "700" }}>{g.grnNumber}</td>
+                              <td style={{ color: "#2563eb", fontWeight: "600" }}>{g.poNumber}</td>
+                              <td>{g.supplierName}</td>
+                              <td style={{ fontWeight: "600" }}>{g.vehicleNo}</td>
+                              <td>{formatToDDMMYYYY(g.receivedDate)}</td>
+                              <td style={{ fontWeight: "700" }}>{g.receivedQty} MT</td>
+                              <td>
+                                <span className={`sco-badge ${g.inspectionStatus?.includes("Passed") ? "badge-green" : "badge-amber"}`}>
+                                  {g.inspectionStatus}
+                                </span>
+                              </td>
+                              <td style={{ textAlign: "right" }}>
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                  <button
+                                    onClick={() => setViewingItem({ type: "grn", data: g })}
+                                    className="sco-btn-icon"
+                                    title="View Delivery Note Details"
+                                  >
+                                    <Eye size={15} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenEditGRN(g)}
+                                    className="sco-btn-icon"
+                                    title="Edit Delivery Note"
+                                  >
+                                    <Edit2 size={15} />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setDeleteConfirm({
+                                        isOpen: true,
+                                        title: "Delete Delivery Note",
+                                        message: `Are you sure you want to delete Delivery Note "${g.grnNumber}"? This action cannot be undone.`,
+                                        onConfirm: async () => {
+                                          await deleteDeliveryNote(g.id);
+                                          await loadAllData();
+                                        }
+                                      })
                                     }
-                                  })
-                                }
-                                className="sco-btn-icon danger"
-                                title="Delete GRN"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                                    className="sco-btn-icon danger"
+                                    title="Delete GRN"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
@@ -2253,6 +2520,158 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                 )}
 
                 <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-primary">
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ────────────────────────────────────────────────────────────── */}
+          {/* VIEW DELIVERY NOTE (GRN) DETAILS MODAL                         */}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {viewingItem?.type === "grn" && (
+            <div
+              className="sco-modal-overlay"
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1050,
+                padding: "20px"
+              }}
+            >
+              <div
+                className="sco-modal-card"
+                style={{
+                  background: "#ffffff",
+                  borderRadius: "14px",
+                  width: "100%",
+                  maxWidth: "680px",
+                  maxHeight: "90vh",
+                  overflowY: "auto",
+                  padding: "28px",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)"
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    borderBottom: "2px solid #e2e8f0",
+                    paddingBottom: "16px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "10px",
+                        background: "#fef3c7",
+                        color: "#d97706",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <Truck size={22} />
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", margin: 0 }}>
+                        {viewingItem.data.grnNumber}
+                      </h2>
+                      <p style={{ fontSize: "13px", color: "#64748b", margin: "2px 0 0 0" }}>
+                        Inward Delivery Note & Goods Receipt Details
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-icon">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "14px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>PO Reference</p>
+                    <p style={{ fontSize: "14px", fontWeight: "700", color: "#2563eb", margin: 0 }}>{viewingItem.data.poNumber || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Supplier / Consignor</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.supplierName || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Logistics Transporter</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.transporter || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Vehicle Registration No</p>
+                    <p style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", margin: 0 }}>{viewingItem.data.vehicleNo || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>E-Way Bill Number</p>
+                    <p style={{ fontSize: "14px", fontWeight: "700", fontFamily: "monospace", color: "#16a34a", margin: 0 }}>{viewingItem.data.eWayBill || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Received Date</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{formatToDDMMYYYY(viewingItem.data.receivedDate)}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Receiving Zone</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.receivingZone || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>QC Inspection Status</p>
+                    <span className={`sco-badge ${viewingItem.data.inspectionStatus?.includes("Passed") ? "badge-green" : "badge-amber"}`} style={{ fontSize: "12px" }}>
+                      {viewingItem.data.inspectionStatus || "Under Inspection"}
+                    </span>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Ordered Qty</p>
+                    <p style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", margin: 0 }}>{viewingItem.data.orderedQty || 0} MT</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Inward Received Qty</p>
+                    <p style={{ fontSize: "15px", fontWeight: "800", color: "#16a34a", margin: 0 }}>{viewingItem.data.receivedQty || 0} MT</p>
+                  </div>
+                </div>
+
+                {viewingItem.data.remarks && (
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>QC Remarks & Notes</p>
+                    <p style={{ fontSize: "13.5px", color: "#1e293b", margin: 0 }}>{viewingItem.data.remarks}</p>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                  <button onClick={() => window.print()} className="sco-btn-secondary">
+                    <Printer size={16} /> Print Receipt
+                  </button>
                   <button onClick={() => setViewingItem(null)} className="sco-btn-primary">
                     Close
                   </button>

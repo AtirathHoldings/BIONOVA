@@ -205,6 +205,76 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
     return '$prefix$nextSeq';
   }
 
+  String _generateNextGrnNumber() {
+    final currentYear = DateTime.now().year;
+    final prefix = 'GRN-$currentYear-';
+    int maxSeq = 0;
+    for (final g in _deliveryNotes) {
+      final num = (g['grnNumber'] ?? '').toString().trim();
+      if (num.startsWith(prefix)) {
+        final rest = num.substring(prefix.length).replaceAll(RegExp(r'[^0-9]'), '');
+        final val = int.tryParse(rest);
+        if (val != null && val > maxSeq) {
+          maxSeq = val;
+        }
+      }
+    }
+    return '$prefix${(maxSeq + 1).toString().padLeft(4, '0')}';
+  }
+
+  void _viewGrnDetails(Map<String, dynamic> g) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.local_shipping_outlined, color: Color(0xFFD97706), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                g['grnNumber']?.toString() ?? 'GRN Details',
+                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow('PO Reference', g['poNumber']?.toString() ?? '—'),
+              _detailRow('Supplier / Consignor', g['supplierName']?.toString() ?? '—'),
+              _detailRow('Logistics Transporter', g['transporter']?.toString() ?? '—'),
+              _detailRow('Vehicle Registration No', g['vehicleNo']?.toString() ?? '—'),
+              _detailRow('E-Way Bill Number', g['eWayBill']?.toString() ?? '—'),
+              _detailRow('Received Date', _formatToDDMMYYYY(g['receivedDate']?.toString())),
+              _detailRow('Receiving Zone', g['receivingZone']?.toString() ?? 'Raw Feedstock Silo Yard'),
+              _detailRow('Ordered Qty', '${g['orderedQty'] ?? 0} MT'),
+              _detailRow('Actual Inward Received', '${g['receivedQty'] ?? 0} MT'),
+              _detailRow('QC Inspection Status', g['inspectionStatus']?.toString() ?? 'Under Inspection'),
+              if (g['remarks'] != null && g['remarks'].toString().isNotEmpty)
+                _detailRow('Remarks / QC Notes', g['remarks'].toString()),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   String _formatToDDMMYYYY(dynamic val) {
     if (val == null) return '';
     final str = val.toString().trim();
@@ -951,23 +1021,23 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
     );
   }
 
-  // --- CREATE DELIVERY NOTE (GRN) ---
-  void _openCreateGrnModal() {
-    final nextSeq = (_deliveryNotes.length + 1).toString().padLeft(4, '0');
+  // --- CREATE / EDIT DELIVERY NOTE (GRN) ---
+  void _openCreateGrnModal([Map<String, dynamic>? editing]) {
     final formKey = GlobalKey<FormState>();
     final poList = _purchaseOrders.map((p) => (p['poNumber'] ?? '').toString()).where((s) => s.isNotEmpty).toList();
     if (poList.isEmpty) poList.add('PO-2026-0001');
 
-    final grnCtrl = TextEditingController(text: 'GRN-2026-$nextSeq');
-    String poRef = poList.first;
-    final supCtrl = TextEditingController(text: _suppliers.isNotEmpty ? (_suppliers.first['name'] ?? '').toString() : 'Agritech Agro Bio Solutions Ltd');
-    final transCtrl = TextEditingController(text: 'Gati-KWE Logistics Fleet');
-    final vehCtrl = TextEditingController(text: 'TS 08 UB 7712');
-    final ewayCtrl = TextEditingController(text: '2418-9921-0842');
-    final ordCtrl = TextEditingController(text: '100');
-    final dispCtrl = TextEditingController(text: '100');
-    final recCtrl = TextEditingController(text: '98.5');
-    String qcStatus = 'Passed QC - Stock Updated';
+    final grnNumber = editing != null ? (editing['grnNumber'] ?? '').toString() : _generateNextGrnNumber();
+    final grnCtrl = TextEditingController(text: grnNumber);
+    String poRef = editing != null ? (editing['poNumber'] ?? poList.first).toString() : poList.first;
+    final supCtrl = TextEditingController(text: editing != null ? (editing['supplierName'] ?? '').toString() : (_suppliers.isNotEmpty ? (_suppliers.first['name'] ?? '').toString() : 'Atirath Bio Supplies Ltd'));
+    final transCtrl = TextEditingController(text: editing != null ? (editing['transporter'] ?? '').toString() : 'Gati-KWE Logistics Fleet');
+    final vehCtrl = TextEditingController(text: editing != null ? (editing['vehicleNo'] ?? '').toString() : '');
+    final ewayCtrl = TextEditingController(text: editing != null ? (editing['eWayBill'] ?? '').toString() : '');
+    final ordCtrl = TextEditingController(text: editing != null ? (editing['orderedQty']?.toString() ?? '100') : '100');
+    final dispCtrl = TextEditingController(text: editing != null ? (editing['dispatchedQty']?.toString() ?? '100') : '100');
+    final recCtrl = TextEditingController(text: editing != null ? (editing['receivedQty']?.toString() ?? '98.5') : '98.5');
+    String qcStatus = editing != null ? (editing['inspectionStatus'] ?? 'Passed QC - Stock Updated').toString() : 'Passed QC - Stock Updated';
 
     showModalBottomSheet(
       context: context,
@@ -987,15 +1057,25 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                     children: [
                       const Icon(Icons.local_shipping_outlined, color: Color(0xFFD97706)),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('Record Inward Delivery Note (GRN)', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700))),
+                      Expanded(
+                        child: Text(
+                          editing != null ? 'Edit Delivery Note (GRN)' : 'Record Inward Delivery Note (GRN)',
+                          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700),
+                        ),
+                      ),
                       IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                     ],
                   ),
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: grnCtrl,
-                    decoration: moduleInputDecoration('GRN Note # *'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    readOnly: true,
+                    style: const TextStyle(fontWeight: FontWeight.w700, color: Color(0xFF1E293B)),
+                    decoration: moduleInputDecoration('GRN Note # (Auto-generated, Locked)').copyWith(
+                      prefixIcon: const Icon(Icons.lock_outline, size: 18, color: Color(0xFF94A3B8)),
+                      filled: true,
+                      fillColor: const Color(0xFFF1F5F9),
+                    ),
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
@@ -1003,7 +1083,15 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                     isExpanded: true,
                     decoration: moduleInputDecoration('Reference Purchase Order'),
                     items: poList.map((p) => DropdownMenuItem(value: p, child: Text(p))).toList(),
-                    onChanged: (v) => setModalState(() => poRef = v ?? poRef),
+                    onChanged: (v) {
+                      setModalState(() {
+                        poRef = v ?? poRef;
+                        final selPo = _purchaseOrders.firstWhere((p) => (p['poNumber'] ?? '').toString() == poRef, orElse: () => {});
+                        if (selPo.isNotEmpty && selPo['supplierName'] != null) {
+                          supCtrl.text = selPo['supplierName'].toString();
+                        }
+                      });
+                    },
                   ),
                   const SizedBox(height: 10),
                   TextFormField(controller: supCtrl, decoration: moduleInputDecoration('Supplier / Vendor Name')),
@@ -1012,11 +1100,40 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                     children: [
                       Expanded(child: TextFormField(controller: transCtrl, decoration: moduleInputDecoration('Transporter'))),
                       const SizedBox(width: 10),
-                      Expanded(child: TextFormField(controller: vehCtrl, decoration: moduleInputDecoration('Vehicle Reg No'))),
+                      Expanded(
+                        child: TextFormField(
+                          controller: vehCtrl,
+                          textCapitalization: TextCapitalization.characters,
+                          decoration: moduleInputDecoration('Vehicle Reg No *', hint: 'TS 08 UB 7712'),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Required';
+                            final reg = RegExp(r'^[A-Z]{2}[ -]?[0-9]{1,2}[ -]?[A-Z]{1,3}[ -]?[0-9]{4}$');
+                            if (!reg.hasMatch(v.trim().toUpperCase())) {
+                              return 'Format: TS 08 UB 7712';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: ewayCtrl, decoration: moduleInputDecoration('E-Way Bill Number')),
+                  TextFormField(
+                    controller: ewayCtrl,
+                    keyboardType: TextInputType.phone,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.allow(RegExp(r'[0-9-]')),
+                      LengthLimitingTextInputFormatter(16),
+                    ],
+                    decoration: moduleInputDecoration('E-Way Bill Number * (12 digits)', hint: '2418-9921-0842'),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Required';
+                      if (RegExp(r'[a-zA-Z]').hasMatch(v)) return 'Alphabets not allowed';
+                      final digits = v.replaceAll(RegExp(r'[^0-9]'), '');
+                      if (digits.length != 12) return 'Must be 12 digits (e.g. 2418-9921-0842)';
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
@@ -1055,13 +1172,14 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                         if (!formKey.currentState!.validate()) return;
                         final rec = double.tryParse(recCtrl.text.trim()) ?? 0;
                         await SupplyChainApiService.saveDeliveryNote({
+                          if (editing != null && editing['id'] != null) 'id': editing['id'],
                           'grnNumber': grnCtrl.text.trim(),
                           'poNumber': poRef,
                           'supplierName': supCtrl.text.trim(),
                           'transporter': transCtrl.text.trim(),
-                          'vehicleNo': vehCtrl.text.trim(),
+                          'vehicleNo': vehCtrl.text.trim().toUpperCase(),
                           'eWayBill': ewayCtrl.text.trim(),
-                          'receivedDate': DateTime.now().toIso8601String().split('T').first,
+                          'receivedDate': editing != null ? (editing['receivedDate'] ?? DateTime.now().toIso8601String().split('T').first) : DateTime.now().toIso8601String().split('T').first,
                           'receivingZone': 'Raw Feedstock Silo Yard',
                           'orderedQty': double.tryParse(ordCtrl.text.trim()) ?? 0,
                           'dispatchedQty': double.tryParse(dispCtrl.text.trim()) ?? 0,
@@ -1074,7 +1192,7 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                         if (ctx.mounted) Navigator.pop(ctx);
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13)),
-                      child: const Text('Confirm Receipt & Update Inventory'),
+                      child: Text(editing != null ? 'Update Delivery Note' : 'Confirm Receipt & Update Inventory'),
                     ),
                   ),
                 ],
@@ -1489,10 +1607,27 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
               ],
             ),
             const SizedBox(height: 8),
+            TextField(
+              decoration: moduleInputDecoration('Search GRN #, PO #, supplier, vehicle reg, transporter...'),
+              onChanged: (v) => setState(() => _searchQuery = v),
+            ),
+            const SizedBox(height: 8),
             if (_deliveryNotes.isEmpty)
               const ModuleEmptyState(icon: Icons.local_shipping_outlined, title: 'No Delivery Notes Logged', subtitle: 'Track incoming consignments and reconcile delivered weights.')
             else
-              ..._deliveryNotes.map((g) {
+              ..._deliveryNotes
+                  .where((g) {
+                    if (_searchQuery.trim().isEmpty) return true;
+                    final q = _searchQuery.toLowerCase().trim();
+                    return (g['grnNumber']?.toString().toLowerCase().contains(q) == true) ||
+                        (g['poNumber']?.toString().toLowerCase().contains(q) == true) ||
+                        (g['supplierName']?.toString().toLowerCase().contains(q) == true) ||
+                        (g['vehicleNo']?.toString().toLowerCase().contains(q) == true) ||
+                        (g['transporter']?.toString().toLowerCase().contains(q) == true) ||
+                        (g['eWayBill']?.toString().toLowerCase().contains(q) == true) ||
+                        (g['inspectionStatus']?.toString().toLowerCase().contains(q) == true);
+                  })
+                  .map((g) {
                 final qc = (g['inspectionStatus'] ?? '').toString();
                 final passed = qc.contains('Passed');
                 return Container(
@@ -1517,20 +1652,34 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                       ),
                       const SizedBox(height: 8),
                       Text('${g['supplierName'] ?? '-'} • ${g['receivedQty'] ?? 0} MT', style: GoogleFonts.inter(fontSize: 14.5, fontWeight: FontWeight.w800)),
-                      Text('Vehicle: ${g['vehicleNo'] ?? '-'} • Received: ${g['receivedDate'] ?? '-'}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
-                      if (_perm.canDelete)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 19),
-                            onPressed: () async {
-                              if (await _confirmDelete('${g['grnNumber']}')) {
-                                await SupplyChainApiService.deleteDeliveryNote(g['id']);
-                                await _loadAllData();
-                              }
-                            },
+                      Text('Vehicle: ${g['vehicleNo'] ?? '-'} • Received: ${_formatToDDMMYYYY(g['receivedDate']?.toString())}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B))),
+                      const SizedBox(height: 4),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.visibility_outlined, color: Color(0xFF2563EB), size: 20),
+                            tooltip: 'View GRN Details',
+                            onPressed: () => _viewGrnDetails(g),
                           ),
-                        ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, color: Color(0xFF475569), size: 20),
+                            tooltip: 'Edit Delivery Note',
+                            onPressed: () => _openCreateGrnModal(g),
+                          ),
+                          if (_perm.canDelete)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 20),
+                              tooltip: 'Delete GRN',
+                              onPressed: () async {
+                                if (await _confirmDelete('${g['grnNumber']}')) {
+                                  await SupplyChainApiService.deleteDeliveryNote(g['id']);
+                                  await _loadAllData();
+                                }
+                              },
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 );
