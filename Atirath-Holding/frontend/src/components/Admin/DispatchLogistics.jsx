@@ -1439,9 +1439,6 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
                   <Navigation size={18} className="text-blue-600" />
                   Live Fleet Dispatch Corridors & Route Telemetry
                 </h3>
-                <button onClick={handleOpenCreateRoute} className="sco-btn-primary">
-                  <Plus size={16} /> Add Route / Corridor
-                </button>
               </div>
 
               <div className="sco-card-body">

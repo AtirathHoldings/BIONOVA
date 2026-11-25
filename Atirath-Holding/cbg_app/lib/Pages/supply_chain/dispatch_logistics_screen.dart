@@ -1066,18 +1066,7 @@ NET CERTIFIED PAYLOAD: ${slip['netWeightMT']} MT
                     ),
                   )),
           ] else if (_activeTab == 'routes') ...[
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('Live Fleet Dispatch Corridors (${_routes.length})', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
-                if (_perm.canCreate)
-                  TextButton.icon(
-                    onPressed: _openCreateRouteModal,
-                    icon: const Icon(Icons.add, size: 16),
-                    label: const Text('Add Route'),
-                  ),
-              ],
-            ),
+            Text('Live Fleet Dispatch Corridors (${_routes.length})', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
             const SizedBox(height: 10),
             if (_routes.isEmpty)
               const ModuleEmptyState(icon: Icons.navigation_outlined, title: 'No Route Corridors', subtitle: 'Add a new dispatch corridor to track transit telemetry.')
