@@ -174,6 +174,8 @@ const CustomDateInput = ({ value, onChange, required, placeholder = "DD-MM-YYYY"
   );
 };
 
+const DateInputDDMMYYYY = CustomDateInput;
+
 const ProcurementManagement = ({ onLogout, userRole }) => {
   const screenPerm = getScreenPermission("PROCUREMENT_MANAGEMENT");
   const { tab } = useParams();
@@ -1650,7 +1652,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
 
                   <div className="sco-form-group">
                     <label>Inward Received Date (DD-MM-YYYY)</label>
-                    <DateInputDDMMYYYY
+                    <CustomDateInput
                       value={grnForm.receivedDate}
                       onChange={(val) => setGrnForm({ ...grnForm, receivedDate: val })}
                     />
