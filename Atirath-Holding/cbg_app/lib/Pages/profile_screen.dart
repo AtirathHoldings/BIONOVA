@@ -25,6 +25,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   // Profile data state — populated from DB
   String _employeeCode = '';
+  String _employeeName = '';
   String _firstName = '';
   String _lastName = '';
   String _gender = '';
@@ -41,6 +42,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   String _department = '';
   String _workLocation = '';
   String _reportingManager = '';
+  String _status = 'Active';
   Map<String, dynamic> _rawProfile = {};
 
   // Text controllers for editing profile
@@ -147,20 +149,59 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (rawEmpTyp == 'CON') friendlyEmpTyp = 'Contract Employee';
     if (rawEmpTyp == 'RET') friendlyEmpTyp = 'Retainer';
 
+    final String rawDesig = (data['desigNm'] ?? data['desig_nm'] ?? data['designationNm'] ?? data['designation_name'] ?? data['designation'] ?? data['role'] ?? '').toString().trim();
+    String friendlyDesig = rawDesig;
+    if (friendlyDesig.isEmpty || friendlyDesig.toLowerCase() == 'null' || friendlyDesig.toLowerCase() == 'undefined' || int.tryParse(friendlyDesig) != null || double.tryParse(friendlyDesig) != null) {
+      friendlyDesig = 'N/A';
+    }
+
+    final String rawCoy = (data['coyNm'] ?? data['coy_nm'] ?? data['companyName'] ?? data['company_name'] ?? '').toString().trim();
+    final String rawPlt = (data['pltNm'] ?? data['plt_nm'] ?? data['plantName'] ?? data['plant_name'] ?? '').toString().trim();
+    final String rawDept = (data['deptNm'] ?? data['dept_nm'] ?? data['departmentName'] ?? data['department_name'] ?? '').toString().trim();
+    final String rawRepMan = (data['repManNm'] ?? data['rep_man_nm'] ?? data['reportingManager'] ?? data['reporting_manager'] ?? '').toString().trim();
+
+    String friendlyCoy = (rawCoy.isEmpty || rawCoy.toLowerCase() == 'null' || int.tryParse(rawCoy) != null) ? '' : rawCoy;
+    String friendlyPlt = (rawPlt.isEmpty || rawPlt.toLowerCase() == 'null' || int.tryParse(rawPlt) != null) ? '' : rawPlt;
+    String friendlyDept = (rawDept.isEmpty || rawDept.toLowerCase() == 'null' || int.tryParse(rawDept) != null) ? 'N/A' : rawDept;
+    String friendlyRepMan = (rawRepMan.isEmpty || rawRepMan.toLowerCase() == 'null' || int.tryParse(rawRepMan) != null) ? 'N/A' : rawRepMan;
+
+    final dynamic rawStatusVal = data['empSts'] ?? data['emp_sts'] ?? data['status'] ?? data['sts'] ?? data['statusNm'] ?? data['status_nm'] ?? data['empStatus'] ?? data['emp_status'] ?? data['actvSts'] ?? data['actv_sts'] ?? data['actvYn'] ?? data['actv_yn'] ?? data['is_active'] ?? data['isActive'];
+
+    String friendlyStatus = 'Active';
+    if (rawStatusVal != null) {
+      final sStr = rawStatusVal.toString().trim().toUpperCase();
+      if (sStr == '1' || sStr == 'TRUE' || sStr == 'Y' || sStr == 'YES' || sStr == 'ACTIVE' || sStr == 'A' || sStr == 'ACTV') {
+        friendlyStatus = 'Active';
+      } else if (sStr == '0' || sStr == 'FALSE' || sStr == 'N' || sStr == 'NO' || sStr == 'INACTIVE' || sStr == 'I' || sStr == 'INACTV') {
+        friendlyStatus = 'Inactive';
+      } else if (sStr.isNotEmpty && sStr != 'NULL' && sStr != 'UNDEFINED') {
+        friendlyStatus = sStr[0] + sStr.substring(1).toLowerCase();
+      }
+    }
+
+    final String fst = (data['fstNm'] ?? data['firstName'] ?? '').toString().trim();
+    final String lst = (data['lstNm'] ?? data['lastName'] ?? '').toString().trim();
+    String empName = '$fst $lst'.trim();
+    if (empName.isEmpty) {
+      empName = (data['fullName'] ?? data['empNm'] ?? data['name'] ?? '').toString().trim();
+    }
+
     setState(() {
       _employeeCode = data['empCode']?.toString() ?? '';
-      _firstName = data['fstNm']?.toString() ?? '';
-      _lastName = data['lstNm']?.toString() ?? '';
+      _employeeName = empName;
+      _firstName = fst.isNotEmpty ? fst : (data['fstNm']?.toString() ?? '');
+      _lastName = lst.isNotEmpty ? lst : (data['lstNm']?.toString() ?? '');
       _email = data['email']?.toString() ?? '';
       _mobileNumber = data['mobNum']?.toString() ?? '';
       _bloodGroup = data['bldGrp']?.toString() ?? '';
       _address = data['address']?.toString() ?? '';
       _workLocation = data['wLoc']?.toString() ?? data['wloc']?.toString() ?? '';
-      _designation = data['designation']?.toString() ?? data['role']?.toString() ?? data['desigId']?.toString() ?? '';
-      _company = data['coyNm']?.toString() ?? data['coyId']?.toString() ?? '';
-      _plant = data['pltNm']?.toString() ?? data['pltId']?.toString() ?? '';
-      _department = data['deptNm']?.toString() ?? data['deptId']?.toString() ?? '';
-      _reportingManager = data['repManNm']?.toString() ?? data['repManId']?.toString() ?? '';
+      _designation = friendlyDesig;
+      _company = friendlyCoy;
+      _plant = friendlyPlt;
+      _department = friendlyDept;
+      _reportingManager = friendlyRepMan;
+      _status = friendlyStatus;
       _gender = friendlyGender;
       _dob = parsedDob;
       _empType = friendlyEmpTyp;
@@ -245,7 +286,7 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
     debugPrint("✅ STEP 1 complete! Uploaded URL: $uploadedUrl");
     
     // STEP 2: Update employee profile with the URL (React flow)
-    debugPrint("📤 STEP 2: Updating employee profile with photo URL...");
+    debugPrint("📤 STEP 2: Updating profile with photo URL...");
     debugPrint("📤 PUT /api/employees/$empId with photoUrl: $uploadedUrl");
     
     final Map<String, dynamic> updatedData = Map<String, dynamic>.from(_rawProfile);
@@ -758,7 +799,7 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
           ),
           const SizedBox(height: 12),
           Text(
-            '$_firstName $_lastName',
+            _employeeName.isNotEmpty ? _employeeName : '$_firstName $_lastName'.trim(),
             style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)),
           ),
           const SizedBox(height: 2),
@@ -815,8 +856,7 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
             child: Divider(color: Color(0xFFF1F5F9), height: 1),
           ),
 
-          _buildInfoRow(Icons.person_outline, 'First Name', _firstName),
-          _buildInfoRow(Icons.person_outline, 'Second Name', _lastName),
+          _buildInfoRow(Icons.person_outline, 'Employee Name', _employeeName.isNotEmpty ? _employeeName : '$_firstName $_lastName'.trim()),
           _buildInfoRow(Icons.wc_outlined, 'Gender', _gender),
           _buildInfoRow(Icons.cake_outlined, 'Date of Birth', _formatDate(_dob)),
           _buildInfoRow(Icons.mail_outline_rounded, 'Email', _email),
@@ -852,7 +892,7 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
           _buildInfoRow(Icons.supervisor_account_outlined, 'Reporting Manager', _reportingManager),
           _buildInfoRow(Icons.calendar_month_outlined, 'Date of Joining', _doj),
           _buildInfoRow(Icons.timelapse_outlined, 'Employment Type', _empType),
-          _buildInfoStatusRow(Icons.timelapse_outlined, 'Status', 'Active'),
+          _buildInfoStatusRow(Icons.timelapse_outlined, 'Status', _status),
         ],
       ),
     );
@@ -887,6 +927,10 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
   }
 
   Widget _buildInfoStatusRow(IconData icon, String label, String statusText) {
+    final bool isActive = statusText.trim().toLowerCase() == 'active';
+    final Color bgColor = isActive ? const Color(0xFFDCFCE7) : const Color(0xFFFEE2E2);
+    final Color textColor = isActive ? const Color(0xFF16A34A) : const Color(0xFFEF4444);
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -905,7 +949,7 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
             decoration: BoxDecoration(
-              color: const Color(0xFFDCFCE7),
+              color: bgColor,
               borderRadius: BorderRadius.circular(4),
             ),
             child: Row(
@@ -914,12 +958,12 @@ Future<void> _uploadAndSavePhoto(String filePath) async {
                 Container(
                   width: 6,
                   height: 6,
-                  decoration: const BoxDecoration(color: Color(0xFF16A34A), shape: BoxShape.circle),
+                  decoration: BoxDecoration(color: textColor, shape: BoxShape.circle),
                 ),
                 const SizedBox(width: 6),
                 Text(
                   statusText,
-                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: const Color(0xFF16A34A)),
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w700, color: textColor),
                 ),
               ],
             ),

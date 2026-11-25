@@ -287,6 +287,11 @@ class _NotificationScreenState extends State<NotificationScreen>
   bool _isLoading = false;
   String? _error;
 
+  Future<void> _handleRefresh() async {
+    await ApiService.preloadAllData(forceRefresh: true);
+    await _fetchNotifications();
+  }
+
   Future<void> _fetchNotifications() async {
     if (!mounted) return;
     setState(() {
@@ -349,10 +354,12 @@ class _NotificationScreenState extends State<NotificationScreen>
       }
 
       if (!mounted) return;
+      final clearedIds = await _getClearedNotificationIds();
       setState(() {
-        _notifications = rawNotifications.map((json) {
-          return NotificationModel.fromJson(json, taskNamesMap: taskNamesMap);
-        }).toList();
+        _notifications = rawNotifications
+            .map((json) => NotificationModel.fromJson(json, taskNamesMap: taskNamesMap))
+            .where((n) => !clearedIds.contains(n.id))
+            .toList();
         _isLoading = false;
       });
     } catch (e) {
@@ -362,6 +369,17 @@ class _NotificationScreenState extends State<NotificationScreen>
         _isLoading = false;
       });
     }
+  }
+
+  Future<Set<String>> _getClearedNotificationIds() async {
+    final prefs = await SharedPreferences.getInstance();
+    final list = prefs.getStringList('cleared_notification_ids') ?? [];
+    return list.toSet();
+  }
+
+  Future<void> _saveClearedNotificationIds(Set<String> clearedIds) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList('cleared_notification_ids', clearedIds.toList());
   }
 
 
@@ -380,26 +398,23 @@ class _NotificationScreenState extends State<NotificationScreen>
         await ApiService.markNotificationAsRead(idInt);
       }
     }
-    _showSnackBar('âœ“ All notifications marked as read');
+    _showSnackBar('All notifications marked as read');
     _fetchNotifications();
   }
-
-
-  // ============================================
-  // HANDLER METHODS
-  // ============================================
-
-
 
   void _handleDismiss(String id) async {
     final idInt = int.tryParse(id);
     if (idInt != null) {
-      await ApiService.markNotificationAsRead(idInt);
+      ApiService.markNotificationAsRead(idInt);
     }
+    final clearedIds = await _getClearedNotificationIds();
+    clearedIds.add(id);
+    await _saveClearedNotificationIds(clearedIds);
+
     setState(() {
       _notifications.removeWhere((n) => n.id == id);
     });
-    _showSnackBar('ðŸ—‘ï¸ Notification dismissed');
+    _showSnackBar('Notification cleared');
   }
 
   void _showSnackBar(String message) {
@@ -520,6 +535,7 @@ class _NotificationScreenState extends State<NotificationScreen>
   Widget build(BuildContext context) {
     final groupedNotifications = _groupedNotifications;
     final keys = groupedNotifications.keys.toList();
+    final unreadCount = _notifications.where((n) => !n.isRead).length;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -527,7 +543,9 @@ class _NotificationScreenState extends State<NotificationScreen>
       // CUSTOM APP BAR / HEADER SECTION
       // ============================================
       appBar: CustomHeader(
-        title: "Notifications", // à°¬à±à°¯à°¾à°•à± à°¬à°Ÿà°¨à± à°†à°Ÿà±‹à°®à±‡à°Ÿà°¿à°•à±â€Œà°—à°¾ à°µà°¸à±à°¤à±à°‚à°¦à°¿
+        title: "Notifications",
+        notificationCount: unreadCount,
+        onNotificationTap: _fetchNotifications,
       ),
       
       body: Column(
@@ -536,13 +554,31 @@ class _NotificationScreenState extends State<NotificationScreen>
           _buildFilterBar(),
           // Notification List
           Expanded(
-            child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
-                : _error != null
-                    ? Center(child: Text('Error: $_error'))
-                    : keys.isEmpty
-                        ? _buildEmptyState()
-                        : _buildNotificationList(keys, groupedNotifications),
+            child: RefreshIndicator(
+              onRefresh: _handleRefresh,
+              color: const Color(0xFF2563EB),
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? SingleChildScrollView(
+                          physics: const AlwaysScrollableScrollPhysics(),
+                          child: Container(
+                            height: MediaQuery.of(context).size.height * 0.7,
+                            alignment: Alignment.center,
+                            child: Text('Error: $_error'),
+                          ),
+                        )
+                      : keys.isEmpty
+                          ? SingleChildScrollView(
+                              physics: const AlwaysScrollableScrollPhysics(),
+                              child: Container(
+                                height: MediaQuery.of(context).size.height * 0.7,
+                                alignment: Alignment.center,
+                                child: _buildEmptyState(),
+                              ),
+                            )
+                          : _buildNotificationList(keys, groupedNotifications),
+            ),
           ),
         ],
       ),
@@ -571,26 +607,51 @@ class _NotificationScreenState extends State<NotificationScreen>
   // ============================================
 
   Widget _buildFilterBar() {
+    final unreadCount = _notifications.where((n) => !n.isRead).length;
+    final totalCount = _notifications.length;
+
     return Container(
       color: Colors.white,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          ElevatedButton.icon(
-            onPressed: _isLoading ? null : _markAllAsRead,
-            icon: const Icon(Icons.done_all, size: 18),
-            label: Text(
-              'Mark All Read',
-              style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF10B981),
-              foregroundColor: Colors.white,
-              elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+          Row(
+            children: [
+              ElevatedButton.icon(
+                onPressed: (_isLoading || unreadCount == 0) ? null : _markAllAsRead,
+                icon: const Icon(Icons.done_all, size: 14),
+                label: Text(
+                  'Mark All As Read',
+                  style: GoogleFonts.inter(fontSize: 11, fontWeight: FontWeight.w600),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF10B981),
+                  foregroundColor: Colors.white,
+                  disabledBackgroundColor: const Color(0xFFE2E8F0),
+                  disabledForegroundColor: const Color(0xFF94A3B8),
+                  elevation: 0,
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF2563EB).withValues(alpha: 0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  unreadCount > 0 ? '$unreadCount Unread' : '$totalCount Total',
+                  style: GoogleFonts.inter(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: const Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+            ],
           ),
           GestureDetector(
             onTap: () {
@@ -599,7 +660,7 @@ class _NotificationScreenState extends State<NotificationScreen>
               });
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: const Color(0xFFF1F5F9),
                 borderRadius: BorderRadius.circular(8),
@@ -611,7 +672,7 @@ class _NotificationScreenState extends State<NotificationScreen>
                     size: 16,
                     color: const Color(0xFF64748B),
                   ),
-                  const SizedBox(width: 6),
+                  const SizedBox(width: 4),
                   Text(
                     _isGridView ? 'List' : 'Grid',
                     style: GoogleFonts.inter(
@@ -629,6 +690,24 @@ class _NotificationScreenState extends State<NotificationScreen>
     );
   }
 
+  Future<void> _handleClearSection(List<NotificationModel> sectionNotifs) async {
+    final idsToRemove = sectionNotifs.map((n) => n.id).toSet();
+    final clearedIds = await _getClearedNotificationIds();
+    clearedIds.addAll(idsToRemove);
+    await _saveClearedNotificationIds(clearedIds);
+
+    for (var n in sectionNotifs) {
+      final idInt = int.tryParse(n.id);
+      if (idInt != null) {
+        ApiService.markNotificationAsRead(idInt);
+      }
+    }
+    setState(() {
+      _notifications.removeWhere((n) => idsToRemove.contains(n.id));
+    });
+    _showSnackBar('Section notifications cleared');
+  }
+
   // ============================================
   // NOTIFICATION LIST
   // ============================================
@@ -638,6 +717,7 @@ class _NotificationScreenState extends State<NotificationScreen>
     Map<String, List<NotificationModel>> grouped,
   ) {
     return ListView.builder(
+      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
       padding: const EdgeInsets.all(16),
       itemCount: keys.length,
       itemBuilder: (context, index) {
@@ -648,19 +728,56 @@ class _NotificationScreenState extends State<NotificationScreen>
           children: [
             // Date Header
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Icon(
-                  Icons.calendar_month_outlined,
-                  size: 16,
-                  color: Color(0xFF64748B),
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_month_outlined,
+                      size: 16,
+                      color: Color(0xFF64748B),
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '$key (${notifications.length})',
+                      style: GoogleFonts.inter(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: const Color(0xFF64748B),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 6),
-                Text(
-                  key,
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: const Color(0xFF64748B),
+                GestureDetector(
+                  onTap: () => _handleClearSection(notifications),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFEF4444).withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(
+                        color: const Color(0xFFEF4444).withValues(alpha: 0.2),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.delete_sweep_outlined,
+                          size: 14,
+                          color: Color(0xFFEF4444),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Clean All',
+                          style: GoogleFonts.inter(
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            color: const Color(0xFFEF4444),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ],
@@ -1075,16 +1192,7 @@ class _NotificationScreenState extends State<NotificationScreen>
           ),
           const SizedBox(height: 16),
           Text(
-            'No Notifications',
-            style: GoogleFonts.inter(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: const Color(0xFF1E293B),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'You\'re all caught up! ðŸŽ‰',
+            'Loading Notifications...',
             style: GoogleFonts.inter(
               fontSize: 14,
               color: const Color(0xFF64748B),

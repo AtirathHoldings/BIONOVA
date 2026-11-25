@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:image_picker/image_picker.dart';
@@ -8,552 +9,29 @@ import '../widgets/footer.dart';
 import 'main_screen.dart';
 import '../services/api_service.dart';
 import '../models/employee_option.dart';
+import '../widgets/searchable_dropdown.dart';
 
-// ============================================================
-// PREMIUM SEARCHABLE DROPDOWN
-// ============================================================
-
-class SearchableDropdown<T> extends StatefulWidget {
-  final List<T> items;
-  final T? selectedItem;
-  final ValueChanged<T?> onChanged;
-  final String label;
-  final String hint;
-  final bool isRequired;
-  final String Function(T) itemLabel;
-  final String Function(T)? itemSubtitle;
-  final Widget Function(T, bool)? itemBuilder;
-  final Widget Function(T?)? selectedBuilder;
-  final bool enabled;
-
-  const SearchableDropdown({
-    super.key,
-    required this.items,
-    this.selectedItem,
-    required this.onChanged,
-    required this.label,
-    this.hint = 'Search...',
-    this.isRequired = true,
-    required this.itemLabel,
-    this.itemSubtitle,
-    this.itemBuilder,
-    this.selectedBuilder,
-    this.enabled = true,
-  });
-
+class DateInputFormatter extends TextInputFormatter {
   @override
-  State<SearchableDropdown<T>> createState() => _SearchableDropdownState<T>();
-}
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final text = newValue.text.replaceAll('/', '');
+    if (text.length > 8) return oldValue;
 
-class _SearchableDropdownState<T> extends State<SearchableDropdown<T>> {
-  final LayerLink _layerLink = LayerLink();
-  OverlayEntry? _overlayEntry;
-  bool _isOpen = false;
-  String _searchQuery = '';
-  final TextEditingController _controller = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
-
-  String _getInitials(String name) {
-    if (name.isEmpty) return '?';
-    final parts = name.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
-    }
-    return parts[0][0].toUpperCase();
-  }
-
-  Color _getColorForName(String name) {
-    final colors = [
-      const Color(0xFF3B82F6), // Blue
-      const Color(0xFF10B981), // Emerald
-      const Color(0xFF8B5CF6), // Purple
-      const Color(0xFFEC4899), // Pink
-      const Color(0xFFF59E0B), // Amber
-      const Color(0xFFEF4444), // Red
-      const Color(0xFF14B8A6), // Teal
-    ];
-    int hash = 0;
-    for (int i = 0; i < name.length; i++) {
-      hash = name.codeUnitAt(i) + ((hash << 5) - hash);
-    }
-    return colors[hash.abs() % colors.length];
-  }
-
-  @override
-  void initState() {
-    super.initState();
-    final selected = widget.selectedItem;
-    _controller.text = selected != null ? widget.itemLabel(selected) : '';
-    _focusNode.addListener(_onFocusChange);
-  }
-
-  @override
-  void didUpdateWidget(covariant SearchableDropdown<T> oldWidget) {
-    super.didUpdateWidget(oldWidget);
-
-    if (widget.items != oldWidget.items || widget.selectedItem != oldWidget.selectedItem) {
-      final selected = widget.selectedItem;
-      _controller.text = selected != null ? widget.itemLabel(selected) : '';
-      _overlayEntry?.markNeedsBuild();
-      if (mounted) {
-        setState(() {});
+    final buffer = StringBuffer();
+    for (int i = 0; i < text.length; i++) {
+      if (i == 2 || i == 4) {
+        buffer.write('/');
       }
+      buffer.write(text[i]);
     }
-  }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    _focusNode.dispose();
-    _closeDropdown();
-    super.dispose();
-  }
-
-  void _onFocusChange() {
-    if (!widget.enabled) {
-      _focusNode.unfocus();
-      return;
-    }
-    if (_focusNode.hasFocus) {
-      _openDropdown();
-    } else {
-      _closeDropdown();
-    }
-  }
-
-  void _openDropdown() {
-    if (_overlayEntry != null) return;
-
-    setState(() {
-      _isOpen = true;
-      _searchQuery = '';
-    });
-
-    _overlayEntry = OverlayEntry(builder: (context) => _buildDropdownOverlay());
-
-    Overlay.of(context).insert(_overlayEntry!);
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _overlayEntry?.markNeedsBuild();
-    });
-  }
-
-  void _closeDropdown() {
-    _overlayEntry?.remove();
-    _overlayEntry = null;
-    if (mounted) {
-      setState(() {
-        _isOpen = false;
-        _searchQuery = '';
-        final selected = widget.selectedItem;
-        if (selected != null &&
-            _controller.text != widget.itemLabel(selected)) {
-          _controller.text = widget.itemLabel(selected);
-        }
-      });
-    }
-  }
-
-  void _clearSelection() {
-    _controller.clear();
-    setState(() {
-      _searchQuery = '';
-    });
-    widget.onChanged(null);
-  }
-
-  Widget _buildDropdownOverlay() {
-    final RenderBox renderBox = context.findRenderObject() as RenderBox;
-    final Offset offset = renderBox.localToGlobal(Offset.zero);
-    final Size size = renderBox.size;
-
-    final filteredItems = _searchQuery.isEmpty
-        ? widget.items
-        : widget.items.where((item) {
-            final label = widget.itemLabel(item).toLowerCase();
-            final subtitle =
-                widget.itemSubtitle?.call(item).toLowerCase() ?? '';
-            final query = _searchQuery.toLowerCase().trim();
-            return label.contains(query) || subtitle.contains(query);
-          }).toList();
-
-    return Positioned(
-      left: offset.dx,
-      top: offset.dy + size.height + 2,
-      width: size.width,
-      child: CompositedTransformFollower(
-        link: _layerLink,
-        offset: Offset(0, size.height + 2),
-        child: Material(
-          elevation: 8,
-          borderRadius: BorderRadius.circular(8),
-          color: Colors.white,
-          child: ConstrainedBox(
-            constraints: BoxConstraints(maxHeight: 300, minHeight: 50),
-            child: filteredItems.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Center(
-                      child: widget.items.isEmpty
-                          ? Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Color(0xFF2563EB),
-                                  ),
-                                ),
-                                const SizedBox(width: 10),
-                                Text(
-                                  'Loading employees...',
-                                  style: GoogleFonts.inter(
-                                    fontSize: 13,
-                                    color: Colors.grey[600],
-                                  ),
-                                ),
-                              ],
-                            )
-                          : Text(
-                              'No results found',
-                              style: GoogleFonts.inter(
-                                fontSize: 13,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                    ),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.symmetric(vertical: 4),
-                    itemCount: filteredItems.length,
-                    separatorBuilder: (context, index) =>
-                        const Divider(height: 1, color: Color(0xFFE2E8F0)),
-                    itemBuilder: (context, index) {
-                      final item = filteredItems[index];
-                      final isSelected = widget.selectedItem == item;
-
-                      return InkWell(
-                        onTap: () {
-                          widget.onChanged(item);
-                          _controller.text = widget.itemLabel(item);
-                          _focusNode.unfocus();
-                          _closeDropdown();
-                        },
-                        child: widget.itemBuilder != null
-                            ? widget.itemBuilder!(item, isSelected)
-                            : Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                                child: Row(
-                                  children: [
-                                    Builder(
-                                      builder: (context) {
-                                        String? imageUrl;
-                                        if (item is EmployeeOption) {
-                                          imageUrl = (item as EmployeeOption)
-                                              .profileImageUrl;
-                                        }
-                                        final hasImage =
-                                            imageUrl != null &&
-                                            imageUrl.isNotEmpty;
-
-                                        final fallbackAvatar = Center(
-                                          child: Text(
-                                            _getInitials(
-                                              widget.itemLabel(item),
-                                            ),
-                                            style: TextStyle(
-                                              color: isSelected
-                                                  ? Colors.white
-                                                  : _getColorForName(
-                                                      widget.itemLabel(item),
-                                                    ),
-                                              fontWeight: FontWeight.bold,
-                                              fontSize: 13,
-                                            ),
-                                          ),
-                                        );
-
-                                        return Container(
-                                          width: 36,
-                                          height: 36,
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? const Color(0xFF2563EB)
-                                                : _getColorForName(
-                                                    widget.itemLabel(item),
-                                                  ).withValues(alpha: 0.15),
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: hasImage
-                                              ? ClipOval(
-                                                  child: Image.network(
-                                                    imageUrl,
-                                                    fit: BoxFit.cover,
-                                                    errorBuilder:
-                                                        (
-                                                          context,
-                                                          error,
-                                                          stackTrace,
-                                                        ) => fallbackAvatar,
-                                                    loadingBuilder:
-                                                        (
-                                                          context,
-                                                          child,
-                                                          loadingProgress,
-                                                        ) {
-                                                          if (loadingProgress ==
-                                                              null)
-                                                            return child;
-                                                          return Center(
-                                                            child: SizedBox(
-                                                              width: 16,
-                                                              height: 16,
-                                                              child: CircularProgressIndicator(
-                                                                strokeWidth:
-                                                                    1.5,
-                                                                color:
-                                                                    isSelected
-                                                                    ? Colors
-                                                                          .white
-                                                                    : const Color(
-                                                                        0xFF2563EB,
-                                                                      ),
-                                                              ),
-                                                            ),
-                                                          );
-                                                        },
-                                                  ),
-                                                )
-                                              : fallbackAvatar,
-                                        );
-                                      },
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            widget.itemLabel(item),
-                                            style: GoogleFonts.inter(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: const Color(0xFF1E293B),
-                                            ),
-                                            overflow: TextOverflow.ellipsis,
-                                            maxLines: 1,
-                                          ),
-                                          if (widget.itemSubtitle != null) ...[
-                                            const SizedBox(height: 2),
-                                            Text(
-                                              widget.itemSubtitle!(item),
-                                              style: GoogleFonts.inter(
-                                                fontSize: 12,
-                                                color: const Color(0xFF475569),
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              overflow: TextOverflow.ellipsis,
-                                              maxLines: 1,
-                                            ),
-                                          ],
-                                          if (item is EmployeeOption) ...[
-                                            Builder(
-                                              builder: (context) {
-                                                final emp =
-                                                    item as EmployeeOption;
-                                                final hasPlant =
-                                                    emp.plantName != null &&
-                                                    emp.plantName!.isNotEmpty;
-                                                final hasCompany =
-                                                    emp.companyName != null &&
-                                                    emp.companyName!.isNotEmpty;
-
-                                                String locationStr = '';
-                                                if (hasPlant && hasCompany) {
-                                                  locationStr =
-                                                      '${emp.plantName} (${emp.companyName})';
-                                                } else if (hasCompany) {
-                                                  locationStr =
-                                                      emp.companyName!;
-                                                } else if (hasPlant) {
-                                                  locationStr = emp.plantName!;
-                                                }
-
-                                                if (locationStr.isEmpty)
-                                                  return const SizedBox.shrink();
-
-                                                return Padding(
-                                                  padding:
-                                                      const EdgeInsets.only(
-                                                        top: 2,
-                                                      ),
-                                                  child: Text(
-                                                    locationStr,
-                                                    style: GoogleFonts.inter(
-                                                      fontSize: 11.5,
-                                                      color: const Color(
-                                                        0xFF64748B,
-                                                      ),
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    maxLines: 1,
-                                                  ),
-                                                );
-                                              },
-                                            ),
-                                          ],
-                                        ],
-                                      ),
-                                    ),
-                                    if (isSelected)
-                                      const Icon(
-                                        Icons.check_circle,
-                                        color: Color(0xFF2563EB),
-                                        size: 20,
-                                      ),
-                                  ],
-                                ),
-                              ),
-                      );
-                    },
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 6),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                widget.label,
-                style: GoogleFonts.inter(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF334155),
-                ),
-              ),
-              if (widget.isRequired)
-                Text(
-                  ' *',
-                  style: GoogleFonts.inter(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.red,
-                  ),
-                ),
-            ],
-          ),
-        ),
-        CompositedTransformTarget(
-          link: _layerLink,
-          child: TextFormField(
-            controller: _controller,
-            focusNode: _focusNode,
-            enabled: widget.enabled,
-            validator: (value) {
-              if (widget.isRequired && widget.selectedItem == null) {
-                return 'Please select ${widget.label}';
-              }
-              return null;
-            },
-            decoration: InputDecoration(
-              hintText: widget.hint,
-              hintStyle: const TextStyle(color: Colors.grey, fontSize: 13),
-              prefixIcon: _controller.text.isEmpty
-                  ? const Icon(Icons.search, color: Colors.grey, size: 20)
-                  : const Icon(
-                      Icons.person_outline,
-                      color: Color(0xFF2563EB),
-                      size: 20,
-                    ),
-              suffixIcon: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  if (_controller.text.isNotEmpty && widget.enabled)
-                    IconButton(
-                      icon: const Icon(
-                        Icons.clear,
-                        size: 18,
-                        color: Colors.grey,
-                      ),
-                      onPressed: _clearSelection,
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(
-                        minWidth: 32,
-                        minHeight: 32,
-                      ),
-                    ),
-                  AnimatedRotation(
-                    turns: _isOpen ? 0.5 : 0,
-                    duration: const Duration(milliseconds: 200),
-                    child: const Icon(
-                      Icons.keyboard_arrow_down,
-                      color: Colors.grey,
-                      size: 20,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                ],
-              ),
-              filled: true,
-              fillColor: Colors.white,
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 14,
-                vertical: 12,
-              ),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFCBD5E1)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFFE2E8F0)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(
-                  color: Color(0xFF2563EB),
-                  width: 1.5,
-                ),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Colors.red, width: 1.5),
-              ),
-            ),
-            onChanged: (value) {
-              setState(() {
-                _searchQuery = value;
-                if (!_isOpen) {
-                  _openDropdown();
-                } else {
-                  _overlayEntry?.markNeedsBuild();
-                }
-              });
-            },
-          ),
-        ),
-      ],
+    final formatted = buffer.toString();
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
     );
   }
 }
@@ -603,16 +81,17 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
     text: '',
   );
   final TextEditingController _durationController = TextEditingController();
+  final TextEditingController _startDateController = TextEditingController();
+  final TextEditingController _dueDateController = TextEditingController();
 
   String _priority = 'Medium';
   String _status = 'Open';
-  DateTime _startDate = DateTime.now();
+  DateTime _startDate = DateTime(
+    DateTime.now().year,
+    DateTime.now().month,
+    DateTime.now().day,
+  );
   DateTime? _dueDate;
-
-  List<DateTime> _holidays = [];
-  int _workingDaysPerWeek = 6;
-  bool _skipSaturday = false;
-  bool _skipSunday = true;
 
   bool _isProcessWorkflowExpanded = false;
 
@@ -622,8 +101,8 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
   // Assignment & Workflow State
   EmployeeOption? _assignedEmployee;
   bool _enableWorkflow = false;
-  EmployeeOption? _reviewer;
-  EmployeeOption? _approver;
+  List<EmployeeOption> _reviewers = [];
+  List<EmployeeOption> _approvers = [];
 
   final List<Map<String, dynamic>> _attachments = [];
   final ImagePicker _picker = ImagePicker();
@@ -635,9 +114,79 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
   // Employees loaded from DB
   List<EmployeeOption> _employees = [];
 
+  // --- Task Code Formatting & Auto Generation (Identical to Web) ---
+  static String formatTaskCode(String cd) {
+    if (cd.trim().isEmpty) return '';
+    final match = RegExp(r'^INDTSK-?(\d+)$', caseSensitive: false).firstMatch(cd.trim());
+    if (match != null) {
+      final num = int.tryParse(match.group(1) ?? '') ?? 0;
+      return 'INDTSK-${num.toString().padLeft(3, '0')}';
+    }
+    return cd.trim().toUpperCase();
+  }
+
+  static String generateNextTaskCode(List<dynamic> allTasks) {
+    if (allTasks.isEmpty) return "INDTSK-001";
+    int maxNum = 0;
+    for (final t in allTasks) {
+      if (t is Map) {
+        final cd = (t['taskCd'] ?? t['task_cd'] ?? t['code'] ?? '').toString();
+        final match = RegExp(r'INDTSK-?(\d+)', caseSensitive: false).firstMatch(cd);
+        if (match != null) {
+          final num = int.tryParse(match.group(1) ?? '') ?? 0;
+          if (num > maxNum) {
+            maxNum = num;
+          }
+        }
+      }
+    }
+    final nextNum = maxNum + 1;
+    return 'INDTSK-${nextNum.toString().padLeft(3, '0')}';
+  }
+
+  Future<void> _initTaskCode() async {
+    if (widget.isEditMode && widget.task != null && (widget.task!['taskCd'] != null && widget.task!['taskCd'].toString().trim().isNotEmpty)) {
+      return;
+    }
+
+    try {
+      final nextCode = await ApiService.getNextTaskCode();
+      if (nextCode != null && nextCode.trim().isNotEmpty) {
+        if (mounted) {
+          setState(() {
+            _taskCodeController.text = formatTaskCode(nextCode.trim());
+          });
+        }
+        return;
+      }
+    } catch (e) {
+      debugPrint("Error fetching next-code endpoint: $e");
+    }
+
+    // Fallback: calculate next code from cached / fetched individual tasks
+    try {
+      final tasks = await ApiService.getIndividualTasks();
+      final calculated = generateNextTaskCode(tasks);
+      if (mounted) {
+        setState(() {
+          _taskCodeController.text = calculated;
+        });
+      }
+    } catch (e) {
+      if (mounted && _taskCodeController.text.trim().isEmpty) {
+        setState(() {
+          _taskCodeController.text = "INDTSK-001";
+        });
+      }
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _startDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
+    _dueDateController.text = _dueDate != null ? DateFormat('dd/MM/yyyy').format(_dueDate!) : '';
+
     _fetchNotificationCount();
     _fetchEmployees();
     _checklistEditController = TextEditingController();
@@ -650,6 +199,11 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
 
     // Pre-fill if task is provided
     _prefillTaskData();
+
+    // Auto-generate task code for new task
+    if (widget.task == null || !widget.isEditMode || _taskCodeController.text.trim().isEmpty) {
+      _initTaskCode();
+    }
   }
 
   @override
@@ -659,6 +213,8 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
     _descController.dispose();
     _taskRemarksController.dispose();
     _durationController.dispose();
+    _startDateController.dispose();
+    _dueDateController.dispose();
     _checklistEditController.dispose();
     _checklistFocusNode.dispose();
     super.dispose();
@@ -669,7 +225,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
 
     final task = widget.task!;
 
-    _taskCodeController.text = (task['taskCd'] ?? '').toString();
+    _taskCodeController.text = formatTaskCode((task['taskCd'] ?? '').toString());
     _titleController.text = (task['taskNm'] ?? '').toString();
     _descController.text = (task['taskDesc'] ?? '').toString();
     _taskRemarksController.text = (task['taskRemarks'] ?? task['remarks'] ?? '')
@@ -701,12 +257,35 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
     final stDt = task['stDt']?.toString();
     if (stDt != null && stDt.isNotEmpty) {
       final parsed = DateTime.tryParse(stDt);
-      if (parsed != null) _startDate = parsed;
+      if (parsed != null) {
+        _startDate = DateTime(parsed.year, parsed.month, parsed.day);
+        _startDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
+      }
+    } else {
+      _startDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
     }
 
     final endDt = task['endDt']?.toString() ?? task['dueDt']?.toString();
     if (endDt != null && endDt.isNotEmpty) {
-      _dueDate = DateTime.tryParse(endDt);
+      final parsed = DateTime.tryParse(endDt);
+      if (parsed != null) {
+        _dueDate = DateTime(parsed.year, parsed.month, parsed.day);
+        _dueDateController.text = DateFormat('dd/MM/yyyy').format(_dueDate!);
+      }
+    }
+
+    final rawDur = task['noOfDays'] ??
+        task['plnDys'] ??
+        task['duration'] ??
+        task['totalProjectDays'];
+    if (rawDur != null && rawDur.toString().trim().isNotEmpty) {
+      final parsedDur = int.tryParse(rawDur.toString());
+      if (parsedDur != null) {
+        _durationController.text = (parsedDur > 0 ? parsedDur : 1).toString();
+      }
+    }
+    if (_durationController.text.isEmpty && _dueDate != null) {
+      _calculateDurationFromDates();
     }
 
     final assignedTo = task['assignedTo'] ?? task['empId'];
@@ -718,22 +297,56 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
       );
     }
 
-    final reviewerId = task['reviewer'];
-    if (reviewerId != null) {
-      _reviewer = EmployeeOption(
-        id: reviewerId.toString(),
-        name: (task['reviewerNm'] ?? 'Unknown').toString(),
-        designation: '',
-      );
+    _reviewers.clear();
+    final reviewerRaw = task['reviewers'] ?? task['reviewer'];
+    if (reviewerRaw != null) {
+      if (reviewerRaw is List) {
+        for (var r in reviewerRaw) {
+          if (r != null && r.toString().isNotEmpty) {
+            _reviewers.add(EmployeeOption(
+              id: r.toString(),
+              name: (task['reviewerNm'] ?? 'Unknown').toString(),
+              designation: '',
+            ));
+          }
+        }
+      } else if (reviewerRaw.toString().isNotEmpty) {
+        for (var id in reviewerRaw.toString().split(',')) {
+          if (id.trim().isNotEmpty) {
+            _reviewers.add(EmployeeOption(
+              id: id.trim(),
+              name: (task['reviewerNm'] ?? 'Unknown').toString(),
+              designation: '',
+            ));
+          }
+        }
+      }
     }
 
-    final approverId = task['approver'];
-    if (approverId != null) {
-      _approver = EmployeeOption(
-        id: approverId.toString(),
-        name: (task['approverNm'] ?? 'Unknown').toString(),
-        designation: '',
-      );
+    _approvers.clear();
+    final approverRaw = task['approvers'] ?? task['approver'];
+    if (approverRaw != null) {
+      if (approverRaw is List) {
+        for (var a in approverRaw) {
+          if (a != null && a.toString().isNotEmpty) {
+            _approvers.add(EmployeeOption(
+              id: a.toString(),
+              name: (task['approverNm'] ?? 'Unknown').toString(),
+              designation: '',
+            ));
+          }
+        }
+      } else if (approverRaw.toString().isNotEmpty) {
+        for (var id in approverRaw.toString().split(',')) {
+          if (id.trim().isNotEmpty) {
+            _approvers.add(EmployeeOption(
+              id: id.trim(),
+              name: (task['approverNm'] ?? 'Unknown').toString(),
+              designation: '',
+            ));
+          }
+        }
+      }
     }
 
     // Workflow
@@ -874,21 +487,21 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
               _calculateDurationFromDates();
             }
 
-            if (_reviewer != null) {
-              final revId = _reviewer!.id;
+            for (int i = 0; i < _reviewers.length; i++) {
+              final revId = _reviewers[i].id;
               for (final emp in _employees) {
                 if (emp.id?.toString() == revId) {
-                  _reviewer = emp;
+                  _reviewers[i] = emp;
                   break;
                 }
               }
             }
 
-            if (_approver != null) {
-              final appId = _approver!.id;
+            for (int i = 0; i < _approvers.length; i++) {
+              final appId = _approvers[i].id;
               for (final emp in _employees) {
                 if (emp.id?.toString() == appId) {
-                  _approver = emp;
+                  _approvers[i] = emp;
                   break;
                 }
               }
@@ -896,9 +509,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
 
             // Fetch process configs to update reviewer and approver if needed (fallback)
             if (widget.isEditMode || widget.isPreview) {
-              if (_reviewer == null || _approver == null) {
-                _fetchProcessConfigs();
-              }
+              _fetchProcessConfigs();
               _fetchChecklistItems();
             }
           }
@@ -1032,84 +643,38 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
     }
   }
 
-  bool _isHoliday(DateTime date) {
-    if (_skipSaturday && date.weekday == DateTime.saturday) return true;
-    if (_skipSunday && date.weekday == DateTime.sunday) return true;
-    final dateOnly = DateTime(date.year, date.month, date.day);
-    return _holidays.any(
-      (h) =>
-          h.year == dateOnly.year &&
-          h.month == dateOnly.month &&
-          h.day == dateOnly.day,
-    );
-  }
-
   void _calculateDurationFromDates() {
     if (_dueDate == null) return;
 
-    if (_dueDate!.isBefore(
-      DateTime(_startDate.year, _startDate.month, _startDate.day),
-    )) {
+    final startDateOnly = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final dueDateOnly = DateTime(_dueDate!.year, _dueDate!.month, _dueDate!.day);
+
+    if (dueDateOnly.isBefore(startDateOnly)) {
+      _dueDate = _startDate;
+      _dueDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
       _durationController.removeListener(_calculateEndDate);
-      _durationController.text = '';
+      _durationController.text = '1';
       _durationController.addListener(_calculateEndDate);
       return;
     }
 
-    int duration = 0;
-    DateTime current = _startDate;
+    final diff = dueDateOnly.difference(startDateOnly).inDays;
+    final duration = (diff + 1).clamp(1, 9999);
 
-    while (!current.isAfter(_dueDate!)) {
-      if (!_isHoliday(current)) {
-        duration++;
-      }
-      current = current.add(const Duration(days: 1));
-    }
-
-    if (duration > 0) {
-      _durationController.removeListener(_calculateEndDate);
-      _durationController.text = duration.toString();
-      _durationController.addListener(_calculateEndDate);
-    }
+    _durationController.removeListener(_calculateEndDate);
+    _durationController.text = duration.toString();
+    _durationController.addListener(_calculateEndDate);
   }
 
   Future<void> _fetchHolidaysForEmployee() async {
     if (_assignedEmployee == null) return;
 
-    try {
-      final List<DateTime> holidays = await ApiService.getHolidays(
-        coyId: _assignedEmployee!.coyId,
-        pltId: _assignedEmployee!.pltId,
-      );
-      final int workingDays = await ApiService.getEffectiveWorkingDaysPerWeek(
-        coyId: _assignedEmployee!.coyId,
-        pltId: _assignedEmployee!.pltId,
-      );
-
-      if (mounted) {
-        setState(() {
-          _holidays = holidays;
-          _workingDaysPerWeek = workingDays;
-          if (_workingDaysPerWeek == 7) {
-            _skipSaturday = false;
-            _skipSunday = false;
-          } else if (_workingDaysPerWeek == 5) {
-            _skipSaturday = true;
-            _skipSunday = true;
-          } else {
-            _skipSaturday = false;
-            _skipSunday = true;
-          }
-        });
-
-        if (_durationController.text.isNotEmpty) {
-          _calculateEndDate();
-        } else if (_dueDate != null) {
-          _calculateDurationFromDates();
-        }
+    if (mounted) {
+      if (_durationController.text.isNotEmpty) {
+        _calculateEndDate();
+      } else if (_dueDate != null) {
+        _calculateDurationFromDates();
       }
-    } catch (e) {
-      debugPrint('Error fetching holidays: $e');
     }
   }
 
@@ -1132,8 +697,8 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
 
       if (!mounted) return;
 
-      EmployeeOption? reviewer;
-      EmployeeOption? approver;
+      final List<EmployeeOption> fetchedReviewers = [];
+      final List<EmployeeOption> fetchedApprovers = [];
 
       EmployeeOption? findEmployeeById(String? id) {
         if (id == null || id.trim().isEmpty) return null;
@@ -1175,82 +740,159 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
         if (empId == null || empId.isEmpty) continue;
 
         final matchedEmployee = findEmployeeById(empId);
+        if (matchedEmployee == null) continue;
 
         if (stepType == 'REVIEWER' || stepLabel == 'REVIEWER') {
-          reviewer = matchedEmployee;
+          if (!fetchedReviewers.any((e) => e.id == matchedEmployee.id)) {
+            fetchedReviewers.add(matchedEmployee);
+          }
         } else if (stepType == 'CHECKER' ||
             stepType == 'APPROVER' ||
             stepLabel == 'APPROVER') {
-          approver = matchedEmployee;
+          if (!fetchedApprovers.any((e) => e.id == matchedEmployee.id)) {
+            fetchedApprovers.add(matchedEmployee);
+          }
         }
       }
 
       if (!mounted) return;
       setState(() {
         _enableWorkflow = configs.isNotEmpty;
-        _reviewer = reviewer;
-        _approver = approver;
+        if (fetchedReviewers.isNotEmpty) _reviewers = fetchedReviewers;
+        if (fetchedApprovers.isNotEmpty) _approvers = fetchedApprovers;
       });
 
-      debugPrint('FINAL REVIEWER => ${_reviewer?.id} / ${_reviewer?.name}');
-      debugPrint('FINAL APPROVER => ${_approver?.id} / ${_approver?.name}');
+      debugPrint('FINAL REVIEWERS => ${_reviewers.map((e) => e.name).join(', ')}');
+      debugPrint('FINAL APPROVERS => ${_approvers.map((e) => e.name).join(', ')}');
     } catch (e) {
       debugPrint('Error fetching process configs: $e');
     }
   }
 
   Future<void> _selectDate(BuildContext context, bool isStart) async {
-    if (!isStart && _assignedEmployee == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Please select an Assigned To employee first to apply their calendar.',
-            style: TextStyle(color: Colors.white, fontSize: 14),
-          ),
-          backgroundColor: Colors.red,
-          duration: Duration(seconds: 2),
-        ),
-      );
-      return;
-    }
-
-    final today = DateTime(
+    final DateTime today = DateTime(
       DateTime.now().year,
       DateTime.now().month,
       DateTime.now().day,
     );
-    final initialDate = isStart
-        ? (_startDate.isBefore(today) ? today : _startDate)
-        : (_dueDate ?? _startDate);
-    final firstDate = isStart ? today : _startDate;
 
-    final picked = await showDatePicker(
+    final DateTime firstDate = isStart
+        ? today
+        : (_startDate.isBefore(today) ? today : _startDate);
+
+    final DateTime initialDate = isStart
+        ? (_startDate.isBefore(today) ? today : _startDate)
+        : (_dueDate != null && !_dueDate!.isBefore(firstDate) ? _dueDate! : firstDate);
+
+    final DateTime? picked = await showDatePicker(
       context: context,
-      initialDate: initialDate,
+      initialDate: initialDate.isBefore(firstDate) ? firstDate : initialDate,
       firstDate: firstDate,
       lastDate: DateTime(2030),
+      initialEntryMode: DatePickerEntryMode.calendarOnly,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
-            colorScheme: const ColorScheme.light(primary: Color(0xFF2563EB)),
+            colorScheme: const ColorScheme.light(
+              primary: Color(0xFF2563EB),
+              onPrimary: Colors.white,
+              onSurface: Color(0xFF1E293B),
+            ),
           ),
           child: child!,
         );
       },
     );
+
     if (picked != null) {
       setState(() {
         if (isStart) {
-          _startDate = picked;
+          _startDate = DateTime(picked.year, picked.month, picked.day);
+          _startDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
           if (_durationController.text.isNotEmpty) {
             _calculateEndDate();
           } else if (_dueDate != null) {
+            if (_dueDate!.isBefore(_startDate)) {
+              _dueDate = _startDate;
+              _dueDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
+            }
             _calculateDurationFromDates();
           }
         } else {
-          _dueDate = picked;
+          _dueDate = DateTime(picked.year, picked.month, picked.day);
+          _dueDateController.text = DateFormat('dd/MM/yyyy').format(_dueDate!);
           _calculateDurationFromDates();
         }
+      });
+    }
+  }
+
+  DateTime? _parseValidDate(String text) {
+    final clean = text.trim();
+    if (clean.length != 10) return null;
+    final parts = clean.split('/');
+    if (parts.length != 3) return null;
+
+    final day = int.tryParse(parts[0]);
+    final month = int.tryParse(parts[1]);
+    final year = int.tryParse(parts[2]);
+
+    if (day == null || month == null || year == null) return null;
+    if (month < 1 || month > 12) return null;
+    if (day < 1 || day > 31) return null;
+
+    final currentYear = DateTime.now().year;
+    if (year < currentYear || year > 2030) return null;
+
+    try {
+      final date = DateTime(year, month, day);
+      if (date.day != day || date.month != month || date.year != year) {
+        return null;
+      }
+      return date;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _parseStartDateFromText(String text) {
+    final picked = _parseValidDate(text);
+    if (picked != null) {
+      final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+      if (picked.isBefore(today)) return;
+
+      setState(() {
+        _startDate = DateTime(picked.year, picked.month, picked.day);
+        if (_durationController.text.isNotEmpty) {
+          _calculateEndDate();
+        } else if (_dueDate != null) {
+          if (_dueDate!.isBefore(_startDate)) {
+            _dueDate = _startDate;
+            _dueDateController.text = DateFormat('dd/MM/yyyy').format(_startDate);
+          }
+          _calculateDurationFromDates();
+        }
+      });
+    }
+  }
+
+  void _parseDueDateFromText(String text) {
+    final picked = _parseValidDate(text);
+    if (picked != null) {
+      final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+      final startDateOnly = DateTime(_startDate.year, _startDate.month, _startDate.day);
+      if (picked.isBefore(today) || picked.isBefore(startDateOnly)) return;
+
+      setState(() {
+        _dueDate = DateTime(picked.year, picked.month, picked.day);
+        _calculateDurationFromDates();
+      });
+    } else if (text.isEmpty) {
+      setState(() {
+        _dueDate = null;
+        _durationController.removeListener(_calculateEndDate);
+        _durationController.text = '';
+        _durationController.addListener(_calculateEndDate);
       });
     }
   }
@@ -1260,34 +902,42 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
     if (text.isEmpty) {
       setState(() {
         _dueDate = null;
+        _dueDateController.clear();
       });
       return;
     }
-    final int? duration = int.tryParse(text);
+    int? duration = int.tryParse(text);
     if (duration == null || duration <= 0) {
-      setState(() {
-        _dueDate = null;
-      });
-      return;
+      duration = 1;
     }
 
-    DateTime current = _startDate;
-    int addedDays = 0;
-
-    // If start date itself is a valid business day, it counts as day 1
-    if (!_isHoliday(current)) {
-      addedDays = 1;
-    }
-
-    while (addedDays < duration) {
-      current = current.add(const Duration(days: 1));
-      if (!_isHoliday(current)) {
-        addedDays++;
-      }
-    }
+    final cleanStart = DateTime(_startDate.year, _startDate.month, _startDate.day);
+    final calculated = cleanStart.add(Duration(days: duration - 1));
 
     setState(() {
-      _dueDate = current;
+      _dueDate = calculated;
+      _dueDateController.text = DateFormat('dd/MM/yyyy').format(calculated);
+    });
+  }
+
+  void _commitChecklistItem(int idx) {
+    final text = _checklistEditController.text.trim();
+    _checklistFocusNode.unfocus();
+    FocusScope.of(context).unfocus();
+    setState(() {
+      if (text.isNotEmpty) {
+        if (idx < _checklistItems.length) {
+          _checklistItems[idx]['title'] = text;
+        }
+      } else {
+        if (idx < _checklistItems.length) {
+          _checklistItems.removeAt(idx);
+          for (int i = 0; i < _checklistItems.length; i++) {
+            _checklistItems[i]['seq'] = '${i + 1}';
+          }
+        }
+      }
+      _editingChecklistIndex = null;
     });
   }
 
@@ -1322,10 +972,19 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
   }
 
   void _removeChecklistItem(int index) {
+    _checklistFocusNode.unfocus();
+    FocusScope.of(context).unfocus();
     setState(() {
-      _checklistItems.removeAt(index);
-      for (int i = 0; i < _checklistItems.length; i++) {
-        _checklistItems[i]['seq'] = '${i + 1}';
+      if (index < _checklistItems.length) {
+        _checklistItems.removeAt(index);
+        for (int i = 0; i < _checklistItems.length; i++) {
+          _checklistItems[i]['seq'] = '${i + 1}';
+        }
+      }
+      if (_editingChecklistIndex == index) {
+        _editingChecklistIndex = null;
+      } else if (_editingChecklistIndex != null && _editingChecklistIndex! > index) {
+        _editingChecklistIndex = _editingChecklistIndex! - 1;
       }
     });
   }
@@ -1380,6 +1039,37 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
   }
 
   Future<void> _submitIndividualTask() async {
+    // 1) Auto-commit any currently editing checklist item so it doesn't get lost
+    if (_editingChecklistIndex != null && _editingChecklistIndex! < _checklistItems.length) {
+      final text = _checklistEditController.text.trim();
+      if (text.isNotEmpty) {
+        _checklistItems[_editingChecklistIndex!]['title'] = text;
+      } else {
+        _checklistItems.removeAt(_editingChecklistIndex!);
+        for (int i = 0; i < _checklistItems.length; i++) {
+          _checklistItems[i]['seq'] = '${i + 1}';
+        }
+      }
+      _editingChecklistIndex = null;
+    }
+    _checklistFocusNode.unfocus();
+    FocusScope.of(context).unfocus();
+
+    // 2) Ensure duration is valid before form validation
+    if (_durationController.text.trim().isEmpty ||
+        (int.tryParse(_durationController.text.trim()) ?? 0) <= 0) {
+      if (_dueDate != null) {
+        _calculateDurationFromDates();
+      }
+      if (_durationController.text.trim().isEmpty ||
+          (int.tryParse(_durationController.text.trim()) ?? 0) <= 0) {
+        _durationController.removeListener(_calculateEndDate);
+        _durationController.text = '1';
+        _durationController.addListener(_calculateEndDate);
+        _calculateEndDate();
+      }
+    }
+
     final bool isFormValid = _formKey.currentState!.validate();
     bool hasMissingFields = false;
 
@@ -1421,7 +1111,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
         curve: Curves.easeInOut,
       );
       hasMissingFields = true;
-    } else if (_enableWorkflow && _reviewer == null) {
+    } else if (_enableWorkflow && _reviewers.isEmpty) {
       Scrollable.ensureVisible(
         _reviewerKey.currentContext!,
         duration: const Duration(milliseconds: 300),
@@ -1430,14 +1120,14 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please select a reviewer.',
+            'Please select at least one reviewer.',
             style: TextStyle(color: Colors.white),
           ),
           backgroundColor: Colors.red,
         ),
       );
       hasMissingFields = true;
-    } else if (_enableWorkflow && _approver == null) {
+    } else if (_enableWorkflow && _approvers.isEmpty) {
       Scrollable.ensureVisible(
         _approverKey.currentContext!,
         duration: const Duration(milliseconds: 300),
@@ -1446,7 +1136,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Please select an approver.',
+            'Please select at least one approver.',
             style: TextStyle(color: Colors.white),
           ),
           backgroundColor: Colors.red,
@@ -1481,22 +1171,25 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
       mappedPriority = 4;
     }
 
-    String mappedStatus = 'ASSIGNED';
+    String mappedStatus = 'OPEN';
     if (widget.isEditMode &&
         widget.task != null &&
         widget.task!['taskSts'] != null) {
       mappedStatus = widget.task!['taskSts'].toString();
     } else {
-      if (_status == 'In Progress')
+      if (_status == 'In Progress') {
         mappedStatus = 'WIP';
-      else if (_status == 'Closed' || _status == 'Completed')
+      } else if (_status == 'Closed' || _status == 'Completed') {
         mappedStatus = 'CLOSED';
-      else if (_status == 'Under Review')
+      } else if (_status == 'Under Review') {
         mappedStatus = 'SUBMIT_REVIEW';
-      else if (_status == 'Rework')
+      } else if (_status == 'Rework') {
         mappedStatus = 'REWORK';
-      else if (_status == 'Reassigned')
+      } else if (_status == 'Reassigned') {
         mappedStatus = 'REASSIGN';
+      } else if (_status == 'Open') {
+        mappedStatus = 'OPEN';
+      }
     }
 
     final String startDateStr = DateFormat('yyyy-MM-dd').format(_startDate);
@@ -1504,8 +1197,11 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
         ? DateFormat('yyyy-MM-dd').format(_dueDate!)
         : null;
 
+    final String enteredCode = _taskCodeController.text.trim();
+    final String formattedCode = formatTaskCode(enteredCode.isNotEmpty ? enteredCode : 'INDTSK-001');
+
     final Map<String, dynamic> taskPayload = {
-      "taskCd": _taskCodeController.text.trim(),
+      "taskCd": formattedCode,
       "taskNm": _titleController.text.trim(),
       "taskDesc": _descController.text.trim(),
       "taskRemarks": _taskRemarksController.text.trim(),
@@ -1522,6 +1218,9 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
       "attaFlg": _attachments.isNotEmpty,
       "prcsFlg": _enableWorkflow,
       "prcsYesActn": _enableWorkflow ? "YES" : "NO",
+      "noOfDays": (int.tryParse(_durationController.text.trim()) ?? 1).clamp(1, 9999),
+      "duration": (int.tryParse(_durationController.text.trim()) ?? 1).clamp(1, 9999),
+      "totalProjectDays": (int.tryParse(_durationController.text.trim()) ?? 1).clamp(1, 9999),
     };
 
     try {
@@ -1559,19 +1258,21 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
         return;
       }
 
-      if (_enableWorkflow && _reviewer != null && _approver != null) {
-        final reviewerId = int.tryParse(_reviewer!.id ?? '') ?? 0;
-        final approverId = int.tryParse(_approver!.id ?? '') ?? 0;
+      if (_enableWorkflow) {
+        final reviewerIds = _reviewers.map((r) => int.tryParse(r.id ?? '') ?? 0).where((id) => id > 0).toList();
+        final approverIds = _approvers.map((a) => int.tryParse(a.id ?? '') ?? 0).where((id) => id > 0).toList();
 
-        if (reviewerId != 0 && approverId != 0) {
-          final processSuccess = await ApiService.saveLiveProcessConfigs(
-            createdTaskId,
-            reviewerId,
-            approverId,
-          );
-          if (!processSuccess) debugPrint('Failed to create process config');
-        }
+        final processSuccess = await ApiService.saveLiveProcessConfigs(
+          createdTaskId,
+          reviewerIds,
+          approverIds,
+        );
+        if (!processSuccess) debugPrint('Failed to save process config');
+      } else {
+        await ApiService.deleteIndividualTaskProcessConfigs(createdTaskId);
       }
+
+      ApiService.clearCache();
 
       if (!mounted) return;
 
@@ -1778,7 +1479,12 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
 
     final filteredItems = excluded.isEmpty
         ? items
-        : items.where((item) => !excluded.contains(item)).toList();
+        : items.where((item) {
+            return !excluded.any((ex) =>
+                ex == item ||
+                (ex.id != null && item.id != null && ex.id!.isNotEmpty && item.id!.isNotEmpty && ex.id == item.id) ||
+                ex.name.trim().toLowerCase() == item.name.trim().toLowerCase());
+          }).toList();
 
     return SearchableDropdown<EmployeeOption>(
       items: filteredItems,
@@ -1881,7 +1587,19 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
           TextFormField(
             controller: _taskCodeController,
             style: const TextStyle(fontSize: 13, color: Colors.black87),
-            decoration: _inputDecoration(enabled: !isPreview),
+            textCapitalization: TextCapitalization.characters,
+            maxLength: 10,
+            decoration: _inputDecoration(
+              enabled: !isPreview,
+              hint: 'e.g. INDTSK-001',
+              suffixIcon: (!isPreview && !widget.isEditMode)
+                  ? IconButton(
+                      icon: const Icon(Icons.refresh, size: 18, color: Color(0xFF2563EB)),
+                      tooltip: 'Auto Generate Code',
+                      onPressed: _initTaskCode,
+                    )
+                  : null,
+            ),
             enabled: !isPreview,
             validator: (value) => value == null || value.trim().isEmpty
                 ? 'Please enter Task Code'
@@ -1933,16 +1651,15 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
               selected: _assignedEmployee,
               onChanged: (val) async {
                 if (isPreview) return;
-                setState(() => _assignedEmployee = val);
+                setState(() {
+                  _assignedEmployee = val;
+                  if (val != null) {
+                    _reviewers.removeWhere((r) => r.id == val.id || r.name.trim().toLowerCase() == val.name.trim().toLowerCase());
+                    _approvers.removeWhere((a) => a.id == val.id || a.name.trim().toLowerCase() == val.name.trim().toLowerCase());
+                  }
+                });
                 if (val != null) {
                   await _fetchHolidaysForEmployee();
-                } else {
-                  setState(() {
-                    _holidays = [];
-                    _workingDaysPerWeek = 6;
-                    _skipSaturday = false;
-                    _skipSunday = true;
-                  });
                 }
               },
               enabled: !isPreview,
@@ -1956,31 +1673,28 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
             child: TextFormField(
               controller: _durationController,
               keyboardType: TextInputType.number,
-              readOnly: _assignedEmployee == null || isPreview,
-              onTap: () {
-                if (_assignedEmployee == null && !isPreview) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'Please select an Assigned To employee first to apply their calendar.',
-                        style: TextStyle(color: Colors.white, fontSize: 14),
-                      ),
-                      backgroundColor: Colors.red,
-                      duration: Duration(seconds: 2),
-                    ),
-                  );
-                }
-              },
+              readOnly: isPreview,
+              inputFormatters: [
+                FilteringTextInputFormatter.digitsOnly,
+                LengthLimitingTextInputFormatter(3),
+              ],
               style: const TextStyle(fontSize: 13, color: Colors.black87),
               decoration: _inputDecoration(
-                enabled: !isPreview && _assignedEmployee != null,
+                hint: 'Enter days',
+                enabled: !isPreview,
               ),
               enabled: !isPreview,
               validator: (value) {
-                if (value == null || value.trim().isEmpty)
+                if (value == null || value.trim().isEmpty) {
                   return 'Please enter Duration';
-                if ((int.tryParse(value.trim()) ?? 0) <= 0)
+                }
+                final dur = int.tryParse(value.trim()) ?? 0;
+                if (dur <= 0) {
                   return 'Duration must be greater than 0';
+                }
+                if (dur > 365) {
+                  return 'Duration cannot exceed 365 days';
+                }
                 return null;
               },
               onChanged: (val) {
@@ -1990,51 +1704,77 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
           ),
           const SizedBox(height: 16),
 
-          _buildLabel('Start Date', isRequired: true),
-          GestureDetector(
-            onTap: isPreview ? null : () => _selectDate(context, true),
-            child: AbsorbPointer(
-              child: TextFormField(
-                controller: TextEditingController(
-                  text: DateFormat('dd-MMM-yyyy').format(_startDate),
+          _buildLabel('Start Date (DD/MM/YYYY)', isRequired: true),
+          TextFormField(
+            controller: _startDateController,
+            keyboardType: TextInputType.number,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            enabled: !isPreview,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              DateInputFormatter(),
+            ],
+            onChanged: _parseStartDateFromText,
+            style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600),
+            decoration: _inputDecoration(
+              hint: 'DD/MM/YYYY',
+              suffixIcon: IconButton(
+                icon: const Icon(
+                  Icons.edit_calendar_outlined,
+                  size: 20,
+                  color: Color(0xFF2563EB),
                 ),
-                style: const TextStyle(fontSize: 13),
-                decoration: _inputDecoration(
-                  suffixIcon: const Icon(
-                    Icons.calendar_today_outlined,
-                    size: 18,
-                    color: Colors.grey,
-                  ),
-                  enabled: !isPreview,
-                ),
-                enabled: !isPreview,
+                tooltip: 'Pick Date Visual',
+                onPressed: isPreview ? null : () => _selectDate(context, true),
               ),
+              enabled: !isPreview,
             ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) return 'Please enter Start Date';
+              final date = _parseValidDate(value);
+              if (date == null) return 'Invalid Date';
+              final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+              if (date.isBefore(today)) return 'Start Date cannot be in the past';
+              return null;
+            },
           ),
           const SizedBox(height: 16),
 
-          _buildLabel('Due Date', isRequired: true),
-          GestureDetector(
-            onTap: isPreview ? null : () => _selectDate(context, false),
-            child: AbsorbPointer(
-              child: TextFormField(
-                controller: TextEditingController(
-                  text: _dueDate == null
-                      ? ''
-                      : DateFormat('dd-MMM-yyyy').format(_dueDate!),
+          _buildLabel('Due Date (DD/MM/YYYY)', isRequired: true),
+          TextFormField(
+            controller: _dueDateController,
+            keyboardType: TextInputType.number,
+            autovalidateMode: AutovalidateMode.onUserInteraction,
+            enabled: !isPreview,
+            inputFormatters: [
+              FilteringTextInputFormatter.digitsOnly,
+              DateInputFormatter(),
+            ],
+            onChanged: _parseDueDateFromText,
+            style: const TextStyle(fontSize: 13, color: Colors.black87, fontWeight: FontWeight.w600),
+            decoration: _inputDecoration(
+              hint: 'DD/MM/YYYY',
+              suffixIcon: IconButton(
+                icon: const Icon(
+                  Icons.edit_calendar_outlined,
+                  size: 20,
+                  color: Color(0xFF2563EB),
                 ),
-                style: const TextStyle(fontSize: 13),
-                decoration: _inputDecoration(
-                  suffixIcon: const Icon(
-                    Icons.calendar_today_outlined,
-                    size: 18,
-                    color: Colors.grey,
-                  ),
-                  enabled: !isPreview,
-                ),
-                enabled: !isPreview,
+                tooltip: 'Pick Date Visual',
+                onPressed: isPreview ? null : () => _selectDate(context, false),
               ),
+              enabled: !isPreview,
             ),
+            validator: (value) {
+              if (value == null || value.trim().isEmpty) return 'Please enter Due Date';
+              final date = _parseValidDate(value);
+              if (date == null) return 'Invalid Date';
+              final today = DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day);
+              if (date.isBefore(today)) return 'Due Date cannot be in the past';
+              final startDateOnly = DateTime(_startDate.year, _startDate.month, _startDate.day);
+              if (date.isBefore(startDateOnly)) return 'Due Date cannot be before Start Date';
+              return null;
+            },
           ),
           const SizedBox(height: 16),
 
@@ -2194,14 +1934,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
                                   style: const TextStyle(fontSize: 12),
                                   autofocus: true,
                                   onFieldSubmitted: (value) {
-                                    setState(() {
-                                      final text = value.trim();
-                                      _checklistItems[idx]['title'] =
-                                          text.isEmpty
-                                          ? 'New Item ${idx + 1}'
-                                          : text;
-                                      _editingChecklistIndex = null;
-                                    });
+                                    _commitChecklistItem(idx);
                                   },
                                   decoration: InputDecoration(
                                     isDense: true,
@@ -2244,18 +1977,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
                               children: [
                                 isEditing
                                     ? GestureDetector(
-                                        onTap: () {
-                                          setState(() {
-                                            final text =
-                                                _checklistEditController.text
-                                                    .trim();
-                                            _checklistItems[idx]['title'] =
-                                                text.isEmpty
-                                                ? 'New Item ${idx + 1}'
-                                                : text;
-                                            _editingChecklistIndex = null;
-                                          });
-                                        },
+                                        onTap: () => _commitChecklistItem(idx),
                                         child: const Icon(
                                           Icons.check,
                                           size: 16,
@@ -2269,6 +1991,14 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
                                             _checklistEditController.text =
                                                 item['title'];
                                           });
+                                          Future.delayed(
+                                            const Duration(milliseconds: 50),
+                                            () {
+                                              if (mounted) {
+                                                _checklistFocusNode.requestFocus();
+                                              }
+                                            },
+                                          );
                                         },
                                         child: const Icon(
                                           Icons.edit_outlined,
@@ -2278,11 +2008,14 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
                                       ),
                                 GestureDetector(
                                   onTap: () {
+                                    _checklistFocusNode.unfocus();
+                                    FocusScope.of(context).unfocus();
                                     if (isEditing) {
                                       setState(() {
                                         _editingChecklistIndex = null;
-                                        if (_checklistItems[idx]['title']
-                                            .isEmpty) {
+                                        if (idx < _checklistItems.length &&
+                                            _checklistItems[idx]['title']
+                                                .isEmpty) {
                                           _checklistItems.removeAt(idx);
                                           for (
                                             int i = 0;
@@ -2395,8 +2128,12 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
         ? '-'
         : DateFormat('dd-MMM-yyyy').format(_dueDate!);
     final assignedName = _assignedEmployee?.name ?? 'Not assigned';
-    final reviewerName = _reviewer?.name ?? 'Not assigned';
-    final approverName = _approver?.name ?? 'Not assigned';
+    final reviewerNames = _reviewers.isNotEmpty
+        ? _reviewers.map((r) => r.name).join(', ')
+        : 'Not assigned';
+    final approverNames = _approvers.isNotEmpty
+        ? _approvers.map((a) => a.name).join(', ')
+        : 'Not assigned';
 
     showDialog(
       context: context,
@@ -2447,7 +2184,7 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
                   _buildPreviewDetailRow(
                     'Workflow',
                     _enableWorkflow
-                        ? 'Enabled\nReviewer: $reviewerName\nApprover: $approverName'
+                        ? 'Enabled\nReviewer(s): $reviewerNames\nApprover(s): $approverNames'
                         : 'Disabled',
                   ),
                   const Divider(height: 24, color: Color(0xFFE2E8F0)),
@@ -2554,6 +2291,93 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
     );
   }
 
+  Widget _buildMultiEmployeeSelector({
+    required String label,
+    required String singleLabel,
+    required List<EmployeeOption> selectedItems,
+    required ValueChanged<List<EmployeeOption>> onChanged,
+    bool isRequired = true,
+    List<EmployeeOption> excluded = const [],
+    bool enabled = true,
+    required GlobalKey key,
+  }) {
+    final availableEmployees = _employees.where((item) {
+      if (selectedItems.any((sel) => sel.id == item.id || (sel.id != null && item.id != null && sel.id!.isNotEmpty && sel.id == item.id) || sel.name.trim().toLowerCase() == item.name.trim().toLowerCase())) {
+        return false;
+      }
+      if (excluded.any((ex) => ex.id == item.id || (ex.id != null && item.id != null && ex.id!.isNotEmpty && item.id == ex.id) || ex.name.trim().toLowerCase() == item.name.trim().toLowerCase())) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    final nextNumber = selectedItems.length + 1;
+    final hintText = 'Select $singleLabel $nextNumber';
+
+    return Container(
+      key: key,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _buildLabel(label, isRequired: isRequired),
+          if (selectedItems.isNotEmpty) ...[
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: selectedItems.asMap().entries.map((entry) {
+                final idx = entry.key + 1;
+                final emp = entry.value;
+                return Chip(
+                  avatar: CircleAvatar(
+                    backgroundColor: const Color(0xFF2563EB),
+                    child: Text(
+                      '$idx',
+                      style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  label: Text(
+                    '$singleLabel $idx: ${emp.name}',
+                    style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF1E293B), fontWeight: FontWeight.w500),
+                  ),
+                  deleteIcon: enabled ? const Icon(Icons.close, size: 16, color: Color(0xFF64748B)) : null,
+                  onDeleted: enabled
+                      ? () {
+                          final updated = List<EmployeeOption>.from(selectedItems)..remove(emp);
+                          onChanged(updated);
+                        }
+                      : null,
+                  backgroundColor: const Color(0xFFEFF6FF),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(20),
+                    side: const BorderSide(color: Color(0xFFBFDBFE)),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 8),
+          ],
+          if (enabled)
+            SearchableDropdown<EmployeeOption>(
+              items: availableEmployees,
+              selectedItem: null,
+              onChanged: (val) {
+                if (val != null) {
+                  final updated = List<EmployeeOption>.from(selectedItems)..add(val);
+                  onChanged(updated);
+                }
+              },
+              label: '',
+              hint: hintText,
+              isRequired: isRequired && selectedItems.isEmpty,
+              enabled: enabled,
+              itemLabel: (item) => item.name,
+              itemSubtitle: (item) => item.designation,
+            ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildWorkflowContent({required bool isPreview}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2582,51 +2406,42 @@ class _IndividualTaskScreenState extends State<IndividualTaskScreen> {
           ],
         ),
         const SizedBox(height: 16),
-        Visibility(
-          visible: _enableWorkflow,
-          maintainState: true,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                key: _reviewerKey,
-                child: _buildEmployeeDropdown(
-                  label: 'Reviewer',
-                  selected: _reviewer,
-                  isRequired: _enableWorkflow,
-                  excluded: [
-                    _assignedEmployee,
-                  ].whereType<EmployeeOption>().toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _reviewer = value;
-                    });
-                  },
-                  enabled: !isPreview,
-                ),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                key: _approverKey,
-                child: _buildEmployeeDropdown(
-                  label: 'Approver',
-                  selected: _approver,
-                  isRequired: _enableWorkflow,
-                  excluded: [
-                    _assignedEmployee,
-                    _reviewer,
-                  ].whereType<EmployeeOption>().toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _approver = value;
-                    });
-                  },
-                  enabled: !isPreview,
-                ),
-              ),
-            ],
+        if (_enableWorkflow) ...[
+          _buildMultiEmployeeSelector(
+            key: _reviewerKey,
+            label: 'Reviewer(s)',
+            singleLabel: 'Reviewer',
+            selectedItems: _reviewers,
+            isRequired: _enableWorkflow,
+            excluded: [
+              _assignedEmployee,
+            ].whereType<EmployeeOption>().toList(),
+            onChanged: (val) {
+              setState(() {
+                _reviewers = val;
+              });
+            },
+            enabled: !isPreview,
           ),
-        ),
+          const SizedBox(height: 16),
+          _buildMultiEmployeeSelector(
+            key: _approverKey,
+            label: 'Approver(s)',
+            singleLabel: 'Approver',
+            selectedItems: _approvers,
+            isRequired: _enableWorkflow,
+            excluded: [
+              _assignedEmployee,
+              ..._reviewers,
+            ].whereType<EmployeeOption>().toList(),
+            onChanged: (val) {
+              setState(() {
+                _approvers = val;
+              });
+            },
+            enabled: !isPreview,
+          ),
+        ],
       ],
     );
   }

@@ -11,6 +11,8 @@ import 'main_screen.dart';
 import '../models/project_model.dart';
 import '../models/task_item.dart';
 import '../services/api_service.dart';
+import '../utils/app_colors.dart';
+import '../utils/priority_helper.dart';
 
 // --- DATA MODELS ---
 class MilestoneModel {
@@ -24,6 +26,8 @@ class MilestoneModel {
   final int open;
   final String status;
   final Color color;
+  final String rawStDt;
+  final String rawEndDt;
 
   MilestoneModel({
     required this.id,
@@ -36,6 +40,8 @@ class MilestoneModel {
     required this.open,
     required this.status,
     required this.color,
+    this.rawStDt = '',
+    this.rawEndDt = '',
   });
 }
 
@@ -131,6 +137,65 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   int? _currentEmpId;
   bool _filterByEmp = false;
   String _leadLagStatus = 'Lag';
+
+  String _calculateUserLeadLag(List<dynamic> tasks, String projEndDt) {
+    DateTime? maxTargetEnd;
+    DateTime? refDate;
+
+    for (final t in tasks) {
+      String? endStr;
+      String? actStr;
+      if (t is Map) {
+        endStr = (t['endDt'] ?? t['enddt'] ?? t['endDate'] ?? t['end_dt'])?.toString();
+        actStr = (t['actCmpDt'] ?? t['actcmpdt'] ?? t['act_cmp_dt'])?.toString();
+        if (actStr == null || actStr.isEmpty) {
+          final st = (t['taskSts'] ?? t['tasksts'] ?? t['status'] ?? '').toString().toUpperCase();
+          if (st == 'COMPLETED' || st == 'CLOSED' || st == 'DONE') {
+            actStr = endStr;
+          }
+        }
+      } else if (t is TaskItem) {
+        endStr = t.endDate ?? t.rawEndDt ?? t.date;
+        actStr = t.rawData?['actCmpDt']?.toString() ?? t.rawData?['act_cmp_dt']?.toString() ?? (t.isCompleted ? endStr : null);
+      }
+
+      if (endStr != null && endStr.isNotEmpty) {
+        final d = DateTime.tryParse(endStr);
+        if (d != null && (maxTargetEnd == null || d.isAfter(maxTargetEnd))) {
+          maxTargetEnd = d;
+        }
+      }
+      if (actStr != null && actStr.isNotEmpty) {
+        final d = DateTime.tryParse(actStr);
+        if (d != null && (refDate == null || d.isAfter(refDate))) {
+          refDate = d;
+        }
+      }
+    }
+
+    if (maxTargetEnd == null && projEndDt.isNotEmpty) {
+      maxTargetEnd = DateTime.tryParse(projEndDt);
+    }
+
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    refDate ??= today;
+
+    if (maxTargetEnd != null) {
+      final targetDate = DateTime(maxTargetEnd.year, maxTargetEnd.month, maxTargetEnd.day);
+      final actualDate = DateTime(refDate.year, refDate.month, refDate.day);
+      final diffDays = targetDate.difference(actualDate).inDays;
+
+      if (diffDays > 0) {
+        return 'Lead ($diffDays Days)';
+      } else if (diffDays < 0) {
+        return 'Lag (${diffDays.abs()} Days)';
+      } else {
+        return 'On Time';
+      }
+    }
+    return 'On Time';
+  }
   String _userDepartment = 'Loading...';
 
   Future<void> _fetchNotificationCount() async {
@@ -238,6 +303,26 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
         debugPrint('Error fetching project milestones: $me');
       }
 
+      if (fetchedMilestones.isEmpty) {
+        try {
+          final allM = await ApiService.getAllMilestones();
+          fetchedMilestones = allM.where((m) {
+            final pId = m['prjId'] ?? m['prj_id'] ?? m['projectId'] ?? m['prj_Id'];
+            return pId != null && (pId as num).toInt() == _project!.prjId;
+          }).toList();
+        } catch (_) {}
+      }
+
+      if (fetchedMilestones.isEmpty && currentEmpId != null) {
+        try {
+          final empM = await ApiService.getMilestonesByEmployee(currentEmpId);
+          fetchedMilestones = empM.where((m) {
+            final pId = m['prjId'] ?? m['prj_id'] ?? m['projectId'] ?? m['prj_Id'];
+            return pId == null || (pId as num).toInt() == _project!.prjId;
+          }).toList();
+        } catch (_) {}
+      }
+
       String leadLag = _project?.leadLagStatusStr ?? 'Lag';
       try {
         leadLag = await ApiService.getProjectLeadLagStatus(_project!.prjId);
@@ -297,15 +382,15 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
       for (int mi = 0; mi < rawMilestones.length; mi++) {
         final m = rawMilestones[mi];
-        final rawMId = m['mId'] ?? m['mid'];
+        final rawMId = m['mId'] ?? m['mid'] ?? m['m_id'] ?? m['id'] ?? m['milestoneId'] ?? m['mlstnId'];
         if (rawMId == null) continue;
         final int mId = (rawMId as num).toInt();
 
-        final String title    = m['mlstnTtl']?.toString() ?? '';
-        final String desc     = m['mlstnDesc']?.toString() ?? '';
-        final String stDtRaw  = m['stDt']?.toString() ?? '';
-        final String endDtRaw = m['endDt']?.toString() ?? '';
-        final String sts      = (m['mlstnSts']?.toString() ?? 'LIVE').toUpperCase().trim();
+        final String title    = (m['mlstnTtl'] ?? m['mlstn_ttl'] ?? m['title'] ?? m['name'] ?? m['mlstnNm'] ?? m['milestoneName'] ?? m['mlstn_nm'] ?? '').toString();
+        final String desc     = (m['mlstnDesc'] ?? m['mlstn_desc'] ?? m['description'] ?? m['desc'] ?? '').toString();
+        final String stDtRaw  = (m['stDt'] ?? m['st_dt'] ?? m['startDate'] ?? m['start_date'] ?? '').toString();
+        final String endDtRaw = (m['endDt'] ?? m['end_dt'] ?? m['endDate'] ?? m['end_date'] ?? m['targetDate'] ?? m['target_date'] ?? '').toString();
+        final String sts      = (m['mlstnSts'] ?? m['mlstn_sts'] ?? m['status'] ?? m['sts'] ?? 'LIVE').toString().toUpperCase().trim();
         final String stDtDisplay  = _formatDbDate(stDtRaw);
         final String endDtDisplay = _formatDbDate(endDtRaw);
 
@@ -315,39 +400,56 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
         for (var t in rawTasks) {
           final String tIdUnfiltered     = t['taskId']?.toString() ?? '';
           final String tNameUnfiltered   = t['taskNm']?.toString() ?? '';
-          final String tStatusUnfiltered = (t['taskSts']?.toString() ?? 'OPEN').toUpperCase();
           final String tCdUnfiltered     = t['taskCd']?.toString() ?? 'T-$tIdUnfiltered';
           final String tEndRawUnfiltered = t['endDt']?.toString() ?? '';
           final taskItemUnfiltered = TaskItem.fromJson(t, _project!, m, currentEmpId?.toString());
-          
-          Color statusColorUnfiltered = const Color(0xffF59E0B);
+
+          String tStatusUnfiltered = '';
+          final rawStsUnfiltered = t['taskSts'] ?? t['task_sts'] ?? t['status'] ?? t['taskStatus'] ?? t['task_status'] ?? t['sts'];
+          if (rawStsUnfiltered != null) {
+            if (rawStsUnfiltered is Map) {
+              tStatusUnfiltered = (rawStsUnfiltered['statusNm'] ?? rawStsUnfiltered['status_nm'] ?? rawStsUnfiltered['name'] ?? rawStsUnfiltered['statusId'] ?? '').toString();
+            } else {
+              tStatusUnfiltered = rawStsUnfiltered.toString();
+            }
+          }
+          tStatusUnfiltered = tStatusUnfiltered.toUpperCase().trim();
+
+          Color statusColorUnfiltered = const Color(0xff2563EB);
           double progressUnfiltered = 0.0;
           switch (tStatusUnfiltered) {
-            case 'WIP':
-            case 'INPROGRESS':
-            case 'IN PROGRESS':
-              statusColorUnfiltered = const Color(0xff2563EB); progressUnfiltered = 0.5;
-              break;
+            case '4':
             case 'COMPLETED':
+            case 'CLOSED':
             case 'DONE':
+            case 'FINISHED':
               statusColorUnfiltered = const Color(0xff10B981); progressUnfiltered = 1.0;
               break;
             case 'SUBMIT_REVIEW':
             case 'UNDER_REVIEW':
             case 'UNDERREVIEW':
+            case 'SUBMIT REVIEW':
+            case 'UNDER REVIEW':
               statusColorUnfiltered = const Color(0xff7C3AED); progressUnfiltered = 0.8;
               break;
-            case 'REASSIGN':
-              statusColorUnfiltered = const Color(0xFF4F46E5); progressUnfiltered = 0.4;
+            case 'WIP':
+            case 'INPROGRESS':
+            case 'IN PROGRESS':
+            case 'IN_PROGRESS':
+              statusColorUnfiltered = const Color(0xFFF59E0B); progressUnfiltered = 0.5;
               break;
             case 'OVERDUE':
               statusColorUnfiltered = const Color(0xffB91C1C); progressUnfiltered = 0.5;
+              break;
+            case 'REASSIGN':
+            case 'REASSIGNED':
+              statusColorUnfiltered = const Color(0xFF4F46E5); progressUnfiltered = 0.4;
               break;
             case 'REWORK':
               statusColorUnfiltered = const Color(0xffEF4444); progressUnfiltered = 0.3;
               break;
             default:
-              statusColorUnfiltered = const Color(0xffF59E0B); progressUnfiltered = 0.0;
+              statusColorUnfiltered = const Color(0xff2563EB); progressUnfiltered = 0.0;
               break;
           }
           
@@ -368,15 +470,22 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
         final List<dynamic> filteredTasks = [];
         for (var t in rawTasks) {
-          if (filterByEmp) {
+          if (filterByEmp && currentEmpId != null) {
             final tempItem = TaskItem.fromJson(t, _project!, m, currentEmpId.toString());
-            final doerId = tempItem.rawData?['empId']?.toString() ?? tempItem.rawData?['empid']?.toString();
             final strEmpId = currentEmpId.toString();
-            
+            final doerId = tempItem.rawData?['empId']?.toString() ?? tempItem.rawData?['empid']?.toString() ?? tempItem.rawData?['assignedTo']?.toString() ?? tempItem.rawData?['executorId']?.toString();
+            final revId = (tempItem.reviewer ?? tempItem.rawData?['reviewer'] ?? tempItem.rawData?['reviewerId'])?.toString();
+            final appId = (tempItem.approver ?? tempItem.rawData?['approver'] ?? tempItem.rawData?['approverId'])?.toString();
             final noteTxt = (tempItem.rawData?['noteTxt'] ?? tempItem.rawData?['note_txt'] ?? '').toString();
             final isTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(strEmpId);
-            
-            if (doerId == strEmpId || tempItem.reviewer == strEmpId || tempItem.approver == strEmpId || isTeamMember) {
+            final teamMembers = tempItem.rawData?['teamMembers'] ?? tempItem.rawData?['team_members'];
+            bool inTeam = isTeamMember;
+            if (!inTeam && teamMembers is List) {
+              inTeam = teamMembers.any((tm) => tm is Map ? (tm['empId']?.toString() == strEmpId || tm['emp_id']?.toString() == strEmpId) : tm?.toString() == strEmpId);
+            }
+            final assignerId = (tempItem.rawData?['assignedBy'] ?? tempItem.rawData?['assigned_by'] ?? tempItem.rawData?['crBy'] ?? tempItem.rawData?['createdBy'])?.toString();
+
+            if (doerId == strEmpId || revId == strEmpId || appId == strEmpId || inTeam || assignerId == strEmpId) {
                filteredTasks.add(t);
             }
           } else {
@@ -386,11 +495,23 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
         int openCount = 0;
         int completedCount = 0;
+        double totalTaskProgress = 0.0;
+        bool anyTaskStarted = false;
 
         for (var t in filteredTasks) {
           final String tId     = t['taskId']?.toString() ?? '';
           final String tName   = t['taskNm']?.toString() ?? '';
-          final String tStatus = (t['taskSts']?.toString() ?? 'OPEN').toUpperCase();
+          String tStatus = '';
+          final rawSts = t['taskSts'] ?? t['task_sts'] ?? t['status'] ?? t['taskStatus'] ?? t['task_status'] ?? t['sts'];
+          if (rawSts != null) {
+            if (rawSts is Map) {
+              tStatus = (rawSts['statusNm'] ?? rawSts['status_nm'] ?? rawSts['name'] ?? rawSts['statusId'] ?? '').toString();
+            } else {
+              tStatus = rawSts.toString();
+            }
+          }
+          tStatus = tStatus.toUpperCase().trim();
+
           final String tCd     = t['taskCd']?.toString() ?? 'T-$tId';
           final String tStRaw  = t['stDt']?.toString() ?? '';
           final String tEndRaw = t['endDt']?.toString() ?? '';
@@ -404,44 +525,67 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
             tDays = int.tryParse(rawDays) ?? 3;
           }
 
-          // Friendly status + progress
+          // Friendly status + progress (identical to website UserMilestone.jsx)
           String friendlyStatus = 'Open';
-          Color statusColor = const Color(0xffF59E0B);
+          Color statusColor = const Color(0xff2563EB);
           double progress = 0.0;
           
           switch (tStatus) {
-            case 'WIP':
-            case 'INPROGRESS':
-            case 'IN PROGRESS':
-              friendlyStatus = 'In Progress'; statusColor = const Color(0xff2563EB); progress = 0.5;
-              break;
+            case '4':
             case 'COMPLETED':
             case 'CLOSED':
             case 'DONE':
+            case 'FINISHED':
               friendlyStatus = 'Closed'; statusColor = const Color(0xff10B981); progress = 1.0;
               break;
             case 'SUBMIT_REVIEW':
             case 'UNDER_REVIEW':
             case 'UNDERREVIEW':
+            case 'SUBMIT REVIEW':
+            case 'UNDER REVIEW':
               friendlyStatus = 'Under Review'; statusColor = const Color(0xff7C3AED); progress = 0.8;
+              anyTaskStarted = true;
+              break;
+            case 'WIP':
+            case 'INPROGRESS':
+            case 'IN PROGRESS':
+            case 'IN_PROGRESS':
+              friendlyStatus = 'In Progress'; statusColor = const Color(0xFFF59E0B); progress = 0.5;
+              anyTaskStarted = true;
               break;
             case 'REASSIGN':
+            case 'REASSIGNED':
               friendlyStatus = 'Reassign'; statusColor = const Color(0xFF4F46E5); progress = 0.4;
+              anyTaskStarted = true;
               break;
             case 'OVERDUE':
               friendlyStatus = 'Overdue'; statusColor = const Color(0xffB91C1C); progress = 0.5;
+              anyTaskStarted = true;
               break;
             case 'REWORK':
               friendlyStatus = 'Rework'; statusColor = const Color(0xffEF4444); progress = 0.3;
+              anyTaskStarted = true;
               break;
             default: // OPEN
-              friendlyStatus = 'Open'; statusColor = const Color(0xffF59E0B); progress = 0.0;
+              friendlyStatus = 'Open'; statusColor = const Color(0xff2563EB); progress = 0.0;
               break;
           }
 
+          if (t['progress'] is num) {
+            final p = (t['progress'] as num).toDouble();
+            if (p > 0) {
+              progress = (p > 1.0) ? (p / 100.0) : p;
+              if (progress > 0) anyTaskStarted = true;
+            }
+          }
+
+          totalTaskProgress += progress * 100.0;
+
           // Status counts
-          if (progress >= 1.0) {
+          if (progress >= 1.0 || friendlyStatus == 'Closed') {
             completedCount++;
+          } else if (friendlyStatus == 'In Progress' || friendlyStatus == 'Under Review') {
+            // WIP / In progress / Under review
           } else {
             openCount++;
           }
@@ -493,31 +637,50 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
           }
         }
 
-        // Milestone progress = completed / total tasks
+        // Milestone progress = average of tasks' progress percentages (identical to UserMilestone.jsx on Website)
         final int progressPercent = filteredTasks.isEmpty
             ? 0
-            : ((completedCount / filteredTasks.length) * 100).round();
+            : (totalTaskProgress / filteredTasks.length).round();
 
-        if (!filterByEmp || filteredTasks.isNotEmpty) {
+        final bool allTasksCompleted = filteredTasks.isNotEmpty && completedCount == filteredTasks.length;
+
+        String milestoneStatus = 'Not Started';
+        Color milestoneColor = const Color(0xff94A3B8);
+
+        if (sts == 'COMPLETED' || sts == 'CLOSED' || sts == 'DONE' || sts == 'FINISHED' || allTasksCompleted) {
+          milestoneStatus = 'Closed';
+          milestoneColor = const Color(0xff10B981);
+        } else if (sts == 'HOLD' || sts == 'ON HOLD' || sts == 'ON_HOLD') {
+          milestoneStatus = 'On Hold';
+          milestoneColor = const Color(0xffF59E0B);
+        } else if (anyTaskStarted || progressPercent > 0 || sts == 'LIVE' || sts == 'WIP' || sts == 'IN_PROGRESS' || sts == 'INPROGRESS') {
+          milestoneStatus = 'In Progress';
+          milestoneColor = const Color(0xff2563EB);
+        }
+
+        bool isUserInvolved = filteredTasks.isNotEmpty;
+        if (_filterByEmp && currentEmpId != null) {
+          final strEmpId = currentEmpId.toString();
+          final mEmpId = (m['empId'] ?? m['empid'] ?? m['emp_id'] ?? m['createdBy'] ?? m['created_by'])?.toString();
+          if (mEmpId == strEmpId) {
+            isUserInvolved = true;
+          }
+        }
+
+        if (!filterByEmp || isUserInvolved) {
           milestoneModels.add(MilestoneModel(
             id: mId.toString(),
-            title: title,
+            title: title.isNotEmpty ? title : 'Milestone $mId',
             desc: desc,
             startDate: stDtDisplay,
             targetDate: endDtDisplay,
             progress: progressPercent,
             assigned: filteredTasks.length,
             open: openCount,
-            status: (sts == 'COMPLETED' || sts == 'CLOSED')
-                ? 'Closed'
-                : sts == 'HOLD'
-                    ? 'On Hold'
-                    : 'In Progress',
-            color: (sts == 'COMPLETED' || sts == 'CLOSED')
-                ? const Color(0xff10B981)
-                : sts == 'HOLD'
-                    ? const Color(0xffF59E0B)
-                    : const Color(0xff2563EB),
+            status: milestoneStatus,
+            color: milestoneColor,
+            rawStDt: stDtRaw,
+            rawEndDt: endDtRaw,
           ));
         }
       }
@@ -530,20 +693,27 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
             final String tId = item['id']?.toString() ?? '';
             final String tName = item['name']?.toString() ?? '';
             
-            // Match against unfiltered task models to get the correct metadata/status
+            // Match against user task models to check involvement and get correct metadata/status
             TaskModel? matchingTask;
             final String cleanTId = tId.replaceAll(RegExp(r'[^0-9]'), '');
-            for (var t in unfilteredTaskModels) {
+            for (var t in taskModels) {
               final String modelId = t.taskItem.id.toString();
               final String cleanModelId = modelId.replaceAll(RegExp(r'[^0-9]'), '');
-              if ((cleanTId.isNotEmpty && cleanTId == cleanModelId) || t.name.toLowerCase() == tName.toLowerCase()) {
+              final String cleanCode = t.code.replaceAll(RegExp(r'[^0-9]'), '');
+              if ((cleanTId.isNotEmpty && (cleanTId == cleanModelId || cleanTId == cleanCode)) ||
+                  t.name.trim().toLowerCase() == tName.trim().toLowerCase()) {
                 matchingTask = t;
                 break;
               }
             }
 
-            final double progVal = (item['progress'] as num?)?.toDouble() ?? 0.0;
-            final String progText = '${(progVal * 100).toInt()}%';
+            if (filterByEmp && matchingTask == null) {
+              // Skip task from Gantt chart if user is not involved in it
+              continue;
+            }
+
+            double taskProgress = (item['progress'] as num?)?.toDouble() ?? 0.0;
+            if (taskProgress > 1.0) taskProgress = taskProgress / 100.0;
 
             final String parentId = item['parent']?.toString() ?? '';
             final String msName = milestoneMap[parentId] ?? 'Other';
@@ -574,17 +744,22 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
             Color statusColor = const Color(0xff2563EB); // Default to blue
             if (matchingTask != null) {
+              if (matchingTask.progress > 0 || taskProgress == 0.0) {
+                taskProgress = matchingTask.progress;
+              }
               statusColor = matchingTask.statusColor;
             } else {
               // Fallback based on progress
-              if (progVal >= 1.0) {
+              if (taskProgress >= 1.0) {
                 statusColor = const Color(0xff10B981); // Closed
-              } else if (progVal > 0.0) {
-                statusColor = const Color(0xff2563EB); // In progress
+              } else if (taskProgress > 0.0) {
+                statusColor = const Color(0xFFF59E0B); // In progress
               } else {
-                statusColor = const Color(0xffF59E0B); // Open
+                statusColor = const Color(0xff2563EB); // Open
               }
             }
+
+            final String progText = '${(taskProgress * 100).round()}%';
 
             ganttModels.add(GanttItemModel(
               id: tId,
@@ -606,7 +781,14 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
           _tasks     = taskModels;
           _ganttData = ganttModels;
           _ganttProjectStart = pStart; // Store the parsed project start date used in Gantt
-          _leadLagStatus = (_project?.leadLagStatusStr != null && _project!.leadLagStatusStr.isNotEmpty) ? _project!.leadLagStatusStr : leadLag;
+          final String calculatedStatus = _calculateUserLeadLag(allRawTasks.expand((x) => x).toList(), _project?.endDt ?? '');
+          final String rawStatusStr = (_project?.leadLagStatusStr != null && _project!.leadLagStatusStr.isNotEmpty && _project!.leadLagStatusStr != 'On Time')
+              ? _project!.leadLagStatusStr
+              : leadLag;
+          final String finalStatusStr = (rawStatusStr.contains(RegExp(r'\d+')))
+              ? rawStatusStr
+              : calculatedStatus;
+          _leadLagStatus = finalStatusStr;
           _userDepartment = userDept;
           _milestoneNames = [
             'All Milestones',
@@ -665,11 +847,8 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
   double get _projectProgressValue {
     if (_tasks.isNotEmpty) {
-      double totalWeighted = 0.0;
-      for (final t in _tasks) {
-        totalWeighted += t.progress;
-      }
-      return totalWeighted / _tasks.length;
+      final double totalProgress = _tasks.fold(0.0, (sum, t) => sum + t.progress);
+      return totalProgress / _tasks.length;
     }
     if (_project != null && _project!.rawProgressValue != null) {
       final double val = _project!.rawProgressValue!;
@@ -679,9 +858,6 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   }
 
   String get _projectProgressText {
-    if (_tasks.isEmpty && _project != null && _project!.progressText.isNotEmpty && _project!.progressText != '0%') {
-      return _project!.progressText;
-    }
     return '${(_projectProgressValue * 100).round()}%';
   }
 
@@ -745,7 +921,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
       case 'normal':
         return const Color(0xFF10B981); // Green
       case 'medium':
-        return const Color(0xFFFACC15); // Yellow
+        return const Color(0xFFF59E0B); // Amber
       case 'high':
         return const Color(0xFF7C3AED); // Purple
       case 'critical':
@@ -760,14 +936,52 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   bool _isTaskAssignedToMe(TaskModel task) {
     if (_currentEmpId == null) return false;
     final tItem = task.taskItem;
-    
-    final doerId = tItem.rawData?['empId']?.toString() ?? tItem.rawData?['empid']?.toString();
-    if (doerId == _currentEmpId.toString()) return true;
-    
-    if (tItem.reviewer == _currentEmpId.toString()) return true;
-    if (tItem.approver == _currentEmpId.toString()) return true;
-    
+    final strEmpId = _currentEmpId.toString();
+
+    final doerId = tItem.rawData?['empId']?.toString() ??
+        tItem.rawData?['empid']?.toString() ??
+        tItem.rawData?['assignedTo']?.toString() ??
+        tItem.rawData?['executorId']?.toString();
+    if (doerId == strEmpId) return true;
+
+    final revId = (tItem.reviewer ?? tItem.rawData?['reviewer'] ?? tItem.rawData?['reviewerId'] ?? tItem.rawData?['reviewer_id'])?.toString();
+    if (revId == strEmpId) return true;
+
+    final appId = (tItem.approver ?? tItem.rawData?['approver'] ?? tItem.rawData?['approverId'] ?? tItem.rawData?['approver_id'])?.toString();
+    if (appId == strEmpId) return true;
+
+    final noteTxt = (tItem.rawData?['noteTxt'] ?? tItem.rawData?['note_txt'] ?? '').toString();
+    if (noteTxt.split(',').map((e) => e.trim()).contains(strEmpId)) return true;
+
+    final teamMembers = tItem.rawData?['teamMembers'] ?? tItem.rawData?['team_members'] ?? tItem.rawData?['team'];
+    if (teamMembers is List) {
+      for (final tm in teamMembers) {
+        if (tm is Map && (tm['empId']?.toString() == strEmpId || tm['emp_id']?.toString() == strEmpId || tm['id']?.toString() == strEmpId)) {
+          return true;
+        } else if (tm != null && tm.toString().trim() == strEmpId) {
+          return true;
+        }
+      }
+    }
+
+    final assignerId = (tItem.rawData?['assignedBy'] ?? tItem.rawData?['assigned_by'] ?? tItem.rawData?['crBy'] ?? tItem.rawData?['cr_by'] ?? tItem.rawData?['createdBy'])?.toString();
+    if (assignerId == strEmpId) return true;
+
     return false;
+  }
+
+  bool _isUserInvolvedInMilestone(MilestoneModel milestone) {
+    if (_currentEmpId == null) return true;
+
+    final milestoneTasks = _tasks.where((t) =>
+      t.milestoneTitle.trim().toLowerCase() == milestone.title.trim().toLowerCase()
+    ).toList();
+
+    if (milestoneTasks.isNotEmpty) {
+      return milestoneTasks.any((t) => _isTaskAssignedToMe(t));
+    }
+
+    return milestone.assigned > 0;
   }
 
   Future<void> _downloadReport() async {
@@ -1254,6 +1468,12 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
     final String status = (_project?.prjSts ?? '').trim().toUpperCase();
     final bool isCompleted = status == 'CLOSED' || status == 'COMPLETED' || status == 'DONE' || _projectProgressValue >= 1.0;
 
+    final priorityMeta = PriorityHelper.calculateDynamicPriority(
+      basePriority: _project?.prjPrty,
+      startDateVal: _project?.stDt,
+      endDateVal: _project?.endDt,
+    );
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
@@ -1297,7 +1517,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
           if (isCompleted)
             _buildLeadLagBadge(_leadLagStatus)
           else
-            _buildPriorityPill(_project?.prjPrty ?? 'Medium', getPriorityColor(_project?.prjPrty ?? 'Medium')),
+            _buildPriorityPill(priorityMeta.name, priorityMeta.color, priorityMeta.bgColor, priorityMeta.borderColor),
         ],
       ),
     );
@@ -1334,17 +1554,17 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   }
 
   // Helper widgets
-  Widget _buildPriorityPill(String? priority, Color priorityColor) {
+  Widget _buildPriorityPill(String name, Color color, Color bgColor, Color borderColor) {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 6,
+        horizontal: 10,
+        vertical: 5,
       ),
       decoration: BoxDecoration(
-        color: priorityColor.withValues(alpha: 0.12),
+        color: bgColor,
         borderRadius: BorderRadius.circular(20),
         border: Border.all(
-          color: priorityColor.withValues(alpha: 0.35),
+          color: borderColor,
           width: 1.2,
         ),
       ),
@@ -1355,15 +1575,15 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
             width: 6,
             height: 6,
             decoration: BoxDecoration(
-              color: priorityColor,
+              color: color,
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 6),
           Text(
-            priority?.toUpperCase() ?? 'NORMAL',
+            name.toUpperCase(),
             style: TextStyle(
-              color: priorityColor,
+              color: color,
               fontSize: 10.5,
               fontWeight: FontWeight.w700,
             ),
@@ -1373,31 +1593,72 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
     );
   }
 
+  String _cleanLeadLagLabel(String statusStr) {
+    final s = statusStr.trim();
+    if (s.isEmpty || s.toLowerCase() == 'null' || s.toLowerCase() == 'n/a' || s.toLowerCase() == 'none') {
+      return 'ON TIME';
+    }
+
+    final Match? numberMatch = RegExp(r'\d+').firstMatch(s);
+    final String? daysNum = numberMatch?.group(0);
+    final String lower = s.toLowerCase();
+
+    if (lower.contains('on time')) {
+      return 'ON TIME';
+    } else if (lower.contains('due today')) {
+      return 'DUE TODAY';
+    } else if (lower.contains('overdue')) {
+      if (daysNum != null && daysNum.isNotEmpty) {
+        return 'OVERDUE ($daysNum DAYS)';
+      }
+      return 'OVERDUE';
+    } else if (lower.contains('lead') || lower.contains('ahead')) {
+      if (daysNum != null && daysNum.isNotEmpty) {
+        return 'LEAD ($daysNum DAYS)';
+      }
+      return 'LEAD';
+    } else if (lower.contains('lag') || lower.contains('behind') || lower.contains('delay')) {
+      if (daysNum != null && daysNum.isNotEmpty) {
+        return 'LAG ($daysNum DAYS)';
+      }
+      return 'LAG';
+    } else if (daysNum != null && daysNum.isNotEmpty) {
+      return 'LAG ($daysNum DAYS)';
+    }
+
+    String cleaned = s.replaceAll(RegExp(r'^schedule:\s*', caseSensitive: false), '').replaceAll('+', '').replaceAll('-', '').trim();
+    return cleaned.toUpperCase();
+  }
+
   Widget _buildLeadLagBadge(String statusStr) {
     final String s = statusStr.trim().toLowerCase();
     
-    // Ensure null, 'null', 'n/a', or empty values default to 'On Time' instead of rendering 'null'
     if (s == 'null' || s == 'n/a' || s.isEmpty || s == 'none') {
-      return _buildLeadLagPill('On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
+      return _buildLeadLagPill('ON TIME', const Color(0xffDBEAFE), const Color(0xff2563EB));
     }
 
     bool isLead = s.contains('lead') || s == 'ahead';
-    bool isLag = s.contains('lag') || s == 'behind' || s == 'delay';
+    bool isLag = s.contains('lag') || s == 'behind' || s == 'delay' || s.contains('overdue');
+    bool isDueToday = s.contains('due today');
+
+    final String label = _cleanLeadLagLabel(statusStr);
 
     if (isLead) {
-      return _buildLeadLagPill('Lead', const Color(0xffDCFCE7), const Color(0xff16A34A));
+      return _buildLeadLagPill(label, const Color(0xffDCFCE7), const Color(0xff16A34A));
     } else if (isLag) {
-      return _buildLeadLagPill('Lag', const Color(0xffFEE2E2), const Color(0xffDC2626));
+      return _buildLeadLagPill(label, const Color(0xffFEE2E2), const Color(0xffDC2626));
+    } else if (isDueToday) {
+      return _buildLeadLagPill(label, const Color(0xffFEF3C7), const Color(0xffD97706));
     } else {
-      return _buildLeadLagPill('On Time', const Color(0xffDBEAFE), const Color(0xff2563EB));
+      return _buildLeadLagPill(label, const Color(0xffDBEAFE), const Color(0xff2563EB));
     }
   }
 
   Widget _buildLeadLagPill(String label, Color bgColor, Color textColor) {
     return Container(
       padding: const EdgeInsets.symmetric(
-        horizontal: 12,
-        vertical: 6,
+        horizontal: 10,
+        vertical: 5,
       ),
       decoration: BoxDecoration(
         color: bgColor,
@@ -1419,12 +1680,16 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
             ),
           ),
           const SizedBox(width: 6),
-          Text(
-            label.toUpperCase(),
-            style: TextStyle(
-              color: textColor,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w700,
+          Flexible(
+            child: Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: textColor,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700,
+              ),
             ),
           ),
         ],
@@ -1750,8 +2015,8 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
               spacing: 12,
               runSpacing: 8,
               children: [
-                _buildGanttLegend('Open', const Color(0xffF59E0B)),
-                _buildGanttLegend('In Progress', const Color(0xff2563EB)),
+                _buildGanttLegend('Open', const Color(0xff2563EB)),
+                _buildGanttLegend('In Progress', const Color(0xFFF59E0B)),
                 _buildGanttLegend('Under Review', const Color(0xff7C3AED)),
                 _buildGanttLegend('Reassign', const Color(0xFF4F46E5)),
                 _buildGanttLegend('Closed', const Color(0xff10B981)),
@@ -2018,6 +2283,11 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
               separatorBuilder: (context, index) => const Divider(color: Color(0xffF8FAFC), height: 16),
               itemBuilder: (context, index) {
                 final task = filteredTasks[index];
+                final bool isTaskCompleted = task.status == 'Closed' || 
+                    task.status == 'Completed' || 
+                    task.progress >= 1.0 || 
+                    task.taskItem.isCompleted;
+
                 return InkWell(
                   onTap: () {
                     Navigator.pushNamed(
@@ -2032,17 +2302,18 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: task.priorityColor.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
+                        if (!isTaskCompleted)
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: task.priorityColor.withValues(alpha: 0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(task.priority, style: TextStyle(color: task.priorityColor, fontSize: 9, fontWeight: FontWeight.w700)),
                             ),
-                            child: Text(task.priority, style: TextStyle(color: task.priorityColor, fontSize: 9, fontWeight: FontWeight.w700)),
                           ),
-                        ),
                         const SizedBox(height: 4),
                         Text(task.name, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: Color(0xff0F172A))),
                         const SizedBox(height: 6),
@@ -2101,7 +2372,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
                               decoration: BoxDecoration(
-                                color: task.status == "In Progress" ? const Color(0xffEFF6FF) : const Color(0xffFFF7ED),
+                                color: task.status == "In Progress" ? const Color(0xFFFEF3C7) : const Color(0xffFFF7ED),
                                 borderRadius: BorderRadius.circular(4),
                               ),
                               child: Text(task.status, style: TextStyle(color: task.statusColor, fontSize: 9, fontWeight: FontWeight.w700)),
@@ -2145,9 +2416,18 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
   Widget _buildTaskSummaryCard() {
     final totalCount = _tasks.length;
-    final inProgressCount = _tasks.where((t) => t.status == 'In Progress').length;
-    final openCount = _tasks.where((t) => t.status == 'Pending' || t.status == 'Open').length;
-    final completedCount = _tasks.where((t) => t.status == 'Closed' || t.status == 'Completed').length;
+    final inProgressCount = _tasks.where((t) {
+      final s = t.status.toUpperCase();
+      return s == 'IN PROGRESS' || s == 'IN_PROGRESS' || s == 'INPROGRESS' || s == 'WIP' || s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || s == 'SUBMIT REVIEW' || s == 'SUBMIT_REVIEW';
+    }).length;
+    final openCount = _tasks.where((t) {
+      final s = t.status.toUpperCase();
+      return s == 'OPEN' || s == 'PENDING' || s == 'OVERDUE' || s == 'REASSIGN' || s == 'REWORK' || s == 'DRAFT' || s == 'ASSIGNED';
+    }).length;
+    final completedCount = _tasks.where((t) {
+      final s = t.status.toUpperCase();
+      return s == 'CLOSED' || s == 'COMPLETED' || s == 'DONE' || s == 'FINISHED' || t.progress >= 1.0;
+    }).length;
 
     return _buildSectionCard(
       title: 'TASK SUMMARY',
@@ -2176,10 +2456,10 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
         crossAxisCount: 4,
         childAspectRatio: 0.85,
         children: [
-          _buildTaskBlock('Tasks Assigned', '$totalCount', Icons.assignment_turned_in_outlined, const Color(0xff7C3AED)),
-          _buildTaskBlock('In Progress', '$inProgressCount', Icons.play_circle_outline, Colors.blue),
-          _buildTaskBlock('Open Tasks', '$openCount', Icons.query_builder, Colors.orange),
-          _buildTaskBlock('Closed', '$completedCount', Icons.check_circle_outline, Colors.green),
+          _buildTaskBlock('Tasks Assigned', '$totalCount', Icons.assignment_turned_in_outlined, AppColors.purple),
+          _buildTaskBlock('In Progress', '$inProgressCount', Icons.play_circle_outline, AppColors.inProgress),
+          _buildTaskBlock('Open Tasks', '$openCount', Icons.query_builder, AppColors.open),
+          _buildTaskBlock('Closed', '$completedCount', Icons.check_circle_outline, AppColors.closed),
         ],
       ),
     );
@@ -2200,9 +2480,18 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
 
   Widget _buildProjectProgressCard() {
     final int total = _tasks.length;
-    final int inProgress = _tasks.where((t) => t.status == 'In Progress' || t.status == 'Under Review' || t.status == 'Reassign' || t.status == 'Rework' || t.status == 'Overdue').length;
-    final int yetToStart = _tasks.where((t) => t.status == 'Open' || t.status == 'Pending').length;
-    final int completed = _tasks.where((t) => t.status == 'Closed' || t.status == 'Completed').length;
+    final int inProgress = _tasks.where((t) {
+      final s = t.status.toUpperCase();
+      return s == 'IN PROGRESS' || s == 'IN_PROGRESS' || s == 'INPROGRESS' || s == 'WIP' || s == 'UNDER REVIEW' || s == 'UNDER_REVIEW' || s == 'SUBMIT REVIEW' || s == 'SUBMIT_REVIEW';
+    }).length;
+    final int yetToStart = _tasks.where((t) {
+      final s = t.status.toUpperCase();
+      return s == 'OPEN' || s == 'PENDING' || s == 'OVERDUE' || s == 'REASSIGN' || s == 'REWORK' || s == 'DRAFT' || s == 'ASSIGNED';
+    }).length;
+    final int completed = _tasks.where((t) {
+      final s = t.status.toUpperCase();
+      return s == 'CLOSED' || s == 'COMPLETED' || s == 'DONE' || s == 'FINISHED' || t.progress >= 1.0;
+    }).length;
 
     double completedPct = 0.0;
     double inProgressPct = 0.0;
@@ -2230,17 +2519,24 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
                   width: 74,
                   height: 74,
                   child: CircularProgressIndicator(
-                    value: completedPct,
+                    value: _projectProgressValue,
                     strokeWidth: 8,
-                    backgroundColor: Colors.orange,
-                    color: Colors.green,
+                    backgroundColor: const Color(0xffF1F5F9),
+                    color: _projectProgressColor,
                   ),
                 ),
                 Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('${(completedPct * 100).round()}%', style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: Color(0xff0F172A))),
-                    const Text('Closed', style: TextStyle(fontSize: 8, color: Color(0xff64748B))),
+                    Text(
+                      _projectProgressText,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: _projectProgressColor,
+                      ),
+                    ),
+                    const Text('Progress', style: TextStyle(fontSize: 8, color: Color(0xff64748B))),
                   ],
                 )
               ],
@@ -2251,7 +2547,7 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
             child: Column(
               children: [
                 _buildProgressLegend('Closed', '${(completedPct * 100).round()}%', Colors.green),
-                _buildProgressLegend('In Progress', '${(inProgressPct * 100).round()}%', Colors.blue),
+                _buildProgressLegend('In Progress', '${(inProgressPct * 100).round()}%', const Color(0xFFF59E0B)),
                 _buildProgressLegend('Yet to Start', '${(yetToStartPct * 100).round()}%', Colors.orange),
               ],
             ),
@@ -2316,20 +2612,75 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
   }
 
   Widget _buildUpcomingMilestonesCard() {
-    final today = DateTime.now();
-    final todayDate = DateTime(today.year, today.month, today.day);
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+
     final upcoming = _milestones.where((m) {
-      if (m.status == 'Closed' || m.status == 'Completed') return false;
-      try {
-        final start = _parseAnyDate(m.startDate);
-        final startDate = DateTime(start.year, start.month, start.day);
-        return startDate.isAfter(todayDate) || startDate.isAtSameMomentAs(todayDate);
-      } catch (_) {
-        return m.status != 'Closed' && m.status != 'Completed';
+      final s = m.status.trim().toLowerCase();
+      // 1. Must not be closed, completed, done, or finished
+      if (s == 'closed' || s == 'completed' || s == 'done' || s == 'finished') {
+        return false;
       }
+
+      // 2. Must not be 100% finished
+      if (m.progress >= 100) {
+        return false;
+      }
+
+      // 3. Must have open tasks remaining if assigned > 0
+      if (m.assigned > 0 && m.open == 0) {
+        return false;
+      }
+
+      // 4. Must be a milestone where the person is involved in its tasks
+      if (_currentEmpId != null) {
+        if (!_isUserInvolvedInMilestone(m)) {
+          return false;
+        }
+      }
+
+      // 5. Must be UPCOMING relative to today's date (Start Date >= Today)
+      final stStr = m.rawStDt.isNotEmpty ? m.rawStDt : m.startDate;
+      final endStr = m.rawEndDt.isNotEmpty ? m.rawEndDt : m.targetDate;
+      if (stStr.isNotEmpty && stStr != 'No Date') {
+        final stDate = _parseAnyDate(stStr);
+        final stDateOnly = DateTime(stDate.year, stDate.month, stDate.day);
+        if (stDateOnly.isBefore(today)) {
+          return false;
+        }
+      } else if (endStr.isNotEmpty && endStr != 'No Date') {
+        final endDate = _parseAnyDate(endStr);
+        final endDateOnly = DateTime(endDate.year, endDate.month, endDate.day);
+        if (endDateOnly.isBefore(today)) {
+          return false;
+        }
+      }
+
+      return true;
     }).toList();
-    
-    // Maintain sequential project order
+
+    // 5. Sort strictly by Start Date ascending (earliest start date first)
+    upcoming.sort((a, b) {
+      DateTime parseStartDate(MilestoneModel model) {
+        if (model.rawStDt.isNotEmpty) {
+          return _parseAnyDate(model.rawStDt);
+        }
+        return _parseAnyDate(model.startDate);
+      }
+      final dateA = parseStartDate(a);
+      final dateB = parseStartDate(b);
+      final cmp = dateA.compareTo(dateB);
+      if (cmp != 0) return cmp;
+
+      DateTime parseEndDate(MilestoneModel model) {
+        if (model.rawEndDt.isNotEmpty) {
+          return _parseAnyDate(model.rawEndDt);
+        }
+        return _parseAnyDate(model.targetDate);
+      }
+      return parseEndDate(a).compareTo(parseEndDate(b));
+    });
+
     final upcomingLimit = upcoming.take(4).toList();
 
     return _buildSectionCard(
@@ -2357,42 +2708,60 @@ class _ProjectDetailsScreenState extends State<ProjectDetailsScreen> with Single
         children: upcomingLimit.isEmpty
             ? [
                 const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 10),
-                  child: Text('No upcoming milestones', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  padding: EdgeInsets.symmetric(vertical: 14),
+                  child: Center(
+                    child: Text('No upcoming milestones', style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500)),
+                  ),
                 )
               ]
             : List.generate(upcomingLimit.length, (index) {
                 final m = upcomingLimit[index];
-                return _buildMilestoneRow(m.title, m.targetDate, m.color, isLast: index == upcomingLimit.length - 1);
+                return _buildMilestoneRow(m, isLast: index == upcomingLimit.length - 1);
               }),
       ),
     );
   }
 
-  Widget _buildMilestoneRow(String title, String date, Color dotColor, {bool isLast = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 10),
-      decoration: BoxDecoration(border: isLast ? null : const Border(bottom: BorderSide(color: Color(0xffF1F5F9), width: 1))),
-      child: Row(
-        children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: dotColor,
+  Widget _buildMilestoneRow(MilestoneModel milestone, {bool isLast = false}) {
+    return InkWell(
+      onTap: () {
+        setState(() {
+          _selectedMilestoneTitle = milestone.title;
+        });
+        _tabController.animateTo(1);
+      },
+      borderRadius: BorderRadius.circular(4),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
+        decoration: BoxDecoration(
+          border: isLast ? null : const Border(bottom: BorderSide(color: Color(0xffF1F5F9), width: 1)),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 8,
+              height: 8,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: milestone.color,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              title,
-              style: const TextStyle(fontSize: 11.5, color: Color(0xff1E293B), fontWeight: FontWeight.w500),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                milestone.title,
+                style: const TextStyle(fontSize: 11.5, color: Color(0xff1E293B), fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
-          ),
-          const SizedBox(width: 8),
-          Text(date, style: const TextStyle(fontSize: 11, color: Color(0xff64748B))),
-        ],
+            const SizedBox(width: 8),
+            Text(
+              milestone.startDate,
+              style: const TextStyle(fontSize: 11, color: Color(0xff64748B), fontWeight: FontWeight.w500),
+            ),
+          ],
+        ),
       ),
     );
   }

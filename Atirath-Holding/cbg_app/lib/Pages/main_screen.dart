@@ -38,7 +38,6 @@ class _MainScreenState extends State<MainScreen> with AutomaticKeepAliveClientMi
   @override
   void initState() {
     super.initState();
-    ApiService.preloadAllData();
     _fetchNotificationCount();
     _fetchProfilePhoto();
   }

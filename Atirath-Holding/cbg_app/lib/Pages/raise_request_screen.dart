@@ -8,6 +8,8 @@ import '../widgets/footer.dart';
 import '../services/api_service.dart';
 import 'main_screen.dart';
 import '../widgets/reassign_icon.dart';
+import '../models/employee_option.dart';
+import '../widgets/employee_dropdown.dart';
 
 class RaiseRequestScreen extends StatefulWidget {
   final TaskItem? task;
@@ -36,7 +38,8 @@ class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
   List<TaskItem> _availableTasks = [];
   bool _isSubmitting = false;
   List<dynamic> _allMilestones = [];
-  List<dynamic> _employees = [];
+  List<EmployeeOption> _employees = [];
+  EmployeeOption? _selectedReassignEmp;
 
   String _activeTab = 'REWORK';
   String? _selectedTargetMilestone;
@@ -49,6 +52,7 @@ class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
     if (widget.task != null) {
       _selectedTaskTitle = widget.task!.title;
       _selectedTaskId = _extractTaskNumericId(widget.task!);
+      _selectedReassignEmpId = _extractExecutorEmpId(widget.task!);
     }
     _reasonCtrl = TextEditingController(text: widget.initialRemarks ?? '');
     _fetchNotifications();
@@ -70,13 +74,35 @@ class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
 
   Future<void> _loadEmployees() async {
     try {
-      final emps = await ApiService.getEmployees();
+      final rawEmps = await ApiService.getEmployees();
+      final List<EmployeeOption> parsedList = [];
+      final Set<String> addedIds = {};
+
+      for (final raw in rawEmps) {
+        final opt = EmployeeOption.fromJson(raw);
+        if (opt.id != null && opt.id!.isNotEmpty && !addedIds.contains(opt.id)) {
+          addedIds.add(opt.id!);
+          parsedList.add(opt);
+        }
+      }
+
+      parsedList.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+
       if (mounted) {
         setState(() {
-          _employees = emps;
+          _employees = parsedList;
+          if (_selectedReassignEmpId != null) {
+            try {
+              _selectedReassignEmp = parsedList.firstWhere(
+                (e) => e.id == _selectedReassignEmpId.toString(),
+              );
+            } catch (_) {}
+          }
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('Error loading employees in raise request screen: $e');
+    }
   }
 
   List<dynamic> get _availableMilestones {
@@ -203,6 +229,14 @@ class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
           if (tasks.isNotEmpty && _selectedTaskId == null) {
             _selectedTaskId = _extractTaskNumericId(tasks.first);
             _selectedTaskTitle = tasks.first.title;
+            _selectedReassignEmpId ??= _extractExecutorEmpId(tasks.first);
+          }
+          if (_selectedReassignEmpId != null && _employees.isNotEmpty && _selectedReassignEmp == null) {
+            try {
+              _selectedReassignEmp = _employees.firstWhere(
+                (e) => e.id == _selectedReassignEmpId.toString(),
+              );
+            } catch (_) {}
           }
         });
       }
@@ -422,7 +456,19 @@ class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
     setState(() => _isSubmitting = true);
 
     final taskId = _selectedTaskId!;
-    final executorId = _selectedReassignEmpId ?? _extractExecutorEmpId(targetTask);
+    final executorId = (_selectedReassignEmp?.id != null ? int.tryParse(_selectedReassignEmp!.id!) : null) ?? _selectedReassignEmpId ?? _extractExecutorEmpId(targetTask);
+    
+    if (executorId == null) {
+      setState(() => _isSubmitting = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please select an employee to reassign.'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
     final bool isIndiv = targetTask?.isIndividualTask == true;
     final String currentUserName = await ApiService.getCurrentEmployeeName();
 
@@ -433,7 +479,7 @@ class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
         rawObj['prcsYesActn'] = 'REASSIGN';
         rawObj['subStatus'] = 'REASSIGN';
         rawObj['sub_status'] = 'REASSIGN';
-        if (executorId != null) rawObj['empId'] = executorId;
+        rawObj['empId'] = executorId;
         if (remarks.isNotEmpty) {
           final prefix = '[Reassigned - $currentUserName]';
           final existingRem = rawObj['remarks'];
@@ -450,7 +496,7 @@ class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
         rawObj['prcsYesActn'] = 'REASSIGN';
         rawObj['subStatus'] = 'REASSIGN';
         rawObj['sub_status'] = 'REASSIGN';
-        if (executorId != null) rawObj['empId'] = executorId;
+        rawObj['empId'] = executorId;
         if (remarks.isNotEmpty) {
           final prefix = '[Reassigned - $currentUserName]';
           final existingRem = rawObj['addlRem'] ?? rawObj['remarks'];
@@ -709,32 +755,16 @@ class _RaiseRequestScreenState extends State<RaiseRequestScreen> {
 
               // REASSIGN MODE FORM
               if (!isReworkMode) ...[
-                const Text(
-                  'Reassign Target (Executor)',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Color(0xFF334155)),
-                ),
-                const SizedBox(height: 6),
-                DropdownButtonFormField<int>(
-                  decoration: InputDecoration(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFFE2E8F0))),
-                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF4F46E5), width: 1.5)),
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  initialValue: _selectedReassignEmpId,
-                  hint: const Text('Select Employee to Reassign', style: TextStyle(fontSize: 13, color: Color(0xFF94A3B8))),
-                  items: _employees.map((emp) {
-                    final eId = int.tryParse((emp['empId'] ?? emp['id'] ?? 0).toString()) ?? 0;
-                    final name = (emp['empNm'] ?? emp['emp_nm'] ?? emp['name'] ?? 'Employee $eId').toString();
-                    return DropdownMenuItem<int>(
-                      value: eId,
-                      child: Text(name, style: const TextStyle(fontSize: 13, color: Color(0xFF1E293B)), overflow: TextOverflow.ellipsis),
-                    );
-                  }).toList(),
+                EmployeeDropdown(
+                  label: 'Reassign Target (Executor)',
+                  selectedItem: _selectedReassignEmp,
+                  items: _employees,
+                  isRequired: true,
                   onChanged: (val) {
-                    setState(() => _selectedReassignEmpId = val);
+                    setState(() {
+                      _selectedReassignEmp = val;
+                      _selectedReassignEmpId = val?.id != null ? int.tryParse(val!.id!) : null;
+                    });
                   },
                 ),
                 const SizedBox(height: 18),

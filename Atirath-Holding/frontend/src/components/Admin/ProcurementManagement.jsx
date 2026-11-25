@@ -26,7 +26,8 @@ import {
   ChevronRight,
   ArrowLeft,
   Lock,
-  Layers
+  Layers,
+  Calendar
 } from "lucide-react";
 import "../../styles/SupplyChainOperations.css";
 import { getScreenPermission } from "../../utils/permissions";
@@ -46,6 +47,132 @@ import {
 } from "../../utils/supplyChainApi";
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+
+// Utility: Format any date representation strictly into DD-MM-YYYY format across all devices
+export const formatToDDMMYYYY = (val) => {
+  if (!val) return "";
+  const str = String(val).trim();
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) return str;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const parts = str.split("T")[0].split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+  }
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+  return str;
+};
+
+// Utility: Convert DD-MM-YYYY to YYYY-MM-DD for native HTML5 date picker sync
+export const parseDDMMYYYYToISO = (val) => {
+  if (!val) return "";
+  const str = String(val).trim();
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+    const [d, m, y] = str.split("-");
+    return `${y}-${m}-${d}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.split("T")[0];
+  }
+  return str;
+};
+
+// CustomDateInput: Guaranteed DD-MM-YYYY display on every device/OS/browser
+const CustomDateInput = ({ value, onChange, required, placeholder = "DD-MM-YYYY" }) => {
+  const hiddenInputRef = React.useRef(null);
+  const displayVal = formatToDDMMYYYY(value);
+  const isoVal = parseDDMMYYYYToISO(value);
+
+  const handlePickerChange = (e) => {
+    const pickedIso = e.target.value;
+    if (pickedIso) {
+      onChange(formatToDDMMYYYY(pickedIso));
+    }
+  };
+
+  const handleManualInput = (e) => {
+    onChange(e.target.value);
+  };
+
+  const openCalendar = () => {
+    if (hiddenInputRef.current) {
+      try {
+        if (hiddenInputRef.current.showPicker) {
+          hiddenInputRef.current.showPicker();
+        } else {
+          hiddenInputRef.current.focus();
+          hiddenInputRef.current.click();
+        }
+      } catch (err) {
+        hiddenInputRef.current.click();
+      }
+    }
+  };
+
+  return (
+    <div style={{ position: "relative", width: "100%", display: "flex", alignItems: "center" }}>
+      <input
+        type="text"
+        required={required}
+        value={displayVal}
+        onChange={handleManualInput}
+        placeholder={placeholder}
+        style={{
+          width: "100%",
+          paddingRight: "40px",
+          fontFamily: "inherit",
+          fontSize: "14px"
+        }}
+        onClick={openCalendar}
+      />
+      <input
+        ref={hiddenInputRef}
+        type="date"
+        tabIndex={-1}
+        value={isoVal}
+        onChange={handlePickerChange}
+        style={{
+          position: "absolute",
+          right: "10px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          opacity: 0,
+          width: "24px",
+          height: "24px",
+          cursor: "pointer",
+          pointerEvents: "none"
+        }}
+      />
+      <button
+        type="button"
+        onClick={openCalendar}
+        style={{
+          position: "absolute",
+          right: "10px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: "4px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#64748B"
+        }}
+        title="Select Date (DD-MM-YYYY)"
+      >
+        <Calendar size={18} />
+      </button>
+    </div>
+  );
+};
 
 const ProcurementManagement = ({ onLogout, userRole }) => {
   const screenPerm = getScreenPermission("PROCUREMENT_MANAGEMENT");
@@ -75,8 +202,8 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
     poNumber: "",
     supplierName: "",
     plantFacility: "",
-    orderDate: new Date().toISOString().split("T")[0],
-    deliveryDate: "",
+    orderDate: formatToDDMMYYYY(new Date()),
+    deliveryDate: formatToDDMMYYYY(new Date(Date.now() + 14 * 86400000)),
     paymentTerms: "Net 30 Days",
     deliveryTerms: "FOR Destination Plant Site",
     shippingAddress: "",
@@ -188,15 +315,53 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
   };
 
   // --- Purchase Order Form Operations ---
-  const handleOpenCreatePO = () => {
-    const nextSeq = String(purchaseOrders.length + 1).padStart(4, "0");
-    const defaultPlant = plants[0]?.pltNm || plants[0]?.plantNm || plants[0]?.name || "20 TPD CBG Plant (Rangareddy)";
+  const generateNextPoNumber = (poList = purchaseOrders) => {
+    const currentYear = new Date().getFullYear();
+    const prefix = `PO-${currentYear}-`;
+    let maxSeq = 0;
+    (poList || []).forEach(po => {
+      const num = po.poNumber || po.po_number || "";
+      if (num.startsWith(prefix)) {
+        const digits = num.substring(prefix.length).replace(/[^0-9]/g, "");
+        if (digits) {
+          const val = parseInt(digits, 10);
+          if (!isNaN(val) && val > maxSeq) {
+            maxSeq = val;
+          }
+        }
+      }
+    });
+    return `PO-${currentYear}-${String(maxSeq + 1).padStart(4, "0")}`;
+  };
+
+  const handleOpenCreatePO = async () => {
+    let nextPoNumber = generateNextPoNumber(purchaseOrders);
+
+    try {
+      const token = sessionStorage.getItem("authToken") || localStorage.getItem("authToken") || "";
+      const res = await fetch(`${apiBaseUrl}/api/procurement/next-po-number`, {
+        headers: { "Authorization": `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.nextPoNumber) {
+          nextPoNumber = data.nextPoNumber;
+        }
+      }
+    } catch (e) {
+      console.warn("Using offline next PO calculation:", e);
+    }
+
+    const defaultPlant = plants[0]?.pltNm || plants[0]?.plantNm || plants[0]?.name || "Atirath Holdings (Mumbai)";
+    const todayDDMMYYYY = formatToDDMMYYYY(new Date());
+    const deliveryDDMMYYYY = formatToDDMMYYYY(new Date(Date.now() + 14 * 86400000));
+
     setPoForm({
-      poNumber: `PO-2026-${nextSeq}`,
-      supplierName: suppliers[0]?.name || "",
+      poNumber: nextPoNumber,
+      supplierName: suppliers[0]?.name || "Atirath Bio Supplies Ltd (Tier 1)",
       plantFacility: defaultPlant,
-      orderDate: new Date().toISOString().split("T")[0],
-      deliveryDate: new Date(Date.now() + 14 * 86400000).toISOString().split("T")[0],
+      orderDate: todayDDMMYYYY,
+      deliveryDate: deliveryDDMMYYYY,
       paymentTerms: "Net 30 Days",
       deliveryTerms: "FOR Destination Plant Site",
       shippingAddress: "BioNova Industrial Bio-Energy Complex, Site Bay 4",
@@ -553,12 +718,34 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                 <div className="sco-form-grid">
                   <div className="sco-form-group">
                     <label>PO Number <span className="required">*</span></label>
-                    <input
-                      type="text"
-                      required
-                      value={poForm.poNumber}
-                      onChange={(e) => setPoForm({ ...poForm, poNumber: e.target.value })}
-                    />
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <input
+                        type="text"
+                        required
+                        readOnly
+                        disabled
+                        value={poForm.poNumber}
+                        style={{
+                          backgroundColor: "#f1f5f9",
+                          cursor: "not-allowed",
+                          color: "#334155",
+                          fontWeight: "600",
+                          paddingRight: "36px"
+                        }}
+                        title="Auto-generated sequential PO number (Non-editable)"
+                      />
+                      <Lock
+                        size={16}
+                        style={{
+                          position: "absolute",
+                          right: "12px",
+                          top: "50%",
+                          transform: "translateY(-50%)",
+                          color: "#94a3b8",
+                          pointerEvents: "none"
+                        }}
+                      />
+                    </div>
                   </div>
 
                   <div className="sco-form-group">
@@ -581,7 +768,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                       value={poForm.plantFacility}
                       onChange={(e) => setPoForm({ ...poForm, plantFacility: e.target.value })}
                     >
-                      <option value="">-- Choose Plant / Facility --</option>
+                      <option value="" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>-- Choose Plant / Facility --</option>
                       {plants.map(p => {
                         const name = p.pltNm || p.plantNm || p.plantName || p.name;
                         const id = p.pltId || p.plantId || p.id;
@@ -605,20 +792,18 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
 
                   <div className="sco-form-group">
                     <label>PO Order Date</label>
-                    <input
-                      type="date"
+                    <CustomDateInput
                       value={poForm.orderDate}
-                      onChange={(e) => setPoForm({ ...poForm, orderDate: e.target.value })}
+                      onChange={(formattedVal) => setPoForm({ ...poForm, orderDate: formattedVal })}
                     />
                   </div>
 
                   <div className="sco-form-group">
                     <label>Expected Delivery Date <span className="required">*</span></label>
-                    <input
-                      type="date"
+                    <CustomDateInput
                       required
                       value={poForm.deliveryDate}
-                      onChange={(e) => setPoForm({ ...poForm, deliveryDate: e.target.value })}
+                      onChange={(formattedVal) => setPoForm({ ...poForm, deliveryDate: formattedVal })}
                     />
                   </div>
 
@@ -815,7 +1000,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                       value={prForm.plantFacility}
                       onChange={(e) => setPrForm({ ...prForm, plantFacility: e.target.value })}
                     >
-                      <option value="">-- Choose Plant / Facility --</option>
+                      <option value="" style={{ color: "#0f172a", backgroundColor: "#ffffff" }}>-- Choose Plant / Facility --</option>
                       {plants.map(p => {
                         const name = p.pltNm || p.plantNm || p.plantName || p.name;
                         const id = p.pltId || p.plantId || p.id;
@@ -1281,8 +1466,8 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                               <td style={{ fontWeight: "700", color: "#1e293b" }}>{po.poNumber}</td>
                               <td>{po.supplierName}</td>
                               <td>{po.plantFacility}</td>
-                              <td>{po.orderDate}</td>
-                              <td>{po.deliveryDate}</td>
+                              <td>{formatToDDMMYYYY(po.orderDate)}</td>
+                              <td>{formatToDDMMYYYY(po.deliveryDate)}</td>
                               <td>{po.items?.length || 1} items</td>
                               <td style={{ fontWeight: "700", color: "#0f172a" }}>
                                 ₹{Number(po.totalAmount || 0).toLocaleString("en-IN")}
@@ -1562,7 +1747,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                             <td style={{ color: "#2563eb", fontWeight: "600" }}>{g.poNumber}</td>
                             <td>{g.supplierName}</td>
                             <td style={{ fontWeight: "600" }}>{g.vehicleNo}</td>
-                            <td>{g.receivedDate}</td>
+                            <td>{formatToDDMMYYYY(g.receivedDate)}</td>
                             <td style={{ fontWeight: "700" }}>{g.receivedQty} MT</td>
                             <td>
                               <span className={`sco-badge ${g.inspectionStatus?.includes("Passed") ? "badge-green" : "badge-amber"}`}>
@@ -1629,7 +1814,13 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                     <p style={{ margin: "0 0 4px 0", color: "#64748b" }}>PO Reference:</p>
                     <p style={{ fontSize: "16px", fontWeight: "700", color: "#2563eb", margin: 0 }}>{viewingItem.data.poNumber}</p>
                     <p style={{ margin: "8px 0 4px 0", color: "#64748b" }}>Order Date:</p>
-                    <p style={{ fontWeight: "600", margin: 0 }}>{viewingItem.data.orderDate}</p>
+                    <p style={{ fontWeight: "600", margin: 0 }}>{formatToDDMMYYYY(viewingItem.data.orderDate)}</p>
+                    {viewingItem.data.deliveryDate && (
+                      <>
+                        <p style={{ margin: "8px 0 4px 0", color: "#64748b" }}>Expected Delivery Date:</p>
+                        <p style={{ fontWeight: "600", margin: 0 }}>{formatToDDMMYYYY(viewingItem.data.deliveryDate)}</p>
+                      </>
+                    )}
                     <p style={{ margin: "8px 0 4px 0", color: "#64748b" }}>Payment Terms:</p>
                     <p style={{ fontWeight: "600", margin: 0 }}>{viewingItem.data.paymentTerms}</p>
                   </div>

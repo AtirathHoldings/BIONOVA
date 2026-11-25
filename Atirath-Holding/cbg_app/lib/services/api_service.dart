@@ -17,6 +17,8 @@ class ApiService {
   static Map<String, dynamic>? _cachedDashboardData;
   static Map<String, dynamic>? _cachedProfile;
   static List<dynamic>? _cachedEmployees;
+  static List<dynamic>? _cachedCompanies;
+  static List<dynamic>? _cachedPlants;
   static bool _isPreloading = false;
 
   static Future<void> clearCache({bool clearAuth = false}) async {
@@ -26,6 +28,8 @@ class ApiService {
     _cachedDashboardData = null;
     _cachedProfile = null;
     _cachedEmployees = null;
+    _cachedCompanies = null;
+    _cachedPlants = null;
 
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -37,6 +41,9 @@ class ApiService {
       await prefs.remove('cache_completedTasksCount');
       await prefs.remove('cache_projectsCount');
       await prefs.remove('cached_employee_list');
+      await prefs.remove('cached_json_projects');
+      await prefs.remove('cached_json_dashboard');
+      await prefs.remove('cached_json_assignments');
       if (clearAuth) {
         await prefs.remove('profilePhotoUrl');
         await prefs.remove('userRole');
@@ -74,21 +81,33 @@ class ApiService {
     if (_cachedProjects != null && !forceRefresh) {
       return _cachedProjects!;
     }
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final token = prefs.getString('authToken');
+    
+    // First, try loading disk cache if in-memory cache is empty
+    final prefs = await SharedPreferences.getInstance();
+    if (_cachedProjects == null) {
+      final cachedJson = prefs.getString('cached_json_projects');
+      if (cachedJson != null && cachedJson.isNotEmpty) {
+        try {
+          final List<dynamic> data = jsonDecode(cachedJson);
+          _cachedProjects = data.map((json) => ProjectModel.fromJson(json)).toList();
+        } catch (_) {}
+      }
+    }
 
+    try {
+      final token = prefs.getString('authToken');
       if (token == null) {
-        throw Exception("Token not found");
+        return _cachedProjects ?? [];
       }
 
-      final role = prefs.getString('userRole') ?? '';
       final currentEmpId = await getCurrentEmployeeId();
-
-      final bool isEmployee = currentEmpId != null &&
-          role.isNotEmpty &&
-          role.toLowerCase() != 'admin' &&
-          role.toLowerCase() != 'manager';
+      final role = prefs.getString('userRole') ?? '';
+      final lowerRole = role.toLowerCase();
+      final bool isAdminOrManager = lowerRole.contains('admin') ||
+          lowerRole.contains('manager') ||
+          lowerRole.contains('pm') ||
+          lowerRole.contains('lead');
+      final bool isEmployee = currentEmpId != null && !isAdminOrManager;
 
       final url = isEmployee
           ? "${dotenv.env['BASE_URL']}/api/project-live/by-employee/$currentEmpId"
@@ -100,20 +119,47 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
         final list = data.map((json) => ProjectModel.fromJson(json)).toList();
         _cachedProjects = list;
+        await prefs.setString('cached_json_projects', response.body);
         return list;
       } else {
-        throw Exception("Failed to load projects : ${response.statusCode}");
+        return _cachedProjects ?? [];
       }
     } catch (e) {
       debugPrint("Error fetching live projects: $e");
-      return [];
+      return _cachedProjects ?? [];
     }
+  }
+
+  /// Fetches projects specifically assigned to an employee directly from backend
+  static Future<List<ProjectModel>> getProjectsByEmployee(int empId, {bool forceRefresh = false}) async {
+    final prefs = await SharedPreferences.getInstance();
+    try {
+      final token = prefs.getString('authToken');
+      if (token == null) return [];
+
+      final url = "${dotenv.env['BASE_URL']}/api/project-live/by-employee/$empId";
+      final response = await http.get(
+        Uri.parse(url),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(const Duration(seconds: 15));
+
+      if (response.statusCode == 200) {
+        final List<dynamic> data = jsonDecode(response.body);
+        return data.map((json) => ProjectModel.fromJson(json)).toList();
+      }
+    } catch (e) {
+      debugPrint("Error fetching projects by employee $empId: $e");
+    }
+    return [];
   }
 
   // ==================== PROFILE ====================
@@ -136,17 +182,30 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final profileData = Map<String, dynamic>.from(jsonDecode(response.body));
         _cachedProfile = profileData;
         
         // Save profile photo URL to SharedPreferences
-        if (profileData['photoUrl'] != null) {
+        if (profileData['photoUrl'] != null && profileData['photoUrl'].toString().isNotEmpty) {
           await prefs.setString('profilePhotoUrl', profileData['photoUrl'].toString());
         } else {
           await prefs.remove('profilePhotoUrl');
+        }
+
+        final fst = (profileData['fstNm'] ?? profileData['firstName'] ?? '').toString().trim();
+        final lst = (profileData['lstNm'] ?? profileData['lastName'] ?? '').toString().trim();
+        String name = "$fst $lst".trim();
+        if (name.isEmpty) {
+          name = (profileData['fullName'] ?? profileData['empNm'] ?? profileData['name'] ?? '').toString().trim();
+        }
+        if (name.isNotEmpty) {
+          profileData['fullName'] = name;
+          await prefs.setString('userName', name);
+          await prefs.setString('fullName', name);
+          await prefs.setString('cache_userName', name);
         }
         
         try {
@@ -444,7 +503,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final Map<String, dynamic> data = jsonDecode(response.body);
@@ -464,8 +523,8 @@ class ApiService {
   }
 
   static Future<String> getCurrentEmployeeName() async {
+    final prefs = await SharedPreferences.getInstance();
     try {
-      final prefs = await SharedPreferences.getInstance();
       final cachedName = prefs.getString('cache_userName') ?? 
                          prefs.getString('fullName') ?? 
                          prefs.getString('userName') ?? 
@@ -486,8 +545,14 @@ class ApiService {
 
         if (response.statusCode == 200) {
           final Map<String, dynamic> data = jsonDecode(response.body);
-          final name = data['fullName']?.toString() ?? data['empNm']?.toString() ?? data['name']?.toString() ?? '';
+          final fst = (data['fstNm'] ?? data['firstName'] ?? '').toString().trim();
+          final lst = (data['lstNm'] ?? data['lastName'] ?? '').toString().trim();
+          String name = "$fst $lst".trim();
+          if (name.isEmpty) {
+            name = (data['fullName'] ?? data['empNm'] ?? data['name'] ?? '').toString().trim();
+          }
           if (name.isNotEmpty) {
+            await prefs.setString('userName', name);
             await prefs.setString('cache_userName', name);
             await prefs.setString('fullName', name);
             return name;
@@ -496,6 +561,15 @@ class ApiService {
       }
     } catch (e) {
       debugPrint("Error fetching employee name: $e");
+    }
+    final email = prefs.getString('userEmail') ?? prefs.getString('savedEmail');
+    if (email != null && email.isNotEmpty) {
+      final namePart = email.split('@').first;
+      return namePart
+          .split(RegExp(r'[._]'))
+          .where((w) => w.isNotEmpty)
+          .map((w) => w[0].toUpperCase() + (w.length > 1 ? w.substring(1) : ''))
+          .join(' ');
     }
     return 'Reviewer';
   }
@@ -620,18 +694,18 @@ class ApiService {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('authToken');
-      if (token == null) throw Exception("Token not found");
+      if (token == null) return [];
 
       final url = "${dotenv.env['BASE_URL']}/api/milestone-live";
       final response = await http.get(
         Uri.parse(url),
         headers: {"Content-Type": "application/json", "Authorization": "Bearer $token"},
-      ).timeout(const Duration(seconds: 6));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body) as List<dynamic>;
       } else {
-        throw Exception("Failed to load milestones: ${response.statusCode}");
+        return [];
       }
     } catch (e) {
       debugPrint('[getAllMilestones] ERROR: $e');
@@ -661,7 +735,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 6));
+      ).timeout(const Duration(seconds: 30));
 
       debugPrint('[getTasksForMilestone] HTTP ${response.statusCode}');
 
@@ -689,97 +763,91 @@ class ApiService {
       final token = prefs.getString('authToken');
       
       if (token == null) {
-        throw Exception("Token not found");
+        return _cachedLiveTasks ?? [];
       }
       
-      final role = prefs.getString('userRole') ?? '';
       final currentEmpId = await getCurrentEmployeeId();
-      final bool isEmployee = currentEmpId != null &&
-          role.isNotEmpty &&
-          role.toLowerCase() != 'admin' &&
-          role.toLowerCase() != 'manager';
-      bool filterByEmp = isEmployee;
 
-      final projects = await getLiveProjects();
-      final List<TaskItem> allTasks = [];
+      // Parallel fetch /api/task-live, projects, and milestones with 30s timeout
+      final futures = await Future.wait([
+        http.get(
+          Uri.parse("${dotenv.env['BASE_URL']}/api/task-live"),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
+        ).timeout(const Duration(seconds: 30)),
+        getLiveProjects(forceRefresh: forceRefresh),
+        getAllMilestones(),
+      ]);
 
-      if (filterByEmp) {
-        // Employee-specific tasks
-        final List<dynamic> rawTasks = await getTasksByEmployee(currentEmpId);
-        final List<dynamic> rawMilestones = await getMilestonesByEmployee(currentEmpId);
+      final taskResponse = futures[0] as http.Response;
+      final List<ProjectModel> projects = futures[1] as List<ProjectModel>;
+      final List<dynamic> milestones = futures[2] as List<dynamic>;
 
-        for (final taskJson in rawTasks) {
-          final mId = taskJson['mId'] ?? taskJson['mid'];
-          final milestone = rawMilestones.firstWhere(
-            (m) => (m['mId'] ?? m['mid']) == mId,
-            orElse: () => null,
-          );
-          final prjId = milestone != null ? milestone['prjId'] : taskJson['prjId'];
-          
-          // Find project, create placeholder if not found
-          ProjectModel? project;
-          try {
-            project = projects.firstWhere((p) => p.prjId == prjId);
-          } catch (_) {
-            // Project not found - create minimal placeholder
-            project = ProjectModel(
-              prjId: prjId ?? 0,
-              prjCd: '',
-              prjNm: 'Unknown Project',
-              prjDesc: '',
-              prjPrty: 'Medium',
-              prjSts: 'LIVE',
-              stDt: '',
-              endDt: '',
-              noOfDays: 0,
-              name: 'Unknown Project',
-              details: '',
-              role: '',
-              assigned: 0,
-              open: 0,
-              progressValue: 0.0,
-              progressText: '0%',
-              barColor: Colors.blue,
-            );
-          }
-          
-          allTasks.add(TaskItem.fromJson(taskJson, project, milestone ?? {}, currentEmpId.toString()));
-        }
-      } else {
-        // Admin/Manager - fetch all tasks
-        final milestoneResults = await Future.wait(
-          projects.map((project) => getMilestones(project.prjId)),
-        );
+      final Map<int, ProjectModel> projectMap = {
+        for (final p in projects) p.prjId: p,
+      };
 
-        final List<Future<List<dynamic>>> taskFutures = [];
-        final List<Map<String, dynamic>> contextList = [];
-
-        for (int i = 0; i < projects.length; i++) {
-          final project = projects[i];
-          final milestones = milestoneResults[i];
-          for (final milestone in milestones) {
-            final mId = milestone['mId'] ?? milestone['mid'];
-            if (mId != null) {
-              taskFutures.add(getTasksForMilestone(mId));
-              contextList.add({
-                'project': project,
-                'milestone': milestone,
-              });
+      final Map<int, Map<String, dynamic>> milestoneMap = {};
+      for (final m in milestones) {
+        if (m is Map) {
+          final mId = m['mId'] ?? m['mid'] ?? m['id'] ?? m['milestoneId'] ?? m['mlstnId'];
+          if (mId != null) {
+            final parsedId = int.tryParse(mId.toString());
+            if (parsedId != null) {
+              milestoneMap[parsedId] = Map<String, dynamic>.from(m);
             }
           }
         }
+      }
 
-        final taskResults = await Future.wait(taskFutures);
-        for (int i = 0; i < taskResults.length; i++) {
-          final context = contextList[i];
-          final ProjectModel project = context['project'];
-          final milestone = context['milestone'];
-          final tasksJson = taskResults[i];
+      final List<TaskItem> allTasks = [];
 
-          for (final taskJson in tasksJson) {
+      if (taskResponse.statusCode == 200) {
+        final List<dynamic> rawTasks = jsonDecode(taskResponse.body);
+        for (final item in rawTasks) {
+          if (item is Map) {
+            final taskJson = Map<String, dynamic>.from(item);
+            final mIdRaw = taskJson['mId'] ?? taskJson['mid'];
+            final int? mId = mIdRaw != null ? int.tryParse(mIdRaw.toString()) : null;
+            final milestone = mId != null ? (milestoneMap[mId] ?? {}) : <String, dynamic>{};
+
+            final prjIdRaw = milestone['prjId'] ?? milestone['prj_id'] ?? taskJson['prjId'] ?? taskJson['prj_id'];
+            final int? prjId = prjIdRaw != null ? int.tryParse(prjIdRaw.toString()) : null;
+
+            ProjectModel project;
+            if (prjId != null && projectMap.containsKey(prjId)) {
+              project = projectMap[prjId]!;
+            } else {
+              final prjNm = (taskJson['prjNm'] ?? milestone['prjNm'] ?? 'Project Task').toString();
+              final prjCd = (taskJson['prjCd'] ?? milestone['prjCd'] ?? '').toString();
+              project = ProjectModel(
+                prjId: prjId ?? 0,
+                prjCd: prjCd,
+                prjNm: prjNm,
+                prjDesc: '',
+                prjPrty: 'Medium',
+                prjSts: 'LIVE',
+                stDt: '',
+                endDt: '',
+                noOfDays: 0,
+                name: prjNm,
+                details: '',
+                role: '',
+                assigned: 0,
+                open: 0,
+                progressValue: 0.0,
+                progressText: '0%',
+                barColor: Colors.blue,
+              );
+            }
+
             allTasks.add(TaskItem.fromJson(taskJson, project, milestone, currentEmpId?.toString()));
           }
         }
+      } else {
+        debugPrint("getLiveTasks HTTP Error: ${taskResponse.statusCode}");
       }
 
       // Include locally assigned tasks
@@ -793,8 +861,6 @@ class ApiService {
                 final taskJson = jsonDecode(taskDataStr);
                 final localTask = TaskItem.fromLocalJson(taskJson);
                 
-                // Fetch the latest data from the backend for individual tasks
-                // to ensure mutual visibility of actions (checklists, status changes)
                 if (localTask.isIndividualTask) {
                   try {
                     final latestRaw = await getIndividualTaskById(int.parse(localTask.id));
@@ -812,25 +878,13 @@ class ApiService {
         }
       }
 
-      // Local filtering for non-admin roles (mirroring website My Tasks.jsx)
-      if (currentEmpId != null && role.isNotEmpty && role.toLowerCase() != 'admin') {
-        final currentEmpIdStr = currentEmpId.toString();
-        allTasks.retainWhere((task) {
-          final raw = task.rawData ?? {};
-          final doer = (raw['empId'] ?? raw['empid'] ?? raw['assignedTo'] ?? raw['executorId'])?.toString();
-          final reviewer = (raw['reviewerId'] ?? raw['reviewer'] ?? task.reviewer)?.toString();
-          final approver = (raw['approverId'] ?? raw['approver'] ?? task.approver)?.toString();
-          return doer == currentEmpIdStr || reviewer == currentEmpIdStr || approver == currentEmpIdStr || task.isCurrentUserReviewer || task.isCurrentUserApprover;
-        });
-      }
-
       allTasks.removeWhere((task) => task.isDraft);
 
       _cachedLiveTasks = allTasks;
       return allTasks;
     } catch (e) {
       debugPrint("Error in getLiveTasks: $e");
-      return [];
+      return _cachedLiveTasks ?? [];
     }
   }
 
@@ -848,7 +902,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -882,7 +936,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode != 200) {
         throw Exception("Failed to complete checklist item: ${response.statusCode}");
@@ -905,7 +959,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode != 200) {
         throw Exception("Failed to reopen checklist item: ${response.statusCode}");
@@ -1100,7 +1154,7 @@ class ApiService {
           "Authorization": "Bearer $token",
         },
         body: jsonEncode({"empId": empId}),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
@@ -1129,7 +1183,7 @@ class ApiService {
           "Authorization": "Bearer $token",
         },
         body: jsonEncode({"empId": empId, "remarks": remarks}),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
@@ -1158,7 +1212,7 @@ class ApiService {
           "Authorization": "Bearer $token",
         },
         body: jsonEncode({"empId": empId, "remarks": remarks}),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       final data = jsonDecode(response.body);
       if (response.statusCode == 200) {
@@ -1289,7 +1343,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       debugPrint("[getLiveProcessConfig] Response status: ${response.statusCode}");
       if (response.statusCode == 200) {
@@ -1323,7 +1377,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       debugPrint("[getDraftProcessConfig] Response status: ${response.statusCode}");
       if (response.statusCode == 200) {
@@ -1358,29 +1412,46 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 10));
 
       debugPrint("[getEmployeeName] Response status for empId $empId: ${response.statusCode}");
       if (response.statusCode == 200) {
-        debugPrint("[getEmployeeName] Response body: ${response.body}");
         final data = jsonDecode(response.body);
         final firstName = data['firstName'] ?? data['first_name'] ?? data['fstNm'] ?? data['fst_nm'] ?? '';
         final lastName = data['lastName'] ?? data['last_name'] ?? data['lstNm'] ?? data['lst_nm'] ?? '';
         String resolvedName = "$firstName $lastName".trim();
-        
+
         if (resolvedName.isEmpty) {
           resolvedName = (data['empNm'] ?? data['employeeName'] ?? data['name'] ?? '').toString().trim();
         }
-        
-        debugPrint("[getEmployeeName] Resolved name: $resolvedName");
-        return resolvedName.isNotEmpty ? resolvedName : null;
+
+        if (resolvedName.isNotEmpty) return resolvedName;
       }
-      debugPrint("[getEmployeeName] Request failed with status: ${response.statusCode}");
-      return null;
     } catch (e) {
-      debugPrint("[getEmployeeName] Error: $e");
-      return null;
+      debugPrint("[getEmployeeName] Direct endpoint error: $e");
     }
+
+    try {
+      final employees = await getEmployees();
+      for (final emp in employees) {
+        if (emp is Map) {
+          final idStr = (emp['id'] ?? emp['empId'] ?? emp['emp_id'])?.toString();
+          if (idStr == empId.toString()) {
+            final firstName = emp['firstName'] ?? emp['first_name'] ?? emp['fstNm'] ?? emp['fst_nm'] ?? '';
+            final lastName = emp['lastName'] ?? emp['last_name'] ?? emp['lstNm'] ?? emp['lst_nm'] ?? '';
+            String resolvedName = "$firstName $lastName".trim();
+            if (resolvedName.isEmpty) {
+              resolvedName = (emp['empNm'] ?? emp['employeeName'] ?? emp['name'] ?? '').toString().trim();
+            }
+            if (resolvedName.isNotEmpty) return resolvedName;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("[getEmployeeName] Employee list search fallback error: $e");
+    }
+
+    return null;
   }
 
   static Future<String?> getReviewerName(int rId) async {
@@ -1401,7 +1472,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       debugPrint("[getReviewerName] Response status for reviewerId $rId: ${response.statusCode}");
       if (response.statusCode == 200) {
@@ -1421,11 +1492,15 @@ class ApiService {
 
   // ==================== COMPANIES ====================
   
-  static Future<List<dynamic>> getCompanies() async {
+  static Future<List<dynamic>> getCompanies({bool forceRefresh = false}) async {
+    if (_cachedCompanies != null && !forceRefresh) {
+      return _cachedCompanies!;
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('authToken');
-      if (token == null) return [];
+      if (token == null) return _cachedCompanies ?? [];
 
       final response = await http.get(
         Uri.parse("${dotenv.env['BASE_URL']}/api/companies"),
@@ -1433,25 +1508,30 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        _cachedCompanies = jsonDecode(response.body);
+        return _cachedCompanies!;
       } else {
-        return [];
+        return _cachedCompanies ?? [];
       }
     } catch (_) {
-      return [];
+      return _cachedCompanies ?? [];
     }
   }
 
   // ==================== PLANTS ====================
   
-  static Future<List<dynamic>> getPlants() async {
+  static Future<List<dynamic>> getPlants({bool forceRefresh = false}) async {
+    if (_cachedPlants != null && !forceRefresh) {
+      return _cachedPlants!;
+    }
+
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('authToken');
-      if (token == null) return [];
+      if (token == null) return _cachedPlants ?? [];
 
       final response = await http.get(
         Uri.parse("${dotenv.env['BASE_URL']}/api/plants"),
@@ -1459,25 +1539,42 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
-        return jsonDecode(response.body);
+        _cachedPlants = jsonDecode(response.body);
+        return _cachedPlants!;
       } else {
-        return [];
+        return _cachedPlants ?? [];
       }
     } catch (_) {
-      return [];
+      return _cachedPlants ?? [];
     }
   }
 
   // ==================== HOLIDAYS ====================
 
-  static Future<List<DateTime>> getHolidays({int? coyId, int? pltId}) async {
+  /// Fetches rich holiday objects from /api/calendar for user's company and plant.
+  static Future<List<Map<String, dynamic>>> getCalendarHolidays({int? coyId, int? pltId}) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('authToken');
       if (token == null) return [];
+
+      int? userCoyId = coyId;
+      int? userPltId = pltId;
+
+      if (userCoyId == null || userPltId == null) {
+        try {
+          final profile = await getProfile();
+          if (userCoyId == null && profile['coyId'] != null) {
+            userCoyId = int.tryParse(profile['coyId'].toString());
+          }
+          if (userPltId == null && profile['pltId'] != null) {
+            userPltId = int.tryParse(profile['pltId'].toString());
+          }
+        } catch (_) {}
+      }
 
       final url = "${dotenv.env['BASE_URL']}/api/calendar";
       final response = await http.get(
@@ -1486,39 +1583,78 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
-        final List<DateTime> holidays = [];
-        
+        final List<Map<String, dynamic>> holidays = [];
+
         for (var item in data) {
-          final type = item['calType'] ?? '';
-          final cId = item['coyId'];
-          final pId = item['pltId'];
-          
+          if (item is! Map) continue;
+          final type = (item['holTyp'] ?? item['hol_typ'] ?? item['calType'] ?? item['cal_type'] ?? item['type'] ?? '').toString().toUpperCase();
+          final cId = item['coyId'] ?? item['coy_id'];
+          final pId = item['pltId'] ?? item['plt_id'];
+
           bool include = false;
-          if (type == 'MANDATORY') {
+          if (type == 'MANDATORY' || type.isEmpty || type == 'HOLIDAY' || type == 'PUBLIC_HOLIDAY' || type == 'PUBLIC HOLIDAY') {
             include = true;
-          } else if (type == 'COMPANY' && cId != null && coyId != null && cId == coyId) {
-            include = true;
-          } else if (type == 'PLANT' && pId != null && pltId != null && pId == pltId) {
+          } else if (type == 'COMPANY') {
+            if (userCoyId == null || cId == null || cId.toString() == userCoyId.toString()) {
+              include = true;
+            }
+          } else if (type == 'PLANT') {
+            if (userPltId == null || pId == null || pId.toString() == userPltId.toString()) {
+              include = true;
+            }
+          } else {
             include = true;
           }
-          
-          if (include && item['calDt'] != null) {
-            final dt = DateTime.tryParse(item['calDt'].toString());
-            if (dt != null) {
-              holidays.add(dt);
+
+          final dateVal = item['calDt'] ?? item['cal_dt'] ?? item['date'] ?? item['dt'];
+          if (include && dateVal != null) {
+            final dtStr = dateVal.toString();
+            final parsedDt = DateTime.tryParse(dtStr);
+            if (parsedDt != null) {
+              final String formattedDate = "${parsedDt.year}-${parsedDt.month.toString().padLeft(2, '0')}-${parsedDt.day.toString().padLeft(2, '0')}";
+              final String occasion = (item['holidayNm'] ?? item['holiday_nm'] ?? item['holidayName'] ?? item['holiday_name'] ?? item['calOcc'] ?? item['cal_occ'] ?? item['calNm'] ?? item['cal_nm'] ?? item['title'] ?? item['name'] ?? item['description'] ?? 'Public Holiday').toString().trim();
+
+              holidays.add({
+                'id': (item['clId'] ?? item['cl_id'] ?? item['calId'] ?? item['cal_id'] ?? item['id'] ?? 'hol_${holidays.length}').toString(),
+                'date': formattedDate,
+                'title': occasion.isNotEmpty ? occasion : 'Public Holiday',
+                'type': 'HOLIDAY',
+                'calType': (item['calType'] ?? (type.isNotEmpty ? type : 'MANDATORY')).toString(),
+                'coyId': cId,
+                'pltId': pId,
+                'raw': item,
+              });
             }
           }
         }
         return holidays;
       }
     } catch (e) {
-      debugPrint("Error fetching holidays: $e");
+      debugPrint("Error fetching calendar holidays: $e");
     }
     return [];
+  }
+
+  static Future<List<DateTime>> getHolidays({int? coyId, int? pltId}) async {
+    try {
+      final holidayMaps = await getCalendarHolidays(coyId: coyId, pltId: pltId);
+      final List<DateTime> holidays = [];
+      for (var map in holidayMaps) {
+        final dateStr = map['date']?.toString();
+        if (dateStr != null) {
+          final dt = DateTime.tryParse(dateStr);
+          if (dt != null) holidays.add(dt);
+        }
+      }
+      return holidays;
+    } catch (e) {
+      debugPrint("Error fetching holidays list: $e");
+      return [];
+    }
   }
 
   static Future<int> getEffectiveWorkingDaysPerWeek({int? coyId, int? pltId}) async {
@@ -1575,7 +1711,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -1601,7 +1737,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -1619,19 +1755,32 @@ class ApiService {
       final token = prefs.getString('authToken');
       if (token == null) return [];
 
-      final response = await http.get(
-        Uri.parse("${dotenv.env['BASE_URL']}/api/notifications/unread"),
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": "Bearer $token",
-        },
-      ).timeout(const Duration(seconds: 15));
+      try {
+        final response = await http.get(
+          Uri.parse("${dotenv.env['BASE_URL']}/api/notifications/unread"),
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": "Bearer $token",
+          },
+        ).timeout(const Duration(seconds: 30));
 
-      if (response.statusCode == 200) {
-        return jsonDecode(response.body);
-      } else {
-        return [];
-      }
+        if (response.statusCode == 200) {
+          final List<dynamic> unread = jsonDecode(response.body);
+          if (unread.isNotEmpty) return unread;
+        }
+      } catch (_) {}
+
+      // Fallback: fetch all notifications and filter unread items
+      final allNotifs = await getNotifications();
+      final unreadList = allNotifs.where((n) {
+        if (n is Map) {
+          final isRead = n['isRead'] ?? n['is_read'] ?? n['read'];
+          return isRead == false || isRead == 0 || isRead == 'false';
+        }
+        return true;
+      }).toList();
+
+      return unreadList;
     } catch (_) {
       return [];
     }
@@ -1649,7 +1798,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       return response.statusCode == 200;
     } catch (_) {
@@ -1671,7 +1820,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         try {
@@ -1713,7 +1862,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -1744,7 +1893,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -1759,14 +1908,24 @@ class ApiService {
   // ==================== USER DASHBOARD ====================
   
   static Future<Map<String, dynamic>?> getUserDashboardData({bool forceRefresh = false}) async {
-    if (_cachedDashboardData != null && !forceRefresh) {
-      return _cachedDashboardData!;
+    final prefs = await SharedPreferences.getInstance();
+    if (_cachedDashboardData == null) {
+      final cachedJson = prefs.getString('cached_json_dashboard');
+      if (cachedJson != null && cachedJson.isNotEmpty) {
+        try {
+          _cachedDashboardData = jsonDecode(cachedJson) as Map<String, dynamic>?;
+        } catch (_) {}
+      }
     }
+
+    if (_cachedDashboardData != null && !forceRefresh) {
+      return _cachedDashboardData;
+    }
+
     try {
-      final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('authToken');
       if (token == null) {
-        throw Exception("Auth token not found. Please log in again.");
+        return _cachedDashboardData;
       }
 
       final response = await http.get(
@@ -1780,13 +1939,14 @@ class ApiService {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body) as Map<String, dynamic>;
         _cachedDashboardData = data;
+        await prefs.setString('cached_json_dashboard', response.body);
         return data;
       } else {
-        throw Exception("Server returned status ${response.statusCode}: ${response.body}");
+        return _cachedDashboardData;
       }
     } catch (e) {
       debugPrint("Error in getUserDashboardData: $e");
-      rethrow;
+      return _cachedDashboardData;
     }
   }
 
@@ -1804,7 +1964,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         return jsonDecode(response.body);
@@ -1835,7 +1995,7 @@ class ApiService {
           "Authorization": "Bearer $token",
         },
         body: jsonEncode(body),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       return response.statusCode == 200;
     } catch (_) {
@@ -1881,9 +2041,17 @@ class ApiService {
     try {
       final response = await http.post(
         Uri.parse("${dotenv.env['BASE_URL']}/api/auth/forgot-password"),
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({"email": email}),
-      ).timeout(const Duration(seconds: 300));
+        headers: {
+          "Content-Type": "application/json",
+          "X-Client-Type": "app",
+        },
+        body: jsonEncode({
+          "email": email,
+          "source": "app",
+          "client": "app",
+          "platform": "mobile",
+        }),
+      ).timeout(const Duration(seconds: 45));
 
       if (response.statusCode == 200) {
         try {
@@ -1916,7 +2084,7 @@ class ApiService {
           "token": token,
           "newPassword": newPassword,
         }),
-      ).timeout(const Duration(seconds: 300));
+      ).timeout(const Duration(seconds: 45));
 
       if (response.statusCode == 200) {
         try {
@@ -1927,12 +2095,18 @@ class ApiService {
         }
       } else {
         debugPrint("resetPasswordWithToken error: ${response.statusCode} - ${response.body}");
+        String errorMsg = "Failed to reset password (Status: ${response.statusCode}).";
         try {
           final Map<String, dynamic> data = jsonDecode(response.body);
-          throw Exception(data['error'] ?? data['message'] ?? "Failed to reset password (Status: ${response.statusCode}).");
-        } catch (_) {
-          throw Exception("Failed to reset password (Status: ${response.statusCode}). Server returned invalid data.");
+          if (data['error'] != null && data['error'].toString().isNotEmpty) {
+            errorMsg = data['error'].toString();
+          } else if (data['message'] != null && data['message'].toString().isNotEmpty) {
+            errorMsg = data['message'].toString();
+          }
+        } catch (e) {
+          debugPrint("Failed to parse resetPassword error JSON: $e");
         }
+        throw Exception(errorMsg);
       }
     } catch (e) {
       debugPrint("Error in resetPasswordWithToken: $e");
@@ -1958,7 +2132,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = jsonDecode(response.body);
@@ -1996,6 +2170,32 @@ class ApiService {
 
   // ==================== INDIVIDUAL TASKS ====================
 
+  static Future<String?> getNextTaskCode() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('authToken');
+      if (token == null) return null;
+
+      final response = await http.get(
+        Uri.parse("${dotenv.env['BASE_URL']}/api/assignments/next-code"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final decoded = jsonDecode(response.body);
+        if (decoded is Map && decoded['nextTaskCode'] != null) {
+          return decoded['nextTaskCode'].toString();
+        }
+      }
+    } catch (e) {
+      debugPrint("getNextTaskCode Exception: $e");
+    }
+    return null;
+  }
+
   static Future<int?> createIndividualTask(Map<String, dynamic> taskData) async {
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -2019,6 +2219,7 @@ class ApiService {
       debugPrint('======================================');
 
       if (response.statusCode == 200 || response.statusCode == 201) {
+        clearCache();
         try {
           final data = jsonDecode(response.body);
           if (data['id'] != null) {
@@ -2049,7 +2250,7 @@ class ApiService {
       if (token == null) return [];
 
       final response = await http.get(
-        Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/individual-task/$taskId"),
+        Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/assignments/$taskId"),
         headers: {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
@@ -2063,21 +2264,35 @@ class ApiService {
     return [];
   }
 
-  static Future<bool> saveLiveProcessConfigs(int taskId, int? reviewerId, int? approverId) async {
+  static Future<bool> saveLiveProcessConfigs(dynamic taskId, dynamic reviewerInput, dynamic approverInput) async {
     try {
       final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('authToken');
       if (token == null) return false;
 
-      // 1. Fetch existing configs
-      final existingConfigs = await getLiveProcessConfigs(taskId);
-      
-      Map<String, dynamic>? checkerConfig;
-      Map<String, dynamic>? reviewerConfig;
+      final int tId = int.tryParse(taskId.toString()) ?? 0;
+      if (tId <= 0) return false;
 
-      for (var config in existingConfigs) {
-        if (config['stepType'] == 'CHECKER' || config['stepType'] == 'APPROVER') checkerConfig = config;
-        if (config['stepType'] == 'REVIEWER') reviewerConfig = config;
+      final List<int> reviewerIds = [];
+      if (reviewerInput is List) {
+        for (var e in reviewerInput) {
+          final id = int.tryParse(e.toString());
+          if (id != null && id > 0 && !reviewerIds.contains(id)) reviewerIds.add(id);
+        }
+      } else if (reviewerInput != null) {
+        final id = int.tryParse(reviewerInput.toString());
+        if (id != null && id > 0) reviewerIds.add(id);
+      }
+
+      final List<int> approverIds = [];
+      if (approverInput is List) {
+        for (var e in approverInput) {
+          final id = int.tryParse(e.toString());
+          if (id != null && id > 0 && !approverIds.contains(id)) approverIds.add(id);
+        }
+      } else if (approverInput != null) {
+        final id = int.tryParse(approverInput.toString());
+        if (id != null && id > 0) approverIds.add(id);
       }
 
       final headers = {
@@ -2085,61 +2300,74 @@ class ApiService {
         "Authorization": "Bearer $token",
       };
 
-      // 2. Handle Approver (CHECKER)
-      if (approverId != null) {
-        final payload = {
-          "ordrId": 2,
-          "stepType": "CHECKER",
-          "empId": approverId,
-          "stepLabel": "Approver"
-        };
-        
-        if (checkerConfig != null) {
-          // Update
-          await http.put(
-            Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/${checkerConfig['pcId']}"),
-            headers: headers,
-            body: jsonEncode(payload),
-          );
-        } else {
-          // Create
-          await http.post(
-            Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/individual-task/$taskId"),
-            headers: headers,
-            body: jsonEncode(payload),
-          );
-        }
-      }
-
-      // 3. Handle Reviewer (REVIEWER)
-      if (reviewerId != null) {
-        final payload = {
-          "ordrId": 1,
+      final List<Map<String, dynamic>> processConfigs = [];
+      for (int i = 0; i < reviewerIds.length; i++) {
+        processConfigs.add({
+          "ordrId": i + 1,
           "stepType": "REVIEWER",
-          "empId": reviewerId,
-          "stepLabel": "Reviewer"
-        };
-        
-        if (reviewerConfig != null) {
-          // Update
-          await http.put(
-            Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/${reviewerConfig['pcId']}"),
-            headers: headers,
-            body: jsonEncode(payload),
-          );
-        } else {
-          // Create
-          await http.post(
-            Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/individual-task/$taskId"),
-            headers: headers,
-            body: jsonEncode(payload),
-          );
-        }
+          "empId": reviewerIds[i],
+          "stepLabel": "Reviewer ${i + 1}"
+        });
+      }
+      for (int i = 0; i < approverIds.length; i++) {
+        processConfigs.add({
+          "ordrId": reviewerIds.length + i + 1,
+          "stepType": "APPROVER",
+          "empId": approverIds[i],
+          "stepLabel": "Approver ${i + 1}"
+        });
       }
 
+      final response = await http.post(
+        Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/assignments/$tId/bulk"),
+        headers: headers,
+        body: jsonEncode(processConfigs),
+      ).timeout(const Duration(seconds: 5));
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        return true;
+      }
+
+      // Fallback: delete and save individually
+      await http.delete(
+        Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/assignments/$tId"),
+        headers: headers,
+      );
+
+      for (final cfg in processConfigs) {
+        await http.post(
+          Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/assignments/$tId"),
+          headers: headers,
+          body: jsonEncode(cfg),
+        );
+      }
       return true;
     } catch (e) {
       debugPrint('Error saving process configs: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> deleteIndividualTaskProcessConfigs(dynamic taskId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final token = prefs.getString('authToken');
+      if (token == null) return false;
+
+      final int tId = int.tryParse(taskId.toString()) ?? 0;
+      if (tId <= 0) return false;
+
+      final response = await http.delete(
+        Uri.parse("${dotenv.env['BASE_URL']}/api/process-config/assignments/$tId"),
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": "Bearer $token",
+        },
+      ).timeout(const Duration(seconds: 5));
+
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (e) {
+      debugPrint('Error deleting process configs: $e');
       return false;
     }
   }
@@ -2148,10 +2376,25 @@ class ApiService {
     if (_cachedIndividualTasks != null && !forceRefresh) {
       return _cachedIndividualTasks!;
     }
+
+    final prefs = await SharedPreferences.getInstance();
+    if (_cachedIndividualTasks == null) {
+      final cachedJson = prefs.getString('cached_json_assignments');
+      if (cachedJson != null && cachedJson.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(cachedJson);
+          if (decoded is List) {
+            _cachedIndividualTasks = decoded;
+          } else if (decoded is Map && decoded.containsKey('data')) {
+            _cachedIndividualTasks = decoded['data'] as List<dynamic>? ?? [];
+          }
+        } catch (_) {}
+      }
+    }
+
     try {
-      final prefs = await SharedPreferences.getInstance();
       final token = prefs.getString('authToken');
-      if (token == null) return [];
+      if (token == null) return _cachedIndividualTasks ?? [];
 
       final response = await http.get(
         Uri.parse("${dotenv.env['BASE_URL']}/api/assignments"),
@@ -2159,7 +2402,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final decoded = jsonDecode(response.body);
@@ -2170,6 +2413,7 @@ class ApiService {
           result = decoded['data'] as List<dynamic>? ?? [];
         }
         _cachedIndividualTasks = result;
+        await prefs.setString('cached_json_assignments', response.body);
         return result;
       } else {
         debugPrint("getIndividualTasks Error: ${response.statusCode}");
@@ -2177,7 +2421,7 @@ class ApiService {
     } catch (e) {
       debugPrint("getIndividualTasks Exception: $e");
     }
-    return [];
+    return _cachedIndividualTasks ?? [];
   }
 
   static Future<Map<String, dynamic>?> getIndividualTaskById(int id) async {
@@ -2348,7 +2592,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       debugPrint("[fetchAttachments] Live response status: ${liveResponse.statusCode}");
       if (liveResponse.statusCode == 200) {
@@ -2367,7 +2611,7 @@ class ApiService {
             "Content-Type": "application/json",
             "Authorization": "Bearer $token",
           },
-        ).timeout(const Duration(seconds: 4));
+        ).timeout(const Duration(seconds: 30));
 
         debugPrint("[fetchAttachments] Draft response status: ${draftResponse.statusCode}");
         if (draftResponse.statusCode == 200) {
@@ -2449,7 +2693,7 @@ class ApiService {
         ),
       );
 
-      final response = await request.send().timeout(const Duration(seconds: 15));
+      final response = await request.send().timeout(const Duration(seconds: 30));
       final respStr = await response.stream.bytesToString();
 
       debugPrint("[uploadFileToStorage] Response status: ${response.statusCode}");
@@ -2563,7 +2807,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       debugPrint("[deleteAttachment] Response status: ${response.statusCode}");
       return response.statusCode == 200;
@@ -2616,7 +2860,7 @@ class ApiService {
         empResp = await http.get(
           Uri.parse("$baseUrl/api/employees"),
           headers: headers,
-        ).timeout(const Duration(seconds: 15));
+        ).timeout(const Duration(seconds: 30));
       } catch (e) {
         debugPrint("[getEmployees] Network timeout/error on /api/employees: $e");
         return cachedEmployees;
@@ -2708,7 +2952,7 @@ class ApiService {
           "Content-Type": "application/json",
           "Authorization": "Bearer $token",
         },
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body);
@@ -2738,7 +2982,7 @@ class ApiService {
           "Authorization": "Bearer $token",
         },
         body: jsonEncode(taskData),
-      ).timeout(const Duration(seconds: 4));
+      ).timeout(const Duration(seconds: 30));
 
       return response.statusCode == 200;
     } catch (e) {
@@ -2812,7 +3056,7 @@ class ApiService {
           "Authorization": "Bearer $token",
         },
         body: jsonEncode({"taskSts": newStatus}),
-      ).timeout(const Duration(seconds: 15));
+      ).timeout(const Duration(seconds: 30));
       
       debugPrint("[updateProjectTaskStatus] PATCH response: ${response.statusCode} - ${response.body}");
       if (response.statusCode != 200) {
@@ -2912,6 +3156,107 @@ class ApiService {
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (e) {
       debugPrint("Error saving contributors to DB: $e");
+      return false;
+    }
+  }
+
+  // ==================== EXTERNAL TASKS ====================
+
+  /// Fetch external task details using token (Public API, no auth token required)
+  static Future<Map<String, dynamic>> fetchExternalTask(String token) async {
+    try {
+      final baseUrl = dotenv.env['BASE_URL'] ?? 'http://10.0.2.2:8080';
+      final cleanToken = token.trim();
+      final response = await http.get(
+        Uri.parse("$baseUrl/api/external-tasks/$cleanToken"),
+        headers: {"Content-Type": "application/json"},
+      ).timeout(const Duration(seconds: 12));
+
+      debugPrint("[fetchExternalTask] Status: ${response.statusCode}");
+      final Map<String, dynamic> body = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {
+          "success": true,
+          "data": body,
+        };
+      } else if (response.statusCode == 410 || body["expiredReason"] != null || (body["isExpired"] == true)) {
+        return {
+          "success": false,
+          "isExpired": true,
+          "expiredReason": body["expiredReason"] ?? "EXPIRED",
+          "message": body["message"] ?? "This task access link has expired.",
+          "data": body["task"] ?? body,
+        };
+      } else {
+        return {
+          "success": false,
+          "message": body["message"] ?? "Unable to load task details.",
+        };
+      }
+    } catch (e) {
+      debugPrint("Error fetching external task: $e");
+      return {
+        "success": false,
+        "message": "Network error while connecting to server.",
+      };
+    }
+  }
+
+  /// Update external task status/remarks using token
+  static Future<Map<String, dynamic>> updateExternalTaskStatus(
+    String token, {
+    String? taskSts,
+    String? subStatus,
+    String? remarks,
+  }) async {
+    try {
+      final baseUrl = dotenv.env['BASE_URL'] ?? 'http://10.0.2.2:8080';
+      final cleanToken = token.trim();
+      final payload = <String, dynamic>{};
+      if (taskSts != null) payload["taskSts"] = taskSts;
+      if (subStatus != null) payload["subStatus"] = subStatus;
+      if (remarks != null) payload["remarks"] = remarks;
+
+      final response = await http.put(
+        Uri.parse("$baseUrl/api/external-tasks/$cleanToken/update"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode(payload),
+      ).timeout(const Duration(seconds: 12));
+
+      debugPrint("[updateExternalTaskStatus] Status: ${response.statusCode} - ${response.body}");
+      final Map<String, dynamic> body = jsonDecode(response.body);
+
+      if (response.statusCode == 200) {
+        return {"success": true, "data": body};
+      } else {
+        return {"success": false, "message": body["message"] ?? "Failed to update task."};
+      }
+    } catch (e) {
+      debugPrint("Error updating external task: $e");
+      return {"success": false, "message": "Network error while updating task."};
+    }
+  }
+
+  /// Toggle external task checklist item using token
+  static Future<bool> updateExternalChecklistItem(String token, int chkId, bool chkSts) async {
+    try {
+      final baseUrl = dotenv.env['BASE_URL'] ?? 'http://10.0.2.2:8080';
+      final cleanToken = token.trim();
+      final response = await http.patch(
+        Uri.parse("$baseUrl/api/external-tasks/$cleanToken/checklist/$chkId"),
+        headers: {"Content-Type": "application/json"},
+        body: jsonEncode({"chkSts": chkSts}),
+      ).timeout(const Duration(seconds: 10));
+
+      debugPrint("[updateExternalChecklistItem] Status: ${response.statusCode}");
+      if (response.statusCode == 200) {
+        final body = jsonDecode(response.body);
+        return body["success"] == true;
+      }
+      return false;
+    } catch (e) {
+      debugPrint("Error updating external checklist item: $e");
       return false;
     }
   }

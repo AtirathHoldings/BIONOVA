@@ -8,6 +8,7 @@ import '../models/employee_option.dart';
 import '../services/api_service.dart';
 import 'task_details_screen.dart';
 import '../widgets/reassign_icon.dart';
+import '../utils/app_colors.dart';
 
 class TasksScreen extends StatefulWidget {
   static final ValueNotifier<String> activeTabNotifier = ValueNotifier<String>('To-Do List');
@@ -24,13 +25,14 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
   final TextEditingController _searchController = TextEditingController();
   
   List<TaskItem> _tasks = [];
-  bool _isLoading = false;
+  bool _isLoading = true;
   String? _errorMessage;
   Timer? _autoRefreshTimer;
 
   String? _userPhotoUrl;
   String _userInitials = 'EM';
   String _userName = '';
+  bool _isFetching = false;
   int? _currentEmpId;
   Map<String, EmployeeOption> _employeeMap = {};
 
@@ -40,22 +42,31 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
   int _totalCount = 0;
 
   Future<void> _fetchTasks() async {
-    if (!mounted) return;
-    setState(() {
-      _errorMessage = null;
-    });
+    if (!mounted || _isFetching) return;
+    _isFetching = true;
+    if (_tasks.isEmpty) {
+      setState(() {
+        _isLoading = true;
+        _errorMessage = null;
+      });
+    }
     try {
       final responses = await Future.wait([
-        ApiService.getLiveTasks(forceRefresh: true),
-        ApiService.getCurrentEmployeeId(),
-        ApiService.getUserDashboardData(forceRefresh: true),
-        ApiService.getEmployees(forceRefresh: true),
+        ApiService.getLiveTasks(forceRefresh: true).catchError((e) {
+          debugPrint("Error fetching live tasks: $e");
+          return <TaskItem>[];
+        }),
+        ApiService.getCurrentEmployeeId().catchError((e) => null),
+        ApiService.getUserDashboardData(forceRefresh: true).catchError((e) => null),
+        ApiService.getEmployees(forceRefresh: true).catchError((e) => <dynamic>[]),
+        ApiService.getIndividualTasks(forceRefresh: true).catchError((e) => <dynamic>[]),
       ]);
 
-      List<TaskItem> liveTasks = responses[0] as List<TaskItem>;
+      List<TaskItem> liveTasks = List<TaskItem>.from(responses[0] as List);
       final currentEmpId = responses[1] as int?;
       final dashboardData = responses[2] as Map<String, dynamic>?;
       final employeesList = responses[3] as List<dynamic>;
+      List<dynamic> rawIndividualTasks = List<dynamic>.from(responses[4] as List);
 
       final Map<String, EmployeeOption> tempMap = {};
       for (final emp in employeesList) {
@@ -99,11 +110,10 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
 
       final prefs = await SharedPreferences.getInstance();
       final userRole = prefs.getString('userRole') ?? '';
-      final bool isAdmin = userRole.toLowerCase() == 'admin';
+      final lowerRole = userRole.toLowerCase();
+      final bool isAdminOrManager = lowerRole.contains('admin') || lowerRole.contains('manager') || lowerRole.contains('pm') || lowerRole.contains('lead');
 
-      List<dynamic> rawIndividualTasks = await ApiService.getIndividualTasks(forceRefresh: true);
-      
-      if (!isAdmin && currentEmpId != null) {
+      if (!isAdminOrManager && currentEmpId != null) {
         final empStr = currentEmpId.toString();
 
         liveTasks = liveTasks.where((t) {
@@ -111,10 +121,14 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
           final doer = (raw['empId'] ?? raw['empid'] ?? raw['assignedTo'] ?? raw['executorId'])?.toString();
           final reviewer = (raw['reviewerId'] ?? raw['reviewer'] ?? t.reviewer)?.toString();
           final approver = (raw['approverId'] ?? raw['approver'] ?? t.approver)?.toString();
+          final assigner = (raw['assignedBy'] ?? raw['assigned_by'] ?? raw['assignerId'] ?? raw['assigner_id'] ?? raw['crBy'] ?? raw['cr_by'])?.toString();
           final noteTxt = (raw['noteTxt'] ?? raw['note_txt'] ?? '').toString();
           final hasTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(empStr) ||
               (raw['teamMembers'] is List && (raw['teamMembers'] as List).any((tm) => tm['empId']?.toString() == empStr || tm['emp_id']?.toString() == empStr));
-          return doer == empStr || reviewer == empStr || approver == empStr || t.isCurrentUserReviewer || t.isCurrentUserApprover || hasTeamMember;
+          final isRevInList = (raw['reviewerIds'] is List && (raw['reviewerIds'] as List).any((id) => id?.toString() == empStr));
+          final isAppInList = (raw['approverIds'] is List && (raw['approverIds'] as List).any((id) => id?.toString() == empStr));
+          final hasPrcsConfig = (raw['processConfigs'] is List && (raw['processConfigs'] as List).any((pc) => (pc is Map) && (pc['empId']?.toString() == empStr || pc['emp_id']?.toString() == empStr)));
+          return doer == empStr || reviewer == empStr || approver == empStr || assigner == empStr || t.isCurrentUserReviewer || t.isCurrentUserApprover || hasTeamMember || isRevInList || isAppInList || hasPrcsConfig;
         }).toList();
 
         rawIndividualTasks = rawIndividualTasks.where((t) {
@@ -122,10 +136,14 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
           final doer = (t['empId'] ?? t['empid'] ?? t['assignedTo'] ?? t['executorId'])?.toString();
           final reviewer = (t['reviewerId'] ?? t['reviewer'])?.toString();
           final approver = (t['approverId'] ?? t['approver'])?.toString();
+          final assigner = (t['assignedBy'] ?? t['assigned_by'] ?? t['assignerId'] ?? t['assigner_id'] ?? t['crBy'] ?? t['cr_by'])?.toString();
           final noteTxt = (t['noteTxt'] ?? t['note_txt'] ?? '').toString();
           final hasTeamMember = noteTxt.split(',').map((e) => e.trim()).contains(empStr) ||
               (t['teamMembers'] is List && (t['teamMembers'] as List).any((tm) => tm['empId']?.toString() == empStr || tm['emp_id']?.toString() == empStr));
-          return doer == empStr || reviewer == empStr || approver == empStr || hasTeamMember;
+          final isRevInList = (t['reviewerIds'] is List && (t['reviewerIds'] as List).any((id) => id?.toString() == empStr));
+          final isAppInList = (t['approverIds'] is List && (t['approverIds'] as List).any((id) => id?.toString() == empStr));
+          final hasPrcsConfig = (t['processConfigs'] is List && (t['processConfigs'] as List).any((pc) => (pc is Map) && (pc['empId']?.toString() == empStr || pc['emp_id']?.toString() == empStr)));
+          return doer == empStr || reviewer == empStr || approver == empStr || assigner == empStr || hasTeamMember || isRevInList || isAppInList || hasPrcsConfig;
         }).toList();
       }
 
@@ -159,12 +177,8 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
         return 0;
       });
 
-      bool isTaskActive(TaskItem task) {
-        return !task.isCompleted;
-      }
-
-      final int todoCount = combinedTasks.where((task) => isTaskActive(task) && !_isTaskUpcoming(task)).length;
-      final int upcomingCount = combinedTasks.where((task) => isTaskActive(task) && _isTaskUpcoming(task)).length;
+      final int todoCount = combinedTasks.where((task) => task.isTodo).length;
+      final int upcomingCount = combinedTasks.where((task) => task.isUpcomingTask).length;
       final int completedCount = combinedTasks.where((task) => task.isCompleted).length;
       final int totalCount = combinedTasks.length;
 
@@ -188,6 +202,8 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
           _isLoading = false;
         });
       }
+    } finally {
+      _isFetching = false;
     }
   }
 
@@ -223,7 +239,7 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
 
   void _startAutoRefresh() {
     _autoRefreshTimer?.cancel();
-    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+    _autoRefreshTimer = Timer.periodic(const Duration(seconds: 30), (_) {
       if (mounted) {
         _fetchTasks();
       }
@@ -269,34 +285,9 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
       if (query.isEmpty) return true;
 
       final String title = task.title.toLowerCase();
-      final String subtitle = task.subtitle.toLowerCase();
       final String code = task.taskCode.toLowerCase();
-      final String prjName = (task.projectName ?? '').toLowerCase();
-      final String prjCode = (task.projectCode ?? '').toLowerCase();
-      final String milestone = (task.milestoneName ?? '').toLowerCase();
-      final String status = task.status.toLowerCase();
-      final String priority = task.priority.toLowerCase();
-      final String tag = task.tag.toLowerCase();
-      final String desc = (task.description ?? '').toLowerCase();
-      final String dateStr = task.date.toLowerCase();
-      final String stDate = (task.startDate ?? '').toLowerCase();
-      final String endDate = (task.endDate ?? '').toLowerCase();
-      final String rawDataStr = (task.rawData != null ? task.rawData.toString() : '').toLowerCase();
 
-      return title.contains(query) ||
-          subtitle.contains(query) ||
-          code.contains(query) ||
-          prjName.contains(query) ||
-          prjCode.contains(query) ||
-          milestone.contains(query) ||
-          status.contains(query) ||
-          priority.contains(query) ||
-          tag.contains(query) ||
-          desc.contains(query) ||
-          dateStr.contains(query) ||
-          stDate.contains(query) ||
-          endDate.contains(query) ||
-          rawDataStr.contains(query);
+      return title.contains(query) || code.contains(query);
     }).toList();
   }
 
@@ -425,8 +416,100 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
     return _buildIconAvatar(Icons.person_rounded, initials, bg ?? const Color(0xFFEFF6FF), text ?? const Color(0xFF2563EB));
   }
 
+  Widget _buildAvatarCircle({
+    required String? photoUrl,
+    required String initials,
+    required Color bg,
+    required Color text,
+    required String tooltipMsg,
+  }) {
+    final resolvedUrl = photoUrl != null && photoUrl.isNotEmpty ? _resolveImageUrl(photoUrl) : '';
+
+    return Tooltip(
+      message: tooltipMsg,
+      child: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: bg,
+          border: Border.all(color: text.withValues(alpha: 0.35), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            )
+          ],
+        ),
+        alignment: Alignment.center,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(11),
+          child: resolvedUrl.isNotEmpty
+              ? Image.network(
+                  resolvedUrl,
+                  width: 22,
+                  height: 22,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => _buildInitialsText(initials, text),
+                )
+              : _buildInitialsText(initials, text),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInitialsText(String initials, Color text) {
+    String displayInitials = initials;
+    if (displayInitials.length > 2) {
+      displayInitials = displayInitials.substring(0, 2);
+    }
+    return Center(
+      child: Text(
+        displayInitials,
+        style: GoogleFonts.inter(
+          fontSize: 8.5,
+          fontWeight: FontWeight.w800,
+          color: text,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOverflowBadge(int count) {
+    return Tooltip(
+      message: '+$count more',
+      child: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: const Color(0xFFF1F5F9),
+          border: Border.all(color: const Color(0xFF94A3B8), width: 1),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.06),
+              blurRadius: 2,
+              offset: const Offset(0, 1),
+            )
+          ],
+        ),
+        alignment: Alignment.center,
+        child: Text(
+          '+$count',
+          style: GoogleFonts.inter(
+            fontSize: 8.5,
+            fontWeight: FontWeight.w800,
+            color: const Color(0xFF334155),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTaskAvatarsRow(TaskItem task) {
-    final List<Widget> avatars = [];
+    final List<Widget> avatarWidgets = [];
+    final Set<String> processedEmpIds = {};
 
     EmployeeOption? findEmp(String idStr, String nameStr) {
       final cleanId = idStr.trim();
@@ -441,47 +524,148 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
       return null;
     }
 
-    // 1. Executor (Doer / Assignee)
-    final executorId = (task.rawData?['empId'] ?? task.rawData?['empid'] ?? task.rawData?['assignedTo'] ?? '').toString().trim();
-    final executorNm = (task.rawData?['empNm'] ?? task.rawData?['executorNm'] ?? task.rawData?['assigneeNm'] ?? task.rawData?['emp_nm'] ?? '').toString().trim();
-    EmployeeOption? executorOpt = findEmp(executorId, executorNm);
+    // 1. Assigned By (AB)
+    final abId = (task.rawData?['assignedBy'] ?? task.rawData?['assigned_by'] ?? task.rawData?['assignerId'] ?? task.rawData?['assigner_id'] ?? task.rawData?['crBy'] ?? task.rawData?['cr_by'] ?? task.rawData?['createdBy'] ?? task.rawData?['created_by'] ?? '').toString().trim();
+    final abNm = (task.rawData?['assignedByNm'] ?? task.rawData?['assignerNm'] ?? task.rawData?['assigned_by_nm'] ?? task.rawData?['crByNm'] ?? task.rawData?['createdByNm'] ?? '').toString().trim();
+    if (abId.isNotEmpty || abNm.isNotEmpty) {
+      EmployeeOption? abOpt = findEmp(abId, abNm);
+      String? abPhoto = abOpt?.profileImageUrl;
+      if (abPhoto == null || abPhoto.isEmpty) {
+        abPhoto = (task.rawData?['assignedByPhoto'] ?? task.rawData?['assigned_by_photo'] ?? '').toString();
+      }
+      String abInitials = abOpt?.initials ?? '';
+      if (abInitials.isEmpty && abNm.isNotEmpty) {
+        final parts = abNm.trim().split(RegExp(r'\s+'));
+        abInitials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
+      }
+      if (abInitials.isEmpty) abInitials = 'AB';
+      final String abLabel = abOpt?.name ?? (abNm.isNotEmpty ? abNm : (RegExp(r'^\d+$').hasMatch(abId) ? 'Unassigned' : (abId.isNotEmpty ? abId : 'Unassigned')));
+      if (abId.isNotEmpty) processedEmpIds.add(abId);
 
-    String? executorPhoto = executorOpt?.profileImageUrl;
-    if (executorPhoto == null || executorPhoto.isEmpty) {
-      executorPhoto = (task.rawData?['executorPhoto'] ?? task.rawData?['executor_photo'] ?? task.rawData?['empPhoto'] ?? task.rawData?['emp_photo'] ?? task.rawData?['photoUrl'] ?? task.rawData?['photo_url'] ?? '').toString();
+      avatarWidgets.add(
+        _buildAvatarCircle(
+          photoUrl: abPhoto,
+          initials: abInitials,
+          bg: const Color(0xFFEEF2FF),
+          text: const Color(0xFF4F46E5),
+          tooltipMsg: 'Assigned By: $abLabel',
+        ),
+      );
     }
-    String executorInitials = executorOpt?.initials ?? '';
-    if (executorInitials.isEmpty && executorNm.isNotEmpty) {
-      final parts = executorNm.trim().split(RegExp(r'\s+'));
-      executorInitials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
+
+    // 2. Executor (EX)
+    final executorId = (task.rawData?['empId'] ?? task.rawData?['empid'] ?? task.rawData?['assignedTo'] ?? task.rawData?['assigned_to'] ?? task.rawData?['executorId'] ?? task.rawData?['executor_id'] ?? '').toString().trim();
+    final executorNm = (task.rawData?['empNm'] ?? task.rawData?['executorNm'] ?? task.rawData?['assigneeNm'] ?? task.rawData?['emp_nm'] ?? task.rawData?['assignedToNm'] ?? '').toString().trim();
+    if (executorId.isNotEmpty || executorNm.isNotEmpty) {
+      EmployeeOption? executorOpt = findEmp(executorId, executorNm);
+      String? executorPhoto = executorOpt?.profileImageUrl;
+      if (executorPhoto == null || executorPhoto.isEmpty) {
+        executorPhoto = (task.rawData?['executorPhoto'] ?? task.rawData?['executor_photo'] ?? task.rawData?['empPhoto'] ?? task.rawData?['emp_photo'] ?? '').toString();
+      }
+      String executorInitials = executorOpt?.initials ?? '';
+      if (executorInitials.isEmpty && executorNm.isNotEmpty) {
+        final parts = executorNm.trim().split(RegExp(r'\s+'));
+        executorInitials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
+      }
+      if (executorInitials.isEmpty) executorInitials = 'EX';
+      if (executorOpt == null && (executorId.isEmpty || executorId == _currentEmpId?.toString())) {
+        executorPhoto = _userPhotoUrl;
+        executorInitials = _userInitials;
+      }
+      final String executorLabel = executorOpt?.name ?? (executorNm.isNotEmpty ? executorNm : (RegExp(r'^\d+$').hasMatch(executorId) ? (executorId == _currentEmpId?.toString() ? _userName : 'Unassigned') : (executorId == _currentEmpId?.toString() ? _userName : "Executor")));
+      if (executorId.isNotEmpty) processedEmpIds.add(executorId);
+
+      avatarWidgets.add(
+        _buildAvatarCircle(
+          photoUrl: executorPhoto,
+          initials: executorInitials,
+          bg: const Color(0xFFE0F2FE),
+          text: const Color(0xFF0284C7),
+          tooltipMsg: 'Executor: $executorLabel',
+        ),
+      );
     }
-    if (executorInitials.isEmpty) executorInitials = 'EX';
 
-    if (executorOpt == null && (executorId.isEmpty || executorId == _currentEmpId?.toString())) {
-      executorPhoto = _userPhotoUrl;
-      executorInitials = _userInitials;
+    // 3. Team Members (TM)
+    final List<Map<String, String>> tmList = [];
+    final rawTm = task.rawData?['teamMembers'] ?? task.rawData?['team_members'] ?? task.rawData?['team'] ?? task.rawData?['contributors'];
+    if (rawTm is List) {
+      for (final tm in rawTm) {
+        if (tm is Map) {
+          final id = (tm['empId'] ?? tm['emp_id'] ?? tm['id'])?.toString().trim() ?? '';
+          final nm = (tm['empNm'] ?? tm['emp_nm'] ?? tm['name'])?.toString().trim() ?? '';
+          final photo = (tm['profileImageUrl'] ?? tm['profile_image_url'] ?? tm['photoUrl'] ?? tm['photo_url'])?.toString().trim();
+          if (id.isNotEmpty || nm.isNotEmpty) {
+            tmList.add({'id': id, 'name': nm, 'photo': photo ?? ''});
+          }
+        } else if (tm != null && tm.toString().trim().isNotEmpty) {
+          tmList.add({'id': tm.toString().trim(), 'name': '', 'photo': ''});
+        }
+      }
     }
-    final String executorLabel = executorOpt?.name ?? (executorNm.isNotEmpty ? executorNm : (executorId == _currentEmpId?.toString() ? _userName : "Executor"));
+    final noteTxt = (task.rawData?['noteTxt'] ?? task.rawData?['note_txt'] ?? '').toString();
+    if (noteTxt.isNotEmpty) {
+      final ids = noteTxt.split(',').map((e) => e.trim()).where((e) => e.isNotEmpty);
+      for (final id in ids) {
+        if (!tmList.any((t) => t['id'] == id)) {
+          tmList.add({'id': id, 'name': '', 'photo': ''});
+        }
+      }
+    }
 
-    avatars.add(
-      _buildRoleAvatar(
-        photoUrl: executorPhoto,
-        initials: executorInitials,
-        fallbackIcon: Icons.person_rounded,
-        bg: const Color(0xFFEFF6FF),
-        text: const Color(0xFF2563EB),
-        tooltipMsg: 'Executor: $executorLabel',
-      ),
-    );
+    final List<Color> tmBgs = [
+      const Color(0xFFF3E8FF),
+      const Color(0xFFECFDF5),
+      const Color(0xFFFEF3C7),
+      const Color(0xFFFCE7F3),
+    ];
+    final List<Color> tmTexts = [
+      const Color(0xFF7C3AED),
+      const Color(0xFF059669),
+      const Color(0xFFD97706),
+      const Color(0xFFDB2777),
+    ];
+    int tmColorIdx = 0;
 
-    // 2. Reviewer
-    final reviewerId = (task.reviewer ?? task.rawData?['reviewer'] ?? '').toString().trim();
+    for (final tm in tmList) {
+      final id = tm['id'] ?? '';
+      final nm = tm['name'] ?? '';
+      if (id.isNotEmpty && processedEmpIds.contains(id)) continue;
+
+      EmployeeOption? tmOpt = findEmp(id, nm);
+      String? tmPhoto = tmOpt?.profileImageUrl ?? (tm['photo']?.isNotEmpty == true ? tm['photo'] : null);
+      String tmInitials = tmOpt?.initials ?? '';
+      if (tmInitials.isEmpty && nm.isNotEmpty) {
+        final parts = nm.trim().split(RegExp(r'\s+'));
+        tmInitials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
+      }
+      if (tmInitials.isEmpty) tmInitials = 'TM';
+      final String tmLabel = tmOpt?.name ?? (nm.isNotEmpty ? nm : (RegExp(r'^\d+$').hasMatch(id) ? 'Unassigned' : id));
+      if (id.isNotEmpty) processedEmpIds.add(id);
+
+      final bg = tmBgs[tmColorIdx % tmBgs.length];
+      final text = tmTexts[tmColorIdx % tmTexts.length];
+      tmColorIdx++;
+
+      avatarWidgets.add(
+        _buildAvatarCircle(
+          photoUrl: tmPhoto,
+          initials: tmInitials,
+          bg: bg,
+          text: text,
+          tooltipMsg: 'Team Member: $tmLabel',
+        ),
+      );
+    }
+
+    // 4. Reviewer (RV)
+    final reviewerId = (task.reviewer ?? task.rawData?['reviewer'] ?? task.rawData?['reviewerId'] ?? task.rawData?['reviewer_id'] ?? task.rawData?['reviewerEmpId'] ?? task.rawData?['reviewer_emp_id'] ?? (task.reviewers.isNotEmpty ? task.reviewers.first : '')).toString().trim();
     final reviewerNm = (task.rawData?['reviewerNm'] ?? task.rawData?['reviewer_nm'] ?? '').toString().trim();
     if (reviewerId.isNotEmpty || reviewerNm.isNotEmpty) {
       EmployeeOption? reviewerOpt = findEmp(reviewerId, reviewerNm);
       String? reviewerPhoto = reviewerOpt?.profileImageUrl;
       if (reviewerPhoto == null || reviewerPhoto.isEmpty) {
-        reviewerPhoto = (task.rawData?['reviewerPhoto'] ?? task.rawData?['reviewer_photo'] ?? task.rawData?['reviewerPhotoUrl'] ?? task.rawData?['reviewer_photo_url'] ?? '').toString();
+        reviewerPhoto = (task.rawData?['reviewerPhoto'] ?? task.rawData?['reviewer_photo'] ?? '').toString();
       }
       String reviewerInitials = reviewerOpt?.initials ?? '';
       if (reviewerInitials.isEmpty && reviewerNm.isNotEmpty) {
@@ -489,14 +673,12 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
         reviewerInitials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
       }
       if (reviewerInitials.isEmpty) reviewerInitials = 'RV';
-      final String reviewerLabel = reviewerOpt?.name ?? (reviewerNm.isNotEmpty ? reviewerNm : reviewerId);
+      final String reviewerLabel = reviewerOpt?.name ?? (reviewerNm.isNotEmpty && !RegExp(r'^\d+$').hasMatch(reviewerNm) ? reviewerNm : (RegExp(r'^\d+$').hasMatch(reviewerId) ? 'Unassigned' : (reviewerId.isNotEmpty ? reviewerId : 'Unassigned')));
 
-      avatars.add(const SizedBox(width: 5));
-      avatars.add(
-        _buildRoleAvatar(
+      avatarWidgets.add(
+        _buildAvatarCircle(
           photoUrl: reviewerPhoto,
           initials: reviewerInitials,
-          fallbackIcon: Icons.rate_review_rounded,
           bg: const Color(0xFFF3E8FF),
           text: const Color(0xFF7C3AED),
           tooltipMsg: 'Reviewer: $reviewerLabel',
@@ -504,14 +686,14 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
       );
     }
 
-    // 3. Approver
-    final approverId = (task.approver ?? task.rawData?['approver'] ?? '').toString().trim();
+    // 5. Approver (AP)
+    final approverId = (task.approver ?? task.rawData?['approver'] ?? task.rawData?['approverId'] ?? task.rawData?['approver_id'] ?? task.rawData?['approverEmpId'] ?? task.rawData?['approver_emp_id'] ?? (task.approvers.isNotEmpty ? task.approvers.first : '')).toString().trim();
     final approverNm = (task.rawData?['approverNm'] ?? task.rawData?['approver_nm'] ?? '').toString().trim();
     if (approverId.isNotEmpty || approverNm.isNotEmpty) {
       EmployeeOption? approverOpt = findEmp(approverId, approverNm);
       String? approverPhoto = approverOpt?.profileImageUrl;
       if (approverPhoto == null || approverPhoto.isEmpty) {
-        approverPhoto = (task.rawData?['approverPhoto'] ?? task.rawData?['approver_photo'] ?? task.rawData?['approverPhotoUrl'] ?? task.rawData?['approver_photo_url'] ?? '').toString();
+        approverPhoto = (task.rawData?['approverPhoto'] ?? task.rawData?['approver_photo'] ?? '').toString();
       }
       String approverInitials = approverOpt?.initials ?? '';
       if (approverInitials.isEmpty && approverNm.isNotEmpty) {
@@ -519,14 +701,12 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
         approverInitials = parts.length >= 2 ? (parts[0][0] + parts[1][0]).toUpperCase() : parts[0][0].toUpperCase();
       }
       if (approverInitials.isEmpty) approverInitials = 'AP';
-      final String approverLabel = approverOpt?.name ?? (approverNm.isNotEmpty ? approverNm : approverId);
+      final String approverLabel = approverOpt?.name ?? (approverNm.isNotEmpty && !RegExp(r'^\d+$').hasMatch(approverNm) ? approverNm : (RegExp(r'^\d+$').hasMatch(approverId) ? 'Unassigned' : (approverId.isNotEmpty ? approverId : 'Unassigned')));
 
-      avatars.add(const SizedBox(width: 5));
-      avatars.add(
-        _buildRoleAvatar(
+      avatarWidgets.add(
+        _buildAvatarCircle(
           photoUrl: approverPhoto,
           initials: approverInitials,
-          fallbackIcon: Icons.verified_user_rounded,
           bg: const Color(0xFFECFDF5),
           text: const Color(0xFF10B981),
           tooltipMsg: 'Approver: $approverLabel',
@@ -534,9 +714,49 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
       );
     }
 
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: avatars,
+    if (avatarWidgets.isEmpty) {
+      String? fallbackPhoto = (task.rawData?['photoUrl'] ?? task.rawData?['photo_url'] ?? task.rawData?['profileImageUrl'] ?? task.rawData?['profile_image_url'] ?? '').toString();
+      if (fallbackPhoto.isEmpty) fallbackPhoto = _userPhotoUrl;
+      String fallbackInitials = (task.rawData?['initials'] ?? '').toString().trim();
+      if (fallbackInitials.isEmpty) fallbackInitials = _userInitials.isNotEmpty ? _userInitials : 'EX';
+
+      avatarWidgets.add(
+        _buildAvatarCircle(
+          photoUrl: fallbackPhoto,
+          initials: fallbackInitials,
+          bg: const Color(0xFFEFF6FF),
+          text: const Color(0xFF2563EB),
+          tooltipMsg: 'Executor: ${_userName.isNotEmpty ? _userName : "Executor"}',
+        ),
+      );
+    }
+
+    const int maxVisible = 2;
+
+    final List<Widget> finalRowWidgets = [];
+
+    if (avatarWidgets.length <= maxVisible) {
+      for (int i = 0; i < avatarWidgets.length; i++) {
+        if (i > 0) finalRowWidgets.add(const SizedBox(width: 3));
+        finalRowWidgets.add(avatarWidgets[i]);
+      }
+    } else {
+      for (int i = 0; i < maxVisible; i++) {
+        if (i > 0) finalRowWidgets.add(const SizedBox(width: 3));
+        finalRowWidgets.add(avatarWidgets[i]);
+      }
+      final remainingCount = avatarWidgets.length - maxVisible;
+      finalRowWidgets.add(const SizedBox(width: 3));
+      finalRowWidgets.add(_buildOverflowBadge(remainingCount));
+    }
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      physics: const BouncingScrollPhysics(),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: finalRowWidgets,
+      ),
     );
   }
 
@@ -645,33 +865,33 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
                   ),
                   const SizedBox(height: 12),
 
-                  // Bottom row: Priority badge (hidden for completed) and Avatars
+                  // Bottom row: Priority badge (for open tasks), Lead/Lag badge (for completed tasks) and Avatars
                   Row(
                     children: [
                       if (!task.isCompleted) ...[
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2.5),
                           decoration: BoxDecoration(
                             color: getPriorityBg(task.priority),
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(5),
                             border: Border.all(color: getPriorityColor(task.priority).withValues(alpha: 0.15), width: 1),
                           ),
                           child: Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Container(
-                                width: 6,
-                                height: 6,
+                                width: 5,
+                                height: 5,
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: getPriorityColor(task.priority),
                                 ),
                               ),
-                              const SizedBox(width: 6),
+                              const SizedBox(width: 4),
                               Text(
                                 task.priority,
                                 style: GoogleFonts.inter(
-                                  fontSize: 10,
+                                  fontSize: 9.5,
                                   fontWeight: FontWeight.bold,
                                   color: getPriorityColor(task.priority),
                                 ),
@@ -679,18 +899,26 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
                             ],
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: 6),
+                      ] else ...[
+                        _buildLeadLagBadge(calculateTaskLeadLag(task)),
+                        const SizedBox(width: 6),
                       ],
-                      _buildTaskAvatarsRow(task),
+                      Expanded(
+                        child: _buildTaskAvatarsRow(task),
+                      ),
                     ],
                   ),
                 ],
               ),
             ),
 
+            const SizedBox(width: 8),
+
             // Right column - aligned right
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 // Progress Status Badge
                 Container(
@@ -709,7 +937,7 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                const SizedBox(height: 10),
+                const SizedBox(height: 6),
 
                 // Process & Time Icons Row (EXACT SAME AS WEBSITE!)
                 Row(
@@ -731,7 +959,7 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
                       ),
                   ],
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 6),
 
                 // Chevron right arrow icon
                 const Icon(
@@ -771,7 +999,16 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
         onRefresh: _fetchTasks,
         color: Colors.deepPurple,
         child: _isLoading && _tasks.isEmpty
-            ? const Center(child: CircularProgressIndicator(color: Colors.deepPurple))
+            ? Center(
+                child: Text(
+                  'loading tasks...',
+                  style: GoogleFonts.inter(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: const Color(0xFF64748B),
+                  ),
+                ),
+              )
             : _errorMessage != null && _tasks.isEmpty
                 ? Center(
                     child: Padding(
@@ -936,12 +1173,30 @@ class _TasksScreenState extends State<TasksScreen> with WidgetsBindingObserver {
                           if (sortedTasks.isEmpty)
                             Center(
                               child: Padding(
-                                padding: const EdgeInsets.only(top: 30.0),
+                                padding: const EdgeInsets.only(top: 40.0, bottom: 40.0),
                                 child: Column(
                                   children: [
-                                    Icon(Icons.assignment_turned_in_outlined, size: 40, color: Colors.grey.shade400),
-                                    const SizedBox(height: 10),
-                                    Text('No tasks found!', style: TextStyle(color: Colors.grey.shade600, fontSize: 14, fontWeight: FontWeight.w500))
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: const BoxDecoration(
+                                        color: Color(0xFFF1F5F9),
+                                        shape: BoxShape.circle,
+                                      ),
+                                      child: const Icon(
+                                        Icons.assignment_turned_in_outlined,
+                                        size: 40,
+                                        color: Color(0xFF94A3B8),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      'No tasks found',
+                                      style: GoogleFonts.inter(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.bold,
+                                        color: const Color(0xFF1E293B),
+                                      ),
+                                    ),
                                   ],
                                 ),
                               ),
@@ -1058,22 +1313,60 @@ class TaskTileRow extends StatelessWidget {
   }
 
   Widget _buildDaysLeftWidget(TaskItem task, String currentStatus) {
-    if (currentStatus == 'Closed' || currentStatus == 'Completed') {
+    if (task.isCompleted || currentStatus == 'Closed' || currentStatus == 'Completed') {
+      final leadLagStr = calculateTaskLeadLag(task);
+      final Match? numberMatch = RegExp(r'\d+').firstMatch(leadLagStr);
+      final String? daysNum = numberMatch?.group(0);
+      final lower = leadLagStr.toLowerCase();
+
+      final bool isClosed = task.progressStatusText == 'CLOSED' ||
+          currentStatus.toLowerCase() == 'closed' ||
+          task.status.toLowerCase() == 'closed';
+      final String statusLabel = isClosed ? 'Closed' : 'Completed';
+
+      Color compColor = const Color(0xFF16A34A);
+      String compText = statusLabel;
+
+      if (lower.contains('lead') || lower.contains('ahead')) {
+        compColor = const Color(0xFF16A34A);
+        compText = daysNum != null ? '$statusLabel ($daysNum days lead)' : '$statusLabel (Lead)';
+      } else if (lower.contains('lag') || lower.contains('behind') || lower.contains('delay') || lower.contains('overdue')) {
+        compColor = const Color(0xFFDC2626);
+        compText = daysNum != null ? '$statusLabel ($daysNum days lag)' : '$statusLabel (Lag)';
+      } else if (lower.contains('on time')) {
+        compColor = const Color(0xFF2563EB);
+        compText = '$statusLabel (On Time)';
+      } else {
+        final compSts = task.computedTimeStatus;
+        if (compSts == 'Lead') {
+          compColor = const Color(0xFF16A34A);
+          compText = '$statusLabel (Lead)';
+        } else if (compSts == 'Lag') {
+          compColor = const Color(0xFFDC2626);
+          compText = '$statusLabel (Lag)';
+        } else {
+          compColor = const Color(0xFF2563EB);
+          compText = '$statusLabel (On Time)';
+        }
+      }
+
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.check_circle_outline, size: 12, color: Colors.green.shade700),
+          Icon(Icons.check_circle_outline, size: 12, color: compColor),
           const SizedBox(width: 3),
           Text(
-            'Closed',
-            style: TextStyle(fontSize: 10, color: Colors.green.shade700, fontWeight: FontWeight.bold),
+            compText,
+            style: TextStyle(fontSize: 10, color: compColor, fontWeight: FontWeight.bold),
           ),
         ],
       );
     }
 
     final daysLeft = _getDaysLeft(task.date);
-    if (daysLeft == null) {
+    final compSts = task.computedTimeStatus;
+
+    if (daysLeft == null && compSts.isEmpty) {
       return Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1090,51 +1383,44 @@ class TaskTileRow extends StatelessWidget {
     Color textColor = Colors.blueGrey.shade600;
     IconData icon = Icons.schedule;
     String text = '';
-    FontWeight fontWeight = FontWeight.w500;
+    FontWeight fontWeight = FontWeight.w600;
 
-    if (task.timeStatus != null && task.timeStatus!.isNotEmpty) {
-      final ts = task.timeStatus!;
-      text = ts;
+    if (compSts == 'Overdue' || (daysLeft != null && daysLeft < 0)) {
+      final absDays = daysLeft != null ? daysLeft.abs() : 1;
+      textColor = const Color(0xFFEF4444);
+      icon = Icons.warning_amber_rounded;
+      text = 'Overdue ($absDays ${absDays == 1 ? 'day' : 'days'})';
       fontWeight = FontWeight.bold;
-      if (ts == 'Lead') {
-        textColor = const Color(0xFF22C55E);
-        icon = Icons.thumb_up_alt_outlined;
-      } else if (ts == 'On Time') {
-        textColor = const Color(0xFF3B82F6);
-        icon = Icons.check_circle_outline;
-      } else if (ts == 'Due Today') {
+    } else if (compSts == 'Due Today' || (daysLeft != null && daysLeft == 0)) {
+      textColor = const Color(0xFFF59E0B);
+      icon = Icons.hourglass_empty_rounded;
+      text = 'Due Today (0 days left)';
+      fontWeight = FontWeight.bold;
+    } else if (daysLeft != null) {
+      if (daysLeft == 1) {
         textColor = const Color(0xFFF59E0B);
-        icon = Icons.hourglass_empty_rounded;
-      } else if (ts == 'Overdue') {
-        textColor = const Color(0xFFEF4444);
-        icon = Icons.warning_amber_rounded;
-        if (daysLeft < 0) text = '${daysLeft.abs()} days overdue';
-      } else if (ts == 'Lag') {
-        textColor = const Color(0xFFDC2626);
-        icon = Icons.error_outline;
-      }
-    } else {
-      if (daysLeft < 0) {
-        textColor = Colors.red.shade700;
-        icon = Icons.warning_amber_rounded;
-        text = '${daysLeft.abs()} days overdue';
-        fontWeight = FontWeight.bold;
-      } else if (daysLeft == 0) {
-        textColor = Colors.orange.shade800;
-        icon = Icons.hourglass_empty_rounded;
-        text = '0 days left (Today)';
-        fontWeight = FontWeight.bold;
-      } else if (daysLeft == 1) {
-        textColor = Colors.orange.shade700;
         icon = Icons.hourglass_bottom_rounded;
         text = '1 day left';
         fontWeight = FontWeight.bold;
       } else {
-        textColor = (currentStatus == 'Pending' || currentStatus == 'Open') ? task.tagColor : Colors.blueGrey.shade600;
-        icon = Icons.schedule;
-        text = '$daysLeft days left';
-        fontWeight = (currentStatus == 'Pending' || currentStatus == 'Open') ? FontWeight.bold : FontWeight.w500;
+        if (compSts == 'Lead') {
+          textColor = const Color(0xFF16A34A);
+          icon = Icons.schedule;
+          text = 'Lead: $daysLeft days left';
+        } else if (compSts == 'On Time') {
+          textColor = const Color(0xFF2563EB);
+          icon = Icons.schedule;
+          text = 'On Time: $daysLeft days left';
+        } else {
+          textColor = (currentStatus == 'Pending' || currentStatus == 'Open') ? task.tagColor : Colors.blueGrey.shade600;
+          icon = Icons.schedule;
+          text = '$daysLeft days left';
+        }
       }
+    } else {
+      textColor = const Color(0xFF3B82F6);
+      icon = Icons.schedule;
+      text = compSts.isNotEmpty ? compSts : 'On Time';
     }
 
     return Row(
@@ -1405,9 +1691,9 @@ class TaskLegendWidget extends StatelessWidget {
                   children: [
                     const Text('PROGRESS (STATUS)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF1E293B))),
                     const SizedBox(height: 8),
-                    _buildLegendBadge('OPEN', const Color(0xFF2563EB), const Color(0xFFEFF6FF), 'Not started'),
-                    _buildLegendBadge('IN PROGRESS', const Color(0xFFF59E0B), const Color(0xFFFFF7ED), 'In progress'),
-                    _buildLegendBadge('CLOSED', const Color(0xFF16A34A), const Color(0xFFF0FDF4), 'Closed'),
+                    _buildLegendBadge('OPEN', AppColors.open, AppColors.openBg, 'Not started'),
+                    _buildLegendBadge('IN PROGRESS', AppColors.inProgress, AppColors.inProgressBg, 'In progress'),
+                    _buildLegendBadge('CLOSED', AppColors.closed, AppColors.closedBg, 'Closed'),
                   ],
                 ),
               ),
@@ -1534,4 +1820,174 @@ class TaskLegendWidget extends StatelessWidget {
       ),
     );
   }
+}
+
+String calculateTaskLeadLag(TaskItem task) {
+  String? endStr = task.endDate ?? task.rawEndDt ?? task.date;
+  if (endStr.isEmpty || endStr.toLowerCase() == 'no date' || endStr.toLowerCase() == 'n/a') {
+    return 'ON TIME';
+  }
+
+  DateTime? endDt;
+  try {
+    endDt = DateTime.parse(endStr);
+  } catch (_) {
+    endDt = TaskItem.parseDateTime(endStr);
+  }
+  if (endDt == null) return 'ON TIME';
+
+  final targetDate = DateTime(endDt.year, endDt.month, endDt.day);
+
+  if (!task.isCompleted) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    if (targetDate.isBefore(today)) {
+      return 'OVERDUE';
+    } else if (targetDate.isAtSameMomentAs(today)) {
+      return 'DUE TODAY';
+    } else {
+      return 'ON TIME';
+    }
+  }
+
+  // Task IS completed -> Calculate exact Lead/Lag days!
+  final String? apiStatus = task.rawData?['leadLagStatus']?.toString() ?? 
+                            task.rawData?['lead_lag_status']?.toString() ?? 
+                            task.rawData?['leadLagStatusStr']?.toString() ?? 
+                            task.rawData?['scheduleStatus']?.toString();
+  if (apiStatus != null && 
+      apiStatus.isNotEmpty && 
+      apiStatus.toLowerCase() != 'null' && 
+      apiStatus.toLowerCase() != 'n/a' && 
+      apiStatus.contains(RegExp(r'\d+'))) {
+    return _cleanLeadLagLabel(apiStatus);
+  }
+
+  String? actStr = task.rawData?['compDt']?.toString() ??
+                   task.rawData?['completedDt']?.toString() ??
+                   task.rawData?['actCmpDt']?.toString() ??
+                   task.rawData?['act_cmp_dt']?.toString() ??
+                   task.rawData?['actlEndDt']?.toString() ??
+                   task.rawData?['updDt']?.toString();
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+  DateTime refDate = today;
+
+  if (actStr != null && actStr.isNotEmpty) {
+    DateTime? actDt;
+    try { actDt = DateTime.parse(actStr); } catch (_) { actDt = TaskItem.parseDateTime(actStr); }
+    if (actDt != null) {
+      refDate = DateTime(actDt.year, actDt.month, actDt.day);
+    }
+  }
+
+  final diffDays = targetDate.difference(refDate).inDays;
+
+  if (diffDays > 0) {
+    return 'LEAD ($diffDays DAYS)';
+  } else if (diffDays < 0) {
+    return 'LAG (${diffDays.abs()} DAYS)';
+  } else {
+    return 'ON TIME';
+  }
+}
+
+String _cleanLeadLagLabel(String statusStr) {
+  final s = statusStr.trim();
+  if (s.isEmpty || s.toLowerCase() == 'null' || s.toLowerCase() == 'n/a' || s.toLowerCase() == 'none') {
+    return 'ON TIME';
+  }
+
+  final Match? numberMatch = RegExp(r'\d+').firstMatch(s);
+  final String? daysNum = numberMatch?.group(0);
+  final String lower = s.toLowerCase();
+
+  if (lower.contains('on time')) {
+    return 'ON TIME';
+  } else if (lower.contains('due today')) {
+    return 'DUE TODAY';
+  } else if (lower.contains('overdue')) {
+    if (daysNum != null && daysNum.isNotEmpty) {
+      return 'OVERDUE ($daysNum DAYS)';
+    }
+    return 'OVERDUE';
+  } else if (lower.contains('lead') || lower.contains('ahead')) {
+    if (daysNum != null && daysNum.isNotEmpty) {
+      return 'LEAD ($daysNum DAYS)';
+    }
+    return 'LEAD';
+  } else if (lower.contains('lag') || lower.contains('behind') || lower.contains('delay')) {
+    if (daysNum != null && daysNum.isNotEmpty) {
+      return 'LAG ($daysNum DAYS)';
+    }
+    return 'LAG';
+  } else if (daysNum != null && daysNum.isNotEmpty) {
+    return 'LAG ($daysNum DAYS)';
+  }
+
+  String cleaned = s.replaceAll(RegExp(r'^schedule:\s*', caseSensitive: false), '').replaceAll('+', '').replaceAll('-', '').trim();
+  return cleaned.toUpperCase();
+}
+
+Widget _buildLeadLagBadge(String statusStr) {
+  final String s = statusStr.trim().toLowerCase();
+  
+  if (s == 'null' || s == 'n/a' || s.isEmpty || s == 'none') {
+    return _buildLeadLagPill('ON TIME', const Color(0xffDBEAFE), const Color(0xff2563EB));
+  }
+
+  bool isLead = s.contains('lead') || s == 'ahead';
+  bool isLag = s.contains('lag') || s == 'behind' || s == 'delay' || s.contains('overdue');
+  bool isDueToday = s.contains('due today');
+
+  final String label = _cleanLeadLagLabel(statusStr);
+
+  if (isLead) {
+    return _buildLeadLagPill(label, const Color(0xffDCFCE7), const Color(0xff16A34A));
+  } else if (isLag) {
+    return _buildLeadLagPill(label, const Color(0xffFEE2E2), const Color(0xffDC2626));
+  } else if (isDueToday) {
+    return _buildLeadLagPill(label, const Color(0xffFEF3C7), const Color(0xffD97706));
+  } else {
+    return _buildLeadLagPill(label, const Color(0xffDBEAFE), const Color(0xff2563EB));
+  }
+}
+
+Widget _buildLeadLagPill(String label, Color bgColor, Color textColor) {
+  return Container(
+    padding: const EdgeInsets.symmetric(
+      horizontal: 8,
+      vertical: 3.5,
+    ),
+    decoration: BoxDecoration(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(
+        color: textColor.withValues(alpha: 0.3),
+        width: 1,
+      ),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 5,
+          height: 5,
+          decoration: BoxDecoration(
+            color: textColor,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    ),
+  );
 }

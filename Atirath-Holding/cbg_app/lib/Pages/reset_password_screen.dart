@@ -18,6 +18,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   bool _isSubmitting = false;
   bool _obscureNew = true;
   bool _obscureConfirm = true;
+  String? _passwordFieldError;
 
   @override
   void dispose() {
@@ -31,6 +32,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
 
     setState(() {
       _isSubmitting = true;
+      _passwordFieldError = null;
     });
 
     try {
@@ -55,6 +57,16 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
       if (!mounted) return;
 
       final errorMsg = e.toString().replaceAll('Exception: ', '').trim();
+      
+      if (errorMsg.toLowerCase().contains('same as your previous') ||
+          errorMsg.toLowerCase().contains('same as your old') ||
+          errorMsg.toLowerCase().contains('different password')) {
+        setState(() {
+          _passwordFieldError = errorMsg;
+        });
+        _formKey.currentState?.validate();
+      }
+
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
@@ -134,7 +146,17 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                       borderRadius: BorderRadius.circular(12),
                     ),
                   ),
+                  onChanged: (val) {
+                    if (_passwordFieldError != null) {
+                      setState(() {
+                        _passwordFieldError = null;
+                      });
+                    }
+                  },
                   validator: (value) {
+                    if (_passwordFieldError != null) {
+                      return _passwordFieldError;
+                    }
                     if (value == null || value.isEmpty) {
                       return 'Password is required';
                     }

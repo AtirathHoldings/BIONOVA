@@ -39,21 +39,59 @@ class EmployeeDropdown extends StatelessWidget {
       hint: 'Search employee...',
       itemLabel: (item) => item.name,
       itemSubtitle: (item) => _getSubtitle(item),
+      selectedBuilder: (item) {
+        if (item == null) return const SizedBox.shrink();
+        return Row(
+          children: [
+            CircleAvatar(
+              radius: 13,
+              backgroundColor: const Color(0xFFEFF6FF),
+              backgroundImage: (item.profileImageUrl != null && item.profileImageUrl!.isNotEmpty)
+                  ? NetworkImage(item.profileImageUrl!)
+                  : null,
+              child: (item.profileImageUrl == null || item.profileImageUrl!.isEmpty)
+                  ? Text(
+                      item.initials,
+                      style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        color: Color(0xFF2563EB),
+                      ),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                item.name,
+                style: GoogleFonts.inter(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF1E293B),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        );
+      },
       itemBuilder: (item, isSelected) {
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 11),
           child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // Profile Image
+              // Profile Image or Initials
               Container(
-                width: 36,
-                height: 36,
-                margin: const EdgeInsets.only(top: 2),
+                width: 38,
+                height: 38,
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  color: const Color(0xFFE2E8F0),
-                  border: isSelected ? Border.all(color: const Color(0xFF2563EB), width: 2) : null,
+                  color: isSelected ? const Color(0xFFDBEAFE) : const Color(0xFFEFF6FF),
+                  border: Border.all(
+                    color: isSelected ? const Color(0xFF2563EB) : const Color(0xFFBFDBFE),
+                    width: isSelected ? 2 : 1,
+                  ),
                   image: (item.profileImageUrl != null && item.profileImageUrl!.isNotEmpty)
                       ? DecorationImage(
                           image: NetworkImage(item.profileImageUrl!),
@@ -62,11 +100,20 @@ class EmployeeDropdown extends StatelessWidget {
                       : null,
                 ),
                 child: (item.profileImageUrl == null || item.profileImageUrl!.isEmpty)
-                    ? const Icon(Icons.person, color: Color(0xFF94A3B8), size: 20)
+                    ? Center(
+                        child: Text(
+                          item.initials,
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: isSelected ? const Color(0xFF1D4ED8) : const Color(0xFF2563EB),
+                          ),
+                        ),
+                      )
                     : null,
               ),
               const SizedBox(width: 12),
-              
+
               // Employee Info
               Expanded(
                 child: Column(
@@ -77,7 +124,7 @@ class EmployeeDropdown extends StatelessWidget {
                       style: GoogleFonts.inter(
                         fontSize: 14,
                         fontWeight: FontWeight.w600,
-                        color: const Color(0xFF1E293B),
+                        color: isSelected ? const Color(0xFF2563EB) : const Color(0xFF1E293B),
                       ),
                       overflow: TextOverflow.ellipsis,
                       maxLines: 1,
@@ -108,15 +155,15 @@ class EmployeeDropdown extends StatelessWidget {
                   ],
                 ),
               ),
-              
+
               // Checkmark for selection
               if (isSelected)
                 const Padding(
-                  padding: EdgeInsets.only(top: 8.0, left: 8.0),
+                  padding: EdgeInsets.only(left: 8.0),
                   child: Icon(
                     Icons.check_circle,
                     color: Color(0xFF2563EB),
-                    size: 20,
+                    size: 22,
                   ),
                 ),
             ],
@@ -136,8 +183,10 @@ class EmployeeDropdown extends StatelessWidget {
   }
 
   String _getCompanyPlantText(EmployeeOption item) {
-    if (item.plantName != null && item.plantName!.isNotEmpty && 
-        item.companyName != null && item.companyName!.isNotEmpty) {
+    if (item.plantName != null &&
+        item.plantName!.isNotEmpty &&
+        item.companyName != null &&
+        item.companyName!.isNotEmpty) {
       return '${item.plantName} (${item.companyName})';
     } else if (item.companyName != null && item.companyName!.isNotEmpty) {
       return item.companyName!;

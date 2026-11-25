@@ -249,112 +249,129 @@ class _LoginActivityScreenState extends State<LoginActivityScreen> {
                               ),
                             ],
                           ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            leading: Stack(
-                              clipBehavior: Clip.none,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                            child: Row(
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(10),
-                                  decoration: BoxDecoration(
-                                    color: isLatest
-                                        ? const Color(0xFFEEF2FF)
-                                        : const Color(0xFFF1F5F9),
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: Icon(
-                                    device.contains('Chrome') || device.contains('Mac') || device.contains('Windows')
-                                        ? Icons.laptop_mac_rounded
-                                        : Icons.phone_android_rounded,
-                                    color: isLatest
-                                        ? const Color(0xFF6366F1)
-                                        : const Color(0xFF64748B),
-                                    size: 20,
-                                  ),
-                                ),
-                                if (isLatest)
-                                  Positioned(
-                                    top: 0,
-                                    right: 0,
-                                    child: Container(
-                                      width: 10,
-                                      height: 10,
+                                Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Container(
+                                      padding: const EdgeInsets.all(10),
                                       decoration: BoxDecoration(
-                                        color: const Color(0xFF22C55E),
+                                        color: isLatest
+                                            ? const Color(0xFFEEF2FF)
+                                            : const Color(0xFFF1F5F9),
                                         shape: BoxShape.circle,
-                                        border: Border.all(color: Colors.white, width: 1.5),
+                                      ),
+                                      child: Icon(
+                                        device.contains('Chrome') || device.contains('Mac') || device.contains('Windows')
+                                            ? Icons.laptop_mac_rounded
+                                            : Icons.phone_android_rounded,
+                                        color: isLatest
+                                            ? const Color(0xFF6366F1)
+                                            : const Color(0xFF64748B),
+                                        size: 20,
                                       ),
                                     ),
-                                  ),
-                              ],
-                            ),
-                            title: Row(
-                              children: [
+                                    if (isLatest)
+                                      Positioned(
+                                        top: 0,
+                                        right: 0,
+                                        child: Container(
+                                          width: 10,
+                                          height: 10,
+                                          decoration: BoxDecoration(
+                                            color: const Color(0xFF22C55E),
+                                            shape: BoxShape.circle,
+                                            border: Border.all(color: Colors.white, width: 1.5),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(width: 12),
                                 Expanded(
-                                  child: Text(
-                                    device,
-                                    style: GoogleFonts.inter(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: const Color(0xFF1E293B),
-                                    ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                ),
-                                if (isLatest)
-                                  Container(
-                                    margin: const EdgeInsets.only(left: 6),
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFFEEF2FF),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      'Latest',
-                                      style: GoogleFonts.inter(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF6366F1),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Flexible(
+                                            child: Text(
+                                              device,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 13,
+                                                fontWeight: FontWeight.w600,
+                                                color: const Color(0xFF1E293B),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                          if (isLatest) ...[
+                                            const SizedBox(width: 6),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                              decoration: BoxDecoration(
+                                                color: const Color(0xFFEEF2FF),
+                                                borderRadius: BorderRadius.circular(4),
+                                              ),
+                                              child: Text(
+                                                'Latest',
+                                                style: GoogleFonts.inter(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.bold,
+                                                  color: const Color(0xFF6366F1),
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
                                       ),
+                                      const SizedBox(height: 4),
+                                      Row(
+                                        children: [
+                                          const Icon(Icons.access_time_outlined, size: 11, color: Color(0xFF94A3B8)),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              dateTime,
+                                              style: GoogleFonts.inter(
+                                                fontSize: 11,
+                                                color: const Color(0xFF94A3B8),
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(
+                                      color: statusColor.withValues(alpha: 0.2),
+                                      width: 1,
                                     ),
                                   ),
-                              ],
-                            ),
-                            subtitle: Padding(
-                              padding: const EdgeInsets.only(top: 4.0),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.access_time_outlined, size: 11, color: Color(0xFF94A3B8)),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    dateTime,
+                                  child: Text(
+                                    status,
                                     style: GoogleFonts.inter(
-                                      fontSize: 11,
-                                      color: const Color(0xFF94A3B8),
+                                      color: statusColor,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                            trailing: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: statusColor.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(6),
-                                border: Border.all(
-                                  color: statusColor.withValues(alpha: 0.2),
-                                  width: 1,
                                 ),
-                              ),
-                              child: Text(
-                                status,
-                                style: GoogleFonts.inter(
-                                  color: statusColor,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
+                              ],
                             ),
                           ),
                         );

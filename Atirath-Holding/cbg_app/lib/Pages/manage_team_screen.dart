@@ -24,24 +24,11 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
   int _unreadNotificationCount = 0;
   bool _isLoading = false;
   EmployeeOption? _selectedEmployee;
-  final TextEditingController _searchController = TextEditingController();
-  String _searchQuery = '';
 
   @override
   void initState() {
     super.initState();
     _loadSavedData();
-    _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text;
-      });
-    });
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   Future<void> _loadSavedData() async {
@@ -352,8 +339,6 @@ class _ManageTeamScreenState extends State<ManageTeamScreen> {
                                 setState(() {
                                   _currentTaskTeam.add(employee);
                                   _selectedEmployee = null;
-                                  _searchController.clear();
-                                  _searchQuery = '';
                                 });
 
                                 final prefs = await SharedPreferences.getInstance();

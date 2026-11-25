@@ -493,6 +493,13 @@ body.sidebar-collapsed .sco-main {
   width: 100%;
 }
 
+.sco-form-group select option,
+.sco-select option,
+select option {
+  color: #0f172a !important;
+  background-color: #ffffff !important;
+}
+
 .sco-form-group input:focus,
 .sco-form-group select:focus,
 .sco-form-group textarea:focus {

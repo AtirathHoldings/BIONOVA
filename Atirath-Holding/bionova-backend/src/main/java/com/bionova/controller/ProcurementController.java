@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/procurement")
@@ -109,9 +110,43 @@ public class ProcurementController {
         return purchaseOrderRepository.findAll();
     }
 
+    @GetMapping("/next-po-number")
+    public ResponseEntity<Map<String, String>> getNextPoNumber() {
+        String nextPoNumber = generateNextPoNumber();
+        int currentYear = java.time.LocalDate.now().getYear();
+        return ResponseEntity.ok(Map.of(
+            "nextPoNumber", nextPoNumber,
+            "year", String.valueOf(currentYear)
+        ));
+    }
+
+    private synchronized String generateNextPoNumber() {
+        int currentYear = java.time.LocalDate.now().getYear();
+        String prefix = "PO-" + currentYear + "-";
+        List<PurchaseOrder> allOrders = purchaseOrderRepository.findAll();
+        int maxSeq = 0;
+        for (PurchaseOrder po : allOrders) {
+            if (po.getPoNumber() != null && po.getPoNumber().startsWith(prefix)) {
+                try {
+                    String digitsOnly = po.getPoNumber().substring(prefix.length()).replaceAll("[^0-9]", "").trim();
+                    if (!digitsOnly.isEmpty()) {
+                        int seq = Integer.parseInt(digitsOnly);
+                        if (seq > maxSeq) {
+                            maxSeq = seq;
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+        }
+        return String.format("PO-%d-%04d", currentYear, maxSeq + 1);
+    }
+
     @PostMapping("/purchase-orders")
     public ResponseEntity<PurchaseOrder> createPurchaseOrder(@RequestBody PurchaseOrder po) {
         po.setId(null);
+        if (po.getPoNumber() == null || po.getPoNumber().trim().isEmpty()) {
+            po.setPoNumber(generateNextPoNumber());
+        }
         return ResponseEntity.ok(purchaseOrderRepository.save(po));
     }
 

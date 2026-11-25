@@ -47,7 +47,99 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
   int _unreadNotificationCount = 0;
   int? _reviewerEmpId;
   int? _approverEmpId;
+  List<int> _reviewerEmpIds = [];
+  List<int> _approverEmpIds = [];
   int? _currentEmpId;
+
+  bool get _isExternalExecutor {
+    final raw = task.rawData ?? {};
+
+    final isExtVal = raw['isExternal'] ??
+        raw['is_external'] ??
+        raw['isExt'] ??
+        raw['is_ext'] ??
+        raw['external'];
+    if (isExtVal == true ||
+        isExtVal == 1 ||
+        isExtVal == '1' ||
+        isExtVal == 'true' ||
+        isExtVal == 'Y' ||
+        isExtVal == 'yes' ||
+        isExtVal == 'YES') {
+      return true;
+    }
+
+    final extNm = (raw['extEmpNm'] ?? raw['ext_emp_nm'] ?? '').toString().trim();
+    if (extNm.isNotEmpty) return true;
+
+    final extEmail = (raw['extEmpEmail'] ?? raw['ext_emp_email'] ?? '').toString().trim();
+    if (extEmail.isNotEmpty) return true;
+
+    final extId = (raw['extEmpId'] ?? raw['ext_emp_id'] ?? '').toString().trim();
+    if (extId.isNotEmpty) return true;
+
+    final empType = (raw['empType'] ??
+            raw['emp_type'] ??
+            raw['empTyp'] ??
+            raw['emp_typ'] ??
+            raw['executorType'] ??
+            raw['executor_type'] ??
+            raw['assignedToType'] ??
+            raw['assigned_to_type'] ??
+            raw['taskType'] ??
+            raw['task_type'] ??
+            '')
+        .toString()
+        .trim()
+        .toUpperCase();
+    if (empType == 'EXT' ||
+        empType == 'EXTERNAL' ||
+        empType == 'EXTERNAL_TASK' ||
+        empType == 'EXTERNAL_GUEST' ||
+        empType == 'GUEST') {
+      return true;
+    }
+
+    final roleStr = (raw['executorRole'] ??
+            raw['executor_role'] ??
+            raw['role'] ??
+            raw['userRole'] ??
+            raw['user_role'] ??
+            '')
+        .toString()
+        .toLowerCase();
+    if (roleStr.contains('external')) return true;
+
+    if (_executorName.toLowerCase().contains('(external)') ||
+        _executorName.toLowerCase().contains('external guest')) {
+      return true;
+    }
+    if (task.subtitle.toLowerCase().contains('external')) return true;
+
+    final execRawId = (raw['empId'] ??
+            raw['empid'] ??
+            raw['assignedTo'] ??
+            raw['executorId'] ??
+            raw['executor_id'] ??
+            '')
+        .toString()
+        .trim();
+    if (execRawId.isNotEmpty && _allEmployees.isNotEmpty) {
+      try {
+        final match = _allEmployees.firstWhere(
+          (e) => e.id == execRawId,
+          orElse: () => EmployeeOption(name: '', designation: ''),
+        );
+        if (match.designation.toLowerCase().contains('external') ||
+            (match.companyName != null &&
+                match.companyName!.toLowerCase().contains('external'))) {
+          return true;
+        }
+      } catch (_) {}
+    }
+
+    return false;
+  }
 
   int? _extractTaskNumericId() {
     if (widget.isIndividualTask) {
@@ -664,62 +756,195 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     }
   }
 
-  Future<void> _loadIndividualTaskProcessConfig() async {
-    if (!widget.isIndividualTask) return;
-
-    try {
-      String reviewerName = '';
-      String approverName = '';
-      int? reviewerEmpId;
-      int? approverEmpId;
-
-      final revRaw = (widget.task?.rawData?['reviewer'] ?? widget.task?.rawData?['reviewerId'] ?? widget.task?.rawData?['reviewer_id'] ?? widget.task?.rawData?['reviewerEmpId'] ?? '').toString().trim();
-      final revNm = (widget.task?.rawData?['reviewerNm'] ?? widget.task?.rawData?['reviewer_nm'] ?? '').toString().trim();
-      
-      reviewerEmpId = int.tryParse(revRaw);
-
-      if (revNm.isNotEmpty) {
-        reviewerName = revNm;
-      } else {
-        if (reviewerEmpId != null) {
-          final rName = await ApiService.getEmployeeName(reviewerEmpId);
-          reviewerName = (rName != null && rName.isNotEmpty) ? rName : '';
-        } else if (revRaw.isNotEmpty) {
-          reviewerName = revRaw;
-        }
-      }
-
-      final appRaw = (widget.task?.rawData?['approver'] ?? widget.task?.rawData?['approverId'] ?? widget.task?.rawData?['approver_id'] ?? widget.task?.rawData?['approverEmpId'] ?? '').toString().trim();
-      final appNm = (widget.task?.rawData?['approverNm'] ?? widget.task?.rawData?['approver_nm'] ?? '').toString().trim();
-      
-      approverEmpId = int.tryParse(appRaw);
-
-      if (appNm.isNotEmpty) {
-        approverName = appNm;
-      } else {
-        if (approverEmpId != null) {
-          final aName = await ApiService.getEmployeeName(approverEmpId);
-          approverName = (aName != null && aName.isNotEmpty) ? aName : '';
-        } else if (appRaw.isNotEmpty) {
-          approverName = appRaw;
-        }
-      }
-
-      if (!mounted) return;
-      setState(() {
-        _reviewerName = reviewerName.isNotEmpty ? reviewerName : 'Not assigned';
-        _approverName = approverName.isNotEmpty ? approverName : 'Not assigned';
-        _reviewerEmpId = reviewerEmpId;
-        _approverEmpId = approverEmpId;
-      });
-    } catch (e) {
-      debugPrint('Error loading individual task process config: $e');
-      if (!mounted) return;
-      setState(() {
-        _reviewerName = 'Not assigned';
-        _approverName = 'Not assigned';
-      });
+  String _formatDisplayName(String? name) {
+    if (name == null) return 'Unassigned';
+    final trimmed = name.trim();
+    if (trimmed.isEmpty ||
+        RegExp(r'^\d+$').hasMatch(trimmed) ||
+        trimmed.toLowerCase() == 'null' ||
+        trimmed.toLowerCase() == 'n/a' ||
+        trimmed.toLowerCase() == 'not assigned') {
+      return 'Unassigned';
     }
+    return trimmed;
+  }
+
+  Future<void> _resolveReviewerAndApprover() async {
+    String foundReviewerName = '';
+    String foundApproverName = '';
+    int? foundReviewerId;
+    int? foundApproverId;
+
+    final raw = task.rawData ?? {};
+
+    // 1) Direct check from task.rawData or task model
+    final revNm = (raw['reviewerNm'] ?? raw['reviewer_nm'] ?? raw['reviewerName'] ?? raw['reviewer_name'] ?? raw['revNm'] ?? raw['rev_nm'])?.toString().trim();
+    if (revNm != null && revNm.isNotEmpty && !revNm.toLowerCase().contains('not assigned') && !RegExp(r'^\d+$').hasMatch(revNm)) {
+      foundReviewerName = revNm;
+    }
+
+    final revIdRaw = (raw['reviewerId'] ?? raw['reviewer_id'] ?? raw['reviewer'] ?? raw['reviewerEmpId'] ?? raw['reviewer_emp_id'] ?? raw['revEmpId'] ?? raw['rev_emp_id'] ?? raw['revId'] ?? raw['rev_id'] ?? task.reviewer)?.toString().trim();
+    if (revIdRaw != null && revIdRaw.isNotEmpty) {
+      final parsedId = int.tryParse(revIdRaw);
+      if (parsedId != null && parsedId > 0) {
+        foundReviewerId = parsedId;
+        final resolvedName = await ApiService.getEmployeeName(parsedId);
+        if (resolvedName != null && resolvedName.isNotEmpty && !RegExp(r'^\d+$').hasMatch(resolvedName.trim())) {
+          foundReviewerName = resolvedName;
+        } else if (foundReviewerName.isEmpty || RegExp(r'^\d+$').hasMatch(foundReviewerName)) {
+          foundReviewerName = 'Unassigned';
+        }
+      } else if (foundReviewerName.isEmpty) {
+        foundReviewerName = RegExp(r'^\d+$').hasMatch(revIdRaw) ? 'Unassigned' : revIdRaw;
+      }
+    }
+
+    final appNm = (raw['approverNm'] ?? raw['approver_nm'] ?? raw['approverName'] ?? raw['approver_name'] ?? raw['appNm'] ?? raw['app_nm'] ?? raw['checkerNm'] ?? raw['checker_nm'])?.toString().trim();
+    if (appNm != null && appNm.isNotEmpty && !appNm.toLowerCase().contains('not assigned') && !RegExp(r'^\d+$').hasMatch(appNm)) {
+      foundApproverName = appNm;
+    }
+
+    final appIdRaw = (raw['approverId'] ?? raw['approver_id'] ?? raw['approver'] ?? raw['approverEmpId'] ?? raw['approver_emp_id'] ?? raw['appEmpId'] ?? raw['app_emp_id'] ?? raw['checkerId'] ?? raw['checker_id'] ?? task.approver)?.toString().trim();
+    if (appIdRaw != null && appIdRaw.isNotEmpty) {
+      final parsedId = int.tryParse(appIdRaw);
+      if (parsedId != null && parsedId > 0) {
+        foundApproverId = parsedId;
+        final resolvedName = await ApiService.getEmployeeName(parsedId);
+        if (resolvedName != null && resolvedName.isNotEmpty && !RegExp(r'^\d+$').hasMatch(resolvedName.trim())) {
+          foundApproverName = resolvedName;
+        } else if (foundApproverName.isEmpty || RegExp(r'^\d+$').hasMatch(foundApproverName)) {
+          foundApproverName = 'Unassigned';
+        }
+      } else if (foundApproverName.isEmpty) {
+        foundApproverName = RegExp(r'^\d+$').hasMatch(appIdRaw) ? 'Unassigned' : appIdRaw;
+      }
+    }
+
+    // 2) Fetch process config from API
+    final numId = _extractTaskNumericId();
+    if (numId != null && numId > 0) {
+      List<dynamic> configs = [];
+      try {
+        if (widget.isIndividualTask) {
+          configs = await ApiService.getLiveProcessConfigs(numId);
+          if (configs.isEmpty) {
+            configs = await ApiService.getLiveProcessConfig(numId);
+          }
+        } else {
+          configs = await ApiService.getLiveProcessConfig(numId);
+          if (configs.isEmpty) {
+            configs = await ApiService.getLiveProcessConfigs(numId);
+          }
+          if (configs.isEmpty && task.drftTaskId != null) {
+            final drftId = int.tryParse(task.drftTaskId!);
+            if (drftId != null) {
+              configs = await ApiService.getDraftProcessConfig(drftId);
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[TaskDetails] Error fetching process config: $e');
+      }
+
+      final List<String> revNames = [];
+      final List<String> appNames = [];
+      final List<int> revIds = [];
+      final List<int> appIds = [];
+
+      if (configs.isNotEmpty) {
+        for (final item in configs) {
+          if (item is! Map) continue;
+          final config = Map<String, dynamic>.from(item);
+
+          final stepType = (config['stepType'] ?? config['step_type'] ?? '').toString().toUpperCase();
+          final stepLabel = (config['stepLabel'] ?? config['step_label'] ?? '').toString().toUpperCase();
+          final rIdVal = (config['rId'] ?? config['r_id'] ?? config['rid'])?.toString();
+
+          final empIdVal = config['empId'] ?? config['emp_id'] ?? config['empid'];
+          final empId = empIdVal != null ? int.tryParse(empIdVal.toString()) : null;
+
+          String empName = (config['empNm'] ?? config['emp_nm'] ?? config['employeeName'] ?? config['employee_name'] ?? '').toString().trim();
+          if ((empName.isEmpty || RegExp(r'^\d+$').hasMatch(empName)) && empId != null && empId > 0) {
+            final resolved = await ApiService.getEmployeeName(empId);
+            if (resolved != null && resolved.isNotEmpty && !RegExp(r'^\d+$').hasMatch(resolved.trim())) {
+              empName = resolved;
+            } else {
+              empName = 'Unassigned';
+            }
+          }
+
+          if (stepType == 'REVIEWER' || stepLabel == 'REVIEWER' || stepLabel.contains('REVIEW') || rIdVal == '1') {
+            if (empId != null) {
+              foundReviewerId ??= empId;
+              if (!revIds.contains(empId)) revIds.add(empId);
+            }
+            if (empName.isNotEmpty && !revNames.contains(empName)) revNames.add(empName);
+          } else if (stepType == 'CHECKER' || stepType == 'APPROVER' || stepLabel == 'APPROVER' || stepLabel.contains('APPROV') || stepLabel.contains('CHECK') || rIdVal == '2') {
+            if (empId != null) {
+              foundApproverId ??= empId;
+              if (!appIds.contains(empId)) appIds.add(empId);
+            }
+            if (empName.isNotEmpty && !appNames.contains(empName)) appNames.add(empName);
+          }
+        }
+
+        if (revNames.isNotEmpty) {
+          foundReviewerName = revNames.join(', ');
+        }
+        if (appNames.isNotEmpty) {
+          foundApproverName = appNames.join(', ');
+        }
+      }
+
+      // Also incorporate IDs from task model / rawData
+      if (foundReviewerId != null && !revIds.contains(foundReviewerId)) {
+        revIds.add(foundReviewerId);
+      }
+      for (final r in task.reviewers) {
+        final parsed = int.tryParse(r.toString());
+        if (parsed != null && !revIds.contains(parsed)) revIds.add(parsed);
+      }
+      if (foundApproverId != null && !appIds.contains(foundApproverId)) {
+        appIds.add(foundApproverId);
+      }
+      for (final a in task.approvers) {
+        final parsed = int.tryParse(a.toString());
+        if (parsed != null && !appIds.contains(parsed)) appIds.add(parsed);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        if (foundReviewerName.isNotEmpty && foundReviewerName.toLowerCase() != 'n/a') {
+          _reviewerName = RegExp(r'^\d+$').hasMatch(foundReviewerName.trim()) ? 'Unassigned' : foundReviewerName;
+        }
+        if (foundApproverName.isNotEmpty && foundApproverName.toLowerCase() != 'n/a') {
+          _approverName = RegExp(r'^\d+$').hasMatch(foundApproverName.trim()) ? 'Unassigned' : foundApproverName;
+        }
+        if (foundReviewerId != null) _reviewerEmpId = foundReviewerId;
+        if (foundApproverId != null) _approverEmpId = foundApproverId;
+        _reviewerEmpIds = revIds;
+        _approverEmpIds = appIds;
+      });
+      return;
+    }
+
+    if (!mounted) return;
+    setState(() {
+      if (foundReviewerName.isNotEmpty && foundReviewerName.toLowerCase() != 'n/a') {
+        _reviewerName = RegExp(r'^\d+$').hasMatch(foundReviewerName.trim()) ? 'Unassigned' : foundReviewerName;
+      }
+      if (foundApproverName.isNotEmpty && foundApproverName.toLowerCase() != 'n/a') {
+        _approverName = RegExp(r'^\d+$').hasMatch(foundApproverName.trim()) ? 'Unassigned' : foundApproverName;
+      }
+      if (foundReviewerId != null) {
+        _reviewerEmpId = foundReviewerId;
+        if (!_reviewerEmpIds.contains(foundReviewerId)) _reviewerEmpIds.add(foundReviewerId);
+      }
+      if (foundApproverId != null) {
+        _approverEmpId = foundApproverId;
+        if (!_approverEmpIds.contains(foundApproverId)) _approverEmpIds.add(foundApproverId);
+      }
+    });
   }
 
   Future<void> _loadSavedData() async {
@@ -751,8 +976,19 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               if (mounted) {
                 setState(() {
                   task = freshItem;
-                  _status = freshItem.status;
+                  _status = freshItem.isUnderReview
+                      ? 'Under Review'
+                      : freshItem.isRework
+                          ? 'Rework'
+                          : freshItem.isReassigned
+                              ? 'Reassigned'
+                              : freshItem.isCompleted
+                                  ? 'Closed'
+                                  : freshItem.isInProgress
+                                      ? 'In Progress'
+                                      : freshItem.status;
                   _rawDbStatus = (freshRaw['taskSts'] ?? freshRaw['status'] ?? '').toString().toUpperCase();
+                  _isButtonClicked = (_status == 'In Progress' || _status == 'Work In Progress' || _status == 'WIP');
                 });
                 await _loadChecklist();
               }
@@ -764,8 +1000,19 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               if (mounted) {
                 setState(() {
                   task = freshItem;
-                  _status = freshItem.status;
+                  _status = freshItem.isUnderReview
+                      ? 'Under Review'
+                      : freshItem.isRework
+                          ? 'Rework'
+                          : freshItem.isReassigned
+                              ? 'Reassigned'
+                              : freshItem.isCompleted
+                                  ? 'Closed'
+                                  : freshItem.isInProgress
+                                      ? 'In Progress'
+                                      : freshItem.status;
                   _rawDbStatus = (freshRaw['taskSts'] ?? freshRaw['status'] ?? '').toString().toUpperCase();
+                  _isButtonClicked = (_status == 'In Progress' || _status == 'Work In Progress' || _status == 'WIP');
                 });
                 await _loadChecklist();
               }
@@ -776,37 +1023,54 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         }
       }
 
-      final execRaw = (task.rawData?['empId'] ?? task.rawData?['empid'] ?? task.rawData?['assignedTo'] ?? '').toString().trim();
-      final execNm = (task.rawData?['empNm'] ?? task.rawData?['executorNm'] ?? task.rawData?['assigneeNm'] ?? task.rawData?['emp_nm'] ?? '').toString().trim();
+      final execRaw = (task.rawData?['empId'] ??
+              task.rawData?['empid'] ??
+              task.rawData?['assignedTo'] ??
+              task.rawData?['extEmpId'] ??
+              task.rawData?['ext_emp_id'] ??
+              '')
+          .toString()
+          .trim();
+      final execNm = (task.rawData?['extEmpNm'] ??
+              task.rawData?['ext_emp_nm'] ??
+              task.rawData?['empNm'] ??
+              task.rawData?['executorNm'] ??
+              task.rawData?['assigneeNm'] ??
+              task.rawData?['emp_nm'] ??
+              task.rawData?['assignedToNm'] ??
+              task.rawData?['assigned_to_name'] ??
+              '')
+          .toString()
+          .trim();
       
-      if (execNm.isNotEmpty) {
+      if (execNm.isNotEmpty && !RegExp(r'^\d+$').hasMatch(execNm)) {
         if (mounted) setState(() => _executorName = execNm);
       } else if (execRaw.isNotEmpty) {
         final execId = int.tryParse(execRaw);
         if (execId != null) {
           final exName = await ApiService.getEmployeeName(execId);
           if (mounted) {
-            setState(() => _executorName = (exName != null && exName.isNotEmpty) ? exName : '');
+            setState(() => _executorName = (exName != null && exName.isNotEmpty && !RegExp(r'^\d+$').hasMatch(exName)) ? exName : 'Unassigned');
           }
         } else {
-          if (mounted) setState(() => _executorName = execRaw);
+          if (mounted) setState(() => _executorName = (execRaw.isEmpty || RegExp(r'^\d+$').hasMatch(execRaw)) ? 'Unassigned' : execRaw);
         }
       }
 
       final abRaw = (task.rawData?['assignedBy'] ?? task.rawData?['assigned_by'] ?? task.rawData?['crBy'] ?? task.rawData?['cr_by'] ?? '').toString().trim();
       final abNm = (task.rawData?['assignedByNm'] ?? task.rawData?['assignerNm'] ?? task.rawData?['assigned_by_nm'] ?? task.rawData?['crByNm'] ?? '').toString().trim();
       
-      if (abNm.isNotEmpty) {
+      if (abNm.isNotEmpty && !RegExp(r'^\d+$').hasMatch(abNm)) {
         if (mounted) setState(() => _assignedByName = abNm);
       } else if (abRaw.isNotEmpty) {
         final abId = int.tryParse(abRaw);
         if (abId != null) {
           final abName = await ApiService.getEmployeeName(abId);
           if (mounted) {
-            setState(() => _assignedByName = (abName != null && abName.isNotEmpty) ? abName : '');
+            setState(() => _assignedByName = (abName != null && abName.isNotEmpty && !RegExp(r'^\d+$').hasMatch(abName)) ? abName : 'Unassigned');
           }
         } else {
-          if (mounted) setState(() => _assignedByName = abRaw);
+          if (mounted) setState(() => _assignedByName = (abRaw.isEmpty || RegExp(r'^\d+$').hasMatch(abRaw)) ? 'Unassigned' : abRaw);
         }
       }
 
@@ -825,7 +1089,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
           }
         }
 
-        await _loadIndividualTaskProcessConfig();
+        await _resolveReviewerAndApprover();
         await _loadChecklist();
 
         // Load attachments from DB for individual tasks
@@ -926,13 +1190,21 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
 
         if (mounted) {
           setState(() {
-            _status = task.status;
+            _status = task.isUnderReview
+                ? 'Under Review'
+                : task.isRework
+                    ? 'Rework'
+                    : task.isReassigned
+                        ? 'Reassigned'
+                        : task.isCompleted
+                            ? 'Closed'
+                            : task.isInProgress
+                                ? 'In Progress'
+                                : task.status;
             _rawDbStatus = (task.rawData?['taskSts'] ?? task.rawData?['status'] ?? '').toString().toUpperCase();
-            _isButtonClicked = (_status == 'In Progress');
-            _isLoadingData = false;
+            _isButtonClicked = (_status == 'In Progress' || _status == 'Work In Progress' || _status == 'WIP');
           });
         }
-        return;
       }
       try {
         final taskIdInt = _extractTaskNumericId() ?? int.tryParse(task.id);
@@ -947,7 +1219,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                   (emp) => emp['id']?.toString() == cEmpId || emp['empId']?.toString() == cEmpId,
                   orElse: () => null,
                 );
-                if (match != null) {
+                if (match != null && !dbTeam.any((e) => e.id == match['id']?.toString())) {
                   dbTeam.add(EmployeeOption.fromJson(match));
                 }
               }
@@ -960,15 +1232,32 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               : await ApiService.getLiveTask(_extractTaskNumericId() ?? int.parse(task.id));
           if (dbTask != null) {
             final String? noteTxt = dbTask['noteTxt'] ?? dbTask['note_txt'];
+            dynamic rawTeam = dbTask['teamMembers'] ?? dbTask['team_members'] ?? dbTask['team'];
+            final dbEmployees = await ApiService.getEmployees();
+
+            if (rawTeam is List && rawTeam.isNotEmpty) {
+              for (final tm in rawTeam) {
+                final tmId = tm is Map ? (tm['empId'] ?? tm['emp_id'] ?? tm['id'])?.toString() : tm.toString();
+                if (tmId != null) {
+                  final match = dbEmployees.firstWhere(
+                    (emp) => emp['id']?.toString() == tmId.trim() || emp['empId']?.toString() == tmId.trim(),
+                    orElse: () => null,
+                  );
+                  if (match != null && !dbTeam.any((e) => e.id == match['id']?.toString())) {
+                    dbTeam.add(EmployeeOption.fromJson(match));
+                  }
+                }
+              }
+            }
+
             if (noteTxt != null && noteTxt.trim().isNotEmpty) {
               final List<String> employeeIds = noteTxt.split(',');
-              final dbEmployees = await ApiService.getEmployees();
               for (final empId in employeeIds) {
                 final match = dbEmployees.firstWhere(
                   (emp) => emp['id']?.toString() == empId.trim() || emp['empId']?.toString() == empId.trim(),
                   orElse: () => null,
                 );
-                if (match != null) {
+                if (match != null && !dbTeam.any((e) => e.id == match['id']?.toString())) {
                   dbTeam.add(EmployeeOption.fromJson(match));
                 }
               }
@@ -981,7 +1270,10 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
 
       if (mounted) {
         setState(() {
-          _currentTaskTeam = dbTeam;
+          if (dbTeam.isNotEmpty) {
+            _currentTaskTeam = dbTeam;
+          }
+          _isLoadingData = false;
         });
       }
 
@@ -1059,85 +1351,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         });
       }
 
-      List<dynamic> configs = await ApiService.getLiveProcessConfig(
-        _extractTaskNumericId()!,
-      );
-      if (configs.isEmpty && task.drftTaskId != null) {
-        configs = await ApiService.getDraftProcessConfig(
-          int.parse(task.drftTaskId!),
-        );
-      }
-      // Log configs for debugging
-      debugPrint('==== PROCESS CONFIGS FOR TASK ${task.id} ====');
-      debugPrint('Configs: ${jsonEncode(configs)}');
-      debugPrint('============================================');
-
-      String? checkerName;
-      String? reviewerName;
-      int? reviewerEmpId;
-      int? approverEmpId;
-      for (final config in configs) {
-        if (config is! Map) continue;
-
-        final stepType = config['stepType']?.toString().toUpperCase();
-        final rIdVal = config['rId'] ?? config['r_id'] ?? config['rid'];
-        final ordrIdVal = config['ordrId'] ?? config['ordr_id'];
-        final empIdVal = config['empId'] ?? config['emp_id'] ?? config['empid'];
-
-        if (empIdVal != null) {
-          final int empId = (empIdVal as num).toInt();
-          final resolvedName = await ApiService.getEmployeeName(empId);
-          if (resolvedName != null && resolvedName.isNotEmpty) {
-            // Rule 1: Use rId to map roles (rId == 1 Reviewer, rId == 2 Approver)
-            if (rIdVal != null) {
-              final int rId = (rIdVal as num).toInt();
-              if (rId == 1) {
-                checkerName = resolvedName;
-                reviewerEmpId = empId;
-              } else if (rId == 2) {
-                reviewerName = resolvedName;
-                approverEmpId = empId;
-              }
-            }
-            // Rule 2: Use ordrId to map roles
-            else if (ordrIdVal != null) {
-              final int ordrId = (ordrIdVal as num).toInt();
-              if (ordrId == 1) {
-                checkerName = resolvedName;
-                reviewerEmpId = empId;
-              } else if (ordrId == 2) {
-                reviewerName = resolvedName;
-                approverEmpId = empId;
-              }
-            }
-            // Rule 3: Fallback to stepType
-            else if (stepType != null) {
-              if (stepType == 'CHECKER') {
-                checkerName = resolvedName;
-                reviewerEmpId = empId;
-              } else if (stepType == 'REVIEWER' || stepType == 'APPROVER') {
-                reviewerName = resolvedName;
-                approverEmpId = empId;
-              }
-            }
-          }
-        }
-      }
-      if (mounted) {
-        setState(() {
-          if (checkerName != null && checkerName.isNotEmpty) {
-            _reviewerName = checkerName;
-          }
-          if (reviewerName != null && reviewerName.isNotEmpty) {
-            _approverName = reviewerName;
-          }
-          _reviewerEmpId = reviewerEmpId;
-          _approverEmpId = approverEmpId;
-        });
-      }
-    } catch (e) {
-      print("Error loading checklist: $e");
-    }
+      await _resolveReviewerAndApprover();
 
     try {
       final history = await ApiService.getTaskHistory(_extractTaskNumericId()!);
@@ -1169,12 +1383,28 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       print("Error loading notes: $e");
     }
 
-    setState(() {
-      _status = task.status;
-      _rawDbStatus = (task.rawData?['taskSts'] ?? task.rawData?['status'] ?? '').toString().toUpperCase();
-      _isButtonClicked = (_status == 'In Progress');
-      _isLoadingData = false;
-    });
+    } catch (e) {
+      debugPrint('Error in _loadSavedData: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _status = task.isUnderReview
+              ? 'Under Review'
+              : task.isRework
+                  ? 'Rework'
+                  : task.isReassigned
+                      ? 'Reassigned'
+                      : task.isCompleted
+                          ? 'Closed'
+                          : task.isInProgress
+                              ? 'In Progress'
+                              : task.status;
+          _rawDbStatus = (task.rawData?['taskSts'] ?? task.rawData?['status'] ?? '').toString().toUpperCase();
+          _isButtonClicked = (_status == 'In Progress' || _status == 'Work In Progress' || _status == 'WIP');
+          _isLoadingData = false;
+        });
+      }
+    }
   }
 
   Future<void> _startTask() async {
@@ -1186,11 +1416,23 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
 
       if (widget.isIndividualTask) {
         // Individual tasks: update via individual-tasks status patch endpoint
-        final success = await ApiService.updateIndividualTaskStatus(taskId, 'WIP');
+        bool success = await ApiService.updateIndividualTaskStatus(taskId, 'WIP');
+        if (!success) {
+          try {
+            await ApiService.startTask(taskId);
+            success = true;
+          } catch (_) {}
+        }
         if (!success) throw Exception('Failed to update task status');
       } else {
         // Project tasks: update via project-live endpoint
-        final success = await ApiService.updateProjectTaskStatus(taskId, 'WIP');
+        bool success = await ApiService.updateProjectTaskStatus(taskId, 'WIP');
+        if (!success) {
+          try {
+            await ApiService.startTask(taskId);
+            success = true;
+          } catch (_) {}
+        }
         if (!success) {
           throw Exception('Failed to update project task status to WIP');
         }
@@ -1221,11 +1463,9 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       }
     } finally {
       if (mounted) {
-        if (mounted) {
-          setState(() {
-            _isLoadingData = false;
-          });
-        }
+        setState(() {
+          _isLoadingData = false;
+        });
       }
     }
   }
@@ -1271,14 +1511,24 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       final taskId = _extractTaskNumericId()!;
 
       if (widget.isIndividualTask) {
-        if (_status == 'Rework') {
+        if (_status == 'Rework' || _status == 'Reassigned') {
           await ApiService.resubmitTask(taskId, _assigneeNoteController.text);
         } else {
           await ApiService.submitTask(taskId, _assigneeNoteController.text);
         }
       } else {
         // Project task: update status via project-live endpoint
-        final success = await ApiService.updateProjectTaskStatus(taskId, 'SUBMIT_REVIEW');
+        bool success = await ApiService.updateProjectTaskStatus(taskId, 'SUBMIT_REVIEW');
+        if (!success) {
+          try {
+            if (_status == 'Rework' || _status == 'Reassigned') {
+              await ApiService.resubmitTask(taskId, _assigneeNoteController.text);
+            } else {
+              await ApiService.submitTask(taskId, _assigneeNoteController.text);
+            }
+            success = true;
+          } catch (_) {}
+        }
         if (!success) {
           throw Exception('Failed to submit project task for review');
         }
@@ -1655,18 +1905,18 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
           taskJson['iconBg'] = const Color(0xFFDCFCE7).value;
         } else if (newStatus == 'In Progress') {
           taskJson['tag'] = 'High';
-          taskJson['tagColor'] = const Color(0xFFEA580C).value;
-          taskJson['tagBg'] = const Color(0xFFFFF7ED).value;
+          taskJson['tagColor'] = const Color(0xFFEF4444).value; // BIONOVA High #EF4444
+          taskJson['tagBg'] = const Color(0xFFFEF2F2).value;
           taskJson['icon'] = Icons.shield_outlined.codePoint;
-          taskJson['iconColor'] = const Color(0xFFEA580C).value;
-          taskJson['iconBg'] = const Color(0xFFFFF7ED).value;
+          taskJson['iconColor'] = const Color(0xFFEF4444).value;
+          taskJson['iconBg'] = const Color(0xFFFEF2F2).value;
         } else if (newStatus == 'Rework') {
           taskJson['tag'] = 'Critical';
-          taskJson['tagColor'] = const Color(0xFFE11D48).value;
-          taskJson['tagBg'] = const Color(0xFFFFF1F2).value;
+          taskJson['tagColor'] = const Color(0xFFB91C1C).value; // BIONOVA Critical #B91C1C
+          taskJson['tagBg'] = const Color(0xFFFEE2E2).value;
           taskJson['icon'] = Icons.assignment_outlined.codePoint;
-          taskJson['iconColor'] = const Color(0xFFE11D48).value;
-          taskJson['iconBg'] = const Color(0xFFFFF1F2).value;
+          taskJson['iconColor'] = const Color(0xFFB91C1C).value;
+          taskJson['iconBg'] = const Color(0xFFFEE2E2).value;
         }
         await prefs.setString(
           'task_item_data_${task.id}',
@@ -1694,13 +1944,6 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     }
   }
 
-  Color _getStatusColor(String status) {
-    final s = status.toUpperCase();
-    if (s == 'CLOSED' || s == 'COMPLETED') return const Color(0xFF16A34A); // GREEN
-    if (s == 'IN PROGRESS' || s == 'UNDER REVIEW' || s == 'REWORK') return const Color(0xFFF59E0B); // AMBER
-    if (s == 'HOLD') return const Color(0xFF7C3AED); // PURPLE
-    return const Color(0xFF2563EB); // BLUE (OPEN)
-  }
 
   // ✅ Reusable Employee Dropdown using SearchableDropdown
   Widget _buildEmployeeDropdown({
@@ -1752,8 +1995,34 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         _status = task.status;
       }
       _isDataLoaded = true;
-      _reviewerName = task.reviewer ?? '';
-      _approverName = task.approver ?? '';
+      _reviewerName = (task.reviewer != null && !RegExp(r'^\d+$').hasMatch(task.reviewer!.trim()) && !task.reviewer!.toLowerCase().contains('not assigned')) ? task.reviewer! : '';
+      _approverName = (task.approver != null && !RegExp(r'^\d+$').hasMatch(task.approver!.trim()) && !task.approver!.toLowerCase().contains('not assigned')) ? task.approver! : '';
+      final initialExecNm = (task.rawData?['extEmpNm'] ??
+              task.rawData?['ext_emp_nm'] ??
+              task.rawData?['empNm'] ??
+              task.rawData?['executorNm'] ??
+              task.rawData?['assigneeNm'] ??
+              task.rawData?['emp_nm'] ??
+              task.rawData?['assignedToNm'] ??
+              task.rawData?['assigned_to_name'] ??
+              '')
+          .toString()
+          .trim();
+      if (initialExecNm.isNotEmpty && !RegExp(r'^\d+$').hasMatch(initialExecNm)) {
+        _executorName = initialExecNm;
+      }
+      final initialAbNm = (task.rawData?['assignedByNm'] ??
+              task.rawData?['assignerNm'] ??
+              task.rawData?['assigned_by_nm'] ??
+              task.rawData?['crByNm'] ??
+              task.rawData?['crtdByNm'] ??
+              task.rawData?['createdByNm'] ??
+              '')
+          .toString()
+          .trim();
+      if (initialAbNm.isNotEmpty && !RegExp(r'^\d+$').hasMatch(initialAbNm)) {
+        _assignedByName = initialAbNm;
+      }
       _loadSavedData();
     }
   }
@@ -1769,38 +2038,62 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
 
 
 
-    final executorId = int.tryParse((task.rawData?['empId'] ?? task.rawData?['empid'] ?? task.rawData?['assignedTo'] ?? '').toString());
+    final executorId = int.tryParse((task.rawData?['empId'] ??
+            task.rawData?['empid'] ??
+            task.rawData?['assignedTo'] ??
+            task.rawData?['assigned_to'] ??
+            task.rawData?['extEmpId'] ??
+            task.rawData?['ext_emp_id'] ??
+            task.rawData?['doerId'] ??
+            task.rawData?['doer_id'] ??
+            task.rawData?['executorId'] ??
+            task.rawData?['executor_id'] ??
+            task.rawData?['assigneeId'] ??
+            task.rawData?['assignee'] ??
+            '')
+        .toString());
 
-    final bool isUserReviewer = (_currentEmpId != null && _reviewerEmpId != null && _currentEmpId == _reviewerEmpId) ||
+    final assignerId = int.tryParse((task.rawData?['assignedBy'] ??
+            task.rawData?['assigned_by'] ??
+            task.rawData?['crBy'] ??
+            task.rawData?['cr_by'] ??
+            task.rawData?['crtdBy'] ??
+            task.rawData?['crtd_by'] ??
+            task.rawData?['createdBy'] ??
+            task.rawData?['created_by'] ??
+            '')
+        .toString());
+
+    final bool isDirectReviewer = (_currentEmpId != null && (_reviewerEmpId == _currentEmpId || _reviewerEmpIds.contains(_currentEmpId))) ||
         (task.reviewer != null && _currentEmpId != null && task.reviewer.toString() == _currentEmpId.toString()) ||
-        (_userRole.toLowerCase() == 'checker' || _userRole.toLowerCase() == 'reviewer');
+        (_currentEmpId != null && task.reviewers.contains(_currentEmpId.toString())) ||
+        (task.isCurrentUserReviewer);
 
-    final bool isUserApprover = (_currentEmpId != null && _approverEmpId != null && _currentEmpId == _approverEmpId) ||
+    final bool isDirectApprover = (_currentEmpId != null && (_approverEmpId == _currentEmpId || _approverEmpIds.contains(_currentEmpId))) ||
         (task.approver != null && _currentEmpId != null && task.approver.toString() == _currentEmpId.toString()) ||
-        (_userRole.toLowerCase() == 'approver');
+        (_currentEmpId != null && task.approvers.contains(_currentEmpId.toString())) ||
+        (task.isCurrentUserApprover);
 
-    final bool isPrimaryExecutor = _currentEmpId != null && executorId != null && _currentEmpId.toString() == executorId.toString();
+    final bool isUserReviewer = isDirectReviewer;
+    final bool isUserApprover = isDirectApprover;
 
-    String displayRole = 'Executor';
-    String actionMessage = task.priority;
+    final bool isPrimaryExecutor = _currentEmpId != null && 
+        ((executorId != null && _currentEmpId.toString() == executorId.toString()) ||
+         (task.rawData?['empId']?.toString() == _currentEmpId.toString()) ||
+         (task.rawData?['empid']?.toString() == _currentEmpId.toString()) ||
+         (task.rawData?['assignedTo']?.toString() == _currentEmpId.toString()) ||
+         (task.rawData?['assigned_to']?.toString() == _currentEmpId.toString()) ||
+         (task.rawData?['doerId']?.toString() == _currentEmpId.toString()) ||
+         (task.rawData?['doer_id']?.toString() == _currentEmpId.toString()) ||
+         (task.rawData?['extEmpId']?.toString() == _currentEmpId.toString()) ||
+         (task.rawData?['ext_emp_id']?.toString() == _currentEmpId.toString()));
 
-    if (_isLoadingData) {
-      displayRole = 'Loading...';
-    } else if (isUserReviewer) {
-      displayRole = 'Reviewer';
-    } else if (isUserApprover) {
-      displayRole = 'Approver';
-    } else if (_currentEmpId != null && (_currentEmpId.toString() == executorId?.toString() || _currentTaskTeam.any((emp) => emp.id?.toString() == _currentEmpId.toString()))) {
-      displayRole = 'Executor';
-    } else {
-      if (_userRole.toLowerCase() == 'checker' || _userRole.toLowerCase() == 'reviewer') {
-        displayRole = 'Reviewer';
-      } else if (_userRole.toLowerCase() == 'approver') {
-        displayRole = 'Approver';
-      } else {
-        displayRole = 'Executor';
-      }
-    }
+    final bool isAssignedExecutor = isPrimaryExecutor || 
+        task.isCurrentUserExecutor ||
+        (_currentEmpId != null && _currentTaskTeam.any((emp) => emp.id?.toString() == _currentEmpId.toString()));
+
+    final bool isDirectAssigner = (_currentEmpId != null && assignerId != null && _currentEmpId == assignerId) ||
+        task.isCurrentUserAssigner;
 
     final String currentProcess = (task.rawData?['prcsYesActn'] ??
             task.rawData?['prcs_yes_actn'] ??
@@ -1825,9 +2118,78 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         _status == 'Completed' ||
         task.status == 'Closed' ||
         task.status == 'Completed' ||
+        task.isCompleted ||
         rawStsStr.toUpperCase().contains('CLOSED') ||
         rawStsStr.toUpperCase().contains('COMPLETED') ||
+        _rawDbStatus.contains('CLOSED') ||
+        _rawDbStatus.contains('COMPLETED') ||
         (rawSts is Map && (rawSts['statusId'] == 4 || rawSts['status_id'] == 4));
+
+    final bool isSubmittedByExecutor = _status == 'Under Review' ||
+        task.status == 'Under Review' ||
+        task.isUnderReview ||
+        _rawDbStatus == 'SUBMIT_REVIEW' ||
+        _rawDbStatus == 'UNDER_REVIEW' ||
+        _rawDbStatus == 'SUBMITTED' ||
+        _rawDbStatus.contains('REVIEW') ||
+        rawStsStr.toUpperCase().contains('REVIEW') ||
+        rawStsStr.toUpperCase().contains('SUBMIT') ||
+        currentProcess == 'PENDING_REVIEWER' ||
+        currentProcess == 'PENDING_APPROVER' ||
+        currentProcess == 'SUBMIT_REVIEW' ||
+        currentProcess == 'UNDER_REVIEW';
+
+    final bool hasReviewer = (_reviewerEmpId != null && _reviewerEmpId != 0) ||
+        _reviewerEmpIds.isNotEmpty ||
+        (task.reviewer != null && task.reviewer!.isNotEmpty && task.reviewer != '0' && task.reviewer != 'N/A') ||
+        (task.reviewers.isNotEmpty) ||
+        (task.rawData?['reviewer'] != null && task.rawData!['reviewer'].toString().isNotEmpty && task.rawData!['reviewer'].toString() != '0') ||
+        (task.rawData?['reviewerId'] != null || task.rawData?['reviewer_id'] != null) ||
+        (_reviewerName.trim().isNotEmpty && _reviewerName.toLowerCase() != 'unassigned');
+
+    final bool hasApprover = (_approverEmpId != null && _approverEmpId != 0) ||
+        _approverEmpIds.isNotEmpty ||
+        (task.approver != null && task.approver!.isNotEmpty && task.approver != '0' && task.approver != 'N/A') ||
+        (task.approvers.isNotEmpty) ||
+        (task.rawData?['approver'] != null && task.rawData!['approver'].toString().isNotEmpty && task.rawData!['approver'].toString() != '0') ||
+        (task.rawData?['approverId'] != null || task.rawData?['approver_id'] != null) ||
+        (_approverName.trim().isNotEmpty && _approverName.toLowerCase() != 'unassigned');
+
+    final bool isApprovedByReviewer = currentProcess == 'PENDING_APPROVER' ||
+        task.rawData?['prcsYesActn'] == 'PENDING_APPROVER' ||
+        task.rawData?['prcs_yes_actn'] == 'PENDING_APPROVER' ||
+        task.rawData?['subStatus']?.toString().toUpperCase() == 'PENDING_APPROVER' ||
+        task.rawData?['sub_status']?.toString().toUpperCase() == 'PENDING_APPROVER' ||
+        !hasReviewer;
+
+    String displayRole = 'Executor';
+    String actionMessage = task.priority;
+
+    if (_isLoadingData) {
+      displayRole = 'Loading...';
+    } else if (isSubmittedByExecutor && isDirectReviewer) {
+      displayRole = 'Reviewer';
+    } else if (isSubmittedByExecutor && isDirectApprover) {
+      displayRole = 'Approver';
+    } else if (isAssignedExecutor) {
+      displayRole = 'Executor';
+    } else if (isDirectReviewer) {
+      displayRole = 'Reviewer';
+    } else if (isDirectApprover) {
+      displayRole = 'Approver';
+    } else if (isDirectAssigner) {
+      displayRole = 'Assigner';
+    } else if (_userRole.toLowerCase() == 'checker' || _userRole.toLowerCase() == 'reviewer') {
+      displayRole = 'Reviewer';
+    } else if (_userRole.toLowerCase() == 'approver') {
+      displayRole = 'Approver';
+    } else if (_userRole.toLowerCase() == 'admin' || _userRole.toLowerCase() == 'super_admin') {
+      displayRole = 'Admin';
+    } else if (_userRole.toLowerCase() == 'project_manager' || _userRole.toLowerCase() == 'manager') {
+      displayRole = 'Manager';
+    } else {
+      displayRole = 'Viewer';
+    }
 
     final String mainStatus = isClosedTask
         ? 'Closed'
@@ -1849,7 +2211,6 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         subStatusText = 'Under Review';
       }
     }
-
     final Color badgeBg = Colors.white;
     final Color badgeTextColor = task.tagColor;
     final Color badgeBorderColor = task.tagColor.withValues(alpha: 0.3);
@@ -1943,10 +2304,10 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               Container(
                 width: double.infinity,
                 decoration: BoxDecoration(
-                  color: task.tagBg,
+                  color: isClosedTask ? const Color(0xFFF0FDF4) : task.tagBg,
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                    color: task.tagColor.withOpacity(0.2),
+                    color: isClosedTask ? const Color(0xFF16A34A).withValues(alpha: 0.2) : task.tagColor.withValues(alpha: 0.2),
                     width: 1,
                   ),
                 ),
@@ -1963,7 +2324,11 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                           color: Colors.white,
                           shape: BoxShape.circle,
                         ),
-                        child: Icon(task.icon, color: task.iconColor, size: 28),
+                        child: Icon(
+                          isClosedTask ? Icons.task_alt : task.icon,
+                          color: isClosedTask ? const Color(0xFF16A34A) : task.iconColor,
+                          size: 28,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -1979,10 +2344,14 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                               color: Color(0xFF1E293B),
                             ),
                           ),
+                          if (isClosedTask) ...[
+                            const SizedBox(height: 6),
+                            _buildLeadLagBadge(calculateTaskLeadLag(task, isClosedTask)),
+                          ],
                         ],
                       ),
                     ),
-                    if (actionMessage.isNotEmpty) ...[
+                    if (!isClosedTask && actionMessage.isNotEmpty) ...[
                       const SizedBox(width: 8),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.end,
@@ -2064,7 +2433,9 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                     _buildMetaRow(
                       'Your Role',
                       Icons.person_outline,
-                      displayRole,
+                      (displayRole == 'Executor' && _isExternalExecutor)
+                          ? 'Executor (External)'
+                          : displayRole,
                       isStatusBadge: true,
                     ),
                     _buildMetaRow(
@@ -2078,29 +2449,36 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                       task.endDate ?? task.date,
                       isValueRed: task.date == 'Today',
                     ),
-                     if (widget.isIndividualTask && (_isLoadingData || (_assignedByName.trim().isNotEmpty && !_assignedByName.toLowerCase().contains('not assigned') && _assignedByName.toLowerCase() != 'n/a')))
+                    if (isClosedTask)
+                      _buildMetaRow(
+                        'Schedule',
+                        Icons.timer_outlined,
+                        calculateTaskLeadLag(task, isClosedTask),
+                        isLeadLagBadge: true,
+                      ),
+                     if (widget.isIndividualTask && (_isLoadingData || _assignedByName.trim().isNotEmpty))
                       _buildMetaRow(
                         'Assigned By',
                         Icons.assignment_ind_outlined,
-                        _isLoadingData ? 'Loading...' : _assignedByName,
+                        _isLoadingData ? 'Loading...' : _formatDisplayName(_assignedByName),
                       ),
-                    if (displayRole != 'Executor' && (_isLoadingData || (_executorName.trim().isNotEmpty && !_executorName.toLowerCase().contains('not assigned') && _executorName.toLowerCase() != 'n/a')))
+                    if (displayRole != 'Executor' && (_isLoadingData || _executorName.trim().isNotEmpty))
                       _buildMetaRow(
-                        'Executor',
+                        _isExternalExecutor ? 'Executor (External)' : 'Executor',
                         Icons.person_outline,
-                        _isLoadingData ? 'Loading...' : _executorName,
+                        _isLoadingData ? 'Loading...' : _formatDisplayName(_executorName),
                       ),
-                    if (displayRole != 'Reviewer' && (_isLoadingData || (_reviewerName.trim().isNotEmpty && !_reviewerName.toLowerCase().contains('not assigned') && _reviewerName.toLowerCase() != 'n/a')))
+                    if (displayRole != 'Reviewer' && (_isLoadingData || _reviewerName.trim().isNotEmpty))
                       _buildMetaRow(
                         'Reviewer',
                         Icons.rate_review_outlined,
-                        _isLoadingData ? 'Loading...' : _reviewerName,
+                        _isLoadingData ? 'Loading...' : _formatDisplayName(_reviewerName),
                       ),
-                    if (displayRole != 'Approver' && (_isLoadingData || (_approverName.trim().isNotEmpty && !_approverName.toLowerCase().contains('not assigned') && _approverName.toLowerCase() != 'n/a')))
+                    if (displayRole != 'Approver' && (_isLoadingData || _approverName.trim().isNotEmpty))
                       _buildMetaRow(
                         'Approver',
                         Icons.verified_outlined,
-                        _isLoadingData ? 'Loading...' : _approverName,
+                        _isLoadingData ? 'Loading...' : _formatDisplayName(_approverName),
                       ),
                     _buildMetaRow(
                       'Status',
@@ -2116,6 +2494,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                         isStatusBadge: true,
                       ),
                     _buildTeamAddedMetaRow(),
+                    _buildTaskProgressMetaRow(),
 
                     const Padding(
                       padding: EdgeInsets.symmetric(vertical: 8.0),
@@ -2184,16 +2563,16 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                               'Task Remarks',
                               _buildRemarksContentList(
                                 task.taskRemarks ?? '',
-                                const Color(0xFF10B981),
+                                const Color(0xFF059669),
                               ),
-                              const Color(0xFF10B981),
+                              const Color(0xFF059669),
                             ),
                             _buildRemarkSection(
                               'Executor Remarks',
                               _isEditingAssigneeRemarks
                                   ? _buildRemarksEditor(
                                       controller: _assigneeNoteController,
-                                      themeColor: const Color(0xFF7C3AED),
+                                      themeColor: const Color(0xFF4F46E5),
                                       onSave: () async {
                                         await _saveRemarksToStorage();
                                         setState(() {
@@ -2227,7 +2606,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                                           _buildRemarksContentWithEdit(
                                             title: 'Executor Remarks',
                                             content: value.text,
-                                            themeColor: const Color(0xFF7C3AED),
+                                            themeColor: const Color(0xFF4F46E5),
                                             canEdit: displayRole == 'Executor',
                                             onEditPressed: () {
                                               setState(() {
@@ -2240,7 +2619,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                                             },
                                           ),
                                     ),
-                              const Color(0xFF7C3AED),
+                              const Color(0xFF4F46E5),
                             ),
                             if (displayRole != 'Executor' || _reviewerNoteController.text.trim().isNotEmpty)
                               _buildRemarkSection(
@@ -2278,7 +2657,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                                               title: 'Reviewer Remarks',
                                               content: value.text,
                                               themeColor: const Color(0xFF0EA5E9),
-                                              canEdit: displayRole == 'Reviewer',
+                                              canEdit: displayRole == 'Reviewer' && isSubmittedByExecutor && currentProcess != 'PENDING_APPROVER',
                                               onEditPressed: () {
                                                 setState(() {
                                                   _tempReviewerRemarks = _reviewerNoteController.text;
@@ -2333,7 +2712,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                                               themeColor: const Color(
                                                 0xFFE11D48,
                                               ),
-                                              canEdit: displayRole == 'Approver',
+                                              canEdit: displayRole == 'Approver' && isSubmittedByExecutor && isApprovedByReviewer,
                                               onEditPressed: () {
                                                 setState(() {
                                                   _tempApproverRemarks =
@@ -2679,6 +3058,10 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                   isLastBoxChecked: isLastBoxChecked,
                   displayRole: displayRole,
                   isClosedTask: isClosedTask,
+                  hasReviewer: hasReviewer,
+                  hasApprover: hasApprover,
+                  isSubmittedByExecutor: isSubmittedByExecutor,
+                  isApprovedByReviewer: isApprovedByReviewer,
                 ),
 
               const SizedBox(height: 16),
@@ -2705,6 +3088,10 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     required bool isLastBoxChecked,
     required String displayRole,
     required bool isClosedTask,
+    required bool hasReviewer,
+    required bool hasApprover,
+    required bool isSubmittedByExecutor,
+    required bool isApprovedByReviewer,
   }) {
     // ── Closed ──────────────────────────────────────────────
     if (isClosedTask) {
@@ -2743,10 +3130,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       );
     }
 
-    final bool isAllChecklistsDone = _checklist.isNotEmpty && 
-                                     _checklist.every((item) => item['isDone'] == true);
-
-    final bool isTaskInReviewableState = _status != 'Closed' && _status != 'Completed';
+    final bool isTaskInReviewableState = !isClosedTask;
 
     final String currentProcess = (task.rawData?['prcsYesActn'] ??
             task.rawData?['prcs_yes_actn'] ??
@@ -2759,8 +3143,92 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         .toUpperCase()
         .trim();
 
+    final String sUpper = _status.toUpperCase().replaceAll('_', ' ').trim();
+    final String rawUpper = _rawDbStatus.toUpperCase().replaceAll('_', ' ').trim();
+
+    final bool isStatusOpen = sUpper == 'OPEN' || 
+        sUpper == 'PENDING' || 
+        sUpper == 'OVERDUE' || 
+        sUpper == 'ASSIGNED' || 
+        sUpper == 'TO-DO' || 
+        sUpper == 'TODO' || 
+        sUpper == 'DRAFT' || 
+        sUpper == 'NEW' || 
+        rawUpper == 'OPEN' || 
+        rawUpper == 'PENDING' || 
+        rawUpper == '1' || 
+        task.isOpen;
+
+    final bool isStatusInProgress = sUpper == 'IN PROGRESS' || 
+        sUpper == 'WORK IN PROGRESS' || 
+        sUpper == 'WIP' || 
+        rawUpper == 'WIP' || 
+        rawUpper == '3' || 
+        rawUpper == 'IN PROGRESS' || 
+        rawUpper == 'WORK IN PROGRESS' || 
+        task.isInProgress;
+
+    final bool isStatusRework = sUpper == 'REWORK' || 
+        rawUpper == 'REWORK' || 
+        currentProcess == 'REWORK' || 
+        task.isRework;
+
+    final bool isStatusReassigned = sUpper == 'REASSIGNED' || 
+        sUpper == 'REASSIGN' || 
+        rawUpper == 'REASSIGNED' || 
+        rawUpper == 'REASSIGN' || 
+        currentProcess == 'REASSIGN' || 
+        currentProcess == 'REASSIGNED' || 
+        task.isReassigned;
+
+    final bool isStatusUnderReview = sUpper == 'UNDER REVIEW' || 
+        isSubmittedByExecutor;
+
+    final bool isAdminOrManager = displayRole == 'Admin' || displayRole == 'Manager';
+    final bool isReviewerRole = displayRole == 'Reviewer';
+    final bool isApproverRole = displayRole == 'Approver';
+    final bool isExecutorRole = displayRole == 'Executor';
+
     // ── Reviewer sees task for review ────────
-    if (displayRole == 'Reviewer' && isTaskInReviewableState) {
+    if (isReviewerRole && isTaskInReviewableState) {
+      // 1. Initial stage: Executor has not completed/submitted yet -> Reviewer buttons must NOT appear!
+      if (!isSubmittedByExecutor) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.hourglass_top_rounded, color: Color(0xFF64748B), size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isStatusRework
+                      ? 'Task in Rework by Executor • Waiting for Submission…'
+                      : isStatusReassigned
+                          ? 'Task Reassigned • Waiting for Executor to Submit…'
+                          : isStatusOpen
+                              ? 'Task Open • Waiting for Executor to Submit…'
+                              : 'Task in Progress by Executor • Waiting for Submission…',
+                  style: const TextStyle(
+                    color: Color(0xFF475569),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+
+      // 2. Reviewer already approved and it's pending Approver
       if (currentProcess == 'PENDING_APPROVER') {
         return Column(
           children: [
@@ -2777,12 +3245,15 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                 children: [
                   Icon(Icons.check_circle_outline_rounded, color: Color(0xFF7C3AED), size: 20),
                   SizedBox(width: 10),
-                  Text(
-                    'Approved by Reviewer • Pending Approver',
-                    style: TextStyle(
-                      color: Color(0xFF7C3AED),
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+                  Expanded(
+                    child: Text(
+                      'Approved by Reviewer • Pending Approver',
+                      style: TextStyle(
+                        color: Color(0xFF7C3AED),
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                      textAlign: TextAlign.center,
                     ),
                   ),
                 ],
@@ -2815,6 +3286,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         );
       }
 
+      // 3. Executor completed & submitted -> Reviewer gets Approve & Denied buttons!
       return _buildApproveRejectRow(
         label: 'Reviewer Actions',
         approveLabel: 'Approve',
@@ -2827,14 +3299,46 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     }
 
     // ── Approver sees task for approval ──────────────────
-    if (displayRole == 'Approver' && isTaskInReviewableState) {
-      final bool hasReviewer = (_reviewerEmpId != null && _reviewerEmpId != 0) ||
-          (task.reviewer != null && task.reviewer!.isNotEmpty && task.reviewer != '0' && task.reviewer != 'N/A') ||
-          (task.rawData?['reviewer'] != null && task.rawData!['reviewer'].toString().isNotEmpty && task.rawData!['reviewer'].toString() != '0');
+    if (isApproverRole && isTaskInReviewableState) {
+      // 1. Initial stage: Executor has not completed/submitted yet -> Approver buttons must NOT appear!
+      if (!isSubmittedByExecutor) {
+        return Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8FAFC),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFCBD5E1)),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.hourglass_top_rounded, color: Color(0xFF64748B), size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  isStatusRework
+                      ? 'Task in Rework by Executor • Waiting for Submission…'
+                      : isStatusReassigned
+                          ? 'Task Reassigned • Waiting for Executor to Submit…'
+                          : isStatusOpen
+                              ? 'Task Open • Waiting for Executor to Submit…'
+                              : 'Task in Progress by Executor • Waiting for Submission…',
+                  style: const TextStyle(
+                    color: Color(0xFF475569),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            ],
+          ),
+        );
+      }
 
-      final bool isApprovedByReviewer = currentProcess == 'PENDING_APPROVER' || !hasReviewer;
-
-      if (!isApprovedByReviewer) {
+      // 2. Executor has submitted, but Reviewer has not approved yet -> Approver buttons must NOT appear!
+      if (hasReviewer && !isApprovedByReviewer) {
         return Container(
           width: double.infinity,
           padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
@@ -2848,12 +3352,15 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
             children: [
               Icon(Icons.hourglass_top_rounded, color: Color(0xFFF97316), size: 20),
               SizedBox(width: 10),
-              Text(
-                'Waiting for Reviewer Review…',
-                style: TextStyle(
-                  color: Color(0xFFF97316),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13,
+              Expanded(
+                child: Text(
+                  'Waiting for Reviewer Review…',
+                  style: TextStyle(
+                    color: Color(0xFFF97316),
+                    fontWeight: FontWeight.w600,
+                    fontSize: 13,
+                  ),
+                  textAlign: TextAlign.center,
                 ),
               ),
             ],
@@ -2861,6 +3368,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
         );
       }
 
+      // 3. Reviewer has submitted/approved (or task has no reviewer) -> Approver gets Approve & Denied buttons!
       return _buildApproveRejectRow(
         label: 'Approver Actions',
         approveLabel: 'Approve',
@@ -2872,13 +3380,125 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       );
     }
 
-    // ── Under Review (Executor / Reviewer waiting) ───────────────────────
-    if (_status == 'Under Review') {
+    // ── Admin / Manager Oversight ───────────────────────────────────────
+    if (isAdminOrManager && isTaskInReviewableState) {
+      if (isSubmittedByExecutor) {
+        if (hasReviewer && !isApprovedByReviewer) {
+          return _buildApproveRejectRow(
+            label: 'Reviewer Actions ($displayRole Override)',
+            approveLabel: 'Approve (Reviewer)',
+            rejectLabel: 'Denied',
+            approveIcon: Icons.thumb_up_rounded,
+            rejectIcon: Icons.cancel_rounded,
+            onApprove: () => _handleCheckerAction('APPROVE'),
+            onReject: () => _handleCheckerAction('REJECT'),
+          );
+        } else {
+          return _buildApproveRejectRow(
+            label: 'Approver Actions ($displayRole Override)',
+            approveLabel: 'Approve & Close',
+            rejectLabel: 'Denied',
+            approveIcon: Icons.verified_rounded,
+            rejectIcon: Icons.cancel_rounded,
+            onApprove: () => _handleReviewerAction('APPROVE'),
+            onReject: () => _handleReviewerAction('REJECT'),
+          );
+        }
+      }
+
+      if (isStatusOpen) {
+        return SizedBox(
+          width: double.infinity,
+          child: ElevatedButton.icon(
+            onPressed: _startTask,
+            icon: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 20),
+            label: const Text(
+              'Start Working',
+              style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+            ),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF2563EB),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              elevation: 2,
+            ),
+          ),
+        );
+      }
+
+      if (isStatusInProgress || isStatusRework || isStatusReassigned) {
+        final canSubmit = _checklist.isEmpty || _checklist.every((c) => c['isDone'] == true);
+        final hasProcess = hasReviewer || hasApprover || _reviewerEmpId != null || _approverEmpId != null;
+
+        return Column(
+          children: [
+            SizedBox(
+              width: double.infinity,
+              child: !canSubmit
+                  ? ElevatedButton.icon(
+                      onPressed: () async {
+                        await _saveRemarksToStorage();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('✅ Remarks saved!'),
+                              backgroundColor: Colors.green,
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.save_outlined, color: Colors.white, size: 20),
+                      label: const Text(
+                        'Update',
+                        style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF2563EB),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 2,
+                      ),
+                    )
+                  : ElevatedButton.icon(
+                      onPressed: () => _confirmSubmission(hasProcess),
+                      icon: Icon(
+                        hasProcess
+                            ? (isStatusRework || isStatusReassigned ? Icons.redo_rounded : Icons.send_rounded)
+                            : Icons.check_circle_outline_rounded,
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                      label: Text(
+                        hasProcess
+                            ? (isStatusRework || isStatusReassigned ? 'Resubmit for Review' : 'Submit for Review')
+                            : 'Mark as Complete',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 13,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: hasProcess ? const Color(0xFFEA580C) : Colors.green,
+                        padding: const EdgeInsets.symmetric(vertical: 13),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 2,
+                      ),
+                    ),
+            ),
+          ],
+        );
+      }
+    }
+
+    // ── Executor: Under Review ──────────────────────────────────────────
+    if (isExecutorRole && isStatusUnderReview) {
       return Column(
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 14),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
             decoration: BoxDecoration(
               color: const Color(0xFFF3F0FF),
               borderRadius: BorderRadius.circular(12),
@@ -2889,12 +3509,15 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
               children: [
                 Icon(Icons.hourglass_top_rounded, color: Color(0xFF7C3AED), size: 20),
                 SizedBox(width: 10),
-                Text(
-                  'Waiting for Review…',
-                  style: TextStyle(
-                    color: Color(0xFF7C3AED),
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
+                Expanded(
+                  child: Text(
+                    'Waiting for Review…',
+                    style: TextStyle(
+                      color: Color(0xFF7C3AED),
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                    textAlign: TextAlign.center,
                   ),
                 ),
               ],
@@ -2927,8 +3550,8 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       );
     }
 
-    // ── Executor: Open / Pending / Overdue / Assigned ────────────────────────
-    if (displayRole == 'Executor' && (_status == 'Open' || _status == 'Pending' || _status == 'Overdue' || _status == 'Assigned' || _status == 'To-Do')) {
+    // ── Executor: Open / Pending / Overdue / Assigned ────────────────────
+    if (isExecutorRole && isStatusOpen) {
       return SizedBox(
         width: double.infinity,
         child: ElevatedButton.icon(
@@ -2948,10 +3571,10 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       );
     }
 
-    // ── Executor: In Progress / Rework / Reassigned / WIP ──────────────────
-    if (displayRole == 'Executor' && (_status == 'In Progress' || _status == 'Rework' || _status == 'Reassigned' || _status == 'WIP')) {
+    // ── Executor: In Progress / Rework / Reassigned / WIP ────────────────
+    if (isExecutorRole && (isStatusInProgress || isStatusRework || isStatusReassigned)) {
       final canSubmit = _checklist.isEmpty || _checklist.every((c) => c['isDone'] == true);
-      final hasProcess = _reviewerEmpId != null || _approverEmpId != null;
+      final hasProcess = hasReviewer || hasApprover || _reviewerEmpId != null || _approverEmpId != null;
 
       return Column(
         children: [
@@ -2987,14 +3610,14 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
                     onPressed: () => _confirmSubmission(hasProcess),
                     icon: Icon(
                       hasProcess
-                          ? (_status == 'Rework' || _status == 'Reassigned' ? Icons.redo_rounded : Icons.send_rounded)
+                          ? (isStatusRework || isStatusReassigned ? Icons.redo_rounded : Icons.send_rounded)
                           : Icons.check_circle_outline_rounded,
                       color: Colors.white,
                       size: 18,
                     ),
                     label: Text(
                       hasProcess
-                          ? (_status == 'Rework' || _status == 'Reassigned' ? 'Resubmit for Review' : 'Submit for Review')
+                          ? (isStatusRework || isStatusReassigned ? 'Resubmit for Review' : 'Submit for Review')
                           : 'Mark as Complete',
                       style: const TextStyle(
                         color: Colors.white,
@@ -3014,8 +3637,45 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
       );
     }
 
-    // ── Default fallback ───────────────────────────────────────
-    return const SizedBox.shrink();
+    // ── Assigner / Viewer / Fallback Status Banner ───────────────────────
+    final String execDisplay = _formatDisplayName(_executorName).isNotEmpty && _formatDisplayName(_executorName) != 'Unassigned'
+        ? _formatDisplayName(_executorName)
+        : 'Executor';
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFCBD5E1)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const Icon(Icons.assignment_ind_outlined, color: Color(0xFF64748B), size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              isStatusRework
+                  ? 'Task in Rework • Assigned to $execDisplay'
+                  : isStatusReassigned
+                      ? 'Task Reassigned • Assigned to $execDisplay'
+                      : isStatusOpen
+                          ? 'Task Open • Assigned to $execDisplay'
+                          : isStatusUnderReview
+                              ? 'Task Under Review • Assigned to $execDisplay'
+                              : 'Task in Progress • Assigned to $execDisplay',
+              style: const TextStyle(
+                color: Color(0xFF475569),
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildApproveRejectRow({
@@ -3096,7 +3756,38 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     bool isValuePurple = false,
     bool isValueRed = false,
     bool isStatusBadge = false,
+    bool isLeadLagBadge = false,
   }) {
+    if (isLeadLagBadge) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 6.0),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            Padding(
+              padding: const EdgeInsets.only(top: 2.0),
+              child: Icon(icon, size: 18, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(width: 12),
+            Padding(
+              padding: const EdgeInsets.only(top: 2.0),
+              child: Text(
+                label,
+                style: const TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              ),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Align(
+                alignment: Alignment.centerRight,
+                child: _buildLeadLagBadge(value),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
     Color badgeBgColor = const Color(0xFFEFF6FF);
     Color badgeTextColor = Colors.blue;
 
@@ -3106,9 +3797,16 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     } else if (value == 'Open' || value == 'Pending') {
       badgeBgColor = const Color(0xFFEFF6FF);
       badgeTextColor = const Color(0xFF2563EB);
-    } else if (value == 'In Progress' || value == 'Work In Progress' || value == 'Executor') {
-      badgeBgColor = const Color(0xFFFFF7ED);
+    } else if (value == 'In Progress' ||
+        value == 'Work In Progress' ||
+        value == 'Executor' ||
+        value == 'Executor (External)' ||
+        value.contains('Executor')) {
+      badgeBgColor = const Color(0xFFFEF3C7);
       badgeTextColor = const Color(0xFFF59E0B);
+    } else if (value == 'Assigner' || value == 'Assigned By' || value == 'Assigned by Me' || value == 'Creator') {
+      badgeBgColor = const Color(0xFFEFF6FF);
+      badgeTextColor = const Color(0xFF2563EB);
     } else if (value == 'Closed' || value == 'Completed') {
       badgeBgColor = const Color(0xFFF0FDF4);
       badgeTextColor = const Color(0xFF16A34A);
@@ -3127,6 +3825,9 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
     } else if (value == 'Approver') {
       badgeBgColor = const Color(0xFFFFF7ED);
       badgeTextColor = Colors.orange.shade800;
+    } else if (value == 'Admin' || value == 'Manager' || value == 'Viewer') {
+      badgeBgColor = const Color(0xFFF1F5F9);
+      badgeTextColor = const Color(0xFF475569);
     }
 
     return Padding(
@@ -3283,7 +3984,13 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
 
   Widget _buildTeamAddedMetaRow() {
     final int teamSize = _currentTaskTeam.length;
-    if (teamSize == 0) return const SizedBox.shrink();
+    if (teamSize == 0) {
+      return _buildMetaRow(
+        'Team Members',
+        Icons.people_outline,
+        _isLoadingData ? 'Loading...' : 'None',
+      );
+    }
 
     final int displayCount = teamSize > 3 ? 3 : teamSize;
     final List<Widget> avatarStack = [];
@@ -3388,7 +4095,7 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
             ),
             const SizedBox(width: 12),
             const Text(
-              'Collabrators',
+              'Team Members',
               style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
             ),
             const Spacer(),
@@ -3399,6 +4106,150 @@ class _TaskDetailsScreenState extends State<TaskDetailsScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  double calculateTaskProgress() {
+    final statusUpper = (task.status).toUpperCase();
+    final rawStsUpper = (_rawDbStatus).toUpperCase();
+    final isClosed = task.isCompleted ||
+        statusUpper == 'CLOSED' ||
+        statusUpper == 'COMPLETED' ||
+        rawStsUpper == 'CLOSED' ||
+        rawStsUpper == 'COMPLETED' ||
+        rawStsUpper == 'C';
+
+    final hasReviewer = _reviewerName.isNotEmpty &&
+        !_reviewerName.toLowerCase().contains('not assigned') &&
+        _reviewerName.toLowerCase() != 'n/a';
+    final hasApprover = _approverName.isNotEmpty &&
+        !_approverName.toLowerCase().contains('not assigned') &&
+        _approverName.toLowerCase() != 'n/a';
+    final bool hasProcess = hasReviewer || hasApprover;
+
+    final int totalChecklists = _checklist.length;
+    int completedChecklists = 0;
+    for (final item in _checklist) {
+      if (item is Map) {
+        final isChecked = item['isDone'] == true ||
+            item['isChecked'] == true ||
+            item['is_checked'] == true ||
+            item['checked'] == true ||
+            item['sts'] == 'C' ||
+            item['status'] == 'Completed' ||
+            item['status'] == 'C';
+        if (isChecked) completedChecklists++;
+      }
+    }
+
+    if (isClosed) return 100.0;
+
+    if (!hasProcess) {
+      // WITHOUT PROCESS: 100% checklist-driven
+      if (totalChecklists > 0) {
+        return (completedChecklists / totalChecklists) * 100.0;
+      } else {
+        if (statusUpper == 'IN PROGRESS' || statusUpper == 'WIP' || statusUpper == 'UNDER REVIEW') {
+          return 50.0;
+        }
+        return 0.0;
+      }
+    } else {
+      // WITH PROCESS: Reviewer = 10%, Approver = 10%, Executor/Checklist = 80%
+      double progress = 0.0;
+
+      // 1) Executor / Checklist phase (Max 80%)
+      final bool isSubmittedOrBeyond = statusUpper.contains('REVIEW') ||
+          statusUpper.contains('APPROV') ||
+          statusUpper.contains('SUBMIT') ||
+          rawStsUpper.contains('REVIEW') ||
+          rawStsUpper.contains('APPROV');
+
+      if (isSubmittedOrBeyond) {
+        progress = 80.0;
+      } else if (totalChecklists > 0) {
+        progress = (completedChecklists / totalChecklists) * 80.0;
+      } else if (statusUpper == 'IN PROGRESS' || statusUpper == 'WIP') {
+        progress = 40.0;
+      } else {
+        progress = 0.0;
+      }
+
+      // 2) Reviewer phase (+10%)
+      final bool isReviewerDone = statusUpper.contains('APPROV') ||
+          statusUpper.contains('APPROVED') ||
+          statusUpper == 'CLOSED' ||
+          statusUpper == 'COMPLETED' ||
+          rawStsUpper.contains('APPROV');
+      if (isReviewerDone) {
+        progress += 10.0;
+      }
+
+      // 3) Approver phase (+10%)
+      if (isClosed) {
+        progress += 10.0;
+      }
+
+      return progress.clamp(0.0, 100.0);
+    }
+  }
+
+    Widget _buildTaskProgressMetaRow() {
+    final double progressPct = calculateTaskProgress();
+    final String pctStr = '${progressPct.toStringAsFixed(1)}%';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(
+                Icons.bar_chart_rounded,
+                size: 18,
+                color: Color(0xFF64748B),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Task Progress',
+                style: TextStyle(color: Color(0xFF64748B), fontSize: 13),
+              ),
+              const Spacer(),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFEFF6FF),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFBFDBFE), width: 0.5),
+                ),
+                child: Text(
+                  pctStr,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF2563EB),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(4),
+            child: LinearProgressIndicator(
+              value: (progressPct / 100.0).clamp(0.0, 1.0),
+              minHeight: 6,
+              backgroundColor: const Color(0xFFE2E8F0),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                progressPct >= 100.0
+                    ? const Color(0xFF16A34A)
+                    : const Color(0xFF2563EB),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -3907,5 +4758,176 @@ class ArrowBannerClipper extends CustomClipper<Path> {
 
   @override
   bool shouldReclip(CustomClipper<Path> oldClipper) => false;
+}
+
+String calculateTaskLeadLag(TaskItem task, [bool? isCompletedOverride]) {
+  final bool isCompleted = isCompletedOverride ?? task.isCompleted;
+
+  // Check explicit backend lead/lag/schedule status first
+  final String? apiStatus = task.rawData?['leadLagStatus']?.toString() ?? 
+                            task.rawData?['lead_lag_status']?.toString() ?? 
+                            task.rawData?['leadLagStatusStr']?.toString() ?? 
+                            task.rawData?['scheduleStatus']?.toString();
+  if (apiStatus != null && 
+      apiStatus.isNotEmpty && 
+      apiStatus.toLowerCase() != 'null' && 
+      apiStatus.toLowerCase() != 'n/a') {
+    return _cleanLeadLagLabel(apiStatus);
+  }
+
+  String? endStr = task.endDate ?? task.rawEndDt ?? task.date;
+  if (endStr.isEmpty || endStr.toLowerCase() == 'no date' || endStr.toLowerCase() == 'n/a') {
+    return 'ON TIME';
+  }
+
+  DateTime? endDt;
+  try {
+    endDt = DateTime.parse(endStr);
+  } catch (_) {
+    endDt = TaskItem.parseDateTime(endStr);
+  }
+  if (endDt == null) return 'ON TIME';
+
+  final targetDate = DateTime(endDt.year, endDt.month, endDt.day);
+  final now = DateTime.now();
+  final today = DateTime(now.year, now.month, now.day);
+
+  if (!isCompleted) {
+    final diffDays = targetDate.difference(today).inDays;
+    if (diffDays < 0) {
+      return 'OVERDUE (${diffDays.abs()} DAYS)';
+    } else if (diffDays == 0) {
+      return 'DUE TODAY';
+    } else {
+      return 'LEAD ($diffDays DAYS)';
+    }
+  }
+
+  // Task IS completed -> Calculate exact Lead/Lag days relative to actual completed date
+  String? actStr = task.rawData?['compDt']?.toString() ??
+                   task.rawData?['completedDt']?.toString() ??
+                   task.rawData?['actCmpDt']?.toString() ??
+                   task.rawData?['act_cmp_dt']?.toString() ??
+                   task.rawData?['actlEndDt']?.toString() ??
+                   task.rawData?['updDt']?.toString();
+  DateTime refDate = today;
+
+  if (actStr != null && actStr.isNotEmpty) {
+    DateTime? actDt;
+    try { actDt = DateTime.parse(actStr); } catch (_) { actDt = TaskItem.parseDateTime(actStr); }
+    if (actDt != null) {
+      refDate = DateTime(actDt.year, actDt.month, actDt.day);
+    }
+  }
+
+  final diffDays = targetDate.difference(refDate).inDays;
+
+  if (diffDays > 0) {
+    return 'LEAD ($diffDays DAYS)';
+  } else if (diffDays < 0) {
+    return 'LAG (${diffDays.abs()} DAYS)';
+  } else {
+    return 'ON TIME';
+  }
+}
+
+String _cleanLeadLagLabel(String statusStr) {
+  final s = statusStr.trim();
+  if (s.isEmpty || s.toLowerCase() == 'null' || s.toLowerCase() == 'n/a' || s.toLowerCase() == 'none') {
+    return 'ON TIME';
+  }
+
+  final Match? numberMatch = RegExp(r'\d+').firstMatch(s);
+  final String? daysNum = numberMatch?.group(0);
+  final String lower = s.toLowerCase();
+
+  if (lower.contains('on time')) {
+    return 'ON TIME';
+  } else if (lower.contains('due today')) {
+    return 'DUE TODAY';
+  } else if (lower.contains('overdue')) {
+    if (daysNum != null && daysNum.isNotEmpty) {
+      return 'OVERDUE ($daysNum DAYS)';
+    }
+    return 'OVERDUE';
+  } else if (lower.contains('lead') || lower.contains('ahead')) {
+    if (daysNum != null && daysNum.isNotEmpty) {
+      return 'LEAD ($daysNum DAYS)';
+    }
+    return 'LEAD';
+  } else if (lower.contains('lag') || lower.contains('behind') || lower.contains('delay')) {
+    if (daysNum != null && daysNum.isNotEmpty) {
+      return 'LAG ($daysNum DAYS)';
+    }
+    return 'LAG';
+  } else if (daysNum != null && daysNum.isNotEmpty) {
+    return 'LAG ($daysNum DAYS)';
+  }
+
+  String cleaned = s.replaceAll(RegExp(r'^schedule:\s*', caseSensitive: false), '').replaceAll('+', '').replaceAll('-', '').trim();
+  return cleaned.toUpperCase();
+}
+
+Widget _buildLeadLagBadge(String statusStr) {
+  final String s = statusStr.trim().toLowerCase();
+  
+  if (s == 'null' || s == 'n/a' || s.isEmpty || s == 'none') {
+    return _buildLeadLagPill('ON TIME', const Color(0xffDBEAFE), const Color(0xff2563EB));
+  }
+
+  bool isLead = s.contains('lead') || s == 'ahead';
+  bool isLag = s.contains('lag') || s == 'behind' || s == 'delay' || s.contains('overdue');
+  bool isDueToday = s.contains('due today');
+
+  final String label = _cleanLeadLagLabel(statusStr);
+
+  if (isLead) {
+    return _buildLeadLagPill(label, const Color(0xffDCFCE7), const Color(0xff16A34A));
+  } else if (isLag) {
+    return _buildLeadLagPill(label, const Color(0xffFEE2E2), const Color(0xffDC2626));
+  } else if (isDueToday) {
+    return _buildLeadLagPill(label, const Color(0xffFEF3C7), const Color(0xffD97706));
+  } else {
+    return _buildLeadLagPill(label, const Color(0xffDBEAFE), const Color(0xff2563EB));
+  }
+}
+
+Widget _buildLeadLagPill(String label, Color bgColor, Color textColor) {
+  return Container(
+    padding: const EdgeInsets.symmetric(
+      horizontal: 8,
+      vertical: 3.5,
+    ),
+    decoration: BoxDecoration(
+      color: bgColor,
+      borderRadius: BorderRadius.circular(16),
+      border: Border.all(
+        color: textColor.withValues(alpha: 0.3),
+        width: 1,
+      ),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Container(
+          width: 5,
+          height: 5,
+          decoration: BoxDecoration(
+            color: textColor,
+            shape: BoxShape.circle,
+          ),
+        ),
+        const SizedBox(width: 5),
+        Text(
+          label,
+          style: TextStyle(
+            color: textColor,
+            fontSize: 9.5,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ],
+    ),
+  );
 }
 
