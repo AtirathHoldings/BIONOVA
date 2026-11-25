@@ -101,6 +101,14 @@ const Login = ({ onLogin }) => {
         if (data.empId) {
           sessionStorage.setItem("empId", String(data.empId));
         }
+        if (data.landingRoute) {
+          sessionStorage.setItem("landingRoute", data.landingRoute);
+          localStorage.setItem("landingRoute", data.landingRoute);
+        }
+        if (data.defaultScreen) {
+          sessionStorage.setItem("defaultScreen", data.defaultScreen);
+          localStorage.setItem("defaultScreen", data.defaultScreen);
+        }
         
         let realName = "";
         let realDesignation = "";
@@ -179,7 +187,7 @@ const Login = ({ onLogin }) => {
           localStorage.removeItem('rememberedPassword');
         }
 
-        onLogin(true, data.role || "full_access");
+        onLogin(true, data.role || "full_access", data.landingRoute);
       } else {
         const msg = data?.message || "Invalid Email or Password";
         if (msg.toLowerCase().includes("user not found")) {

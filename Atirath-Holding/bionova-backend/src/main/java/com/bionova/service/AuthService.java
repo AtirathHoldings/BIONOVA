@@ -23,19 +23,22 @@ public class AuthService {
     private final RoleBasedEmployeeMappingRepository employeeMappingRepository;
     private final RoleBasedAccessControlRepository rbacRepository;
     private final EmployeeSettingsService employeeSettingsService;
+    private final RbacService rbacService;
 
     public AuthService(EmployeeRepository employeeRepository,
                        PasswordEncoder passwordEncoder,
                        JwtUtil jwtUtil,
                        RoleBasedEmployeeMappingRepository employeeMappingRepository,
                        RoleBasedAccessControlRepository rbacRepository,
-                       EmployeeSettingsService employeeSettingsService) {
+                       EmployeeSettingsService employeeSettingsService,
+                       RbacService rbacService) {
         this.employeeRepository = employeeRepository;
         this.passwordEncoder = passwordEncoder;
         this.jwtUtil = jwtUtil;
         this.employeeMappingRepository = employeeMappingRepository;
         this.rbacRepository = rbacRepository;
         this.employeeSettingsService = employeeSettingsService;
+        this.rbacService = rbacService;
     }
 
     public LoginResponse login(LoginRequest request, String userAgent) {
@@ -90,7 +93,11 @@ public class AuthService {
         String determinedDevice = determineDeviceInfo(userAgent, request.getDeviceInfo());
         employeeSettingsService.recordLoginActivity(employee.getEmpId(), determinedDevice);
 
-        return new LoginResponse(true, "Login Success", role, token, employee.getEmpId());
+        String landingRoute = rbacService.determineLandingRoute(employee.getEmpId(), role);
+        String defaultScreen = rbacService.determineDefaultScreenCode(employee.getEmpId(), role);
+        boolean hasRbac = rbacService.hasRbacConfigured(employee.getEmpId());
+
+        return new LoginResponse(true, "Login Success", role, token, employee.getEmpId(), landingRoute, defaultScreen, hasRbac);
     }
 
     private String determineDeviceInfo(String userAgent, String requestDeviceInfo) {

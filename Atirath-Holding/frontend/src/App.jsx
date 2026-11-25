@@ -76,6 +76,9 @@ const AppContent = () => {
       return '/dashboard';
     }
 
+    // Check if backend or login returned a landing route
+    const savedLandingRoute = sessionStorage.getItem("landingRoute") || localStorage.getItem("landingRoute");
+
     // Check RBAC permissions in sessionStorage / localStorage
     const rawPerms = sessionStorage.getItem("userPermissions") || localStorage.getItem("userPermissions");
     if (rawPerms) {
@@ -90,23 +93,54 @@ const AppContent = () => {
           return '/dashboard';
         }
 
-        // 2. Project Dashboard access -> /pm-dashboard
-        const hasProjectDashboard = perms.some(
-          p => (p.screenCode === 'PROJECT_DASHBOARD' || p.screenCode === 'PROJECT_CREATION') && (p.viewFlg || p.view_flg)
-        );
-        if (hasProjectDashboard) {
+        // 2. Check if user has specific new operational module access:
+        const hasInventory = perms.some(p => p.screenCode === 'INVENTORY_MANAGEMENT' && (p.viewFlg || p.view_flg));
+        const hasVisitor = perms.some(p => p.screenCode === 'VISITOR_MANAGEMENT' && (p.viewFlg || p.view_flg));
+        const hasExecutive = perms.some(p => p.screenCode === 'EXECUTIVE_MODULE' && (p.viewFlg || p.view_flg));
+        const hasProcurement = perms.some(p => p.screenCode === 'PROCUREMENT_MANAGEMENT' && (p.viewFlg || p.view_flg));
+        const hasAsset = perms.some(p => p.screenCode === 'ASSET_MAINTENANCE' && (p.viewFlg || p.view_flg));
+        const hasDispatch = perms.some(p => p.screenCode === 'FLEET_DISPATCH' && (p.viewFlg || p.view_flg));
+        const hasHarvesting = perms.some(p => (p.screenCode === 'HARVESTING_MODULE' || p.screenCode === 'HARVESTING' || p.screenCode === 'HARVESTING_MANAGEMENT') && (p.viewFlg || p.view_flg));
+        const hasDpr = perms.some(p => (p.screenCode === 'DPR_MANAGEMENT' || p.screenCode === 'DPR' || p.screenCode === 'DAILY_PROGRESS_REPORT') && (p.viewFlg || p.view_flg));
+        const hasUserDashboard = perms.some(p => p.screenCode === 'USER_DASHBOARD' && (p.viewFlg || p.view_flg));
+        const hasProjectDashboard = perms.some(p => (p.screenCode === 'PROJECT_DASHBOARD' || p.screenCode === 'PROJECT_CREATION') && (p.viewFlg || p.view_flg));
+
+        // If user does not have User Dashboard or Project Dashboard, route to their module's first screen!
+        if (!hasUserDashboard && !hasProjectDashboard) {
+          if (hasInventory) return '/inventory';
+          if (hasVisitor) return '/visitor-management';
+          if (hasExecutive) return '/executive';
+          if (hasProcurement) return '/procurement';
+          if (hasAsset) return '/asset-maintenance';
+          if (hasDispatch) return '/dispatch-logistics';
+          if (hasHarvesting) return '/harvesting';
+          if (hasDpr) return '/dpr';
+        }
+
+        // If user's role specifically matches one of the operational modules:
+        if (lowerRole.includes('inventory') && hasInventory) return '/inventory';
+        if (lowerRole.includes('visitor') && hasVisitor) return '/visitor-management';
+        if (lowerRole.includes('executive') && hasExecutive) return '/executive';
+        if ((lowerRole.includes('procurement') || lowerRole.includes('supply')) && hasProcurement) return '/procurement';
+        if (lowerRole.includes('harvest') && hasHarvesting) return '/harvesting';
+        if (lowerRole.includes('dpr') && hasDpr) return '/dpr';
+
+        // 3. Project Dashboard access -> /pm-dashboard
+        if (hasProjectDashboard && (lowerRole.includes('pm') || lowerRole.includes('project') || lowerRole.includes('manager') || !hasUserDashboard)) {
           return '/pm-dashboard';
         }
 
-        // 3. User Dashboard access -> /user-dashboard
-        const hasUserDashboard = perms.some(
-          p => p.screenCode === 'USER_DASHBOARD' && (p.viewFlg || p.view_flg)
-        );
+        // 4. User Dashboard access -> /user-dashboard
         if (hasUserDashboard) {
           return '/user-dashboard';
         }
 
-        // 4. Any other accessible screen
+        // 5. If savedLandingRoute is available, respect it
+        if (savedLandingRoute && savedLandingRoute !== '/' && savedLandingRoute !== '/user-dashboard') {
+          return savedLandingRoute;
+        }
+
+        // 6. Any other accessible screen
         const firstAllowed = perms.find(p => (p.viewFlg || p.view_flg));
         if (firstAllowed) {
           const SCREEN_PATHS = {
@@ -156,6 +190,10 @@ const AppContent = () => {
       }
     }
 
+    if (savedLandingRoute && savedLandingRoute !== '/') {
+      return savedLandingRoute;
+    }
+
     if (lowerRole === 'project_manager' || lowerRole === 'pm' || lowerRole === 'manager') {
       return '/pm-dashboard';
     } else {
@@ -163,10 +201,11 @@ const AppContent = () => {
     }
   };
 
-  const handleLogin = (status, role) => {
+  const handleLogin = (status, role, landingRoute) => {
     setIsLoggedIn(status);
     setUserRole(role);
-    navigate(getDashboardRoute(role), { replace: true });
+    const targetRoute = landingRoute || getDashboardRoute(role);
+    navigate(targetRoute, { replace: true });
   };
 
   const handleLogout = () => {

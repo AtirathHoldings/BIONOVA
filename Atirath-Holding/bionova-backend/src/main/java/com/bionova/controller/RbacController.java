@@ -42,13 +42,33 @@ public class RbacController {
     }
 
     /**
-     * Returns whether RBAC has been configured for the given employee.
-     * Frontend uses this to decide: show all menus (no RBAC) vs. show filtered menus (RBAC set).
+     * Returns whether RBAC has been configured for the given employee along with initial landing route.
+     * Frontend & Mobile use this to decide default landing screen and menu filtering.
      */
     @GetMapping("/employees/{empId}/has-rbac")
     public ResponseEntity<Map<String, Object>> hasRbac(@PathVariable Long empId) {
         boolean hasRbac = rbacService.hasRbacConfigured(empId);
-        return ResponseEntity.ok(Map.of("hasRbac", hasRbac, "empId", empId));
+        String landingRoute = rbacService.determineLandingRoute(empId, null);
+        String defaultScreen = rbacService.determineDefaultScreenCode(empId, null);
+        return ResponseEntity.ok(Map.of(
+            "hasRbac", hasRbac,
+            "empId", empId,
+            "landingRoute", landingRoute,
+            "defaultScreen", defaultScreen
+        ));
+    }
+
+    @GetMapping("/employees/{empId}/landing-route")
+    public ResponseEntity<Map<String, Object>> getLandingRoute(@PathVariable Long empId) {
+        String landingRoute = rbacService.determineLandingRoute(empId, null);
+        String defaultScreen = rbacService.determineDefaultScreenCode(empId, null);
+        boolean hasRbac = rbacService.hasRbacConfigured(empId);
+        return ResponseEntity.ok(Map.of(
+            "empId", empId,
+            "landingRoute", landingRoute,
+            "defaultScreen", defaultScreen,
+            "hasRbac", hasRbac
+        ));
     }
 
     @PostMapping("/save")

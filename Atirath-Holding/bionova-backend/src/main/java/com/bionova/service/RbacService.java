@@ -46,9 +46,11 @@ public class RbacService {
             ensureScreen("PROCUREMENT_MANAGEMENT", "Procurement & PO Management", "Supply Chain & Operations");
             ensureScreen("ASSET_MAINTENANCE", "Equipment & Asset Maintenance (CMMS)", "Supply Chain & Operations");
             ensureScreen("FLEET_DISPATCH", "Fleet & Dispatch Logistics", "Supply Chain & Operations");
-            ensureScreen("INVENTORY_MANAGEMENT", "Inventory Management", "Inventory");
-            ensureScreen("VISITOR_MANAGEMENT", "Visitor Management", "Visitor Management");
+            ensureScreen("INVENTORY_MANAGEMENT", "Inventory Management", "Operations");
+            ensureScreen("VISITOR_MANAGEMENT", "Visitor Management", "Operations");
             ensureScreen("EXECUTIVE_MODULE", "Executive Overview", "Executive");
+            ensureScreen("HARVESTING_MODULE", "Harvesting & Feedstock Batches", "Operations");
+            ensureScreen("DPR_MANAGEMENT", "Daily Progress Report (DPR)", "Operations");
         } catch (Exception e) {
             // Silently continue if DB temporarily read-only
         }
@@ -387,6 +389,190 @@ public class RbacService {
                     }
                 }
             }
+        }
+    }
+
+    public String determineLandingRoute(Long empId, String role) {
+        if (role != null) {
+            String lower = role.toLowerCase().trim();
+            if ("admin".equals(lower) || "super_admin".equals(lower) || "full_access".equals(lower)) {
+                return "/dashboard";
+            }
+        }
+
+        if (empId == null) {
+            return "/user-dashboard";
+        }
+
+        List<ScreenPermissionDto> perms = getEmployeePermissions(empId);
+        if (perms == null || perms.isEmpty()) {
+            return "/user-dashboard";
+        }
+
+        List<ScreenPermissionDto> allowed = perms.stream()
+                .filter(p -> Boolean.TRUE.equals(p.getViewFlg()))
+                .collect(Collectors.toList());
+
+        if (allowed.isEmpty()) {
+            return "/user-dashboard";
+        }
+
+        // 1. If Admin Dashboard is allowed
+        if (allowed.stream().anyMatch(p -> "ADMIN_DASHBOARD".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/dashboard";
+        }
+
+        // Check if role name hints at specific module
+        String lowerRole = (role != null) ? role.toLowerCase() : "";
+        List<RoleBasedEmployeeMapping> mappings = employeeMappingRepository.findByEmpId(empId);
+        if (!mappings.isEmpty()) {
+            List<RoleBasedAccessControl> rbacList = rbacRepository.findByRoleId(mappings.get(0).getRoleId());
+            if (!rbacList.isEmpty() && rbacList.get(0).getRoleNm() != null) {
+                lowerRole = rbacList.get(0).getRoleNm().toLowerCase();
+            }
+        }
+
+        // If the role explicitly specifies one of the operational modules:
+        if (lowerRole.contains("inventory") && allowed.stream().anyMatch(p -> "INVENTORY_MANAGEMENT".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/inventory";
+        }
+        if (lowerRole.contains("visitor") && allowed.stream().anyMatch(p -> "VISITOR_MANAGEMENT".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/visitor-management";
+        }
+        if (lowerRole.contains("executive") && allowed.stream().anyMatch(p -> "EXECUTIVE_MODULE".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/executive";
+        }
+        if ((lowerRole.contains("procurement") || lowerRole.contains("supply")) && allowed.stream().anyMatch(p -> "PROCUREMENT_MANAGEMENT".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/procurement";
+        }
+        if (lowerRole.contains("asset") && allowed.stream().anyMatch(p -> "ASSET_MAINTENANCE".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/asset-maintenance";
+        }
+        if (lowerRole.contains("dispatch") && allowed.stream().anyMatch(p -> "FLEET_DISPATCH".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/dispatch-logistics";
+        }
+        if (lowerRole.contains("harvest") && allowed.stream().anyMatch(p -> "HARVESTING_MODULE".equalsIgnoreCase(p.getScreenCode()) || "HARVESTING".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/harvesting";
+        }
+        if (lowerRole.contains("dpr") && allowed.stream().anyMatch(p -> "DPR_MANAGEMENT".equalsIgnoreCase(p.getScreenCode()) || "DPR".equalsIgnoreCase(p.getScreenCode()))) {
+            return "/dpr";
+        }
+
+        // Check if user has User Dashboard or Project Dashboard
+        boolean hasUserDash = allowed.stream().anyMatch(p -> "USER_DASHBOARD".equalsIgnoreCase(p.getScreenCode()));
+        boolean hasPmDash = allowed.stream().anyMatch(p -> "PROJECT_DASHBOARD".equalsIgnoreCase(p.getScreenCode()) || "PROJECT_CREATION".equalsIgnoreCase(p.getScreenCode()));
+
+        // If user does NOT have User Dashboard and does NOT have Project Dashboard, check operational modules:
+        if (!hasUserDash && !hasPmDash) {
+            if (allowed.stream().anyMatch(p -> "INVENTORY_MANAGEMENT".equalsIgnoreCase(p.getScreenCode()))) {
+                return "/inventory";
+            }
+            if (allowed.stream().anyMatch(p -> "VISITOR_MANAGEMENT".equalsIgnoreCase(p.getScreenCode()))) {
+                return "/visitor-management";
+            }
+            if (allowed.stream().anyMatch(p -> "EXECUTIVE_MODULE".equalsIgnoreCase(p.getScreenCode()))) {
+                return "/executive";
+            }
+            if (allowed.stream().anyMatch(p -> "PROCUREMENT_MANAGEMENT".equalsIgnoreCase(p.getScreenCode()))) {
+                return "/procurement";
+            }
+            if (allowed.stream().anyMatch(p -> "ASSET_MAINTENANCE".equalsIgnoreCase(p.getScreenCode()))) {
+                return "/asset-maintenance";
+            }
+            if (allowed.stream().anyMatch(p -> "FLEET_DISPATCH".equalsIgnoreCase(p.getScreenCode()))) {
+                return "/dispatch-logistics";
+            }
+            if (allowed.stream().anyMatch(p -> "HARVESTING_MODULE".equalsIgnoreCase(p.getScreenCode()) || "HARVESTING".equalsIgnoreCase(p.getScreenCode()))) {
+                return "/harvesting";
+            }
+            if (allowed.stream().anyMatch(p -> "DPR_MANAGEMENT".equalsIgnoreCase(p.getScreenCode()) || "DPR".equalsIgnoreCase(p.getScreenCode()))) {
+                return "/dpr";
+            }
+            for (ScreenPermissionDto p : allowed) {
+                String route = mapScreenCodeToRoute(p.getScreenCode());
+                if (route != null) {
+                    return route;
+                }
+            }
+        }
+
+        // If user has Project Dashboard
+        if (hasPmDash && (lowerRole.contains("pm") || lowerRole.contains("project") || lowerRole.contains("manager") || !hasUserDash)) {
+            return "/pm-dashboard";
+        }
+
+        // If user has User Dashboard
+        if (hasUserDash) {
+            return "/user-dashboard";
+        }
+
+        // Fallback to first allowed screen or user-dashboard
+        for (ScreenPermissionDto p : allowed) {
+            String route = mapScreenCodeToRoute(p.getScreenCode());
+            if (route != null) {
+                return route;
+            }
+        }
+
+        return "/user-dashboard";
+    }
+
+    public String determineDefaultScreenCode(Long empId, String role) {
+        String route = determineLandingRoute(empId, role);
+        if ("/dashboard".equals(route)) return "ADMIN_DASHBOARD";
+        if ("/pm-dashboard".equals(route)) return "PROJECT_DASHBOARD";
+        if ("/user-dashboard".equals(route)) return "USER_DASHBOARD";
+        if ("/inventory".equals(route)) return "INVENTORY_MANAGEMENT";
+        if ("/visitor-management".equals(route)) return "VISITOR_MANAGEMENT";
+        if ("/executive".equals(route)) return "EXECUTIVE_MODULE";
+        if ("/procurement".equals(route)) return "PROCUREMENT_MANAGEMENT";
+        if ("/asset-maintenance".equals(route)) return "ASSET_MAINTENANCE";
+        if ("/dispatch-logistics".equals(route)) return "FLEET_DISPATCH";
+        if ("/harvesting".equals(route)) return "HARVESTING_MODULE";
+        if ("/dpr".equals(route)) return "DPR_MANAGEMENT";
+        return "USER_DASHBOARD";
+    }
+
+    public String mapScreenCodeToRoute(String screenCode) {
+        if (screenCode == null) return "/user-dashboard";
+        switch (screenCode.toUpperCase()) {
+            case "ADMIN_DASHBOARD": return "/dashboard";
+            case "COMPANY_CREATION": return "/company-creation";
+            case "PLANT_CREATION": return "/plant-creation";
+            case "LAND_CREATION": return "/agriland-allocation";
+            case "DEPARTMENT_CREATION": return "/department-creation";
+            case "DEPARTMENT_MAPPING": return "/department-mapping";
+            case "DESIGNATION_CREATION": return "/designation-creation";
+            case "EMPLOYEE_CREATION": return "/employee-creation";
+            case "PROJECT_CREATION": return "/project-creation";
+            case "MILESTONE_CREATION": return "/milestone-creation";
+            case "PROJECT_DASHBOARD": return "/pm-dashboard";
+            case "TASK_BOARD": return "/task-board";
+            case "GANTT_CHART":
+            case "ALL_PROJECT_GANTT_CHART": return "/all-project-gantt-chart";
+            case "USER_DASHBOARD": return "/user-dashboard";
+            case "MY_TASK": return "/my-tasks";
+            case "MY_PROJECTS": return "/projects";
+            case "CALENDAR": return "/calendar";
+            case "USER_TASK_BOARD": return "/user-task-board";
+            case "PUBLIC_HOLIDAYS": return "/public-holidays";
+            case "PROFILE": return "/profile";
+            case "INDIVIDUAL_TASK": return "/assignment";
+            case "ASSIGN_ACCESS": return "/assign-access";
+            case "PROJECT_ACCESS": return "/project-access";
+            case "INVENTORY_MANAGEMENT": return "/inventory";
+            case "VISITOR_MANAGEMENT": return "/visitor-management";
+            case "EXECUTIVE_MODULE": return "/executive";
+            case "PROCUREMENT_MANAGEMENT": return "/procurement";
+            case "ASSET_MAINTENANCE": return "/asset-maintenance";
+            case "FLEET_DISPATCH": return "/dispatch-logistics";
+            case "HARVESTING_MODULE":
+            case "HARVESTING_MANAGEMENT":
+            case "HARVESTING": return "/harvesting";
+            case "DPR_MANAGEMENT":
+            case "DPR":
+            case "DAILY_PROGRESS_REPORT": return "/dpr";
+            default: return "/user-dashboard";
         }
     }
 }

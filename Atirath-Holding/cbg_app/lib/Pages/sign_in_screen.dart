@@ -120,6 +120,7 @@ class _SignInPageState extends State<SignInPage> {
   bool _isLoading = false;
   String? _loginError;
   String? _emailError;
+  String? _passwordError;
 
   @override
   void initState() {
@@ -158,20 +159,20 @@ class _SignInPageState extends State<SignInPage> {
         _isLoading = true;
         _loginError = null;
         _emailError = null;
+        _passwordError = null;
       });
 
       try {
         final response = await http.post(
           Uri.parse('${dotenv.env['BASE_URL']}/api/auth/login'),
           headers: {
-            'key': 'value',
             'Content-Type': 'application/json',
           },
           body: jsonEncode({
             'email': _usernameController.text.trim(),
             'password': _passwordController.text.trim(),
           }),
-        ).timeout(const Duration(seconds: 10));
+        ).timeout(const Duration(seconds: 45));
 
         print('Status Code: ${response.statusCode}');
         print('Response Body: ${response.body}');
@@ -192,8 +193,11 @@ class _SignInPageState extends State<SignInPage> {
               await prefs.remove('savedPassword');
             }
             
-            // Purge previous employee cache
-            await ApiService.clearCache();
+            // Purge previous cache only if logging in as a different user
+            final previousEmail = prefs.getString('userEmail');
+            if (previousEmail != null && previousEmail.toLowerCase() != _usernameController.text.trim().toLowerCase()) {
+              await ApiService.clearCache();
+            }
 
             final String? tokenStr = (data['token'] ?? data['accessToken'] ?? data['jwt'] ?? data['jwtToken'] ?? data['data']?['token'])?.toString();
             if (tokenStr != null && tokenStr.isNotEmpty) {
@@ -202,26 +206,77 @@ class _SignInPageState extends State<SignInPage> {
             if (data['role'] != null) {
               await prefs.setString('userRole', data['role']);
             }
-            await prefs.setString('userEmail', _usernameController.text.trim());
+            final emailInput = _usernameController.text.trim();
+            await prefs.setString('userEmail', emailInput);
+            
+            final namePart = emailInput.split('@')[0];
+            final formattedName = namePart
+                .split(RegExp(r'[._]'))
+                .where((word) => word.isNotEmpty)
+                .map((word) => word[0].toUpperCase() + (word.length > 1 ? word.substring(1) : ''))
+                .join(' ');
+            if (formattedName.isNotEmpty) {
+              await prefs.setString('userName', formattedName);
+              await prefs.setString('fullName', formattedName);
+              await prefs.setString('cache_userName', formattedName);
+            }
+
+            final String? landingRoute = (data['landingRoute'] ?? data['landing_route'] ?? data['defaultRoute'] ?? data['default_route'])?.toString();
+            final String? defaultScreen = (data['defaultScreen'] ?? data['default_screen'])?.toString();
+            if (landingRoute != null && landingRoute.isNotEmpty) {
+              await prefs.setString('landingRoute', landingRoute);
+            }
+            if (defaultScreen != null && defaultScreen.isNotEmpty) {
+              await prefs.setString('defaultScreen', defaultScreen);
+            }
             
             if (mounted) {
+              final targetRoute = _resolveMobileRoute(landingRoute, defaultScreen);
               Navigator.pushReplacementNamed(
                 context,
-                '/main',
+                targetRoute,
               );
             }
             return;
           } else {
             setState(() {
-              final errMsg = data['message'] ?? 'Invalid email or password.';
-              _loginError = errMsg;
-              _emailError = errMsg;
+              final errMsg = (data['message'] ?? 'User not found').toString();
+              if (errMsg.toLowerCase().contains('password')) {
+                _passwordError = errMsg.isNotEmpty ? errMsg : 'Incorrect password. Please try again.';
+                _loginError = null;
+                _emailError = null;
+              } else if (errMsg.toLowerCase().contains('user') || errMsg.toLowerCase().contains('found') || errMsg.toLowerCase().contains('exist') || errMsg.toLowerCase().contains('not found') || errMsg.toLowerCase().contains('invalid credentials') || errMsg.toLowerCase().contains('invalid email')) {
+                _loginError = 'User not found';
+                _emailError = null;
+                _passwordError = null;
+              } else {
+                _emailError = errMsg;
+                _loginError = null;
+                _passwordError = null;
+              }
             });
           }
-        } else if (response.statusCode == 401 || response.statusCode == 400) {
+        } else if (response.statusCode == 401 || response.statusCode == 400 || response.statusCode == 404) {
+          Map<String, dynamic> data = {};
+          try {
+            data = jsonDecode(response.body) as Map<String, dynamic>;
+          } catch (_) {}
+          final errMsg = (data['message'] ?? data['error'] ?? '').toString();
+
           setState(() {
-            _loginError = 'Invalid email or password. Please try again.';
-            _emailError = 'Invalid email or password';
+            if (errMsg.toLowerCase().contains('password')) {
+              _passwordError = errMsg.isNotEmpty ? errMsg : 'Incorrect password. Please try again.';
+              _loginError = null;
+              _emailError = null;
+            } else if (errMsg.toLowerCase().contains('user') || errMsg.toLowerCase().contains('found') || errMsg.toLowerCase().contains('exist') || errMsg.toLowerCase().contains('not found') || errMsg.toLowerCase().contains('invalid credentials') || errMsg.toLowerCase().contains('invalid email') || errMsg.isEmpty) {
+              _loginError = 'User not found';
+              _emailError = null;
+              _passwordError = null;
+            } else {
+              _emailError = errMsg;
+              _loginError = null;
+              _passwordError = null;
+            }
           });
         } else {
           setState(() {
@@ -241,6 +296,27 @@ class _SignInPageState extends State<SignInPage> {
         }
       }
     }
+  }
+
+  String _resolveMobileRoute(String? landingRoute, String? defaultScreen) {
+    if (landingRoute == '/inventory' || defaultScreen == 'INVENTORY_MANAGEMENT') {
+      return '/inventory';
+    } else if (landingRoute == '/visitor-management' || landingRoute == '/visitors' || defaultScreen == 'VISITOR_MANAGEMENT') {
+      return '/visitor-management';
+    } else if (landingRoute == '/executive' || defaultScreen == 'EXECUTIVE_MODULE') {
+      return '/executive';
+    } else if (landingRoute == '/procurement' || defaultScreen == 'PROCUREMENT_MANAGEMENT') {
+      return '/procurement';
+    } else if (landingRoute == '/asset-maintenance' || defaultScreen == 'ASSET_MAINTENANCE') {
+      return '/asset-maintenance';
+    } else if (landingRoute == '/dispatch-logistics' || defaultScreen == 'FLEET_DISPATCH') {
+      return '/dispatch-logistics';
+    } else if (landingRoute == '/harvesting' || defaultScreen == 'HARVESTING_MODULE' || defaultScreen == 'HARVESTING') {
+      return '/harvesting';
+    } else if (landingRoute == '/dpr' || defaultScreen == 'DPR_MANAGEMENT' || defaultScreen == 'DPR') {
+      return '/dpr';
+    }
+    return '/main';
   }
 
   // =============================================
@@ -565,7 +641,7 @@ class _SignInPageState extends State<SignInPage> {
                                   vertical: 18,
                                   horizontal: 16,
                                 ),
-                                errorText: _emailError,
+                                errorText: _emailError != 'User not found' ? _emailError : null,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -615,6 +691,14 @@ class _SignInPageState extends State<SignInPage> {
                             TextFormField(
                               controller: _passwordController,
                               obscureText: _obscurePassword,
+                              autovalidateMode: AutovalidateMode.onUserInteraction,
+                              onChanged: (val) {
+                                if (_passwordError != null) {
+                                  setState(() {
+                                    _passwordError = null;
+                                  });
+                                }
+                              },
                               decoration: InputDecoration(
                                 labelText: 'Password',
                                 prefixIcon: const Icon(Icons.lock_outline),
@@ -636,6 +720,7 @@ class _SignInPageState extends State<SignInPage> {
                                   vertical: 18,
                                   horizontal: 16,
                                 ),
+                                errorText: _passwordError,
                                 border: OutlineInputBorder(
                                   borderRadius: BorderRadius.circular(16),
                                 ),
@@ -649,6 +734,19 @@ class _SignInPageState extends State<SignInPage> {
                                   borderRadius: BorderRadius.circular(16),
                                   borderSide: const BorderSide(
                                     color: Color(0xFF2469F5),
+                                  ),
+                                ),
+                                errorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Colors.red,
+                                  ),
+                                ),
+                                focusedErrorBorder: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                  borderSide: const BorderSide(
+                                    color: Colors.red,
+                                    width: 2,
                                   ),
                                 ),
                               ),
@@ -723,7 +821,7 @@ class _SignInPageState extends State<SignInPage> {
                                     ),
                             ),
 
-                            if (_loginError != null) ...[
+                             if (_loginError != null || _emailError != null || _passwordError != null) ...[
                               const SizedBox(height: 16),
                               Container(
                                 padding: const EdgeInsets.symmetric(
@@ -737,7 +835,8 @@ class _SignInPageState extends State<SignInPage> {
                                     color: Colors.red.shade200,
                                   ),
                                 ),
-                                child: Row(
+                                 child: Row(
+                                  mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
                                     Icon(
                                       Icons.error_outline,
@@ -745,13 +844,14 @@ class _SignInPageState extends State<SignInPage> {
                                       size: 20,
                                     ),
                                     const SizedBox(width: 10),
-                                    Expanded(
+                                    Flexible(
                                       child: Text(
-                                        _loginError!,
+                                        _loginError ?? _emailError ?? _passwordError ?? 'User not found',
+                                        textAlign: TextAlign.center,
                                         style: TextStyle(
                                           color: Colors.red.shade800,
                                           fontSize: 13,
-                                          fontWeight: FontWeight.w500,
+                                          fontWeight: FontWeight.w600,
                                         ),
                                       ),
                                     ),
