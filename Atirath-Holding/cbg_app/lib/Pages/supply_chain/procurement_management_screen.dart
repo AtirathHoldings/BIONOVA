@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import '../../services/rbac_service.dart';
@@ -120,6 +121,70 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
       ),
     );
     return res == true;
+  }
+
+  void _viewSupplierDetails(Map<String, dynamic> s) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFF3E8FF), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.business_outlined, color: Color(0xFF7C3AED), size: 22),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                s['name']?.toString() ?? 'Supplier Details',
+                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow('Strategic Tier', s['tier']?.toString() ?? '—'),
+              _detailRow('Supply Category', s['category']?.toString() ?? '—'),
+              _detailRow('GSTIN Number', s['gstin']?.toString() ?? '—'),
+              _detailRow('Contact Person', s['contactPerson']?.toString() ?? '—'),
+              _detailRow('Phone Number', s['phone']?.toString() ?? '—'),
+              _detailRow('Email Address', s['email']?.toString() ?? '—'),
+              _detailRow('Payment Terms', s['paymentTerms']?.toString() ?? '—'),
+              _detailRow('Account Status', s['status']?.toString() ?? 'Active'),
+            ],
+          ),
+        ),
+        actions: [
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: GoogleFonts.inter(fontSize: 11, color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+          const SizedBox(height: 1),
+          Text(value, style: GoogleFonts.inter(fontSize: 13.5, color: const Color(0xFF0F172A), fontWeight: FontWeight.w600)),
+          const Divider(height: 10, color: Color(0xFFF1F5F9)),
+        ],
+      ),
+    );
   }
 
   String _generateNextPoNumber() {
@@ -772,19 +837,75 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                   const SizedBox(height: 10),
                   TextFormField(
                     controller: gstinCtrl,
+                    textCapitalization: TextCapitalization.characters,
+                    inputFormatters: [
+                      LengthLimitingTextInputFormatter(15),
+                      FilteringTextInputFormatter.allow(RegExp(r'[A-Za-z0-9]')),
+                    ],
                     decoration: moduleInputDecoration('GSTIN Number *', hint: '36AABCB1234F1Z8'),
-                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Required';
+                      final reg = RegExp(r'^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$');
+                      if (!reg.hasMatch(v.trim().toUpperCase())) {
+                        return 'Invalid GSTIN (15 chars, e.g. 36AABCB1234F1Z8)';
+                      }
+                      return null;
+                    },
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(child: TextFormField(controller: contactCtrl, decoration: moduleInputDecoration('Contact Person'))),
+                      Expanded(
+                        child: TextFormField(
+                          controller: contactCtrl,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z\s.]')),
+                          ],
+                          decoration: moduleInputDecoration('Contact Person'),
+                          validator: (v) {
+                            if (v != null && RegExp(r'\d').hasMatch(v)) {
+                              return 'Names only (no numbers)';
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
                       const SizedBox(width: 10),
-                      Expanded(child: TextFormField(controller: phoneCtrl, keyboardType: TextInputType.phone, decoration: moduleInputDecoration('Phone'))),
+                      Expanded(
+                        child: TextFormField(
+                          controller: phoneCtrl,
+                          keyboardType: TextInputType.phone,
+                          inputFormatters: [
+                            FilteringTextInputFormatter.digitsOnly,
+                            LengthLimitingTextInputFormatter(10),
+                          ],
+                          decoration: moduleInputDecoration('Phone (Starts with 6-9)'),
+                          validator: (v) {
+                            if (v != null && v.trim().isNotEmpty) {
+                              if (!RegExp(r'^[6-9]\d{9}$').hasMatch(v.trim())) {
+                                return '10 digits starting with 6, 7, 8, or 9';
+                              }
+                            }
+                            return null;
+                          },
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: emailCtrl, keyboardType: TextInputType.emailAddress, decoration: moduleInputDecoration('Email Address')),
+                  TextFormField(
+                    controller: emailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: moduleInputDecoration('Email Address'),
+                    validator: (v) {
+                      if (v != null && v.trim().isNotEmpty) {
+                        if (!RegExp(r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$').hasMatch(v.trim())) {
+                          return 'Enter valid email (@gmail.com or business email)';
+                        }
+                      }
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: paymentTerms,
@@ -1289,43 +1410,68 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
               ],
             ),
             const SizedBox(height: 8),
+            TextField(
+              decoration: moduleInputDecoration('Search vendor name, category, contact, phone, GSTIN...'),
+              onChanged: (v) => setState(() => _searchQuery = v),
+            ),
+            const SizedBox(height: 8),
             if (_suppliers.isEmpty)
               const ModuleEmptyState(icon: Icons.business_outlined, title: 'No Suppliers Registered', subtitle: 'Build your multi-tier supply network by onboarding your first vendor.')
             else
-              ..._suppliers.map((s) => Container(
-                    margin: const EdgeInsets.only(bottom: 10),
-                    padding: const EdgeInsets.all(14),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+              ..._suppliers
+                  .where((s) {
+                    if (_searchQuery.trim().isEmpty) return true;
+                    final q = _searchQuery.toLowerCase().trim();
+                    return (s['name']?.toString().toLowerCase().contains(q) == true) ||
+                        (s['tier']?.toString().toLowerCase().contains(q) == true) ||
+                        (s['category']?.toString().toLowerCase().contains(q) == true) ||
+                        (s['gstin']?.toString().toLowerCase().contains(q) == true) ||
+                        (s['contactPerson']?.toString().toLowerCase().contains(q) == true) ||
+                        (s['phone']?.toString().toLowerCase().contains(q) == true) ||
+                        (s['email']?.toString().toLowerCase().contains(q) == true);
+                  })
+                  .map((s) => Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        padding: const EdgeInsets.all(14),
+                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Expanded(child: Text('${s['name'] ?? '-'}', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800))),
-                            ModuleTag(text: '${s['status'] ?? 'Active'}', bgColor: const Color(0xFFD1FAE5), textColor: const Color(0xFF059669)),
+                            Row(
+                              children: [
+                                Expanded(child: Text('${s['name'] ?? '-'}', style: GoogleFonts.inter(fontSize: 15, fontWeight: FontWeight.w800))),
+                                ModuleTag(text: '${s['status'] ?? 'Active'}', bgColor: const Color(0xFFD1FAE5), textColor: const Color(0xFF059669)),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            ModuleTag(text: '${s['tier'] ?? '-'}', bgColor: const Color(0xFFF3E8FF), textColor: const Color(0xFF7C3AED)),
+                            const SizedBox(height: 6),
+                            Text('${s['category'] ?? '-'} • GSTIN: ${s['gstin'] ?? '-'}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569))),
+                            Text('Contact: ${s['contactPerson'] ?? '-'} (${s['phone'] ?? '-'}) • ${s['paymentTerms'] ?? '-'}', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
+                            const SizedBox(height: 4),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.end,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.visibility_outlined, color: Color(0xFF2563EB), size: 20),
+                                  tooltip: 'View Supplier Details',
+                                  onPressed: () => _viewSupplierDetails(s),
+                                ),
+                                if (_perm.canDelete)
+                                  IconButton(
+                                    icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 20),
+                                    onPressed: () async {
+                                      if (await _confirmDelete('${s['name']}')) {
+                                        await SupplyChainApiService.deleteProcurementSupplier(s['id']);
+                                        await _loadAllData();
+                                      }
+                                    },
+                                  ),
+                              ],
+                            ),
                           ],
                         ),
-                        const SizedBox(height: 4),
-                        ModuleTag(text: '${s['tier'] ?? '-'}', bgColor: const Color(0xFFF3E8FF), textColor: const Color(0xFF7C3AED)),
-                        const SizedBox(height: 6),
-                        Text('${s['category'] ?? '-'} • GSTIN: ${s['gstin'] ?? '-'}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569))),
-                        Text('Contact: ${s['contactPerson'] ?? '-'} (${s['phone'] ?? '-'}) • ${s['paymentTerms'] ?? '-'}', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
-                        if (_perm.canDelete)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 19),
-                              onPressed: () async {
-                                if (await _confirmDelete('${s['name']}')) {
-                                  await SupplyChainApiService.deleteProcurementSupplier(s['id']);
-                                  await _loadAllData();
-                                }
-                              },
-                            ),
-                          ),
-                      ],
-                    ),
-                  )),
+                      )),
           ] else ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -196,6 +196,13 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
   const [formMode, setFormMode] = useState(null); // 'create_po' | 'create_pr' | 'create_supplier' | 'create_grn' | null
   const [editingItem, setEditingItem] = useState(null);
   const [viewingItem, setViewingItem] = useState(null);
+  const [supplierErrors, setSupplierErrors] = useState({});
+  const [deleteConfirm, setDeleteConfirm] = useState({
+    isOpen: false,
+    title: "",
+    message: "",
+    onConfirm: null
+  });
 
   // Form States
   const [poForm, setPoForm] = useState({
@@ -308,6 +315,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
     setFormMode(null);
     setEditingItem(null);
     setViewingItem(null);
+    setSupplierErrors({});
     setSearchQuery("");
     setStatusFilter("All");
     navigate(`/procurement/${newTab}`);
@@ -477,6 +485,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
 
   // --- Vendor Form Operations ---
   const handleOpenCreateSupplier = () => {
+    setSupplierErrors({});
     setSupplierForm({
       name: "",
       tier: "Tier 1 - Strategic EPC / OEM",
@@ -498,9 +507,59 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
 
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
+    const errors = {};
+
+    // 1. Vendor / Legal Entity Name validation
+    if (!supplierForm.name || !supplierForm.name.trim()) {
+      errors.name = "Vendor / Legal Entity Name is required";
+    }
+
+    // 2. GSTIN validation (15 alphanumeric characters: 2 digits + 5 letters + 4 digits + 1 letter + 1 char + Z + 1 char)
+    const gstinRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    const cleanGstin = (supplierForm.gstin || "").trim().toUpperCase();
+    if (!cleanGstin) {
+      errors.gstin = "GSTIN Number is required";
+    } else if (!gstinRegex.test(cleanGstin)) {
+      errors.gstin = "Invalid GSTIN format (15 characters alphanumeric, e.g. 36AABCB1234F1Z8)";
+    }
+
+    // 3. Contact Person validation (Names only, no numbers allowed)
+    if (supplierForm.contactPerson) {
+      if (/\d/.test(supplierForm.contactPerson)) {
+        errors.contactPerson = "Contact person name cannot contain numbers";
+      }
+    }
+
+    // 4. Phone Number validation (Digits only, must start with 6, 7, 8, or 9, exactly 10 digits)
+    if (supplierForm.phone) {
+      const cleanPhone = supplierForm.phone.trim();
+      if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
+        errors.phone = "Phone number must be exactly 10 digits starting with 6, 7, 8, or 9";
+      }
+    }
+
+    // 5. Email validation (Valid format with domain like @gmail.com or corporate/business emails)
+    if (supplierForm.email) {
+      const cleanEmail = supplierForm.email.trim();
+      const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+      if (!emailRegex.test(cleanEmail)) {
+        errors.email = "Please enter a valid email address (e.g. contact@domain.com or name@gmail.com)";
+      }
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setSupplierErrors(errors);
+      return;
+    }
+
+    setSupplierErrors({});
     const payload = {
       ...supplierForm,
-      id: editingItem ? editingItem.id : undefined
+      id: editingItem ? editingItem.id : undefined,
+      gstin: cleanGstin,
+      contactPerson: (supplierForm.contactPerson || "").trim(),
+      phone: (supplierForm.phone || "").trim(),
+      email: (supplierForm.email || "").trim()
     };
     await saveProcurementSupplier(payload);
     await loadAllData();
@@ -1144,8 +1203,33 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
             <div className="sco-form-card">
               <div className="sco-form-title">
                 <span>Onboard Vendor / Supplier</span>
-                <button onClick={() => setFormMode(null)} className="sco-btn-icon"><X size={18} /></button>
+                <button onClick={() => { setFormMode(null); setSupplierErrors({}); }} className="sco-btn-icon"><X size={18} /></button>
               </div>
+
+              {Object.keys(supplierErrors).length > 0 && (
+                <div style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fca5a5",
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  color: "#991b1b",
+                  fontSize: "13.5px"
+                }}>
+                  <AlertTriangle size={18} style={{ color: "#dc2626", marginTop: "2px", flexShrink: 0 }} />
+                  <div>
+                    <span style={{ fontWeight: "700" }}>Please review and fix the following errors:</span>
+                    <ul style={{ margin: "4px 0 0 16px", padding: 0, fontSize: "13px" }}>
+                      {Object.values(supplierErrors).map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleSaveSupplier}>
                 <div className="sco-form-grid">
@@ -1155,9 +1239,18 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                       type="text"
                       required
                       value={supplierForm.name}
-                      onChange={(e) => setSupplierForm({ ...supplierForm, name: e.target.value })}
+                      onChange={(e) => {
+                        setSupplierForm({ ...supplierForm, name: e.target.value });
+                        if (supplierErrors.name) setSupplierErrors({ ...supplierErrors, name: null });
+                      }}
                       placeholder="e.g. Deccan Biomass & Agritech Pvt Ltd"
+                      style={supplierErrors.name ? { borderColor: "#dc2626" } : undefined}
                     />
+                    {supplierErrors.name && (
+                      <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                        {supplierErrors.name}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
@@ -1191,10 +1284,25 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                     <input
                       type="text"
                       required
+                      maxLength={15}
                       value={supplierForm.gstin}
-                      onChange={(e) => setSupplierForm({ ...supplierForm, gstin: e.target.value })}
+                      onChange={(e) => {
+                        const upper = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "").slice(0, 15);
+                        setSupplierForm({ ...supplierForm, gstin: upper });
+                        if (supplierErrors.gstin) setSupplierErrors({ ...supplierErrors, gstin: null });
+                      }}
                       placeholder="e.g. 36AABCB1234F1Z8"
+                      style={supplierErrors.gstin ? { borderColor: "#dc2626" } : undefined}
                     />
+                    {supplierErrors.gstin ? (
+                      <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                        {supplierErrors.gstin}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#64748b", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        15 characters alphanumeric format (e.g. 36AABCB1234F1Z8)
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
@@ -1202,17 +1310,52 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                     <input
                       type="text"
                       value={supplierForm.contactPerson}
-                      onChange={(e) => setSupplierForm({ ...supplierForm, contactPerson: e.target.value })}
+                      onChange={(e) => {
+                        // Accept only alphabets, spaces and dots - numbers are strictly rejected
+                        const lettersOnly = e.target.value.replace(/[^a-zA-Z\s.]/g, "");
+                        setSupplierForm({ ...supplierForm, contactPerson: lettersOnly });
+                        if (supplierErrors.contactPerson) setSupplierErrors({ ...supplierErrors, contactPerson: null });
+                      }}
+                      placeholder="e.g. Rajesh Kumar (alphabets only)"
+                      style={supplierErrors.contactPerson ? { borderColor: "#dc2626" } : undefined}
                     />
+                    {supplierErrors.contactPerson ? (
+                      <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                        {supplierErrors.contactPerson}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#64748b", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        Accepts names only (numbers are blocked)
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
                     <label>Phone Number</label>
                     <input
                       type="text"
+                      maxLength={10}
                       value={supplierForm.phone}
-                      onChange={(e) => setSupplierForm({ ...supplierForm, phone: e.target.value })}
+                      onChange={(e) => {
+                        const digits = e.target.value.replace(/\D/g, "");
+                        // Must start with 6, 7, 8, or 9
+                        if (digits === "" || ["6", "7", "8", "9"].includes(digits[0])) {
+                          setSupplierForm({ ...supplierForm, phone: digits.slice(0, 10) });
+                        }
+                        if (supplierErrors.phone) setSupplierErrors({ ...supplierErrors, phone: null });
+                      }}
+                      placeholder="e.g. 9876543210 (starts with 6, 7, 8, or 9)"
+                      style={supplierErrors.phone ? { borderColor: "#dc2626" } : undefined}
                     />
+                    {supplierErrors.phone ? (
+                      <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                        {supplierErrors.phone}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#64748b", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        10 digits starting with 6, 7, 8, or 9
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
@@ -1220,8 +1363,22 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                     <input
                       type="email"
                       value={supplierForm.email}
-                      onChange={(e) => setSupplierForm({ ...supplierForm, email: e.target.value })}
+                      onChange={(e) => {
+                        setSupplierForm({ ...supplierForm, email: e.target.value });
+                        if (supplierErrors.email) setSupplierErrors({ ...supplierErrors, email: null });
+                      }}
+                      placeholder="e.g. vendor@company.com or name@gmail.com"
+                      style={supplierErrors.email ? { borderColor: "#dc2626" } : undefined}
                     />
+                    {supplierErrors.email ? (
+                      <span style={{ color: "#dc2626", fontSize: "12px", marginTop: "4px", display: "block" }}>
+                        {supplierErrors.email}
+                      </span>
+                    ) : (
+                      <span style={{ color: "#64748b", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        Valid email format (e.g. @gmail.com or corporate domain)
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
@@ -1238,7 +1395,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                 </div>
 
                 <div className="sco-form-actions">
-                  <button type="button" onClick={() => setFormMode(null)} className="sco-btn-secondary">
+                  <button type="button" onClick={() => { setFormMode(null); setSupplierErrors({}); }} className="sco-btn-secondary">
                     Cancel
                   </button>
                   <button type="submit" className="sco-btn-primary">
@@ -1486,12 +1643,17 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                                   <Printer size={15} />
                                 </button>
                                 <button
-                                  onClick={async () => {
-                                    if (window.confirm(`Delete ${po.poNumber}?`)) {
-                                      await deletePurchaseOrder(po.id);
-                                      await loadAllData();
-                                    }
-                                  }}
+                                  onClick={() =>
+                                    setDeleteConfirm({
+                                      isOpen: true,
+                                      title: "Delete Purchase Order",
+                                      message: `Are you sure you want to delete Purchase Order "${po.poNumber}"? This action cannot be undone.`,
+                                      onConfirm: async () => {
+                                        await deletePurchaseOrder(po.id);
+                                        await loadAllData();
+                                      }
+                                    })
+                                  }
                                   className="sco-btn-icon danger"
                                   title="Delete PO"
                                 >
@@ -1593,13 +1755,19 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                                 </div>
                               ) : (
                                 <button
-                                  onClick={async () => {
-                                    if (window.confirm(`Delete ${pr.prNumber}?`)) {
-                                      await deletePurchaseRequisition(pr.id);
-                                      await loadAllData();
-                                    }
-                                  }}
+                                  onClick={() =>
+                                    setDeleteConfirm({
+                                      isOpen: true,
+                                      title: "Delete Purchase Requisition",
+                                      message: `Are you sure you want to delete Requisition "${pr.prNumber}"? This action cannot be undone.`,
+                                      onConfirm: async () => {
+                                        await deletePurchaseRequisition(pr.id);
+                                        await loadAllData();
+                                      }
+                                    })
+                                  }
                                   className="sco-btn-icon danger"
+                                  title="Delete Requisition"
                                 >
                                   <Trash2 size={15} />
                                 </button>
@@ -1636,6 +1804,18 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
               </div>
 
               <div className="sco-card-body">
+                <div className="sco-toolbar">
+                  <div className="sco-search-box">
+                    <Search size={16} className="search-icon" />
+                    <input
+                      type="text"
+                      placeholder="Search by vendor name, category, tier, contact, phone, GSTIN..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                    />
+                  </div>
+                </div>
+
                 {suppliers.length === 0 ? (
                   <div className="sco-empty-state">
                     <div className="icon"><Building size={40} /></div>
@@ -1644,6 +1824,25 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                     <button onClick={handleOpenCreateSupplier} className="sco-btn-primary">
                       <Plus size={16} /> Onboard Supplier
                     </button>
+                  </div>
+                ) : suppliers.filter((s) => {
+                    if (!searchQuery.trim()) return true;
+                    const q = searchQuery.toLowerCase().trim();
+                    return (
+                      (s.name && s.name.toLowerCase().includes(q)) ||
+                      (s.tier && s.tier.toLowerCase().includes(q)) ||
+                      (s.category && s.category.toLowerCase().includes(q)) ||
+                      (s.gstin && s.gstin.toLowerCase().includes(q)) ||
+                      (s.contactPerson && s.contactPerson.toLowerCase().includes(q)) ||
+                      (s.phone && s.phone.toLowerCase().includes(q)) ||
+                      (s.email && s.email.toLowerCase().includes(q)) ||
+                      (s.paymentTerms && s.paymentTerms.toLowerCase().includes(q))
+                    );
+                  }).length === 0 ? (
+                  <div className="sco-empty-state" style={{ padding: "32px 16px" }}>
+                    <div className="icon"><Search size={32} /></div>
+                    <h3>No Matching Suppliers Found</h3>
+                    <p>No suppliers match "{searchQuery}". Try searching by another keyword.</p>
                   </div>
                 ) : (
                   <div className="sco-table-wrapper">
@@ -1662,31 +1861,61 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {suppliers.map((s) => (
-                          <tr key={s.id}>
-                            <td style={{ fontWeight: "700" }}>{s.name}</td>
-                            <td><span className="sco-badge badge-purple">{s.tier}</span></td>
-                            <td>{s.category}</td>
-                            <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{s.gstin}</td>
-                            <td>{s.contactPerson || "—"}</td>
-                            <td>{s.phone || "—"}</td>
-                            <td>{s.paymentTerms}</td>
-                            <td><span className="sco-badge badge-green">{s.status}</span></td>
-                            <td style={{ textAlign: "right" }}>
-                              <button
-                                onClick={async () => {
-                                  if (window.confirm(`Delete ${s.name}?`)) {
-                                    await deleteProcurementSupplier(s.id);
-                                    await loadAllData();
-                                  }
-                                }}
-                                className="sco-btn-icon danger"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                        {suppliers
+                          .filter((s) => {
+                            if (!searchQuery.trim()) return true;
+                            const q = searchQuery.toLowerCase().trim();
+                            return (
+                              (s.name && s.name.toLowerCase().includes(q)) ||
+                              (s.tier && s.tier.toLowerCase().includes(q)) ||
+                              (s.category && s.category.toLowerCase().includes(q)) ||
+                              (s.gstin && s.gstin.toLowerCase().includes(q)) ||
+                              (s.contactPerson && s.contactPerson.toLowerCase().includes(q)) ||
+                              (s.phone && s.phone.toLowerCase().includes(q)) ||
+                              (s.email && s.email.toLowerCase().includes(q)) ||
+                              (s.paymentTerms && s.paymentTerms.toLowerCase().includes(q))
+                            );
+                          })
+                          .map((s) => (
+                            <tr key={s.id}>
+                              <td style={{ fontWeight: "700" }}>{s.name}</td>
+                              <td><span className="sco-badge badge-purple">{s.tier}</span></td>
+                              <td>{s.category}</td>
+                              <td style={{ fontFamily: "monospace", fontSize: "12px" }}>{s.gstin}</td>
+                              <td>{s.contactPerson || "—"}</td>
+                              <td>{s.phone || "—"}</td>
+                              <td>{s.paymentTerms}</td>
+                              <td><span className="sco-badge badge-green">{s.status}</span></td>
+                              <td style={{ textAlign: "right" }}>
+                                <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                  <button
+                                    onClick={() => setViewingItem({ type: "supplier", data: s })}
+                                    className="sco-btn-icon"
+                                    title="View Supplier Details"
+                                  >
+                                    <Eye size={15} />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setDeleteConfirm({
+                                        isOpen: true,
+                                        title: "Delete Supplier Record",
+                                        message: `Are you sure you want to delete "${s.name}"? This action cannot be undone.`,
+                                        onConfirm: async () => {
+                                          await deleteProcurementSupplier(s.id);
+                                          await loadAllData();
+                                        }
+                                      })
+                                    }
+                                    className="sco-btn-icon danger"
+                                    title="Delete Supplier"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))}
                       </tbody>
                     </table>
                   </div>
@@ -1756,13 +1985,19 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                             </td>
                             <td style={{ textAlign: "right" }}>
                               <button
-                                onClick={async () => {
-                                  if (window.confirm(`Delete ${g.grnNumber}?`)) {
-                                    await deleteDeliveryNote(g.id);
-                                    await loadAllData();
-                                  }
-                                }}
+                                onClick={() =>
+                                  setDeleteConfirm({
+                                    isOpen: true,
+                                    title: "Delete Delivery Note",
+                                    message: `Are you sure you want to delete Delivery Note "${g.grnNumber}"? This action cannot be undone.`,
+                                    onConfirm: async () => {
+                                      await deleteDeliveryNote(g.id);
+                                      await loadAllData();
+                                    }
+                                  })
+                                }
                                 className="sco-btn-icon danger"
+                                title="Delete GRN"
                               >
                                 <Trash2 size={15} />
                               </button>
@@ -1883,6 +2118,225 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                   </button>
                   <button onClick={() => setViewingItem(null)} className="sco-btn-primary">
                     Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ────────────────────────────────────────────────────────────── */}
+          {/* VIEW SUPPLIER DETAILS MODAL                                    */}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {viewingItem?.type === "supplier" && (
+            <div
+              className="sco-modal-overlay"
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1050,
+                padding: "20px"
+              }}
+            >
+              <div
+                className="sco-modal-card"
+                style={{
+                  background: "#ffffff",
+                  borderRadius: "14px",
+                  width: "100%",
+                  maxWidth: "680px",
+                  maxHeight: "90vh",
+                  overflowY: "auto",
+                  padding: "28px",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)"
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "flex-start",
+                    borderBottom: "2px solid #e2e8f0",
+                    paddingBottom: "16px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "10px",
+                        background: "#f3e8ff",
+                        color: "#7c3aed",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <Building size={22} />
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", margin: 0 }}>
+                        {viewingItem.data.name}
+                      </h2>
+                      <p style={{ fontSize: "13px", color: "#64748b", margin: "2px 0 0 0" }}>
+                        Supplier Profile & Compliance Details
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-icon">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "14px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Strategic Tier</p>
+                    <span className="sco-badge badge-purple" style={{ fontSize: "12px" }}>{viewingItem.data.tier || "—"}</span>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Supply Category</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.category || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>GSTIN Number</p>
+                    <p style={{ fontSize: "14px", fontWeight: "700", fontFamily: "monospace", color: "#2563eb", margin: 0 }}>{viewingItem.data.gstin || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Account Status</p>
+                    <span className="sco-badge badge-green" style={{ fontSize: "12px" }}>{viewingItem.data.status || "Active"}</span>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Contact Person</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.contactPerson || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Phone Number</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.phone || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Email Address</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.email || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Default Payment Terms</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.paymentTerms || "—"}</p>
+                  </div>
+                </div>
+
+                {viewingItem.data.address && (
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "20px" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Registered Office Address</p>
+                    <p style={{ fontSize: "13.5px", color: "#1e293b", margin: 0 }}>{viewingItem.data.address}</p>
+                  </div>
+                )}
+
+                <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-primary">
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ────────────────────────────────────────────────────────────── */}
+          {/* CUSTOM WEB CONFIRMATION MODAL (NO BROWSER POPUPS)             */}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {deleteConfirm.isOpen && (
+            <div
+              className="sco-modal-overlay"
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1100,
+                padding: "20px"
+              }}
+            >
+              <div
+                className="sco-modal-card"
+                style={{
+                  background: "#ffffff",
+                  borderRadius: "14px",
+                  width: "100%",
+                  maxWidth: "440px",
+                  padding: "26px",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.25)",
+                  textAlign: "center"
+                }}
+              >
+                <div
+                  style={{
+                    width: "52px",
+                    height: "52px",
+                    borderRadius: "50%",
+                    background: "#fee2e2",
+                    color: "#dc2626",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto 16px auto"
+                  }}
+                >
+                  <Trash2 size={26} />
+                </div>
+
+                <h3 style={{ fontSize: "18px", fontWeight: "800", color: "#0f172a", marginBottom: "8px" }}>
+                  {deleteConfirm.title || "Confirm Deletion"}
+                </h3>
+                <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 24px 0", lineHeight: "1.5" }}>
+                  {deleteConfirm.message}
+                </p>
+
+                <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm({ isOpen: false, title: "", message: "", onConfirm: null })}
+                    className="sco-btn-secondary"
+                    style={{ minWidth: "110px" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (deleteConfirm.onConfirm) {
+                        await deleteConfirm.onConfirm();
+                      }
+                      setDeleteConfirm({ isOpen: false, title: "", message: "", onConfirm: null });
+                    }}
+                    className="sco-btn-primary"
+                    style={{ background: "#dc2626", borderColor: "#dc2626", minWidth: "110px" }}
+                  >
+                    Delete
                   </button>
                 </div>
               </div>
