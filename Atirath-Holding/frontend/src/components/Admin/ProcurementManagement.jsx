@@ -509,6 +509,27 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleOpenEditSupplier = (supplier) => {
+    setSupplierErrors({});
+    setEditingItem(supplier);
+    setSupplierForm({
+      name: supplier.name || "",
+      tier: supplier.tier || "Tier 1 - Strategic EPC / OEM",
+      category: supplier.category || "Biomass Feedstock & Silage",
+      gstin: supplier.gstin || "",
+      pan: supplier.pan || "",
+      contactPerson: supplier.contactPerson || "",
+      phone: supplier.phone || "",
+      email: supplier.email || "",
+      address: supplier.address || "",
+      paymentTerms: supplier.paymentTerms || "Net 30 Days",
+      rating: supplier.rating || 5,
+      status: supplier.status || "Active"
+    });
+    setFormMode("create_supplier");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSaveSupplier = async (e) => {
     e.preventDefault();
     const errors = {};
@@ -568,6 +589,7 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
     await saveProcurementSupplier(payload);
     await loadAllData();
     setFormMode(null);
+    setEditingItem(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1287,8 +1309,8 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
           {formMode === "create_supplier" && (
             <div className="sco-form-card">
               <div className="sco-form-title">
-                <span>Onboard Vendor / Supplier</span>
-                <button onClick={() => { setFormMode(null); setSupplierErrors({}); }} className="sco-btn-icon"><X size={18} /></button>
+                <span>{editingItem ? "Edit Vendor / Supplier Profile" : "Onboard Vendor / Supplier"}</span>
+                <button onClick={() => { setFormMode(null); setEditingItem(null); setSupplierErrors({}); }} className="sco-btn-icon"><X size={18} /></button>
               </div>
 
               {Object.keys(supplierErrors).length > 0 && (
@@ -1480,11 +1502,11 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                 </div>
 
                 <div className="sco-form-actions">
-                  <button type="button" onClick={() => { setFormMode(null); setSupplierErrors({}); }} className="sco-btn-secondary">
+                  <button type="button" onClick={() => { setFormMode(null); setEditingItem(null); setSupplierErrors({}); }} className="sco-btn-secondary">
                     Cancel
                   </button>
                   <button type="submit" className="sco-btn-primary">
-                    <Save size={16} /> Save Supplier Record
+                    <Save size={16} /> {editingItem ? "Update Supplier Record" : "Save Supplier Record"}
                   </button>
                 </div>
               </form>
@@ -2103,6 +2125,13 @@ const ProcurementManagement = ({ onLogout, userRole }) => {
                                     title="View Supplier Details"
                                   >
                                     <Eye size={15} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenEditSupplier(s)}
+                                    className="sco-btn-icon"
+                                    title="Edit Supplier Details"
+                                  >
+                                    <Edit2 size={15} />
                                   </button>
                                   <button
                                     onClick={() =>

@@ -838,17 +838,17 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
     );
   }
 
-  // --- CREATE SUPPLIER ---
-  void _openCreateSupplierModal() {
+  // --- CREATE / EDIT SUPPLIER ---
+  void _openCreateSupplierModal([Map<String, dynamic>? editing]) {
     final formKey = GlobalKey<FormState>();
-    final nameCtrl = TextEditingController();
-    String tier = 'Tier 1 - Strategic EPC / OEM';
-    String category = 'Biomass Feedstock & Silage';
-    final gstinCtrl = TextEditingController();
-    final contactCtrl = TextEditingController();
-    final phoneCtrl = TextEditingController();
-    final emailCtrl = TextEditingController();
-    String paymentTerms = 'Net 30 Days';
+    final nameCtrl = TextEditingController(text: editing != null ? (editing['name'] ?? '').toString() : '');
+    String tier = (editing != null && editing['tier'] != null) ? editing['tier'].toString() : 'Tier 1 - Strategic EPC / OEM';
+    String category = (editing != null && editing['category'] != null) ? editing['category'].toString() : 'Biomass Feedstock & Silage';
+    final gstinCtrl = TextEditingController(text: editing != null ? (editing['gstin'] ?? '').toString() : '');
+    final contactCtrl = TextEditingController(text: editing != null ? (editing['contactPerson'] ?? '').toString() : '');
+    final phoneCtrl = TextEditingController(text: editing != null ? (editing['phone'] ?? '').toString() : '');
+    final emailCtrl = TextEditingController(text: editing != null ? (editing['email'] ?? '').toString() : '');
+    String paymentTerms = (editing != null && editing['paymentTerms'] != null) ? editing['paymentTerms'].toString() : 'Net 30 Days';
 
     showModalBottomSheet(
       context: context,
@@ -868,7 +868,7 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                     children: [
                       const Icon(Icons.business_outlined, color: Color(0xFF7C3AED)),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('Onboard Vendor / Supplier', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700))),
+                      Expanded(child: Text(editing != null ? 'Edit Vendor / Supplier' : 'Onboard Vendor / Supplier', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700))),
                       IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                     ],
                   ),
@@ -994,6 +994,7 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         await SupplyChainApiService.saveProcurementSupplier({
+                          if (editing != null && editing['id'] != null) 'id': editing['id'],
                           'name': nameCtrl.text.trim(),
                           'tier': tier,
                           'category': category,
@@ -1002,14 +1003,14 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                           'phone': phoneCtrl.text.trim(),
                           'email': emailCtrl.text.trim(),
                           'paymentTerms': paymentTerms,
-                          'rating': 5,
-                          'status': 'Active',
+                          'rating': editing != null ? (editing['rating'] ?? 5) : 5,
+                          'status': editing != null ? (editing['status'] ?? 'Active') : 'Active',
                         });
                         await _loadAllData();
                         if (ctx.mounted) Navigator.pop(ctx);
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13)),
-                      child: const Text('Save Supplier Record'),
+                      child: Text(editing != null ? 'Update Supplier Record' : 'Save Supplier Record'),
                     ),
                   ),
                 ],
@@ -1574,6 +1575,11 @@ class _ProcurementManagementScreenState extends State<ProcurementManagementScree
                                   icon: const Icon(Icons.visibility_outlined, color: Color(0xFF2563EB), size: 20),
                                   tooltip: 'View Supplier Details',
                                   onPressed: () => _viewSupplierDetails(s),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.edit_outlined, color: Color(0xFF475569), size: 20),
+                                  tooltip: 'Edit Supplier Details',
+                                  onPressed: () => _openCreateSupplierModal(s),
                                 ),
                                 if (_perm.canDelete)
                                   IconButton(
