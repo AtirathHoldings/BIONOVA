@@ -958,13 +958,13 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                             <td>{a.facility}</td>
                             <td>{a.oemManufacturer} ({a.modelSerial})</td>
                             <td>
-                              <span className={`sco-badge ${a.criticality.startsWith("A") ? "badge-red" : "badge-amber"}`}>
-                                {a.criticality.split(" ")[0]}
+                              <span className={`sco-badge ${(a.criticality || "").startsWith("A") ? "badge-red" : "badge-amber"}`}>
+                                {(a.criticality || "—").split(" ")[0]}
                               </span>
                             </td>
                             <td>
                               <span className={`sco-badge ${a.operatingStatus === "Operational" ? "badge-green" : "badge-red"}`}>
-                                {a.operatingStatus}
+                                {a.operatingStatus || "—"}
                               </span>
                             </td>
                             <td style={{ textAlign: "right" }}>
@@ -1111,8 +1111,8 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                             <td style={{ fontWeight: "700" }}>{i.ticketNumber}</td>
                             <td>{i.assetName}</td>
                             <td>
-                              <span className={`sco-badge ${i.severity.startsWith("Critical") ? "badge-red" : "badge-amber"}`}>
-                                {i.severity.split(" ")[0]}
+                              <span className={`sco-badge ${(i.severity || "").startsWith("Critical") ? "badge-red" : "badge-amber"}`}>
+                                {(i.severity || "—").split(" ")[0]}
                               </span>
                             </td>
                             <td>{i.reportedTime?.replace("T", " ")}</td>
