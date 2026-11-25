@@ -236,6 +236,76 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
     );
   }
 
+  String _generateNextIncidentTicket() {
+    final currentYear = DateTime.now().year;
+    int maxSeq = 0;
+    for (final inc in _incidents) {
+      final code = (inc['ticketNumber'] ?? inc['ticket_number'] ?? '').toString();
+      final match = RegExp(r'INC-(\d{4})-(\d+)', caseSensitive: false).firstMatch(code);
+      if (match != null) {
+        final yr = int.tryParse(match.group(1)!) ?? 0;
+        final seq = int.tryParse(match.group(2)!) ?? 0;
+        if (yr == currentYear && seq > maxSeq) {
+          maxSeq = seq;
+        }
+      } else {
+        final sm = RegExp(r'INC-(\d+)', caseSensitive: false).firstMatch(code);
+        if (sm != null) {
+          final seq = int.tryParse(sm.group(1)!) ?? 0;
+          if (seq > maxSeq) {
+            maxSeq = seq;
+          }
+        }
+      }
+    }
+    return 'INC-$currentYear-${(maxSeq + 1).toString().padLeft(4, '0')}';
+  }
+
+  void _viewIncidentDetails(Map<String, dynamic> i) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                i['ticketNumber']?.toString() ?? 'Incident Details',
+                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow('Affected Machinery Asset', i['assetName']?.toString() ?? '—'),
+              _detailRow('Severity Level', i['severity']?.toString() ?? '—'),
+              _detailRow('Incident Timestamp', _formatToDDMMYYYY(i['reportedTime'])),
+              _detailRow('Downtime Logged', '${i['downtimeHours'] ?? 0} Hours'),
+              _detailRow('Status', i['status']?.toString() ?? 'In Progress / Under Repair'),
+              if (i['symptomDescription'] != null && i['symptomDescription'].toString().isNotEmpty)
+                _detailRow('Failure Symptom', i['symptomDescription'].toString()),
+              if (i['correctiveAction'] != null && i['correctiveAction'].toString().isNotEmpty)
+                _detailRow('RCA & Corrective Action', i['correctiveAction'].toString()),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
   List<String> _plantOptions() {
     final names = _plants
         .map((p) => (p['plantNm'] ?? p['name'] ?? '').toString())
@@ -599,17 +669,18 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
     );
   }
 
-  void _openCreateIncidentModal() {
-    final nextSeq = (_incidents.length + 1).toString().padLeft(4, '0');
+  void _openCreateIncidentModal([Map<String, dynamic>? editing]) {
+    final nextCode = editing != null ? (editing['ticketNumber'] ?? editing['ticket_number'] ?? '') : _generateNextIncidentTicket();
     final assetList = _assetOptions('Primary CSTR Biogas Digester Agitator #2');
     final formKey = GlobalKey<FormState>();
 
-    final ticketCtrl = TextEditingController(text: 'INC-2026-$nextSeq');
-    String assetName = assetList.first;
-    String severity = 'Major (Process Bottleneck)';
-    final downtimeCtrl = TextEditingController(text: '2.5');
-    final symptomCtrl = TextEditingController(text: 'High mechanical vibration detected on agitator gear unit.');
-    final rcaCtrl = TextEditingController(text: 'Flushed gearbox, installed high-temp synthetic gear oil, and re-torqued motor bolts.');
+    final ticketCtrl = TextEditingController(text: nextCode);
+    String? assetName = editing != null ? (editing['assetName'] ?? editing['asset_name']) : null;
+    String? severity = editing != null ? editing['severity'] : null;
+    final timeCtrl = TextEditingController(text: editing != null ? _formatToDDMMYYYY(editing['reportedTime']) : _formatToDDMMYYYY(DateTime.now()));
+    final downtimeCtrl = TextEditingController(text: editing != null ? '${editing['downtimeHours'] ?? ''}' : '');
+    final symptomCtrl = TextEditingController(text: editing != null ? '${editing['symptomDescription'] ?? ''}' : '');
+    final rcaCtrl = TextEditingController(text: editing != null ? '${editing['correctiveAction'] ?? ''}' : '');
 
     showModalBottomSheet(
       context: context,
@@ -629,51 +700,103 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                     children: [
                       const Icon(Icons.local_fire_department_outlined, color: Color(0xFFDC2626)),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('Log Unscheduled Breakdown Incident', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFFDC2626)))),
+                      Expanded(
+                        child: Text(
+                          editing != null ? 'Edit Breakdown Incident Record' : 'Log Unscheduled Breakdown Incident',
+                          style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700, color: const Color(0xFFDC2626)),
+                        ),
+                      ),
                       IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: ticketCtrl, decoration: moduleInputDecoration('Incident Ticket # *'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
+                  TextFormField(
+                    controller: ticketCtrl,
+                    readOnly: true,
+                    decoration: moduleInputDecoration('Incident Ticket # * (Auto)').copyWith(fillColor: const Color(0xFFF8FAFC), filled: true),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: assetName,
                     isExpanded: true,
                     decoration: moduleInputDecoration('Affected Machinery Asset *'),
+                    hint: const Text('-- Choose Affected Machinery Asset --'),
                     items: assetList.map((a) => DropdownMenuItem(value: a, child: Text(a, overflow: TextOverflow.ellipsis))).toList(),
-                    onChanged: (v) => setModalState(() => assetName = v ?? assetName),
+                    onChanged: (v) => setModalState(() => assetName = v),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please select an Affected Machinery Asset' : null,
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: severity,
+                    isExpanded: true,
+                    decoration: moduleInputDecoration('Severity Level *'),
+                    hint: const Text('-- Choose Severity Level --'),
+                    items: const [
+                      DropdownMenuItem(value: 'Critical (Plant Trip Risk)', child: Text('Critical (Plant Trip Risk)')),
+                      DropdownMenuItem(value: 'Major (Process Bottleneck)', child: Text('Major (Process Bottleneck)')),
+                      DropdownMenuItem(value: 'Minor (Auxiliary Fault)', child: Text('Minor (Auxiliary Fault)')),
+                    ],
+                    onChanged: (v) => setModalState(() => severity = v),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please select a Severity Level' : null,
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
                       Expanded(
-                        flex: 2,
-                        child: DropdownButtonFormField<String>(
-                          initialValue: severity,
-                          isExpanded: true,
-                          decoration: moduleInputDecoration('Severity Level'),
-                          items: const [
-                            DropdownMenuItem(value: 'Critical (Plant Trip Risk)', child: Text('Critical (Plant Trip)')),
-                            DropdownMenuItem(value: 'Major (Process Bottleneck)', child: Text('Major (Bottleneck)')),
-                            DropdownMenuItem(value: 'Minor (Auxiliary Fault)', child: Text('Minor (Auxiliary)')),
-                          ],
-                          onChanged: (v) => setModalState(() => severity = v ?? severity),
+                        child: TextFormField(
+                          controller: timeCtrl,
+                          readOnly: true,
+                          decoration: moduleInputDecoration('Incident Date *').copyWith(
+                            suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+                          ),
+                          onTap: () async {
+                            final now = DateTime.now();
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: now,
+                              firstDate: DateTime(2000),
+                              lastDate: now,
+                            );
+                            if (picked != null) {
+                              setModalState(() {
+                                timeCtrl.text = _formatToDDMMYYYY(picked);
+                              });
+                            }
+                          },
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Incident Date is required' : null,
                         ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: TextFormField(
                           controller: downtimeCtrl,
-                          keyboardType: TextInputType.number,
-                          decoration: moduleInputDecoration('Downtime (Hrs)'),
+                          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                          decoration: moduleInputDecoration('Downtime (Hrs) *', hint: 'e.g. 2.5 (> 0)'),
+                          validator: (v) {
+                            if (v == null || v.trim().isEmpty) return 'Downtime required';
+                            final dt = double.tryParse(v.trim());
+                            if (dt == null || dt <= 0) return 'Must be > 0 hours';
+                            return null;
+                          },
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: symptomCtrl, maxLines: 2, decoration: moduleInputDecoration('Failure Symptom *'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
+                  TextFormField(
+                    controller: symptomCtrl,
+                    maxLines: 2,
+                    decoration: moduleInputDecoration('Failure Symptom & Details *', hint: 'Describe breakdown details...'),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Failure symptom is required' : null,
+                  ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: rcaCtrl, maxLines: 2, decoration: moduleInputDecoration('RCA & Corrective Action')),
+                  TextFormField(
+                    controller: rcaCtrl,
+                    maxLines: 2,
+                    decoration: moduleInputDecoration('RCA & Corrective Action *', hint: 'Corrective action taken...'),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'RCA & Corrective Action is required' : null,
+                  ),
                   const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
@@ -681,21 +804,22 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         await SupplyChainApiService.saveBreakdownIncident({
+                          if (editing != null && editing['id'] != null) 'id': editing['id'],
                           'ticketNumber': ticketCtrl.text.trim(),
                           'facility': _plantOptions().first,
-                          'assetName': assetName,
-                          'reportedTime': DateTime.now().toIso8601String().substring(0, 16),
-                          'severity': severity,
+                          'assetName': assetName ?? '',
+                          'reportedTime': timeCtrl.text.trim(),
+                          'severity': severity ?? '',
                           'symptomDescription': symptomCtrl.text.trim(),
                           'downtimeHours': double.tryParse(downtimeCtrl.text.trim()) ?? 0,
                           'correctiveAction': rcaCtrl.text.trim(),
-                          'status': 'In Progress / Under Repair',
+                          'status': editing != null ? (editing['status'] ?? 'In Progress / Under Repair') : 'In Progress / Under Repair',
                         });
                         await _loadAllData();
                         if (ctx.mounted) Navigator.pop(ctx);
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFDC2626), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13)),
-                      child: const Text('Log Incident & Notify Team'),
+                      child: Text(editing != null ? 'Update Incident Record' : 'Log Incident & Notify Team'),
                     ),
                   ),
                 ],
@@ -1034,14 +1158,23 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Breakdown Incidents (${_incidents.length})', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
-                IconButton(
-                  icon: const Icon(Icons.download_outlined, color: Color(0xFF2563EB)),
-                  onPressed: () => exportCsvData(
-                    context,
-                    fileName: 'breakdown_incidents.csv',
-                    headers: const ['Ticket #', 'Asset', 'Severity', 'Reported Time', 'Downtime Hrs', 'Symptom', 'Status'],
-                    rows: _incidents.map((i) => [i['ticketNumber'] ?? '', i['assetName'] ?? '', i['severity'] ?? '', i['reportedTime'] ?? '', i['downtimeHours'] ?? 0, i['symptomDescription'] ?? '', i['status'] ?? '']).toList(),
-                  ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.add_circle_outline, color: Color(0xFFDC2626)),
+                      tooltip: 'Log Breakdown Incident',
+                      onPressed: () => _openCreateIncidentModal(),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.download_outlined, color: Color(0xFF2563EB)),
+                      onPressed: () => exportCsvData(
+                        context,
+                        fileName: 'breakdown_incidents.csv',
+                        headers: const ['Ticket #', 'Asset', 'Severity', 'Reported Time', 'Downtime Hrs', 'Symptom', 'Status'],
+                        rows: _incidents.map((i) => [i['ticketNumber'] ?? '', i['assetName'] ?? '', i['severity'] ?? '', i['reportedTime'] ?? '', i['downtimeHours'] ?? 0, i['symptomDescription'] ?? '', i['status'] ?? '']).toList(),
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -1073,20 +1206,33 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                       const SizedBox(height: 8),
                       Text('${i['assetName'] ?? '-'}', style: GoogleFonts.inter(fontSize: 14.5, fontWeight: FontWeight.w800)),
                       Text('${i['symptomDescription'] ?? '-'}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569))),
-                      Text('Status: ${i['status'] ?? '-'} • ${i['reportedTime'] ?? '-'}', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
-                      if (_perm.canDelete)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 19),
-                            onPressed: () async {
-                              if (await _confirmDelete('${i['ticketNumber']}')) {
-                                await SupplyChainApiService.deleteBreakdownIncident(i['id']);
-                                await _loadAllData();
-                              }
-                            },
+                      Text('Status: ${i['status'] ?? '-'} • ${_formatToDDMMYYYY(i['reportedTime'])}', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.visibility_outlined, color: Color(0xFF2563EB), size: 20),
+                            tooltip: 'View Incident Details',
+                            onPressed: () => _viewIncidentDetails(i),
                           ),
-                        ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, color: Color(0xFF475569), size: 20),
+                            tooltip: 'Edit Incident Record',
+                            onPressed: () => _openCreateIncidentModal(i),
+                          ),
+                          if (_perm.canDelete)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 20),
+                              tooltip: 'Delete Incident',
+                              onPressed: () async {
+                                if (await _confirmDelete('${i['ticketNumber']}')) {
+                                  await SupplyChainApiService.deleteBreakdownIncident(i['id']);
+                                  await _loadAllData();
+                                }
+                              },
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 );
