@@ -64,13 +64,78 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
   const [drivers, setDrivers] = useState([]);
   const [weighbridgeSlips, setWeighbridgeSlips] = useState([]);
   const [tempLogs, setTempLogs] = useState([]);
+  const [routes, setRoutes] = useState(() => {
+    const saved = localStorage.getItem("bionova_dispatch_routes");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
+    }
+    return [
+      {
+        id: 1,
+        corridorName: "Corridor 1: Agri Substrate",
+        badgeColor: "badge-blue",
+        origin: "Warangal Napier Farms",
+        destination: "Hyderabad East CBG",
+        distanceKm: 148,
+        estTransitTime: "3h 45m",
+        highwayRoute: "NH 163",
+        assignedVehicle: "TS 08 UB 7712",
+        driverName: "Nagaraju Rao",
+        speedKmh: 52,
+        etaRemaining: "1h 15m remaining",
+        transitProgressPercent: 68,
+        status: "LIVE TRANSIT"
+      },
+      {
+        id: 2,
+        corridorName: "Corridor 2: CBG Mother Cascade",
+        badgeColor: "badge-green",
+        origin: "Hyderabad East CBG",
+        destination: "IOCL Retail Dispenser Station",
+        distanceKm: 42,
+        estTransitTime: "1h 10m",
+        highwayRoute: "Industrial Arterial",
+        assignedVehicle: "TS 07 UA 9901",
+        driverName: "B. Satyanarayana",
+        speedKmh: 40,
+        etaRemaining: "25 mins remaining",
+        transitProgressPercent: 45,
+        status: "LIVE TRANSIT"
+      }
+    ];
+  });
+
+  const [routeForm, setRouteForm] = useState({
+    corridorName: "",
+    corridorCategory: "Agri Substrate",
+    origin: "",
+    destination: "",
+    distanceKm: 120,
+    estTransitTime: "3h 00m",
+    highwayRoute: "NH 163",
+    assignedVehicle: "TS 08 UB 7712",
+    driverName: "",
+    speedKmh: 50,
+    etaRemaining: "1h 30m remaining",
+    transitProgressPercent: 50,
+    status: "LIVE TRANSIT"
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("bionova_dispatch_routes", JSON.stringify(routes));
+    } catch (e) {}
+  }, [routes]);
 
   // Filter / Search states
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
   // Form View States (Full Page Form)
-  const [formMode, setFormMode] = useState(null); // 'create_trip' | 'create_driver' | 'create_weighbridge' | 'create_temp' | null
+  const [formMode, setFormMode] = useState(null); // 'create_trip' | 'create_driver' | 'create_weighbridge' | 'create_temp' | 'create_route' | null
   const [editingItem, setEditingItem] = useState(null);
   const [viewingSlip, setViewingSlip] = useState(null);
 
@@ -310,6 +375,63 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  // --- Route / Corridor Operations ---
+  const handleOpenCreateRoute = () => {
+    const nextSeq = routes.length + 1;
+    const defaultOrigin = lands[0] ? `${lands[0].landName || "Farm Lot"} (${lands[0].district || "Site"})` : "Warangal Napier Farms";
+    const defaultDest = plants[0]?.pltNm || plants[0]?.plantNm || "Hyderabad East CBG";
+    const defaultDriver = drivers[0]?.name || "Nagaraju Rao";
+
+    setRouteForm({
+      corridorName: `Corridor ${nextSeq}: Agri Feedstock Transit`,
+      corridorCategory: "Agri Substrate",
+      origin: defaultOrigin,
+      destination: defaultDest,
+      distanceKm: 120,
+      estTransitTime: "3h 15m",
+      highwayRoute: "NH 163 / State Highway 1",
+      assignedVehicle: "TS 08 UB 7712",
+      driverName: defaultDriver,
+      speedKmh: 50,
+      etaRemaining: "1h 45m remaining",
+      transitProgressPercent: 40,
+      status: "LIVE TRANSIT"
+    });
+    setEditingItem(null);
+    setFormMode("create_route");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleSaveRoute = (e) => {
+    e.preventDefault();
+    const badgeColor =
+      routeForm.corridorCategory === "CBG Mother Cascade"
+        ? "badge-green"
+        : routeForm.corridorCategory === "Organic Bio-Fertilizer"
+        ? "badge-amber"
+        : "badge-blue";
+
+    if (editingItem) {
+      setRoutes(prev => prev.map(r => (r.id === editingItem.id ? { ...routeForm, badgeColor, id: editingItem.id } : r)));
+    } else {
+      const newRoute = {
+        ...routeForm,
+        badgeColor,
+        id: Date.now()
+      };
+      setRoutes(prev => [newRoute, ...prev]);
+    }
+    setFormMode(null);
+    setEditingItem(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDeleteRoute = (id) => {
+    if (window.confirm("Are you sure you want to delete this route corridor?")) {
+      setRoutes(prev => prev.filter(r => r.id !== id));
+    }
+  };
+
   // Export to CSV
   const exportToCSV = (data, filename) => {
     if (!data.length) return;
@@ -386,6 +508,11 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
               {activeTab === "temperature" && (
                 <button onClick={handleOpenCreateTemp} className="sco-btn-primary">
                   <Plus size={16} /> Log Temperature Sensor
+                </button>
+              )}
+              {activeTab === "routes" && (
+                <button onClick={handleOpenCreateRoute} className="sco-btn-primary">
+                  <Plus size={16} /> Add Route / Corridor
                 </button>
               )}
             </div>
@@ -887,6 +1014,172 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
             </div>
           )}
 
+          {/* FULL PAGE FORM: CREATE ROUTE / DISPATCH CORRIDOR              */}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {formMode === "create_route" && (
+            <div className="sco-form-card">
+              <div className="sco-form-title">
+                <span>{editingItem ? "Edit Dispatch Route Corridor" : "Create New Dispatch Route Corridor"}</span>
+                <button onClick={() => setFormMode(null)} className="sco-btn-icon"><X size={18} /></button>
+              </div>
+
+              <form onSubmit={handleSaveRoute}>
+                <div className="sco-form-grid">
+                  <div className="sco-form-group">
+                    <label>Corridor Name <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Corridor 3: Organic Fertilizer Corridor"
+                      value={routeForm.corridorName}
+                      onChange={(e) => setRouteForm({ ...routeForm, corridorName: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Corridor Category <span className="required">*</span></label>
+                    <select
+                      value={routeForm.corridorCategory}
+                      onChange={(e) => setRouteForm({ ...routeForm, corridorCategory: e.target.value })}
+                    >
+                      <option value="Agri Substrate">Agri Substrate</option>
+                      <option value="CBG Mother Cascade">CBG Mother Cascade</option>
+                      <option value="Organic Bio-Fertilizer">Organic Bio-Fertilizer</option>
+                      <option value="Plant Equipment & Spares">Plant Equipment & Spares</option>
+                    </select>
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Origin Point <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Warangal Napier Farms / Lot A"
+                      value={routeForm.origin}
+                      onChange={(e) => setRouteForm({ ...routeForm, origin: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Destination Point <span className="required">*</span></label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g. Hyderabad East CBG / Retail Station"
+                      value={routeForm.destination}
+                      onChange={(e) => setRouteForm({ ...routeForm, destination: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Distance (km)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 120"
+                      value={routeForm.distanceKm}
+                      onChange={(e) => setRouteForm({ ...routeForm, distanceKm: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Estimated Transit Time</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 2h 45m"
+                      value={routeForm.estTransitTime}
+                      onChange={(e) => setRouteForm({ ...routeForm, estTransitTime: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Highway / Transit Corridor Route</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. NH 163 / State Arterial Highway"
+                      value={routeForm.highwayRoute}
+                      onChange={(e) => setRouteForm({ ...routeForm, highwayRoute: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Assigned Vehicle Reg #</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. TS 08 UB 7712"
+                      value={routeForm.assignedVehicle}
+                      onChange={(e) => setRouteForm({ ...routeForm, assignedVehicle: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Assigned Driver</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Nagaraju Rao"
+                      value={routeForm.driverName}
+                      onChange={(e) => setRouteForm({ ...routeForm, driverName: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Transit Speed (km/h)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="e.g. 52"
+                      value={routeForm.speedKmh}
+                      onChange={(e) => setRouteForm({ ...routeForm, speedKmh: parseFloat(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>ETA Remaining</label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 1h 15m remaining"
+                      value={routeForm.etaRemaining}
+                      onChange={(e) => setRouteForm({ ...routeForm, etaRemaining: e.target.value })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Transit Progress (%)</label>
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      value={routeForm.transitProgressPercent}
+                      onChange={(e) => setRouteForm({ ...routeForm, transitProgressPercent: parseInt(e.target.value) || 0 })}
+                    />
+                  </div>
+
+                  <div className="sco-form-group">
+                    <label>Telemetry Live Status</label>
+                    <select
+                      value={routeForm.status}
+                      onChange={(e) => setRouteForm({ ...routeForm, status: e.target.value })}
+                    >
+                      <option value="LIVE TRANSIT">LIVE TRANSIT</option>
+                      <option value="SCHEDULED">SCHEDULED</option>
+                      <option value="IN DEPOT / LOADING">IN DEPOT / LOADING</option>
+                      <option value="COMPLETED">COMPLETED</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="sco-form-actions">
+                  <button type="button" onClick={() => setFormMode(null)} className="sco-btn-secondary">
+                    Cancel
+                  </button>
+                  <button type="submit" className="sco-btn-primary">
+                    <Save size={16} /> {editingItem ? "Update Route Corridor" : "Create Route Corridor"}
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
           {/* ────────────────────────────────────────────────────────────── */}
           {/* TAB 1: VEHICLE TRIP SHEETS TABLE                               */}
           {/* ────────────────────────────────────────────────────────────── */}
@@ -1139,73 +1432,74 @@ const DispatchLogistics = ({ onLogout, userRole }) => {
           {/* ────────────────────────────────────────────────────────────── */}
           {/* TAB 4: ROUTE TRACKING & TRANSIT TELEMETRY                      */}
           {/* ────────────────────────────────────────────────────────────── */}
-          {activeTab === "routes" && (
+          {activeTab === "routes" && !formMode && (
             <div className="sco-card">
               <div className="sco-card-header">
                 <h3 className="sco-card-title">
                   <Navigation size={18} className="text-blue-600" />
                   Live Fleet Dispatch Corridors & Route Telemetry
                 </h3>
+                <button onClick={handleOpenCreateRoute} className="sco-btn-primary">
+                  <Plus size={16} /> Add Route / Corridor
+                </button>
               </div>
 
               <div className="sco-card-body">
-                <div className="sco-routes-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
-                  <div style={{ border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px", background: "#f8fafc" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                      <span className="sco-badge badge-blue">Corridor 1: Agri Substrate</span>
-                      <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "700" }}>● LIVE TRANSIT</span>
-                    </div>
-                    <h4 style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", margin: "0 0 6px 0" }}>
-                      Warangal Napier Farms → Hyderabad East CBG
-                    </h4>
-                    <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 16px 0" }}>
-                      Distance: 148 km | Est. Transit: 3h 45m | Highway: NH 163
-                    </p>
-
-                    <div style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "12px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px", marginBottom: "6px" }}>
-                        <span style={{ color: "#64748b" }}>Vehicle: TS 08 UB 7712</span>
-                        <span style={{ fontWeight: "700" }}>Speed: 52 km/h</span>
-                      </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px" }}>
-                        <span style={{ color: "#64748b" }}>Driver: Nagaraju Rao</span>
-                        <span style={{ color: "#2563eb", fontWeight: "700" }}>ETA: 1h 15m remaining</span>
-                      </div>
-                    </div>
-
-                    <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "9999px", overflow: "hidden" }}>
-                      <div style={{ width: "68%", height: "100%", background: "#2563eb" }}></div>
-                    </div>
+                {routes.length === 0 ? (
+                  <div className="sco-empty-state">
+                    <div className="icon"><Navigation size={40} /></div>
+                    <h3>No Dispatch Corridors Recorded</h3>
+                    <p>Track live telemetry, highway dispatch corridors, and transit ETAs across farm lots and plants.</p>
+                    <button onClick={handleOpenCreateRoute} className="sco-btn-primary">
+                      <Plus size={16} /> Add Route / Corridor
+                    </button>
                   </div>
+                ) : (
+                  <div className="sco-routes-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: "20px" }}>
+                    {routes.map((r) => (
+                      <div key={r.id} style={{ border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px", background: "#f8fafc", position: "relative" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
+                          <span className={`sco-badge ${r.badgeColor || "badge-blue"}`}>{r.corridorName}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                            <span style={{ fontSize: "12px", color: r.status === "LIVE TRANSIT" ? "#16a34a" : "#64748b", fontWeight: "700" }}>
+                              ● {r.status}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteRoute(r.id)}
+                              className="sco-btn-icon danger"
+                              title="Delete Corridor"
+                              style={{ padding: "2px 6px" }}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </div>
+                        <h4 style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", margin: "0 0 6px 0" }}>
+                          {r.origin} → {r.destination}
+                        </h4>
+                        <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 16px 0" }}>
+                          Distance: {r.distanceKm} km | Est. Transit: {r.estTransitTime} | Highway: {r.highwayRoute}
+                        </p>
 
-                  <div style={{ border: "1px solid #e2e8f0", borderRadius: "10px", padding: "18px", background: "#f8fafc" }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
-                      <span className="sco-badge badge-green">Corridor 2: CBG Mother Cascade</span>
-                      <span style={{ fontSize: "12px", color: "#16a34a", fontWeight: "700" }}>● LIVE TRANSIT</span>
-                    </div>
-                    <h4 style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", margin: "0 0 6px 0" }}>
-                      Hyderabad East CBG → IOCL Retail Dispenser Station
-                    </h4>
-                    <p style={{ fontSize: "13px", color: "#64748b", margin: "0 0 16px 0" }}>
-                      Distance: 42 km | Est. Transit: 1h 10m | Industrial Arterial
-                    </p>
+                        <div style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "12px" }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px", marginBottom: "6px" }}>
+                            <span style={{ color: "#64748b" }}>Vehicle: {r.assignedVehicle}</span>
+                            <span style={{ fontWeight: "700" }}>Speed: {r.speedKmh} km/h</span>
+                          </div>
+                          <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px" }}>
+                            <span style={{ color: "#64748b" }}>Driver: {r.driverName}</span>
+                            <span style={{ color: "#2563eb", fontWeight: "700" }}>ETA: {r.etaRemaining}</span>
+                          </div>
+                        </div>
 
-                    <div style={{ background: "#ffffff", padding: "12px", borderRadius: "8px", border: "1px solid #e2e8f0", marginBottom: "12px" }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px", marginBottom: "6px" }}>
-                        <span style={{ color: "#64748b" }}>Vehicle: TS 07 UA 9901</span>
-                        <span style={{ fontWeight: "700" }}>Speed: 40 km/h</span>
+                        <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "9999px", overflow: "hidden" }}>
+                          <div style={{ width: `${Math.min(100, Math.max(0, r.transitProgressPercent || 0))}%`, height: "100%", background: r.status === "LIVE TRANSIT" ? "#2563eb" : "#16a34a" }}></div>
+                        </div>
                       </div>
-                      <div style={{ display: "flex", justifyContent: "space-between", fontSize: "12.5px" }}>
-                        <span style={{ color: "#64748b" }}>Driver: B. Satyanarayana</span>
-                        <span style={{ color: "#16a34a", fontWeight: "700" }}>ETA: 25 mins remaining</span>
-                      </div>
-                    </div>
-
-                    <div style={{ height: "6px", background: "#e2e8f0", borderRadius: "9999px", overflow: "hidden" }}>
-                      <div style={{ width: "45%", height: "100%", background: "#16a34a" }}></div>
-                    </div>
+                    ))}
                   </div>
-                </div>
+                )}
               </div>
             </div>
           )}

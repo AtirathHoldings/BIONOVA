@@ -33,6 +33,32 @@ class _DispatchLogisticsScreenState extends State<DispatchLogisticsScreen> {
   List<Map<String, dynamic>> _drivers = [];
   List<Map<String, dynamic>> _weighbridgeSlips = [];
   List<Map<String, dynamic>> _tempLogs = [];
+  final List<Map<String, dynamic>> _routes = [
+    {
+      'id': 1,
+      'badge': 'Corridor 1: Agri Substrate',
+      'color': const Color(0xFF2563EB),
+      'title': 'Warangal Napier Farms → Hyderabad East CBG',
+      'meta': 'Distance: 148 km | Est. Transit: 3h 45m | Highway: NH 163',
+      'vehicle': 'TS 08 UB 7712',
+      'speed': 'Speed: 52 km/h',
+      'driver': 'Nagaraju Rao',
+      'eta': 'ETA: 1h 15m remaining',
+      'progress': 0.68,
+    },
+    {
+      'id': 2,
+      'badge': 'Corridor 2: CBG Mother Cascade',
+      'color': const Color(0xFF16A34A),
+      'title': 'Hyderabad East CBG → IOCL Retail Dispenser Station',
+      'meta': 'Distance: 42 km | Est. Transit: 1h 10m | Industrial Arterial',
+      'vehicle': 'TS 07 UA 9901',
+      'speed': 'Speed: 40 km/h',
+      'driver': 'B. Satyanarayana',
+      'eta': 'ETA: 25 mins remaining',
+      'progress': 0.45,
+    },
+  ];
 
   @override
   void initState() {
@@ -672,6 +698,136 @@ NET CERTIFIED PAYLOAD: ${slip['netWeightMT']} MT
     );
   }
 
+  void _openCreateRouteModal() {
+    final formKey = GlobalKey<FormState>();
+    final nextSeq = _routes.length + 1;
+    final nameCtrl = TextEditingController(text: 'Corridor $nextSeq: Agri Biomass Transit');
+    String category = 'Agri Substrate';
+    final originCtrl = TextEditingController(text: 'Warangal Napier Farms');
+    final destCtrl = TextEditingController(text: 'Hyderabad East CBG');
+    final distCtrl = TextEditingController(text: '120');
+    final timeCtrl = TextEditingController(text: '3h 15m');
+    final highwayCtrl = TextEditingController(text: 'NH 163');
+    final vehCtrl = TextEditingController(text: 'TS 08 UB 7712');
+    final driverCtrl = TextEditingController(text: 'Nagaraju Rao');
+    final speedCtrl = TextEditingController(text: '50');
+    final etaCtrl = TextEditingController(text: '1h 30m remaining');
+    double progress = 0.50;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(18))),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setModalState) => Padding(
+          padding: EdgeInsets.only(left: 16, right: 16, top: 16, bottom: MediaQuery.of(ctx).viewInsets.bottom + 16),
+          child: Form(
+            key: formKey,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const Icon(Icons.navigation_outlined, color: Color(0xFF2563EB)),
+                      const SizedBox(width: 8),
+                      Expanded(child: Text('Add Dispatch Route Corridor', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700))),
+                      IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: moduleInputDecoration('Corridor Name *'),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
+                  const SizedBox(height: 10),
+                  DropdownButtonFormField<String>(
+                    initialValue: category,
+                    isExpanded: true,
+                    decoration: moduleInputDecoration('Corridor Category'),
+                    items: const [
+                      DropdownMenuItem(value: 'Agri Substrate', child: Text('Agri Substrate')),
+                      DropdownMenuItem(value: 'CBG Mother Cascade', child: Text('CBG Mother Cascade')),
+                      DropdownMenuItem(value: 'Organic Bio-Fertilizer', child: Text('Organic Bio-Fertilizer')),
+                      DropdownMenuItem(value: 'Plant Equipment', child: Text('Plant Equipment')),
+                    ],
+                    onChanged: (v) => setModalState(() => category = v ?? category),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: TextFormField(controller: originCtrl, decoration: moduleInputDecoration('Origin *'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null)),
+                      const SizedBox(width: 10),
+                      Expanded(child: TextFormField(controller: destCtrl, decoration: moduleInputDecoration('Destination *'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null)),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: TextFormField(controller: distCtrl, keyboardType: TextInputType.number, decoration: moduleInputDecoration('Distance (km)'))),
+                      const SizedBox(width: 10),
+                      Expanded(child: TextFormField(controller: timeCtrl, decoration: moduleInputDecoration('Est. Transit'))),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextFormField(controller: highwayCtrl, decoration: moduleInputDecoration('Highway / Route')),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: TextFormField(controller: vehCtrl, decoration: moduleInputDecoration('Vehicle Reg #'))),
+                      const SizedBox(width: 10),
+                      Expanded(child: TextFormField(controller: driverCtrl, decoration: moduleInputDecoration('Driver Name'))),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      Expanded(child: TextFormField(controller: speedCtrl, keyboardType: TextInputType.number, decoration: moduleInputDecoration('Speed (km/h)'))),
+                      const SizedBox(width: 10),
+                      Expanded(child: TextFormField(controller: etaCtrl, decoration: moduleInputDecoration('ETA Remaining'))),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: () {
+                        if (!formKey.currentState!.validate()) return;
+                        final col = category == 'CBG Mother Cascade'
+                            ? const Color(0xFF16A34A)
+                            : (category == 'Organic Bio-Fertilizer' ? const Color(0xFFD97706) : const Color(0xFF2563EB));
+                        setState(() {
+                          _routes.insert(0, {
+                            'id': DateTime.now().millisecondsSinceEpoch,
+                            'badge': nameCtrl.text.trim(),
+                            'color': col,
+                            'title': '${originCtrl.text.trim()} → ${destCtrl.text.trim()}',
+                            'meta': 'Distance: ${distCtrl.text.trim()} km | Est. Transit: ${timeCtrl.text.trim()} | Highway: ${highwayCtrl.text.trim()}',
+                            'vehicle': vehCtrl.text.trim(),
+                            'speed': 'Speed: ${speedCtrl.text.trim()} km/h',
+                            'driver': driverCtrl.text.trim(),
+                            'eta': 'ETA: ${etaCtrl.text.trim()}',
+                            'progress': progress,
+                          });
+                        });
+                        Navigator.pop(ctx);
+                      },
+                      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
+                      child: const Text('Add Route Corridor'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildTabContent() {
     final activeTrips = _trips.where((t) => (t['status'] ?? '').toString().contains('En Route') || (t['status'] ?? '').toString().contains('Dispatched')).length;
     final totalWeightMT = _trips.fold<double>(0, (s, t) => s + _num(t['dispatchQtyMT']));
@@ -694,7 +850,7 @@ NET CERTIFIED PAYLOAD: ${slip['netWeightMT']} MT
                   ],
                 ),
               ),
-              if (_perm.canCreate && _activeTab != 'routes')
+              if (_perm.canCreate)
                 ElevatedButton.icon(
                   onPressed: _activeTab == 'trips'
                       ? _openCreateTripModal
@@ -702,7 +858,9 @@ NET CERTIFIED PAYLOAD: ${slip['netWeightMT']} MT
                           ? _openCreateDriverModal
                           : _activeTab == 'weighbridge'
                               ? _openCreateWeighbridgeModal
-                              : _openCreateTempModal,
+                              : _activeTab == 'routes'
+                                  ? _openCreateRouteModal
+                                  : _openCreateTempModal,
                   icon: const Icon(Icons.add, size: 15),
                   label: Text(
                     _activeTab == 'trips'
@@ -711,7 +869,9 @@ NET CERTIFIED PAYLOAD: ${slip['netWeightMT']} MT
                             ? 'Driver'
                             : _activeTab == 'weighbridge'
                                 ? 'Slip'
-                                : 'Temp Log',
+                                : _activeTab == 'routes'
+                                    ? 'Route'
+                                    : 'Temp Log',
                   ),
                   style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white),
                 ),
@@ -906,30 +1066,33 @@ NET CERTIFIED PAYLOAD: ${slip['netWeightMT']} MT
                     ),
                   )),
           ] else if (_activeTab == 'routes') ...[
-            Text('Live Fleet Dispatch Corridors', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Live Fleet Dispatch Corridors (${_routes.length})', style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700)),
+                if (_perm.canCreate)
+                  TextButton.icon(
+                    onPressed: _openCreateRouteModal,
+                    icon: const Icon(Icons.add, size: 16),
+                    label: const Text('Add Route'),
+                  ),
+              ],
+            ),
             const SizedBox(height: 10),
-            _buildCorridorCard(
-              badge: 'Corridor 1: Agri Substrate',
-              color: const Color(0xFF2563EB),
-              title: 'Warangal Napier Farms → Hyderabad East CBG',
-              meta: 'Distance: 148 km | Est. Transit: 3h 45m | Highway: NH 163',
-              vehicle: 'TS 08 UB 7712',
-              speed: 'Speed: 52 km/h',
-              driver: 'Nagaraju Rao',
-              eta: 'ETA: 1h 15m remaining',
-              progress: 0.68,
-            ),
-            _buildCorridorCard(
-              badge: 'Corridor 2: CBG Mother Cascade',
-              color: const Color(0xFF16A34A),
-              title: 'Hyderabad East CBG → IOCL Retail Dispenser Station',
-              meta: 'Distance: 42 km | Est. Transit: 1h 10m | Industrial Arterial',
-              vehicle: 'TS 07 UA 9901',
-              speed: 'Speed: 40 km/h',
-              driver: 'B. Satyanarayana',
-              eta: 'ETA: 25 mins remaining',
-              progress: 0.45,
-            ),
+            if (_routes.isEmpty)
+              const ModuleEmptyState(icon: Icons.navigation_outlined, title: 'No Route Corridors', subtitle: 'Add a new dispatch corridor to track transit telemetry.')
+            else
+              ..._routes.map((r) => _buildCorridorCard(
+                    badge: r['badge'] ?? 'Corridor',
+                    color: r['color'] as Color? ?? const Color(0xFF2563EB),
+                    title: r['title'] ?? '',
+                    meta: r['meta'] ?? '',
+                    vehicle: r['vehicle'] ?? '',
+                    speed: r['speed'] ?? '',
+                    driver: r['driver'] ?? '',
+                    eta: r['eta'] ?? '',
+                    progress: (r['progress'] is num) ? (r['progress'] as num).toDouble() : 0.5,
+                  )),
           ] else ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
