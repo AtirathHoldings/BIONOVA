@@ -207,6 +207,7 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
 
   // Custom UI Dialog & Modal States
   const [assetErrors, setAssetErrors] = useState({});
+  const [scheduleErrors, setScheduleErrors] = useState({});
   const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, title: "", message: "", onConfirm: null });
   const [viewingItem, setViewingItem] = useState(null);
 
@@ -231,11 +232,11 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
     scheduleCode: "",
     assetName: "",
     facility: "",
-    frequency: "Monthly Overhaul & Calibration",
+    frequency: "",
     nextDueDate: "",
     meterThresholdHrs: 500,
-    checklistItems: "1. Inspect oil seals & lubricant levels\n2. Calibrate pressure transducer transmitters\n3. Check gas sensor alarms & valves",
-    leadTechnician: "Chief Mechanical Engineer",
+    checklistItems: "",
+    leadTechnician: "",
     status: "Upcoming"
   });
 
@@ -423,17 +424,37 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
   };
 
   // --- Schedule Operations ---
+  const generateNextScheduleCode = (scheduleList = schedules) => {
+    const currentYear = new Date().getFullYear();
+    const prefix = `PMS-${currentYear}-`;
+    let maxSeq = 0;
+    (scheduleList || []).forEach((s) => {
+      const code = s.scheduleCode || s.schedule_code || "";
+      if (code.startsWith(prefix)) {
+        const digits = code.substring(prefix.length).replace(/[^0-9]/g, "");
+        if (digits) {
+          const val = parseInt(digits, 10);
+          if (!isNaN(val) && val > maxSeq) {
+            maxSeq = val;
+          }
+        }
+      }
+    });
+    return `PMS-${currentYear}-${String(maxSeq + 1).padStart(4, "0")}`;
+  };
+
   const handleOpenCreateSchedule = () => {
-    const nextSeq = String(schedules.length + 1).padStart(4, "0");
+    setScheduleErrors({});
+    const nextCode = generateNextScheduleCode(schedules);
     setScheduleForm({
-      scheduleCode: `PMS-2026-${nextSeq}`,
-      assetName: assets[0]?.name || "High-Pressure CBG Compressor Train 1",
-      facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant",
-      frequency: "Monthly Overhaul & Calibration",
-      nextDueDate: new Date(Date.now() + 10 * 86400000).toISOString().split("T")[0],
+      scheduleCode: nextCode,
+      assetName: "",
+      facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant (Rangareddy)",
+      frequency: "",
+      nextDueDate: "",
       meterThresholdHrs: 500,
-      checklistItems: "1. Inspect oil seals & lubricant levels\n2. Calibrate pressure transducer transmitters\n3. Check gas sensor alarms & valves",
-      leadTechnician: "Suresh Reddy (Lead Reliability Engineer)",
+      checklistItems: "",
+      leadTechnician: "",
       status: "Upcoming"
     });
     setEditingItem(null);
@@ -441,15 +462,64 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleOpenEditSchedule = (schedule) => {
+    setScheduleErrors({});
+    setEditingItem(schedule);
+    setScheduleForm({
+      scheduleCode: schedule.scheduleCode || schedule.schedule_code || "",
+      assetName: schedule.assetName || "",
+      facility: schedule.facility || "",
+      frequency: schedule.frequency || "",
+      nextDueDate: formatToDDMMYYYY(schedule.nextDueDate || ""),
+      meterThresholdHrs: schedule.meterThresholdHrs || 500,
+      checklistItems: schedule.checklistItems || "",
+      leadTechnician: schedule.leadTechnician || "",
+      status: schedule.status || "Upcoming"
+    });
+    setFormMode("create_schedule");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSaveSchedule = async (e) => {
     e.preventDefault();
+    const errors = {};
+
+    // 1. Schedule Code
+    if (!scheduleForm.scheduleCode || !scheduleForm.scheduleCode.trim()) {
+      errors.scheduleCode = "PM Schedule Code is required";
+    }
+
+    // 2. Select Machinery Asset
+    if (!scheduleForm.assetName || !scheduleForm.assetName.trim()) {
+      errors.assetName = "Please select a Machinery Asset";
+    }
+
+    // 3. Inspection Frequency
+    if (!scheduleForm.frequency || !scheduleForm.frequency.trim()) {
+      errors.frequency = "Please select an Inspection Frequency";
+    }
+
+    // 4. Next Scheduled Due Date
+    if (!scheduleForm.nextDueDate || !scheduleForm.nextDueDate.trim()) {
+      errors.nextDueDate = "Next Scheduled Due Date is required";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setScheduleErrors(errors);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    setScheduleErrors({});
     const payload = {
       ...scheduleForm,
-      id: editingItem ? editingItem.id : undefined
+      id: editingItem ? editingItem.id : undefined,
+      nextDueDate: formatToDDMMYYYY(scheduleForm.nextDueDate)
     };
     await saveMaintenanceSchedule(payload);
     await loadAllData();
     setFormMode(null);
+    setEditingItem(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -893,14 +963,39 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
           )}
 
           {/* ────────────────────────────────────────────────────────────── */}
-          {/* FULL PAGE FORM: CREATE PREVENTIVE MAINTENANCE SCHEDULE         */}
+          {/* FULL PAGE FORM: CREATE / EDIT PREVENTIVE MAINTENANCE SCHEDULE   */}
           {/* ────────────────────────────────────────────────────────────── */}
           {formMode === "create_schedule" && (
             <div className="sco-form-card">
               <div className="sco-form-title">
-                <span>Configure Preventive Maintenance (PM) Schedule</span>
-                <button onClick={() => setFormMode(null)} className="sco-btn-icon"><X size={18} /></button>
+                <span>{editingItem ? "Edit Preventive Maintenance (PM) Schedule" : "Configure Preventive Maintenance (PM) Schedule"}</span>
+                <button onClick={() => { setFormMode(null); setEditingItem(null); setScheduleErrors({}); }} className="sco-btn-icon"><X size={18} /></button>
               </div>
+
+              {Object.keys(scheduleErrors).length > 0 && (
+                <div style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fca5a5",
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  color: "#991b1b",
+                  fontSize: "13.5px"
+                }}>
+                  <AlertTriangle size={18} style={{ color: "#dc2626", marginTop: "2px", flexShrink: 0 }} />
+                  <div>
+                    <span style={{ fontWeight: "700" }}>Please review and fix the following errors:</span>
+                    <ul style={{ margin: "6px 0 0 16px", padding: 0 }}>
+                      {Object.entries(scheduleErrors).map(([field, msg]) => (
+                        <li key={field}>{msg}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleSaveSchedule}>
                 <div className="sco-form-grid">
@@ -908,9 +1003,10 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     <label>PM Schedule Code <span className="required">*</span></label>
                     <input
                       type="text"
-                      required
+                      readOnly
                       value={scheduleForm.scheduleCode}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, scheduleCode: e.target.value })}
+                      style={{ backgroundColor: "#f8fafc", cursor: "not-allowed", color: "#334155", fontWeight: "600" }}
+                      title="Auto-generated sequential PM Schedule Code"
                     />
                   </div>
 
@@ -919,35 +1015,62 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     <select
                       required
                       value={scheduleForm.assetName}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, assetName: e.target.value })}
+                      onChange={(e) => {
+                        setScheduleForm({ ...scheduleForm, assetName: e.target.value });
+                        if (scheduleErrors.assetName) setScheduleErrors({ ...scheduleErrors, assetName: null });
+                      }}
+                      style={scheduleErrors.assetName ? { borderColor: "#dc2626" } : {}}
                     >
+                      <option value="">-- Choose Machinery Asset --</option>
                       {assets.map(a => <option key={a.id} value={a.name}>{a.name} ({a.assetCode})</option>)}
-                      {!assets.length && <option value="High-Pressure CBG Compressor Train 1">High-Pressure CBG Compressor Train 1</option>}
                     </select>
+                    {scheduleErrors.assetName && (
+                      <span style={{ color: "#dc2626", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        {scheduleErrors.assetName}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
                     <label>Inspection Frequency <span className="required">*</span></label>
                     <select
+                      required
                       value={scheduleForm.frequency}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, frequency: e.target.value })}
+                      onChange={(e) => {
+                        setScheduleForm({ ...scheduleForm, frequency: e.target.value });
+                        if (scheduleErrors.frequency) setScheduleErrors({ ...scheduleErrors, frequency: null });
+                      }}
+                      style={scheduleErrors.frequency ? { borderColor: "#dc2626" } : {}}
                     >
+                      <option value="">-- Choose Inspection Frequency --</option>
                       <option value="Daily Inspection">Daily Operator Inspection</option>
                       <option value="Weekly Lubrication">Weekly Lubrication & Seals</option>
                       <option value="Monthly Overhaul & Calibration">Monthly Overhaul & Calibration</option>
                       <option value="Running Meter: 500 Hrs">Running Meter: 500 Hours</option>
                       <option value="Running Meter: 2000 Hrs">Running Meter: 2,000 Hours Major AMC</option>
                     </select>
+                    {scheduleErrors.frequency && (
+                      <span style={{ color: "#dc2626", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        {scheduleErrors.frequency}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
                     <label>Next Scheduled Due Date <span className="required">*</span></label>
-                    <input
-                      type="date"
-                      required
+                    <CustomDateInput
                       value={scheduleForm.nextDueDate}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, nextDueDate: e.target.value })}
+                      onChange={(val) => {
+                        setScheduleForm({ ...scheduleForm, nextDueDate: val });
+                        if (scheduleErrors.nextDueDate) setScheduleErrors({ ...scheduleErrors, nextDueDate: null });
+                      }}
+                      required
                     />
+                    {scheduleErrors.nextDueDate && (
+                      <span style={{ color: "#dc2626", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        {scheduleErrors.nextDueDate}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
@@ -956,6 +1079,7 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                       type="text"
                       value={scheduleForm.leadTechnician}
                       onChange={(e) => setScheduleForm({ ...scheduleForm, leadTechnician: e.target.value })}
+                      placeholder="e.g. Suresh Reddy (Lead Reliability Engineer)"
                     />
                   </div>
 
@@ -965,16 +1089,17 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                       rows="3"
                       value={scheduleForm.checklistItems}
                       onChange={(e) => setScheduleForm({ ...scheduleForm, checklistItems: e.target.value })}
+                      placeholder="1. Inspect oil seals & lubricant levels&#10;2. Calibrate pressure transducer transmitters&#10;3. Check gas sensor alarms & valves"
                     ></textarea>
                   </div>
                 </div>
 
                 <div className="sco-form-actions">
-                  <button type="button" onClick={() => setFormMode(null)} className="sco-btn-secondary">
+                  <button type="button" onClick={() => { setFormMode(null); setEditingItem(null); setScheduleErrors({}); }} className="sco-btn-secondary">
                     Cancel
                   </button>
                   <button type="submit" className="sco-btn-primary">
-                    <Save size={16} /> Save PM Schedule
+                    <Save size={16} /> {editingItem ? "Update PM Schedule" : "Save PM Schedule"}
                   </button>
                 </div>
               </form>
@@ -1337,9 +1462,9 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                       <thead>
                         <tr>
                           <th>Schedule Code</th>
-                          <th>Target Asset</th>
-                          <th>Frequency</th>
-                          <th>Next Due Date</th>
+                          <th>Machinery Asset</th>
+                          <th>Inspection Frequency</th>
+                          <th>Next Scheduled Due Date</th>
                           <th>Lead Engineer</th>
                           <th>Status</th>
                           <th style={{ textAlign: "right" }}>Actions</th>
@@ -1351,27 +1476,43 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                             <td style={{ fontWeight: "700" }}>{s.scheduleCode}</td>
                             <td>{s.assetName}</td>
                             <td>{s.frequency}</td>
-                            <td>{s.nextDueDate}</td>
-                            <td>{s.leadTechnician}</td>
-                            <td><span className="sco-badge badge-blue">{s.status}</span></td>
+                            <td>{formatToDDMMYYYY(s.nextDueDate)}</td>
+                            <td>{s.leadTechnician || "—"}</td>
+                            <td><span className="sco-badge badge-blue">{s.status || "Upcoming"}</span></td>
                             <td style={{ textAlign: "right" }}>
-                              <button
-                                onClick={() =>
-                                  setDeleteConfirm({
-                                    isOpen: true,
-                                    title: "Delete PM Schedule",
-                                    message: `Are you sure you want to delete PM schedule "${s.scheduleCode}" for ${s.assetName}? This action cannot be undone.`,
-                                    onConfirm: async () => {
-                                      await deleteMaintenanceSchedule(s.id);
-                                      await loadAllData();
-                                    }
-                                  })
-                                }
-                                className="sco-btn-icon danger"
-                                title="Delete Schedule"
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                <button
+                                  onClick={() => setViewingItem({ type: "schedule", data: s })}
+                                  className="sco-btn-icon"
+                                  title="View Schedule Details"
+                                >
+                                  <Eye size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenEditSchedule(s)}
+                                  className="sco-btn-icon"
+                                  title="Edit PM Schedule"
+                                >
+                                  <Edit2 size={15} />
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    setDeleteConfirm({
+                                      isOpen: true,
+                                      title: "Delete PM Schedule",
+                                      message: `Are you sure you want to delete PM schedule "${s.scheduleCode}" for ${s.assetName}? This action cannot be undone.`,
+                                      onConfirm: async () => {
+                                        await deleteMaintenanceSchedule(s.id);
+                                        await loadAllData();
+                                      }
+                                    })
+                                  }
+                                  className="sco-btn-icon danger"
+                                  title="Delete Schedule"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1685,6 +1826,138 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                 <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
                   <button onClick={() => window.print()} className="sco-btn-secondary">
                     <Printer size={16} /> Print Record
+                  </button>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-primary">
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ────────────────────────────────────────────────────────────── */}
+          {/* VIEW PM SCHEDULE DETAILS MODAL                                  */}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {viewingItem && viewingItem.type === "schedule" && (
+            <div
+              className="sco-modal-overlay"
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1050,
+                padding: "20px"
+              }}
+            >
+              <div
+                className="sco-modal-card"
+                style={{
+                  background: "#ffffff",
+                  borderRadius: "14px",
+                  width: "100%",
+                  maxWidth: "680px",
+                  maxHeight: "90vh",
+                  overflowY: "auto",
+                  padding: "28px",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.25)"
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    borderBottom: "2px solid #e2e8f0",
+                    paddingBottom: "16px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "10px",
+                        background: "#fef3c7",
+                        color: "#d97706",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <Clock size={22} />
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", margin: 0 }}>
+                        {viewingItem.data.scheduleCode}
+                      </h2>
+                      <p style={{ fontSize: "13px", color: "#64748b", margin: "2px 0 0 0" }}>
+                        Preventive Maintenance (PM) Inspection Schedule
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-icon">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "14px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Machinery Asset</p>
+                    <p style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", margin: 0 }}>{viewingItem.data.assetName || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Inspection Frequency</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.frequency || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Next Scheduled Due Date</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "700", color: "#2563eb", margin: 0 }}>{formatToDDMMYYYY(viewingItem.data.nextDueDate)}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Lead Engineer / Technician</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.leadTechnician || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Operating Status</p>
+                    <p style={{ margin: 0 }}>
+                      <span className="sco-badge badge-blue">{viewingItem.data.status || "Upcoming"}</span>
+                    </p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Running Meter Threshold</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.meterThresholdHrs || 500} Hours</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", gridColumn: "span 2" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Mandatory Checklist Steps (SOP)</p>
+                    <pre style={{ fontSize: "13px", color: "#334155", margin: 0, whiteSpace: "pre-wrap", fontFamily: "inherit", lineHeight: "1.6" }}>
+                      {viewingItem.data.checklistItems || "No checklist SOP recorded."}
+                    </pre>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                  <button onClick={() => window.print()} className="sco-btn-secondary">
+                    <Printer size={16} /> Print Schedule
                   </button>
                   <button onClick={() => setViewingItem(null)} className="sco-btn-primary">
                     Close

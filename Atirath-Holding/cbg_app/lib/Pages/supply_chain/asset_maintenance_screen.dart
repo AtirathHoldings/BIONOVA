@@ -178,6 +178,64 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
     );
   }
 
+  String _generateNextScheduleCode() {
+    final currentYear = DateTime.now().year;
+    final prefix = 'PMS-$currentYear-';
+    int maxSeq = 0;
+    for (final s in _schedules) {
+      final code = (s['scheduleCode'] ?? s['schedule_code'] ?? '').toString();
+      if (code.startsWith(prefix)) {
+        final digits = code.substring(prefix.length).replaceAll(RegExp(r'[^0-9]'), '');
+        final val = int.tryParse(digits) ?? 0;
+        if (val > maxSeq) maxSeq = val;
+      }
+    }
+    return 'PMS-$currentYear-${(maxSeq + 1).toString().padLeft(4, '0')}';
+  }
+
+  void _viewScheduleDetails(Map<String, dynamic> s) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.schedule_outlined, color: Color(0xFFD97706)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                s['scheduleCode']?.toString() ?? 'PM Schedule Details',
+                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow('Machinery Asset', s['assetName']?.toString() ?? '—'),
+              _detailRow('Inspection Frequency', s['frequency']?.toString() ?? '—'),
+              _detailRow('Next Scheduled Due Date', _formatToDDMMYYYY(s['nextDueDate'])),
+              _detailRow('Lead Engineer', s['leadTechnician']?.toString() ?? '—'),
+              _detailRow('Status', s['status']?.toString() ?? 'Upcoming'),
+              if (s['checklistItems'] != null && s['checklistItems'].toString().isNotEmpty)
+                _detailRow('Checklist SOP', s['checklistItems'].toString()),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
   List<String> _plantOptions() {
     final names = _plants
         .map((p) => (p['plantNm'] ?? p['name'] ?? '').toString())
@@ -404,17 +462,17 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
     );
   }
 
-  void _openCreateScheduleModal() {
-    final nextSeq = (_schedules.length + 1).toString().padLeft(4, '0');
+  void _openCreateScheduleModal([Map<String, dynamic>? editing]) {
+    final nextCode = _generateNextScheduleCode();
     final assetList = _assetOptions('High-Pressure CBG Compressor Train 1');
     final formKey = GlobalKey<FormState>();
 
-    final codeCtrl = TextEditingController(text: 'PMS-2026-$nextSeq');
-    String assetName = assetList.first;
-    String frequency = 'Monthly Overhaul & Calibration';
-    final dueCtrl = TextEditingController(text: DateTime.now().add(const Duration(days: 10)).toIso8601String().split('T').first);
-    final techCtrl = TextEditingController(text: 'Suresh Reddy (Lead Reliability Engineer)');
-    final checklistCtrl = TextEditingController(text: '1. Inspect oil seals & lubricant levels\n2. Calibrate pressure transducer transmitters\n3. Check gas sensor alarms & valves');
+    final codeCtrl = TextEditingController(text: editing != null ? (editing['scheduleCode'] ?? editing['schedule_code'] ?? nextCode).toString() : nextCode);
+    String? assetName = editing != null ? editing['assetName']?.toString() : null;
+    String? frequency = editing != null ? editing['frequency']?.toString() : null;
+    final dueCtrl = TextEditingController(text: editing != null ? _formatToDDMMYYYY(editing['nextDueDate']) : '');
+    final techCtrl = TextEditingController(text: editing != null ? (editing['leadTechnician'] ?? '').toString() : '');
+    final checklistCtrl = TextEditingController(text: editing != null ? (editing['checklistItems'] ?? '').toString() : '');
 
     showModalBottomSheet(
       context: context,
@@ -434,25 +492,33 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                     children: [
                       const Icon(Icons.schedule_outlined, color: Color(0xFFD97706)),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('Configure Preventive Maintenance (PM)', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700))),
+                      Expanded(child: Text(editing != null ? 'Edit PM Schedule' : 'Configure Preventive Maintenance (PM)', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700))),
                       IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: codeCtrl, decoration: moduleInputDecoration('PM Schedule Code *'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
+                  TextFormField(
+                    controller: codeCtrl,
+                    readOnly: true,
+                    decoration: moduleInputDecoration('PM Schedule Code * (Auto)').copyWith(fillColor: const Color(0xFFF8FAFC), filled: true),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: assetName,
                     isExpanded: true,
                     decoration: moduleInputDecoration('Select Machinery Asset *'),
+                    hint: const Text('-- Choose Machinery Asset --'),
                     items: assetList.map((a) => DropdownMenuItem(value: a, child: Text(a, overflow: TextOverflow.ellipsis))).toList(),
-                    onChanged: (v) => setModalState(() => assetName = v ?? assetName),
+                    onChanged: (v) => setModalState(() => assetName = v),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please select a Machinery Asset' : null,
                   ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: frequency,
                     isExpanded: true,
-                    decoration: moduleInputDecoration('Inspection Frequency'),
+                    decoration: moduleInputDecoration('Inspection Frequency *'),
+                    hint: const Text('-- Choose Inspection Frequency --'),
                     items: const [
                       DropdownMenuItem(value: 'Daily Inspection', child: Text('Daily Operator Inspection')),
                       DropdownMenuItem(value: 'Weekly Lubrication', child: Text('Weekly Lubrication & Seals')),
@@ -460,18 +526,45 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                       DropdownMenuItem(value: 'Running Meter: 500 Hrs', child: Text('Running Meter: 500 Hours')),
                       DropdownMenuItem(value: 'Running Meter: 2000 Hrs', child: Text('Running Meter: 2,000 Hours Major AMC')),
                     ],
-                    onChanged: (v) => setModalState(() => frequency = v ?? frequency),
+                    onChanged: (v) => setModalState(() => frequency = v),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Please select an Inspection Frequency' : null,
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(child: TextFormField(controller: dueCtrl, decoration: moduleInputDecoration('Next Due Date *'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null)),
+                      Expanded(
+                        child: TextFormField(
+                          controller: dueCtrl,
+                          readOnly: true,
+                          decoration: moduleInputDecoration('Next Scheduled Due Date *').copyWith(
+                            suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+                          ),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2035),
+                            );
+                            if (picked != null) {
+                              setModalState(() {
+                                dueCtrl.text = _formatToDDMMYYYY(picked);
+                              });
+                            }
+                          },
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Next Scheduled Due Date is required' : null,
+                        ),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(child: TextFormField(controller: techCtrl, decoration: moduleInputDecoration('Lead Technician'))),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: checklistCtrl, maxLines: 3, decoration: moduleInputDecoration('Mandatory Checklist Steps (SOP)')),
+                  TextFormField(
+                    controller: checklistCtrl,
+                    maxLines: 3,
+                    decoration: moduleInputDecoration('Mandatory Checklist Steps (SOP)', hint: '1. Inspect oil seals & lubricant levels\n2. Calibrate pressure transducer transmitters\n3. Check gas sensor alarms & valves'),
+                  ),
                   const SizedBox(height: 14),
                   SizedBox(
                     width: double.infinity,
@@ -479,21 +572,22 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         await SupplyChainApiService.saveMaintenanceSchedule({
+                          if (editing != null && editing['id'] != null) 'id': editing['id'],
                           'scheduleCode': codeCtrl.text.trim(),
-                          'assetName': assetName,
+                          'assetName': assetName ?? '',
                           'facility': _plantOptions().first,
-                          'frequency': frequency,
+                          'frequency': frequency ?? '',
                           'nextDueDate': dueCtrl.text.trim(),
                           'meterThresholdHrs': 500,
                           'checklistItems': checklistCtrl.text.trim(),
                           'leadTechnician': techCtrl.text.trim(),
-                          'status': 'Upcoming',
+                          'status': editing != null ? (editing['status'] ?? 'Upcoming') : 'Upcoming',
                         });
                         await _loadAllData();
                         if (ctx.mounted) Navigator.pop(ctx);
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13)),
-                      child: const Text('Save PM Schedule'),
+                      child: Text(editing != null ? 'Update PM Schedule' : 'Save PM Schedule'),
                     ),
                   ),
                 ],
@@ -903,22 +997,35 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                           ],
                         ),
                         const SizedBox(height: 8),
-                        Text('${s['assetName'] ?? '-'}', style: GoogleFonts.inter(fontSize: 14.5, fontWeight: FontWeight.w800)),
-                        Text('${s['frequency'] ?? '-'} • Due: ${s['nextDueDate'] ?? '-'}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569))),
+                        Text('Machinery Asset: ${s['assetName'] ?? '-'}', style: GoogleFonts.inter(fontSize: 14.5, fontWeight: FontWeight.w800)),
+                        Text('${s['frequency'] ?? '-'} • Due: ${_formatToDDMMYYYY(s['nextDueDate'])}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569))),
                         Text('Lead Engineer: ${s['leadTechnician'] ?? '-'}', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
-                        if (_perm.canDelete)
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: IconButton(
-                              icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 19),
-                              onPressed: () async {
-                                if (await _confirmDelete('${s['scheduleCode']}')) {
-                                  await SupplyChainApiService.deleteMaintenanceSchedule(s['id']);
-                                  await _loadAllData();
-                                }
-                              },
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.end,
+                          children: [
+                            IconButton(
+                              icon: const Icon(Icons.visibility_outlined, color: Color(0xFF2563EB), size: 20),
+                              tooltip: 'View Schedule Details',
+                              onPressed: () => _viewScheduleDetails(s),
                             ),
-                          ),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, color: Color(0xFF475569), size: 20),
+                              tooltip: 'Edit PM Schedule',
+                              onPressed: () => _openCreateScheduleModal(s),
+                            ),
+                            if (_perm.canDelete)
+                              IconButton(
+                                icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 20),
+                                tooltip: 'Delete Schedule',
+                                onPressed: () async {
+                                  if (await _confirmDelete('${s['scheduleCode']}')) {
+                                    await SupplyChainApiService.deleteMaintenanceSchedule(s['id']);
+                                    await _loadAllData();
+                                  }
+                                },
+                              ),
+                          ],
+                        ),
                       ],
                     ),
                   )),
