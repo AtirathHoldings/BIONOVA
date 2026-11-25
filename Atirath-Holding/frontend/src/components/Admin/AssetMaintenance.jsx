@@ -24,7 +24,9 @@ import {
   Flame,
   FileText,
   Lock,
-  Cpu
+  Cpu,
+  Edit2,
+  Printer
 } from "lucide-react";
 import "../../styles/SupplyChainOperations.css";
 import { getScreenPermission } from "../../utils/permissions";
@@ -45,6 +47,146 @@ import {
 
 const apiBaseUrl = import.meta.env.VITE_API_BASE_URL;
 
+// Utility: Format any date representation strictly into DD-MM-YYYY format across all devices
+export const formatToDDMMYYYY = (val) => {
+  if (!val) return "";
+  const str = String(val).trim();
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) return str;
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const parts = str.split("T")[0].split("-");
+    if (parts.length === 3) {
+      return `${parts[2]}-${parts[1]}-${parts[0]}`;
+    }
+  }
+  const d = new Date(val);
+  if (!isNaN(d.getTime())) {
+    const day = String(d.getDate()).padStart(2, "0");
+    const month = String(d.getMonth() + 1).padStart(2, "0");
+    const year = d.getFullYear();
+    return `${day}-${month}-${year}`;
+  }
+  return str;
+};
+
+// Utility: Convert DD-MM-YYYY to YYYY-MM-DD for native HTML5 date picker sync
+export const parseDDMMYYYYToISO = (val) => {
+  if (!val) return "";
+  const str = String(val).trim();
+  if (/^\d{2}-\d{2}-\d{4}$/.test(str)) {
+    const [d, m, y] = str.split("-");
+    return `${y}-${m}-${d}`;
+  }
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    return str.split("T")[0];
+  }
+  return str;
+};
+
+// CustomDateInput: Guaranteed DD-MM-YYYY display on every device/OS/browser
+const CustomDateInput = ({ value, onChange, required, placeholder = "DD-MM-YYYY" }) => {
+  const hiddenInputRef = React.useRef(null);
+  const displayVal = formatToDDMMYYYY(value);
+  const isoVal = parseDDMMYYYYToISO(value);
+
+  const handlePickerChange = (e) => {
+    const pickedIso = e.target.value;
+    if (pickedIso) {
+      onChange(formatToDDMMYYYY(pickedIso));
+    }
+  };
+
+  const handleManualInput = (e) => {
+    onChange(e.target.value);
+  };
+
+  const openCalendar = () => {
+    if (hiddenInputRef.current) {
+      try {
+        if (hiddenInputRef.current.showPicker) {
+          hiddenInputRef.current.showPicker();
+        } else {
+          hiddenInputRef.current.focus();
+          hiddenInputRef.current.click();
+        }
+      } catch (err) {
+        hiddenInputRef.current.click();
+      }
+    }
+  };
+
+  return (
+    <div style={{ position: "relative", width: "100%", display: "flex", alignItems: "center" }}>
+      <input
+        type="text"
+        required={required}
+        value={displayVal}
+        onChange={handleManualInput}
+        placeholder={placeholder}
+        style={{
+          width: "100%",
+          paddingRight: "40px",
+          fontFamily: "inherit",
+          fontSize: "14px"
+        }}
+        onClick={openCalendar}
+      />
+      <input
+        ref={hiddenInputRef}
+        type="date"
+        tabIndex={-1}
+        value={isoVal}
+        onChange={handlePickerChange}
+        style={{
+          position: "absolute",
+          right: "10px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          opacity: 0,
+          width: "24px",
+          height: "24px",
+          cursor: "pointer",
+          pointerEvents: "none"
+        }}
+      />
+      <button
+        type="button"
+        onClick={openCalendar}
+        style={{
+          position: "absolute",
+          right: "10px",
+          top: "50%",
+          transform: "translateY(-50%)",
+          background: "none",
+          border: "none",
+          cursor: "pointer",
+          padding: "4px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "#64748B"
+        }}
+        title="Select Date (DD-MM-YYYY)"
+      >
+        <Calendar size={18} />
+      </button>
+    </div>
+  );
+};
+
+export const getCriticalityBadge = (crit) => {
+  const c = crit || "";
+  if (c.startsWith("A") || c.toLowerCase().includes("critical")) {
+    return { label: "Critical Asset", cls: "badge-red" };
+  }
+  if (c.startsWith("B") || c.toLowerCase().includes("essential")) {
+    return { label: "Essential Asset", cls: "badge-amber" };
+  }
+  if (c.startsWith("C") || c.toLowerCase().includes("standard") || c.toLowerCase().includes("auxiliary")) {
+    return { label: "Standard Auxiliary", cls: "badge-blue" };
+  }
+  return { label: c || "Standard Auxiliary", cls: "badge-blue" };
+};
+
 const AssetMaintenance = ({ onLogout, userRole }) => {
   const screenPerm = getScreenPermission("ASSET_MAINTENANCE");
   const { tab } = useParams();
@@ -63,6 +205,11 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("All");
 
+  // Custom UI Dialog & Modal States
+  const [assetErrors, setAssetErrors] = useState({});
+  const [deleteConfirm, setDeleteConfirm] = useState({ isOpen: false, title: "", message: "", onConfirm: null });
+  const [viewingItem, setViewingItem] = useState(null);
+
   // Form View States (Full Page Form)
   const [formMode, setFormMode] = useState(null); // 'create_asset' | 'create_schedule' | 'create_incident' | 'create_cost' | null
   const [editingItem, setEditingItem] = useState(null);
@@ -75,8 +222,8 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
     facility: "",
     oemManufacturer: "",
     modelSerial: "",
-    commissionDate: new Date().toISOString().split("T")[0],
-    criticality: "A - Critical Asset",
+    commissionDate: formatToDDMMYYYY(new Date()),
+    criticality: "Critical Asset",
     operatingStatus: "Operational"
   });
 
@@ -171,17 +318,37 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
   };
 
   // --- Asset Operations ---
+  const generateNextAssetTag = (assetList = assets) => {
+    const currentYear = new Date().getFullYear();
+    const prefix = `AST-${currentYear}-`;
+    let maxSeq = 0;
+    (assetList || []).forEach((a) => {
+      const code = a.assetCode || a.asset_code || "";
+      if (code.startsWith(prefix)) {
+        const digits = code.substring(prefix.length).replace(/[^0-9]/g, "");
+        if (digits) {
+          const val = parseInt(digits, 10);
+          if (!isNaN(val) && val > maxSeq) {
+            maxSeq = val;
+          }
+        }
+      }
+    });
+    return `AST-${currentYear}-${String(maxSeq + 1).padStart(4, "0")}`;
+  };
+
   const handleOpenCreateAsset = () => {
-    const nextSeq = String(assets.length + 1).padStart(4, "0");
+    setAssetErrors({});
+    const nextTag = generateNextAssetTag(assets);
     setAssetForm({
-      assetCode: `AST-2026-${nextSeq}`,
+      assetCode: nextTag,
       name: "",
       category: "Anaerobic Digester & Agitators",
-      facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant",
-      oemManufacturer: "Linde / Neuman & Esser",
-      modelSerial: "NEA-CBG-450",
-      commissionDate: new Date().toISOString().split("T")[0],
-      criticality: "A - Critical Asset",
+      facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant (Rangareddy)",
+      oemManufacturer: "",
+      modelSerial: "",
+      commissionDate: formatToDDMMYYYY(new Date()),
+      criticality: "Critical Asset",
       operatingStatus: "Operational"
     });
     setEditingItem(null);
@@ -189,15 +356,69 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleOpenEditAsset = (asset) => {
+    setAssetErrors({});
+    setEditingItem(asset);
+    setAssetForm({
+      assetCode: asset.assetCode || asset.asset_code || "",
+      name: asset.name || "",
+      category: asset.category || "Anaerobic Digester & Agitators",
+      facility: asset.facility || "",
+      oemManufacturer: asset.oemManufacturer || "",
+      modelSerial: asset.modelSerial || "",
+      commissionDate: formatToDDMMYYYY(asset.commissionDate || new Date()),
+      criticality: asset.criticality || "Critical Asset",
+      operatingStatus: asset.operatingStatus || "Operational"
+    });
+    setFormMode("create_asset");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSaveAsset = async (e) => {
     e.preventDefault();
+    const errors = {};
+
+    // 1. Machine / Asset Name (no numbers)
+    if (!assetForm.name || !assetForm.name.trim()) {
+      errors.name = "Machine / Asset Name is required";
+    } else if (/[0-9]/.test(assetForm.name)) {
+      errors.name = "Machine / Asset Name cannot contain numbers";
+    }
+
+    // 2. OEM Manufacturer (no numbers)
+    if (assetForm.oemManufacturer && /[0-9]/.test(assetForm.oemManufacturer)) {
+      errors.oemManufacturer = "OEM Manufacturer cannot contain numbers";
+    }
+
+    // 3. Model & Serial Number (mandatory)
+    if (!assetForm.modelSerial || !assetForm.modelSerial.trim()) {
+      errors.modelSerial = "Model & Serial Number is mandatory";
+    }
+
+    // 4. Commissioning Date
+    if (!assetForm.commissionDate || !assetForm.commissionDate.trim()) {
+      errors.commissionDate = "Commissioning Date is required";
+    }
+
+    if (Object.keys(errors).length > 0) {
+      setAssetErrors(errors);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
+    setAssetErrors({});
     const payload = {
       ...assetForm,
-      id: editingItem ? editingItem.id : undefined
+      id: editingItem ? editingItem.id : undefined,
+      name: assetForm.name.trim(),
+      oemManufacturer: (assetForm.oemManufacturer || "").trim(),
+      modelSerial: assetForm.modelSerial.trim(),
+      commissionDate: formatToDDMMYYYY(assetForm.commissionDate)
     };
     await saveMachineryAsset(payload);
     await loadAllData();
     setFormMode(null);
+    setEditingItem(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -460,14 +681,39 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
           </div>
 
           {/* ────────────────────────────────────────────────────────────── */}
-          {/* FULL PAGE FORM: REGISTER MACHINERY ASSET                       */}
+          {/* FULL PAGE FORM: REGISTER / EDIT MACHINERY ASSET                 */}
           {/* ────────────────────────────────────────────────────────────── */}
           {formMode === "create_asset" && (
             <div className="sco-form-card">
               <div className="sco-form-title">
-                <span>Register Plant Machinery & Physical Infrastructure</span>
-                <button onClick={() => setFormMode(null)} className="sco-btn-icon"><X size={18} /></button>
+                <span>{editingItem ? "Edit Plant Machinery & Infrastructure" : "Register Plant Machinery & Physical Infrastructure"}</span>
+                <button onClick={() => { setFormMode(null); setEditingItem(null); setAssetErrors({}); }} className="sco-btn-icon"><X size={18} /></button>
               </div>
+
+              {Object.keys(assetErrors).length > 0 && (
+                <div style={{
+                  background: "#fef2f2",
+                  border: "1px solid #fca5a5",
+                  borderRadius: "8px",
+                  padding: "12px 16px",
+                  marginBottom: "16px",
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: "10px",
+                  color: "#991b1b",
+                  fontSize: "13.5px"
+                }}>
+                  <AlertTriangle size={18} style={{ color: "#dc2626", marginTop: "2px", flexShrink: 0 }} />
+                  <div>
+                    <span style={{ fontWeight: "700" }}>Please review and fix the following errors:</span>
+                    <ul style={{ margin: "6px 0 0 16px", padding: 0 }}>
+                      {Object.entries(assetErrors).map(([field, msg]) => (
+                        <li key={field}>{msg}</li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleSaveAsset}>
                 <div className="sco-form-grid">
@@ -475,9 +721,10 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     <label>Asset Identification Tag <span className="required">*</span></label>
                     <input
                       type="text"
-                      required
+                      readOnly
                       value={assetForm.assetCode}
-                      onChange={(e) => setAssetForm({ ...assetForm, assetCode: e.target.value })}
+                      style={{ backgroundColor: "#f8fafc", cursor: "not-allowed", color: "#334155", fontWeight: "600" }}
+                      title="Auto-generated sequential Asset Identification Tag"
                     />
                   </div>
 
@@ -487,9 +734,19 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                       type="text"
                       required
                       value={assetForm.name}
-                      onChange={(e) => setAssetForm({ ...assetForm, name: e.target.value })}
-                      placeholder="e.g. Primary Bio-Gas CSTR Digester Agitator 1"
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[0-9]/g, "");
+                        setAssetForm({ ...assetForm, name: cleaned });
+                        if (assetErrors.name) setAssetErrors({ ...assetErrors, name: null });
+                      }}
+                      placeholder="e.g. Primary Bio-Gas CSTR Digester Agitator"
+                      style={assetErrors.name ? { borderColor: "#dc2626" } : {}}
                     />
+                    {assetErrors.name && (
+                      <span style={{ color: "#dc2626", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        {assetErrors.name}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
@@ -540,38 +797,72 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     <input
                       type="text"
                       value={assetForm.oemManufacturer}
-                      onChange={(e) => setAssetForm({ ...assetForm, oemManufacturer: e.target.value })}
-                      placeholder="e.g. John Deere / Neuman & Esser"
+                      onChange={(e) => {
+                        const cleaned = e.target.value.replace(/[0-9]/g, "");
+                        setAssetForm({ ...assetForm, oemManufacturer: cleaned });
+                        if (assetErrors.oemManufacturer) setAssetErrors({ ...assetErrors, oemManufacturer: null });
+                      }}
+                      placeholder="e.g. Linde / Neuman & Esser"
+                      style={assetErrors.oemManufacturer ? { borderColor: "#dc2626" } : {}}
                     />
+                    {assetErrors.oemManufacturer && (
+                      <span style={{ color: "#dc2626", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        {assetErrors.oemManufacturer}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
-                    <label>Model & Serial Number</label>
+                    <label>Model & Serial Number <span className="required">*</span></label>
                     <input
                       type="text"
+                      required
                       value={assetForm.modelSerial}
-                      onChange={(e) => setAssetForm({ ...assetForm, modelSerial: e.target.value })}
+                      onChange={(e) => {
+                        setAssetForm({ ...assetForm, modelSerial: e.target.value });
+                        if (assetErrors.modelSerial) setAssetErrors({ ...assetErrors, modelSerial: null });
+                      }}
+                      placeholder="e.g. NEA-CBG-450"
+                      style={assetErrors.modelSerial ? { borderColor: "#dc2626" } : {}}
                     />
+                    {assetErrors.modelSerial && (
+                      <span style={{ color: "#dc2626", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        {assetErrors.modelSerial}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
-                    <label>Commissioning Date</label>
-                    <input
-                      type="date"
+                    <label>Commissioning Date <span className="required">*</span></label>
+                    <CustomDateInput
                       value={assetForm.commissionDate}
-                      onChange={(e) => setAssetForm({ ...assetForm, commissionDate: e.target.value })}
+                      onChange={(val) => {
+                        setAssetForm({ ...assetForm, commissionDate: val });
+                        if (assetErrors.commissionDate) setAssetErrors({ ...assetErrors, commissionDate: null });
+                      }}
+                      required
                     />
+                    {assetErrors.commissionDate && (
+                      <span style={{ color: "#dc2626", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        {assetErrors.commissionDate}
+                      </span>
+                    )}
                   </div>
 
                   <div className="sco-form-group">
                     <label>Operational Criticality</label>
                     <select
-                      value={assetForm.criticality}
+                      value={
+                        assetForm.criticality?.startsWith("A") || assetForm.criticality?.toLowerCase().includes("critical") ? "Critical Asset" :
+                        assetForm.criticality?.startsWith("B") || assetForm.criticality?.toLowerCase().includes("essential") ? "Essential Asset" :
+                        assetForm.criticality?.startsWith("C") || assetForm.criticality?.toLowerCase().includes("standard") || assetForm.criticality?.toLowerCase().includes("auxiliary") ? "Standard Auxiliary" :
+                        assetForm.criticality || "Critical Asset"
+                      }
                       onChange={(e) => setAssetForm({ ...assetForm, criticality: e.target.value })}
                     >
-                      <option value="A - Critical Asset">A - Critical Asset (Downtime Shuts Facility)</option>
-                      <option value="B - Essential Asset">B - Essential Asset (Process Degraded)</option>
-                      <option value="C - Standard Asset">C - Standard Auxiliary Equipment</option>
+                      <option value="Critical Asset">Critical Asset (Downtime Shuts Facility)</option>
+                      <option value="Essential Asset">Essential Asset (Process Degraded)</option>
+                      <option value="Standard Auxiliary">Standard Auxiliary Equipment</option>
                     </select>
                   </div>
 
@@ -590,11 +881,11 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                 </div>
 
                 <div className="sco-form-actions">
-                  <button type="button" onClick={() => setFormMode(null)} className="sco-btn-secondary">
+                  <button type="button" onClick={() => { setFormMode(null); setEditingItem(null); setAssetErrors({}); }} className="sco-btn-secondary">
                     Cancel
                   </button>
                   <button type="submit" className="sco-btn-primary">
-                    <Save size={16} /> Save Machinery Record
+                    <Save size={16} /> {editingItem ? "Update Machinery Record" : "Save Machinery Record"}
                   </button>
                 </div>
               </form>
@@ -956,11 +1247,12 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                             <td>{a.name}</td>
                             <td>{a.category}</td>
                             <td>{a.facility}</td>
-                            <td>{a.oemManufacturer} ({a.modelSerial})</td>
+                            <td>{a.oemManufacturer || "—"} ({a.modelSerial || "—"})</td>
                             <td>
-                              <span className={`sco-badge ${(a.criticality || "").startsWith("A") ? "badge-red" : "badge-amber"}`}>
-                                {(a.criticality || "—").split(" ")[0]}
-                              </span>
+                              {(() => {
+                                const badge = getCriticalityBadge(a.criticality);
+                                return <span className={`sco-badge ${badge.cls}`}>{badge.label}</span>;
+                              })()}
                             </td>
                             <td>
                               <span className={`sco-badge ${a.operatingStatus === "Operational" ? "badge-green" : "badge-red"}`}>
@@ -968,17 +1260,39 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                               </span>
                             </td>
                             <td style={{ textAlign: "right" }}>
-                              <button
-                                onClick={async () => {
-                                  if (window.confirm(`Delete ${a.name}?`)) {
-                                    await deleteMachineryAsset(a.id);
-                                    await loadAllData();
+                              <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                                <button
+                                  onClick={() => setViewingItem({ type: "asset", data: a })}
+                                  className="sco-btn-icon"
+                                  title="View Asset Details"
+                                >
+                                  <Eye size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleOpenEditAsset(a)}
+                                  className="sco-btn-icon"
+                                  title="Edit Machinery Details"
+                                >
+                                  <Edit2 size={15} />
+                                </button>
+                                <button
+                                  onClick={() =>
+                                    setDeleteConfirm({
+                                      isOpen: true,
+                                      title: "Delete Machinery Asset",
+                                      message: `Are you sure you want to delete "${a.name}" (${a.assetCode})? This action cannot be undone.`,
+                                      onConfirm: async () => {
+                                        await deleteMachineryAsset(a.id);
+                                        await loadAllData();
+                                      }
+                                    })
                                   }
-                                }}
-                                className="sco-btn-icon danger"
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                                  className="sco-btn-icon danger"
+                                  title="Delete Asset"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         ))}
@@ -1042,13 +1356,19 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                             <td><span className="sco-badge badge-blue">{s.status}</span></td>
                             <td style={{ textAlign: "right" }}>
                               <button
-                                onClick={async () => {
-                                  if (window.confirm(`Delete ${s.scheduleCode}?`)) {
-                                    await deleteMaintenanceSchedule(s.id);
-                                    await loadAllData();
-                                  }
-                                }}
+                                onClick={() =>
+                                  setDeleteConfirm({
+                                    isOpen: true,
+                                    title: "Delete PM Schedule",
+                                    message: `Are you sure you want to delete PM schedule "${s.scheduleCode}" for ${s.assetName}? This action cannot be undone.`,
+                                    onConfirm: async () => {
+                                      await deleteMaintenanceSchedule(s.id);
+                                      await loadAllData();
+                                    }
+                                  })
+                                }
                                 className="sco-btn-icon danger"
+                                title="Delete Schedule"
                               >
                                 <Trash2 size={15} />
                               </button>
@@ -1121,13 +1441,19 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                             <td><span className="sco-badge badge-amber">{i.status}</span></td>
                             <td style={{ textAlign: "right" }}>
                               <button
-                                onClick={async () => {
-                                  if (window.confirm(`Delete ${i.ticketNumber}?`)) {
-                                    await deleteBreakdownIncident(i.id);
-                                    await loadAllData();
-                                  }
-                                }}
+                                onClick={() =>
+                                  setDeleteConfirm({
+                                    isOpen: true,
+                                    title: "Delete Incident Log",
+                                    message: `Are you sure you want to delete incident ticket "${i.ticketNumber}"? This action cannot be undone.`,
+                                    onConfirm: async () => {
+                                      await deleteBreakdownIncident(i.id);
+                                      await loadAllData();
+                                    }
+                                  })
+                                }
                                 className="sco-btn-icon danger"
+                                title="Delete Incident Log"
                               >
                                 <Trash2 size={15} />
                               </button>
@@ -1200,13 +1526,19 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                             <td>{c.servicingVendor || "In-House Team"}</td>
                             <td style={{ textAlign: "right" }}>
                               <button
-                                onClick={async () => {
-                                  if (window.confirm(`Delete ${c.logNumber}?`)) {
-                                    await deleteServicingCostLog(c.id);
-                                    await loadAllData();
-                                  }
-                                }}
+                                onClick={() =>
+                                  setDeleteConfirm({
+                                    isOpen: true,
+                                    title: "Delete Servicing Cost Log",
+                                    message: `Are you sure you want to delete cost ledger log "${c.logNumber}"? This action cannot be undone.`,
+                                    onConfirm: async () => {
+                                      await deleteServicingCostLog(c.id);
+                                      await loadAllData();
+                                    }
+                                  })
+                                }
                                 className="sco-btn-icon danger"
+                                title="Delete Cost Log"
                               >
                                 <Trash2 size={15} />
                               </button>
@@ -1217,6 +1549,229 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     </table>
                   </div>
                 )}
+              </div>
+            </div>
+          )}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {/* VIEW ASSET DETAILS MODAL                                        */}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {viewingItem && viewingItem.type === "asset" && (
+            <div
+              className="sco-modal-overlay"
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1050,
+                padding: "20px"
+              }}
+            >
+              <div
+                className="sco-modal-card"
+                style={{
+                  background: "#ffffff",
+                  borderRadius: "14px",
+                  width: "100%",
+                  maxWidth: "680px",
+                  maxHeight: "90vh",
+                  overflowY: "auto",
+                  padding: "28px",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.25)"
+                }}
+              >
+                <div
+                  style={{
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    borderBottom: "2px solid #e2e8f0",
+                    paddingBottom: "16px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "10px",
+                        background: "#eff6ff",
+                        color: "#2563eb",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <Cpu size={22} />
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", margin: 0 }}>
+                        {viewingItem.data.assetCode}
+                      </h2>
+                      <p style={{ fontSize: "13px", color: "#64748b", margin: "2px 0 0 0" }}>
+                        Plant Machinery & Physical Infrastructure Profile
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-icon">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "14px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Machine / Asset Name</p>
+                    <p style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", margin: 0 }}>{viewingItem.data.name || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Asset Category</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.category || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Plant Facility</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.facility || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>OEM Manufacturer</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.oemManufacturer || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Model & Serial Number</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.modelSerial || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Commissioning Date</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "700", color: "#2563eb", margin: 0 }}>{formatToDDMMYYYY(viewingItem.data.commissionDate)}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Operational Criticality</p>
+                    <p style={{ margin: 0 }}>
+                      {(() => {
+                        const badge = getCriticalityBadge(viewingItem.data.criticality);
+                        return <span className={`sco-badge ${badge.cls}`}>{badge.label}</span>;
+                      })()}
+                    </p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Operating Status</p>
+                    <p style={{ margin: 0 }}>
+                      <span className={`sco-badge ${viewingItem.data.operatingStatus === "Operational" ? "badge-green" : "badge-red"}`}>
+                        {viewingItem.data.operatingStatus || "—"}
+                      </span>
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                  <button onClick={() => window.print()} className="sco-btn-secondary">
+                    <Printer size={16} /> Print Record
+                  </button>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-primary">
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ────────────────────────────────────────────────────────────── */}
+          {/* CUSTOM WEB CONFIRMATION MODAL (NO BROWSER POPUPS)             */}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {deleteConfirm.isOpen && (
+            <div
+              className="sco-modal-overlay"
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.6)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 1100,
+                padding: "20px"
+              }}
+            >
+              <div
+                className="sco-modal-card"
+                style={{
+                  background: "#ffffff",
+                  borderRadius: "14px",
+                  width: "100%",
+                  maxWidth: "440px",
+                  padding: "26px",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.25)",
+                  textAlign: "center"
+                }}
+              >
+                <div
+                  style={{
+                    width: "52px",
+                    height: "52px",
+                    borderRadius: "50%",
+                    background: "#fee2e2",
+                    color: "#dc2626",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    margin: "0 auto 16px auto"
+                  }}
+                >
+                  <Trash2 size={26} />
+                </div>
+
+                <h3 style={{ fontSize: "18px", fontWeight: "800", color: "#0f172a", marginBottom: "8px" }}>
+                  {deleteConfirm.title || "Confirm Deletion"}
+                </h3>
+                <p style={{ fontSize: "14px", color: "#64748b", margin: "0 0 24px 0", lineHeight: "1.5" }}>
+                  {deleteConfirm.message}
+                </p>
+
+                <div style={{ display: "flex", gap: "12px", justifyContent: "center" }}>
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm({ isOpen: false, title: "", message: "", onConfirm: null })}
+                    className="sco-btn-secondary"
+                    style={{ minWidth: "110px" }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (deleteConfirm.onConfirm) {
+                        await deleteConfirm.onConfirm();
+                      }
+                      setDeleteConfirm({ isOpen: false, title: "", message: "", onConfirm: null });
+                    }}
+                    className="sco-btn-primary"
+                    style={{ background: "#dc2626", borderColor: "#dc2626", minWidth: "110px" }}
+                  >
+                    Delete
+                  </button>
+                </div>
               </div>
             </div>
           )}

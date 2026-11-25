@@ -80,6 +80,104 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
 
   String _fmtInr(dynamic v) => '₹${_inrFmt.format(_num(v).round())}';
 
+  String _formatToDDMMYYYY(dynamic val) {
+    if (val == null) return '';
+    final str = val.toString().trim();
+    if (str.isEmpty) return '';
+    if (RegExp(r'^\d{2}-\d{2}-\d{4}$').hasMatch(str)) return str;
+    final isoMatch = RegExp(r'^(\d{4})-(\d{2})-(\d{2})').firstMatch(str);
+    if (isoMatch != null) {
+      return '${isoMatch.group(3)}-${isoMatch.group(2)}-${isoMatch.group(1)}';
+    }
+    try {
+      final dt = DateTime.parse(str);
+      return '${dt.day.toString().padLeft(2, '0')}-${dt.month.toString().padLeft(2, '0')}-${dt.year}';
+    } catch (_) {
+      return str;
+    }
+  }
+
+  String _criticalityLabel(String? crit) {
+    final c = (crit ?? '').trim();
+    if (c.isEmpty) return 'Standard Auxiliary';
+    if (c.startsWith('A') || c.toLowerCase().contains('critical')) return 'Critical Asset';
+    if (c.startsWith('B') || c.toLowerCase().contains('essential')) return 'Essential Asset';
+    if (c.startsWith('C') || c.toLowerCase().contains('standard') || c.toLowerCase().contains('auxiliary')) return 'Standard Auxiliary';
+    return c;
+  }
+
+  String _generateNextAssetTag() {
+    final currentYear = DateTime.now().year;
+    final prefix = 'AST-$currentYear-';
+    int maxSeq = 0;
+    for (final a in _assets) {
+      final code = (a['assetCode'] ?? a['asset_code'] ?? '').toString();
+      if (code.startsWith(prefix)) {
+        final digits = code.substring(prefix.length).replaceAll(RegExp(r'[^0-9]'), '');
+        final val = int.tryParse(digits) ?? 0;
+        if (val > maxSeq) maxSeq = val;
+      }
+    }
+    return 'AST-$currentYear-${(maxSeq + 1).toString().padLeft(4, '0')}';
+  }
+
+  void _viewAssetDetails(Map<String, dynamic> a) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: const Color(0xFFEFF6FF), borderRadius: BorderRadius.circular(8)),
+              child: const Icon(Icons.precision_manufacturing_outlined, color: Color(0xFF2563EB)),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                a['assetCode']?.toString() ?? 'Asset Details',
+                style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w800),
+              ),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _detailRow('Equipment Name', a['name']?.toString() ?? '—'),
+              _detailRow('Category', a['category']?.toString() ?? '—'),
+              _detailRow('Plant Facility', a['facility']?.toString() ?? '—'),
+              _detailRow('OEM Manufacturer', a['oemManufacturer']?.toString() ?? '—'),
+              _detailRow('Model & Serial', a['modelSerial']?.toString() ?? '—'),
+              _detailRow('Commissioning Date', _formatToDDMMYYYY(a['commissionDate'])),
+              _detailRow('Criticality', _criticalityLabel(a['criticality']?.toString())),
+              _detailRow('Status', a['operatingStatus']?.toString() ?? 'Operational'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+        ],
+      ),
+    );
+  }
+
+  Widget _detailRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 120, child: Text(label, style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w600))),
+          Expanded(child: Text(value, style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)))),
+        ],
+      ),
+    );
+  }
+
   List<String> _plantOptions() {
     final names = _plants
         .map((p) => (p['plantNm'] ?? p['name'] ?? '').toString())
@@ -119,20 +217,20 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
     return res == true;
   }
 
-  void _openCreateAssetModal() {
-    final nextSeq = (_assets.length + 1).toString().padLeft(4, '0');
+  void _openCreateAssetModal([Map<String, dynamic>? editing]) {
+    final nextTag = _generateNextAssetTag();
     final plantList = _plantOptions();
     final formKey = GlobalKey<FormState>();
 
-    final codeCtrl = TextEditingController(text: 'AST-2026-$nextSeq');
-    final nameCtrl = TextEditingController();
-    String category = 'Anaerobic Digester & Agitators';
-    String facility = plantList.first;
-    final oemCtrl = TextEditingController(text: 'Linde / Neuman & Esser');
-    final serialCtrl = TextEditingController(text: 'NEA-CBG-450');
-    final dateCtrl = TextEditingController(text: DateTime.now().toIso8601String().split('T').first);
-    String criticality = 'A - Critical Asset';
-    String status = 'Operational';
+    final codeCtrl = TextEditingController(text: editing != null ? (editing['assetCode'] ?? editing['asset_code'] ?? nextTag).toString() : nextTag);
+    final nameCtrl = TextEditingController(text: editing != null ? (editing['name'] ?? '').toString() : '');
+    String category = (editing != null && editing['category'] != null) ? editing['category'].toString() : 'Anaerobic Digester & Agitators';
+    String facility = (editing != null && editing['facility'] != null) ? editing['facility'].toString() : plantList.first;
+    final oemCtrl = TextEditingController(text: editing != null ? (editing['oemManufacturer'] ?? '').toString() : 'Linde / Neuman & Esser');
+    final serialCtrl = TextEditingController(text: editing != null ? (editing['modelSerial'] ?? '').toString() : 'NEA-CBG-450');
+    final dateCtrl = TextEditingController(text: editing != null ? _formatToDDMMYYYY(editing['commissionDate']) : _formatToDDMMYYYY(DateTime.now()));
+    String criticality = _criticalityLabel(editing != null ? editing['criticality']?.toString() : 'Critical Asset');
+    String status = (editing != null && editing['operatingStatus'] != null) ? editing['operatingStatus'].toString() : 'Operational';
 
     showModalBottomSheet(
       context: context,
@@ -152,14 +250,27 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                     children: [
                       const Icon(Icons.precision_manufacturing_outlined, color: Color(0xFF2563EB)),
                       const SizedBox(width: 8),
-                      Expanded(child: Text('Register Machinery Asset', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700))),
+                      Expanded(child: Text(editing != null ? 'Edit Machinery Asset' : 'Register Machinery Asset', style: GoogleFonts.inter(fontSize: 16, fontWeight: FontWeight.w700))),
                       IconButton(icon: const Icon(Icons.close), onPressed: () => Navigator.pop(ctx)),
                     ],
                   ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: codeCtrl, decoration: moduleInputDecoration('Asset Identification Tag *'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
+                  TextFormField(
+                    controller: codeCtrl,
+                    readOnly: true,
+                    decoration: moduleInputDecoration('Asset Identification Tag * (Auto)').copyWith(fillColor: const Color(0xFFF8FAFC), filled: true),
+                    validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                  ),
                   const SizedBox(height: 10),
-                  TextFormField(controller: nameCtrl, decoration: moduleInputDecoration('Machine / Asset Name *', hint: 'Primary Bio-Gas CSTR Digester Agitator 1'), validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null),
+                  TextFormField(
+                    controller: nameCtrl,
+                    decoration: moduleInputDecoration('Machine / Asset Name *', hint: 'Primary Bio-Gas CSTR Digester Agitator'),
+                    validator: (v) {
+                      if (v == null || v.trim().isEmpty) return 'Required';
+                      if (RegExp(r'[0-9]').hasMatch(v)) return 'Numbers not allowed in name';
+                      return null;
+                    },
+                  ),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
                     initialValue: category,
@@ -185,15 +296,52 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(child: TextFormField(controller: oemCtrl, decoration: moduleInputDecoration('OEM Manufacturer'))),
+                      Expanded(
+                        child: TextFormField(
+                          controller: oemCtrl,
+                          decoration: moduleInputDecoration('OEM Manufacturer'),
+                          validator: (v) {
+                            if (v != null && RegExp(r'[0-9]').hasMatch(v)) return 'Numbers not allowed';
+                            return null;
+                          },
+                        ),
+                      ),
                       const SizedBox(width: 10),
-                      Expanded(child: TextFormField(controller: serialCtrl, decoration: moduleInputDecoration('Model / Serial'))),
+                      Expanded(
+                        child: TextFormField(
+                          controller: serialCtrl,
+                          decoration: moduleInputDecoration('Model / Serial *'),
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 10),
                   Row(
                     children: [
-                      Expanded(child: TextFormField(controller: dateCtrl, decoration: moduleInputDecoration('Commissioning Date'))),
+                      Expanded(
+                        child: TextFormField(
+                          controller: dateCtrl,
+                          readOnly: true,
+                          decoration: moduleInputDecoration('Commissioning Date *').copyWith(
+                            suffixIcon: const Icon(Icons.calendar_today_outlined, size: 18),
+                          ),
+                          onTap: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: DateTime.now(),
+                              firstDate: DateTime(2000),
+                              lastDate: DateTime(2035),
+                            );
+                            if (picked != null) {
+                              setModalState(() {
+                                dateCtrl.text = _formatToDDMMYYYY(picked);
+                              });
+                            }
+                          },
+                          validator: (v) => (v == null || v.trim().isEmpty) ? 'Required' : null,
+                        ),
+                      ),
                       const SizedBox(width: 10),
                       Expanded(
                         child: DropdownButtonFormField<String>(
@@ -201,9 +349,9 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                           isExpanded: true,
                           decoration: moduleInputDecoration('Criticality'),
                           items: const [
-                            DropdownMenuItem(value: 'A - Critical Asset', child: Text('A - Critical')),
-                            DropdownMenuItem(value: 'B - Essential Asset', child: Text('B - Essential')),
-                            DropdownMenuItem(value: 'C - Standard Asset', child: Text('C - Standard')),
+                            DropdownMenuItem(value: 'Critical Asset', child: Text('Critical Asset')),
+                            DropdownMenuItem(value: 'Essential Asset', child: Text('Essential Asset')),
+                            DropdownMenuItem(value: 'Standard Auxiliary', child: Text('Standard Auxiliary')),
                           ],
                           onChanged: (v) => setModalState(() => criticality = v ?? criticality),
                         ),
@@ -229,6 +377,7 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                       onPressed: () async {
                         if (!formKey.currentState!.validate()) return;
                         await SupplyChainApiService.saveMachineryAsset({
+                          if (editing != null && editing['id'] != null) 'id': editing['id'],
                           'assetCode': codeCtrl.text.trim(),
                           'name': nameCtrl.text.trim(),
                           'category': category,
@@ -243,7 +392,7 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                         if (ctx.mounted) Navigator.pop(ctx);
                       },
                       style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF2563EB), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 13)),
-                      child: const Text('Save Machinery Record'),
+                      child: Text(editing != null ? 'Update Machinery Record' : 'Save Machinery Record'),
                     ),
                   ),
                 ],
@@ -674,9 +823,9 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                           ModuleTag(text: '${a['assetCode'] ?? ''}', bgColor: const Color(0xFFEFF6FF), textColor: const Color(0xFF1D4ED8)),
                           const SizedBox(width: 6),
                           ModuleTag(
-                            text: crit.split(' ').first,
-                            bgColor: crit.startsWith('A') ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
-                            textColor: crit.startsWith('A') ? const Color(0xFFDC2626) : const Color(0xFFD97706),
+                            text: _criticalityLabel(crit),
+                            bgColor: (crit.startsWith('A') || crit.toLowerCase().contains('critical')) ? const Color(0xFFFEE2E2) : const Color(0xFFFEF3C7),
+                            textColor: (crit.startsWith('A') || crit.toLowerCase().contains('critical')) ? const Color(0xFFDC2626) : const Color(0xFFD97706),
                           ),
                           const Spacer(),
                           ModuleTag(
@@ -690,19 +839,32 @@ class _AssetMaintenanceScreenState extends State<AssetMaintenanceScreen> {
                       Text('${a['name'] ?? '-'}', style: GoogleFonts.inter(fontSize: 14.5, fontWeight: FontWeight.w800)),
                       Text('${a['category'] ?? '-'} • ${a['facility'] ?? '-'}', style: GoogleFonts.inter(fontSize: 12, color: const Color(0xFF475569))),
                       Text('OEM: ${a['oemManufacturer'] ?? '-'} (${a['modelSerial'] ?? '-'})', style: GoogleFonts.inter(fontSize: 11.5, color: const Color(0xFF64748B))),
-                      if (_perm.canDelete)
-                        Align(
-                          alignment: Alignment.centerRight,
-                          child: IconButton(
-                            icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 19),
-                            onPressed: () async {
-                              if (await _confirmDelete('${a['name']}')) {
-                                await SupplyChainApiService.deleteMachineryAsset(a['id']);
-                                await _loadAllData();
-                              }
-                            },
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.visibility_outlined, color: Color(0xFF2563EB), size: 20),
+                            tooltip: 'View Asset Details',
+                            onPressed: () => _viewAssetDetails(a),
                           ),
-                        ),
+                          IconButton(
+                            icon: const Icon(Icons.edit_outlined, color: Color(0xFF475569), size: 20),
+                            tooltip: 'Edit Machinery Details',
+                            onPressed: () => _openCreateAssetModal(a),
+                          ),
+                          if (_perm.canDelete)
+                            IconButton(
+                              icon: const Icon(Icons.delete_outline, color: Color(0xFFDC2626), size: 20),
+                              tooltip: 'Delete Asset',
+                              onPressed: () async {
+                                if (await _confirmDelete('${a['name']}')) {
+                                  await SupplyChainApiService.deleteMachineryAsset(a['id']);
+                                  await _loadAllData();
+                                }
+                              },
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 );
