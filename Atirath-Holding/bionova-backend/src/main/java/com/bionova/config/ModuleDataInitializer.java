@@ -38,36 +38,6 @@ public class ModuleDataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        try {
-            // Purge any dummy / mock seed records so database contains zero dummy data.
-            // Tables will only store actual records created by the user through the application.
-            inventoryItemRepo.deleteAll();
-            civilBomRepo.deleteAll();
-            fastenerRepo.deleteAll();
-            pipingRepo.deleteAll();
-            warrantyRepo.deleteAll();
-            inventoryAlertRepo.deleteAll();
-            weighbridgeRepo.deleteAll();
-            vendorRepo.deleteAll();
-
-            visitorRecordRepo.deleteAll();
-            visitorRequestRepo.deleteAll();
-            visitorAppointmentRepo.deleteAll();
-            visitorVehicleRepo.deleteAll();
-            materialInwardRepo.deleteAll();
-            materialOutwardRepo.deleteAll();
-            safetyClearanceRepo.deleteAll();
-
-            pipelineRepo.deleteAll();
-            budgetRepo.deleteAll();
-            revenueRepo.deleteAll();
-            complianceRepo.deleteAll();
-            fundingRepo.deleteAll();
-            escrowRepo.deleteAll();
-            executiveAlertRepo.deleteAll();
-            System.out.println("ModuleDataInitializer: Dummy/mock records successfully purged from database.");
-        } catch (Exception e) {
-            System.err.println("ModuleDataInitializer purge notice: " + e.getMessage());
-        }
+        // ModuleDataInitializer ready. Preserving all user records in database.
     }
 }

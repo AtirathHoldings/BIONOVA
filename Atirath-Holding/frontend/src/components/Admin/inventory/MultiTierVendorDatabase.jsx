@@ -36,9 +36,6 @@ import "../../../styles/InventoryManagement.css";
 import { getScreenPermission } from "../../../utils/permissions";
 
 const STORAGE_KEY = "bionova_vendor_management_v1";
-try {
-  localStorage.removeItem(STORAGE_KEY);
-} catch (e) {}
 
 const INITIAL_VENDORS = [];
 
@@ -76,7 +73,14 @@ const GRADES = [
 const MultiTierVendorDatabase = ({ screenPerm: propPerm }) => {
   const perm = propPerm || getScreenPermission("INVENTORY_MANAGEMENT");
 
-  const [vendors, setVendors] = useState([]);
+  const [vendors, setVendors] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
   useEffect(() => {
     getInventoryVendors()
@@ -133,10 +137,10 @@ const MultiTierVendorDatabase = ({ screenPerm: propPerm }) => {
 
   // KPIs
   const totalCount = vendors.length;
-  const tier1Count = vendors.filter(v => v.tier.includes("Tier 1")).length;
-  const tier2Count = vendors.filter(v => v.tier.includes("Tier 2")).length;
-  const tier3Count = vendors.filter(v => v.tier.includes("Tier 3")).length;
-  const msmeCount = vendors.filter(v => v.msmeStatus !== "Large / Non-MSME").length;
+  const tier1Count = vendors.filter(v => (v.tier || "").includes("Tier 1")).length;
+  const tier2Count = vendors.filter(v => (v.tier || "").includes("Tier 2")).length;
+  const tier3Count = vendors.filter(v => (v.tier || "").includes("Tier 3")).length;
+  const msmeCount = vendors.filter(v => (v.msmeStatus || "") !== "Large / Non-MSME").length;
   const msmePercent = totalCount > 0 ? Math.round((msmeCount / totalCount) * 100) : 0;
   const totalCreditExposure = vendors.reduce((sum, v) => sum + Number(v.creditLimit || 0), 0);
   const avgOnTime = totalCount > 0 ? (vendors.reduce((s, v) => s + Number(v.onTimeDeliveryRate || 0), 0) / totalCount).toFixed(1) : "0.0";
@@ -144,16 +148,16 @@ const MultiTierVendorDatabase = ({ screenPerm: propPerm }) => {
 
   // Filter Logic
   const filteredVendors = vendors.filter(item => {
-    const term = searchTerm.toLowerCase();
+    const term = (searchTerm || "").toLowerCase();
     const matchesSearch =
-      item.vendorCode.toLowerCase().includes(term) ||
-      item.name.toLowerCase().includes(term) ||
-      item.gstin.toLowerCase().includes(term) ||
-      item.contactPerson.toLowerCase().includes(term) ||
-      item.category.toLowerCase().includes(term) ||
+      (item.vendorCode || item.vendor_code || "").toLowerCase().includes(term) ||
+      (item.name || item.vendorName || item.vendor_name || "").toLowerCase().includes(term) ||
+      (item.gstin || "").toLowerCase().includes(term) ||
+      (item.contactPerson || item.contact_person || "").toLowerCase().includes(term) ||
+      (item.category || "").toLowerCase().includes(term) ||
       (item.udyamRegNo && item.udyamRegNo.toLowerCase().includes(term));
 
-    const matchesTier = tierFilter === "All Tiers" || item.tier === tierFilter;
+    const matchesTier = tierFilter === "All Tiers" || (item.tier || "").includes(tierFilter);
     const matchesCategory = categoryFilter === "All Categories" || item.category === categoryFilter;
     const matchesMsme = msmeFilter === "All MSME Classes" || item.msmeStatus === msmeFilter;
     const matchesGrade = gradeFilter === "All Grades" || item.performanceGrade === gradeFilter;

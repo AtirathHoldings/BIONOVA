@@ -96,7 +96,7 @@ const PipingInstrumentation = ({ screenPerm }) => {
 
   useEffect(() => {
     getPipingSpares().then(res => {
-      if (Array.isArray(res) && res.length > 0) setSpares(res);
+      if (Array.isArray(res)) setSpares(res);
     }).catch(err => console.warn(err));
   }, []);
 

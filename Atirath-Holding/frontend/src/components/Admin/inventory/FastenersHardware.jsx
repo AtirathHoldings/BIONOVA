@@ -111,7 +111,7 @@ const FastenersHardware = ({ screenPerm }) => {
 
   useEffect(() => {
     getFasteners().then(res => {
-      if (Array.isArray(res) && res.length > 0) setFasteners(res);
+      if (Array.isArray(res)) setFasteners(res);
     }).catch(err => console.warn(err));
   }, []);
 

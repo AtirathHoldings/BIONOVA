@@ -27,7 +27,6 @@ import {
 import { getWeighbridgeSlips, saveWeighbridgeSlip, deleteWeighbridgeSlip } from "./inventoryApi";
 
 const STORAGE_KEY = "bionova_weightbridge_portal_v1";
-try { const _raw = localStorage.getItem(STORAGE_KEY); if (_raw && (_raw.includes("INV-") || _raw.includes("CIV-") || _raw.includes("FST-") || _raw.includes("BN-") || _raw.includes("UltraTech") || _raw.includes("Neuman"))) { localStorage.removeItem(STORAGE_KEY); } } catch(e){}
 
 const INITIAL_TRUCK_SLIPS = [];
 
@@ -41,11 +40,18 @@ const WAREHOUSE_ZONES = [
 const SAMPLE_SCAN_TAGS = [];
 
 const WarehouseWeightbridge = ({ screenPerm }) => {
-  const [slips, setSlips] = useState([]);
+  const [slips, setSlips] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
   useEffect(() => {
     getWeighbridgeSlips().then(res => {
-      if (Array.isArray(res) && res.length > 0) setSlips(res);
+      if (Array.isArray(res)) setSlips(res);
     }).catch(err => console.warn(err));
   }, []);
 
@@ -87,20 +93,21 @@ const WarehouseWeightbridge = ({ screenPerm }) => {
   // KPIs
   const totalBiomassMT = slips
     .filter(s => s.status === "Completed")
-    .reduce((acc, s) => acc + (s.netWeightKg / 1000), 0);
+    .reduce((acc, s) => acc + (Number(s.netWeightKg || s.net_weight || 0) / 1000), 0);
 
   const totalTrucksToday = slips.length;
-  const activeOnScale = slips.filter(s => s.status.includes("Pending")).length;
+  const activeOnScale = slips.filter(s => (s.status || "").includes("Pending")).length;
   const rejectedCount = slips.filter(s => s.status === "Quality Rejected").length;
 
   // Filter
   const filteredSlips = slips.filter(item => {
+    const s = (searchTerm || "").toLowerCase();
     const matchesSearch =
-      item.slipNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.vehicleNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.supplier.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.materialName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.driverName.toLowerCase().includes(searchTerm.toLowerCase());
+      (item.slipNo || item.slip_no || "").toLowerCase().includes(s) ||
+      (item.vehicleNo || item.vehicle_no || "").toLowerCase().includes(s) ||
+      (item.supplier || "").toLowerCase().includes(s) ||
+      (item.materialName || item.material_type || "").toLowerCase().includes(s) ||
+      (item.driverName || item.driver_name || "").toLowerCase().includes(s);
 
     const matchesStatus = statusFilter === "All" || item.status === statusFilter;
 

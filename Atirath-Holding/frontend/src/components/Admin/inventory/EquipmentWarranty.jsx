@@ -24,16 +24,22 @@ import {
 import { getEquipmentWarranties, saveEquipmentWarranty, deleteEquipmentWarranty } from "./inventoryApi";
 
 const STORAGE_KEY = "bionova_equipment_warranty_v1";
-try { const _raw = localStorage.getItem(STORAGE_KEY); if (_raw && (_raw.includes("INV-") || _raw.includes("CIV-") || _raw.includes("FST-") || _raw.includes("BN-") || _raw.includes("UltraTech") || _raw.includes("Neuman"))) { localStorage.removeItem(STORAGE_KEY); } } catch(e){}
 
 const INITIAL_EQUIPMENT_WARRANTIES = [];
 
 const EquipmentWarranty = ({ screenPerm }) => {
-  const [warranties, setWarranties] = useState([]);
+  const [warranties, setWarranties] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
   useEffect(() => {
     getEquipmentWarranties().then(res => {
-      if (Array.isArray(res) && res.length > 0) setWarranties(res);
+      if (Array.isArray(res)) setWarranties(res);
     }).catch(err => console.warn(err));
   }, []);
 
@@ -93,16 +99,17 @@ const EquipmentWarranty = ({ screenPerm }) => {
 
   // Filter
   const filteredWarranties = warranties.filter(item => {
+    const s = (searchTerm || "").toLowerCase();
     const matchesSearch =
-      item.assetTag.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.machineName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.serialNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.oem.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.contractType.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.plantLocation && item.plantLocation.toLowerCase().includes(searchTerm.toLowerCase()));
+      (item.assetTag || item.tagCode || "").toLowerCase().includes(s) ||
+      (item.machineName || item.equipmentName || item.name || "").toLowerCase().includes(s) ||
+      (item.serialNo || "").toLowerCase().includes(s) ||
+      (item.oem || item.oemVendor || "").toLowerCase().includes(s) ||
+      (item.contractType || "").toLowerCase().includes(s) ||
+      (item.plantLocation && item.plantLocation.toLowerCase().includes(s));
 
     const matchesStatus = statusFilter === "All" || item.status === statusFilter;
-    const matchesOem = oemFilter === "All" || item.oem.includes(oemFilter);
+    const matchesOem = oemFilter === "All" || (item.oem || item.oemVendor || "").includes(oemFilter);
 
     return matchesSearch && matchesStatus && matchesOem;
   });

@@ -22,16 +22,22 @@ import {
 import { getStockAlerts, saveStockAlert, deleteStockAlert } from "./inventoryApi";
 
 const STORAGE_KEY = "bionova_inventory_alerts_v1";
-try { const _raw = localStorage.getItem(STORAGE_KEY); if (_raw && (_raw.includes("INV-") || _raw.includes("CIV-") || _raw.includes("FST-") || _raw.includes("BN-") || _raw.includes("UltraTech") || _raw.includes("Neuman"))) { localStorage.removeItem(STORAGE_KEY); } } catch(e){}
 
 const INITIAL_ALERTS = [];
 
 const StockExpiryAlerts = ({ screenPerm }) => {
-  const [alerts, setAlerts] = useState([]);
+  const [alerts, setAlerts] = useState(() => {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  });
 
   useEffect(() => {
     getStockAlerts().then(res => {
-      if (Array.isArray(res) && res.length > 0) setAlerts(res);
+      if (Array.isArray(res)) setAlerts(res);
     }).catch(err => console.warn(err));
   }, []);
 
@@ -70,12 +76,13 @@ const StockExpiryAlerts = ({ screenPerm }) => {
 
   // Filter
   const filteredAlerts = alerts.filter(item => {
+    const s = (searchTerm || "").toLowerCase();
     const matchesSearch =
-      item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.materialName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.batchNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      (item.plantLocation && item.plantLocation.toLowerCase().includes(searchTerm.toLowerCase())) ||
-      (item.actionRequired && item.actionRequired.toLowerCase().includes(searchTerm.toLowerCase()));
+      (item.title || item.description || "").toLowerCase().includes(s) ||
+      (item.materialName || item.itemRef || "").toLowerCase().includes(s) ||
+      (item.batchNo || "").toLowerCase().includes(s) ||
+      (item.plantLocation && item.plantLocation.toLowerCase().includes(s)) ||
+      (item.actionRequired && item.actionRequired.toLowerCase().includes(s));
 
     const matchesType = typeFilter === "All" || item.type === typeFilter;
     const matchesSeverity = severityFilter === "All" || item.severity === severityFilter;

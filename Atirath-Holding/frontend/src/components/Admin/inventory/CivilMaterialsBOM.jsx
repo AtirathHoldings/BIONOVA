@@ -97,7 +97,7 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
 
   useEffect(() => {
     getCivilMaterials().then(res => {
-      if (Array.isArray(res) && res.length > 0) setMaterials(res);
+      if (Array.isArray(res)) setMaterials(res);
     }).catch(err => console.warn(err));
   }, []);
 

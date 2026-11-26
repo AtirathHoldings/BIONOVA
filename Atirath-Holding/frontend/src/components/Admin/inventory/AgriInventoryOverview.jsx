@@ -142,7 +142,7 @@ const AgriInventoryOverview = ({ screenPerm }) => {
   // Persist items
   useEffect(() => {
     getInventoryItems().then(data => {
-      if (Array.isArray(data) && data.length > 0) setItems(data);
+      if (Array.isArray(data)) setItems(data);
     }).catch(err => console.warn("Failed to load inventory items:", err));
   }, []);
 
@@ -277,7 +277,7 @@ const AgriInventoryOverview = ({ screenPerm }) => {
   };
 
   // Apply Quick Stock Adjustment
-  const handleApplyAdjustment = (e) => {
+  const handleApplyAdjustment = async (e) => {
     e.preventDefault();
     const qty = Number(adjustmentQty);
     if (isNaN(qty) || qty <= 0) {
@@ -285,16 +285,26 @@ const AgriInventoryOverview = ({ screenPerm }) => {
       return;
     }
 
-    setItems(items.map(it => {
+    let updatedItemToSave = null;
+    const updated = items.map(it => {
       if (it.id === selectedItem.id) {
         const updatedStock = adjustmentType === "add"
           ? it.currentStock + qty
           : Math.max(0, it.currentStock - qty);
-        return { ...it, currentStock: updatedStock };
+        updatedItemToSave = { ...it, currentStock: updatedStock };
+        return updatedItemToSave;
       }
       return it;
-    }));
+    });
+    setItems(updated);
     setIsAdjustModalOpen(false);
+    if (updatedItemToSave) {
+      try {
+        await saveInventoryItem(updatedItemToSave, selectedItem.id);
+      } catch (err) {
+        console.warn("Adjustment sync warning:", err);
+      }
+    }
   };
 
   // Delete Item
