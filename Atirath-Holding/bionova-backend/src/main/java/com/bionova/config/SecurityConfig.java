@@ -52,6 +52,7 @@ public class SecurityConfig {
                     "/api/external-tasks/**",
                     "/api/storage/view",
                     "/api/storage/download",
+                    "/api/inventory/sku/**",
                     // Swagger UI
                     "/swagger-ui.html",
                     "/swagger-ui/**",

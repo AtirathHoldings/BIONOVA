@@ -17,9 +17,22 @@ import {
   Save,
   Tag,
   Gauge,
-  ArrowLeft
+  ArrowLeft,
+  Lock,
+  Copy,
+  Check,
+  Boxes
 } from "lucide-react";
 import { getPipingSpares, savePipingSpare, deletePipingSpare } from "./inventoryApi";
+import SkuPreviewCard from "./SkuPreviewCard";
+import {
+  DEFAULT_MASTER_DATA,
+  getSkuMasterDataSync,
+  fetchSkuMasterData,
+  fetchNextSerial,
+  generateLiveSkuPreview,
+  allocateBackendSku
+} from "./skuService";
 
 const STORAGE_KEY = "bionova_piping_instrumentation_v1";
 
@@ -112,12 +125,21 @@ const PipingInstrumentation = ({ screenPerm }) => {
   // Form State
   const [formData, setFormData] = useState({
     tagNo: "",
+    sku: "",
+    itemCategory: "PIPING", // 'PIPING' or 'INSTRUMENTATION'
+    pipingType: "ELB",
+    pipingMaterial: "CS",
+    pipingSize: "050",
+    pressureClass: "150",
+    instrumentType: "PRS",
+    range: "010BAR",
+    connection: "THD",
     name: "",
-    category: "Manual Valves",
-    material: "",
-    sizeRating: "",
-    endConnection: "",
-    operatingTemp: "",
+    category: "Pipes & Tubing",
+    material: "Carbon Steel ASTM A106 Gr. B",
+    sizeRating: "DN50 (2-Inch) ANSI 150# RF",
+    endConnection: "Flanged ANSI 150# RF",
+    operatingTemp: "-20°C to +120°C",
     currentStock: 0,
     reorderThreshold: 0,
     uom: "Units",
@@ -127,6 +149,50 @@ const PipingInstrumentation = ({ screenPerm }) => {
     pidLineRef: "",
     notes: ""
   });
+
+  // Master Data & Sequence States
+  const [masterData, setMasterData] = useState(getSkuMasterDataSync());
+  const [nextSerial, setNextSerial] = useState("0003");
+  const [copiedSku, setCopiedSku] = useState(false);
+
+  useEffect(() => {
+    fetchSkuMasterData().then(d => { if (d) setMasterData(d); });
+    fetchNextSerial("PIP").then(s => { if (s) setNextSerial(s); });
+  }, []);
+
+  const updateSpecAndSku = (field, val) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: val };
+      if (modalMode === "add") {
+        const cat = updated.itemCategory;
+        const specs = cat === "INSTRUMENTATION"
+          ? { instrumentType: updated.instrumentType, range: updated.range, connection: updated.connection }
+          : { pipingType: updated.pipingType, pipingMaterial: updated.pipingMaterial, pipingSize: updated.pipingSize, pressureClass: updated.pressureClass };
+        const preview = generateLiveSkuPreview(cat, specs, nextSerial);
+        updated.tagNo = preview.sku;
+        updated.sku = preview.sku;
+      }
+      return updated;
+    });
+  };
+
+  const handleCategorySwitch = async (newCat) => {
+    const prefix = newCat === "INSTRUMENTATION" ? "INS" : "PIP";
+    const freshSerial = await fetchNextSerial(prefix);
+    setNextSerial(freshSerial);
+    setFormData(prev => {
+      const updated = { ...prev, itemCategory: newCat };
+      if (modalMode === "add") {
+        const specs = newCat === "INSTRUMENTATION"
+          ? { instrumentType: updated.instrumentType, range: updated.range, connection: updated.connection }
+          : { pipingType: updated.pipingType, pipingMaterial: updated.pipingMaterial, pipingSize: updated.pipingSize, pressureClass: updated.pressureClass };
+        const preview = generateLiveSkuPreview(newCat, specs, freshSerial);
+        updated.tagNo = preview.sku;
+        updated.sku = preview.sku;
+      }
+      return updated;
+    });
+  };
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(spares));
@@ -140,7 +206,7 @@ const PipingInstrumentation = ({ screenPerm }) => {
   // Filter
   const filteredSpares = spares.filter(item => {
     const s = (searchTerm || "").toLowerCase();
-    const tag = item.tagNo || "";
+    const tag = item.tagNo || item.sku || "";
     const name = item.name || item.componentName || "";
     const mat = item.material || item.materialMoc || "";
     const rating = item.sizeRating || item.pressureRating || item.lineSize || "";
@@ -161,24 +227,42 @@ const PipingInstrumentation = ({ screenPerm }) => {
     return matchesSearch && matchesCategory;
   });
 
-  const handleOpenAdd = () => {
+  const handleOpenAdd = async () => {
+    const freshSerial = await fetchNextSerial("PIP");
+    setNextSerial(freshSerial);
     setModalMode("add");
+    const initialSpecs = {
+      pipingType: "ELB",
+      pipingMaterial: "CS",
+      pipingSize: "050",
+      pressureClass: "150"
+    };
+    const preview = generateLiveSkuPreview("PIPING", initialSpecs, freshSerial);
     setFormData({
-      tagNo: `PID-VLV-${String(Date.now()).slice(-4)}`,
-      name: "",
-      category: "Manual Valves",
-      material: "Forged Steel A105 / SS316",
-      sizeRating: "2-Inch Class 300 (50 Bar)",
-      endConnection: "Flanged ANSI 300# RF",
-      operatingTemp: "-20°C to +120°C",
-      currentStock: 5,
-      reorderThreshold: 2,
+      tagNo: preview.sku,
+      sku: preview.sku,
+      itemCategory: "PIPING",
+      pipingType: "ELB",
+      pipingMaterial: "CS",
+      pipingSize: "050",
+      pressureClass: "150",
+      instrumentType: "PRS",
+      range: "010BAR",
+      connection: "THD",
+      name: "90° Long Radius Seamless Carbon Steel Pipe Elbow (2-Inch ANSI 150#)",
+      category: "Pipes & Tubing",
+      material: "Carbon Steel ASTM A106 Gr. B",
+      sizeRating: "DN50 (2-Inch) ANSI 150# RF",
+      endConnection: "Butt Weld / Flanged ANSI 150# RF",
+      operatingTemp: "-20°C to +150°C",
+      currentStock: 12,
+      reorderThreshold: 4,
       uom: "Units",
-      location: "Instrument Store Room",
-      unitCost: 25000,
-      supplier: "",
-      pidLineRef: "",
-      notes: ""
+      location: "Pipe Yard - Rack 4",
+      unitCost: 3500,
+      supplier: "Maharashtra Seamless Ltd",
+      pidLineRef: "P&ID-BG-L01-050",
+      notes: "Primary raw biogas conveyance elbow"
     });
     setIsModalOpen(true);
   };
@@ -186,7 +270,44 @@ const PipingInstrumentation = ({ screenPerm }) => {
   const handleOpenEdit = (item) => {
     setModalMode("edit");
     setSelectedSpare(item);
-    setFormData({ ...item });
+    const code = item.tagNo || item.sku || "";
+    const isIns = code.startsWith("INS-") || (item.category && item.category.includes("Instrumentation"));
+    const parts = code.split("-");
+    const itemCategory = isIns ? "INSTRUMENTATION" : "PIPING";
+    
+    let pipingType = item.pipingType || "ELB";
+    let pipingMaterial = item.pipingMaterial || "CS";
+    let pipingSize = item.pipingSize || "050";
+    let pressureClass = item.pressureClass || "150";
+
+    let instrumentType = item.instrumentType || "PRS";
+    let range = item.range || "010BAR";
+    let connection = item.connection || "THD";
+
+    if (itemCategory === "INSTRUMENTATION" && parts.length >= 5) {
+      instrumentType = parts[1];
+      range = parts[2];
+      connection = parts[3];
+    } else if (itemCategory === "PIPING" && parts.length >= 6) {
+      pipingType = parts[1];
+      pipingMaterial = parts[2];
+      pipingSize = parts[3];
+      pressureClass = parts[4];
+    }
+
+    setFormData({
+      ...item,
+      tagNo: code,
+      sku: code,
+      itemCategory,
+      pipingType,
+      pipingMaterial,
+      pipingSize,
+      pressureClass,
+      instrumentType,
+      range,
+      connection
+    });
     setIsModalOpen(true);
   };
 
@@ -204,14 +325,25 @@ const PipingInstrumentation = ({ screenPerm }) => {
 
   const handleSaveForm = async (e) => {
     e.preventDefault();
-    const cleanItem = {
-      ...formData,
-      currentStock: Number(formData.currentStock) || 0,
-      reorderThreshold: Number(formData.reorderThreshold) || 0,
-      unitCost: Number(formData.unitCost) || 0
-    };
+    if (!formData.name?.trim()) {
+      alert("Please enter a component name.");
+      return;
+    }
 
     if (modalMode === "add") {
+      const specs = formData.itemCategory === "INSTRUMENTATION"
+        ? { instrumentType: formData.instrumentType, range: formData.range, connection: formData.connection }
+        : { pipingType: formData.pipingType, pipingMaterial: formData.pipingMaterial, pipingSize: formData.pipingSize, pressureClass: formData.pressureClass };
+      const allocatedSku = await allocateBackendSku(formData.itemCategory, specs);
+      const finalCode = allocatedSku || formData.tagNo || formData.sku;
+      const cleanItem = {
+        ...formData,
+        tagNo: finalCode,
+        sku: finalCode,
+        currentStock: Number(formData.currentStock) || 0,
+        reorderThreshold: Number(formData.reorderThreshold) || 0,
+        unitCost: Number(formData.unitCost) || 0
+      };
       const tempId = Date.now();
       const newItem = { ...cleanItem, id: tempId };
       setSpares(prev => [newItem, ...prev.filter(s => s.id !== tempId)]);
@@ -225,6 +357,14 @@ const PipingInstrumentation = ({ screenPerm }) => {
         console.warn("Backend save warning:", err);
       }
     } else {
+      const cleanItem = {
+        ...formData,
+        tagNo: formData.tagNo || formData.sku,
+        sku: formData.sku || formData.tagNo,
+        currentStock: Number(formData.currentStock) || 0,
+        reorderThreshold: Number(formData.reorderThreshold) || 0,
+        unitCost: Number(formData.unitCost) || 0
+      };
       const updated = { ...cleanItem, id: selectedSpare.id };
       setSpares(prev => prev.map(s => s.id === selectedSpare.id ? updated : s));
       setIsModalOpen(false);
@@ -339,6 +479,25 @@ const PipingInstrumentation = ({ screenPerm }) => {
           </div>
 
           <form onSubmit={handleSaveForm} style={{ padding: "28px" }}>
+            {/* Real-Time Dynamic SKU Preview Card */}
+            {(() => {
+              const specs = formData.itemCategory === "INSTRUMENTATION"
+                ? { instrumentType: formData.instrumentType, range: formData.range, connection: formData.connection }
+                : { pipingType: formData.pipingType, pipingMaterial: formData.pipingMaterial, pipingSize: formData.pipingSize, pressureClass: formData.pressureClass };
+              const livePreview = generateLiveSkuPreview(formData.itemCategory, specs, nextSerial);
+
+              return (
+                <SkuPreviewCard
+                  sku={livePreview.sku}
+                  format={livePreview.format}
+                  isValid={livePreview.isValid}
+                  missingFields={livePreview.missingFields}
+                  chips={livePreview.chips}
+                  categoryName={formData.itemCategory === "INSTRUMENTATION" ? "Instrumentation & SCADA" : "Process Piping & Valves"}
+                />
+              );
+            })()}
+
             {/* Section 1: Item Identification & Technical Specs */}
             <div style={{
               marginBottom: "28px",
@@ -348,23 +507,215 @@ const PipingInstrumentation = ({ screenPerm }) => {
               borderRadius: "12px",
               boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
             }}>
-              <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Layers size={18} color="#1677ff" /> 1. P&ID Tag & Technical Specifications
-              </h4>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "18px", flexWrap: "wrap", gap: "10px" }}>
+                <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: 0, display: "flex", alignItems: "center", gap: "8px" }}>
+                  <Layers size={18} color="#1677ff" /> 1. Dynamic SKU Classification & Technical Specifications
+                </h4>
+
+                {/* Subsystem Selector Pill */}
+                <div style={{ display: "flex", background: "#f1f5f9", padding: "4px", borderRadius: "8px", gap: "4px" }}>
+                  <button
+                    type="button"
+                    onClick={() => handleCategorySwitch("PIPING")}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      backgroundColor: formData.itemCategory === "PIPING" ? "#2563eb" : "transparent",
+                      color: formData.itemCategory === "PIPING" ? "#ffffff" : "#64748b",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    Process Piping (PIP)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCategorySwitch("INSTRUMENTATION")}
+                    style={{
+                      padding: "6px 14px",
+                      borderRadius: "6px",
+                      border: "none",
+                      fontSize: "12px",
+                      fontWeight: "700",
+                      cursor: "pointer",
+                      backgroundColor: formData.itemCategory === "INSTRUMENTATION" ? "#2563eb" : "transparent",
+                      color: formData.itemCategory === "INSTRUMENTATION" ? "#ffffff" : "#64748b",
+                      transition: "all 0.15s ease"
+                    }}
+                  >
+                    Instrumentation (INS)
+                  </button>
+                </div>
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
-                    P&ID Tag Number *
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: "600", color: "#334155", margin: 0 }}>
+                      <Lock size={13} color="#64748b" /> SKU / Tag Number (Auto-Generated) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(formData.tagNo);
+                        setCopiedSku(true);
+                        setTimeout(() => setCopiedSku(false), 2000);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        fontSize: "11px",
+                        color: copiedSku ? "#059669" : "#2563eb",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      {copiedSku ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedSku ? "Copied" : "Copy"}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. BV-601-DISPENSE"
+                    readOnly
                     value={formData.tagNo}
-                    onChange={(e) => setFormData({ ...formData, tagNo: e.target.value })}
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "13.5px",
+                      backgroundColor: "#f8fafc",
+                      fontFamily: "monospace",
+                      fontWeight: "700",
+                      color: "#0f172a",
+                      cursor: "not-allowed",
+                      boxSizing: "border-box"
+                    }}
                   />
+                  <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", display: "block" }}>
+                    {formData.itemCategory === "INSTRUMENTATION"
+                      ? "Format: INS-[TYPE]-[RANGE]-[CONNECTION]-[SERIAL]"
+                      : "Format: PIP-[TYPE]-[MATERIAL]-[SIZE]-[PRESSURE_CLASS]-[SERIAL]"}
+                  </span>
                 </div>
+
+                {formData.itemCategory === "PIPING" ? (
+                  <>
+                    <div>
+                      <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                        Piping Type [TYPE] *
+                      </label>
+                      <select
+                        value={formData.pipingType || "ELB"}
+                        onChange={(e) => updateSpecAndSku("pipingType", e.target.value)}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                      >
+                        {(masterData.PIPING?.TYPE || DEFAULT_MASTER_DATA.PIPING.TYPE).map(t => (
+                          <option key={t.code} value={t.code}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                        Material Grade [MATERIAL] *
+                      </label>
+                      <select
+                        value={formData.pipingMaterial || "CS"}
+                        onChange={(e) => updateSpecAndSku("pipingMaterial", e.target.value)}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                      >
+                        {(masterData.PIPING?.MATERIAL || DEFAULT_MASTER_DATA.PIPING.MATERIAL).map(m => (
+                          <option key={m.code} value={m.code}>{m.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                        Nominal Pipe Size (NPS) [SIZE] *
+                      </label>
+                      <select
+                        value={formData.pipingSize || "050"}
+                        onChange={(e) => updateSpecAndSku("pipingSize", e.target.value)}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                      >
+                        {(masterData.PIPING?.SIZE || DEFAULT_MASTER_DATA.PIPING.SIZE).map(s => (
+                          <option key={s.code} value={s.code}>{s.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                        Pressure Rating Class [PRESSURE_CLASS] *
+                      </label>
+                      <select
+                        value={formData.pressureClass || "150"}
+                        onChange={(e) => updateSpecAndSku("pressureClass", e.target.value)}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                      >
+                        {(masterData.PIPING?.PRESSURE_CLASS || DEFAULT_MASTER_DATA.PIPING.PRESSURE_CLASS).map(p => (
+                          <option key={p.code} value={p.code}>{p.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                        Instrument Sensor Type [TYPE] *
+                      </label>
+                      <select
+                        value={formData.instrumentType || "PRS"}
+                        onChange={(e) => updateSpecAndSku("instrumentType", e.target.value)}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                      >
+                        {(masterData.INSTRUMENTATION?.TYPE || DEFAULT_MASTER_DATA.INSTRUMENTATION.TYPE).map(t => (
+                          <option key={t.code} value={t.code}>{t.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                        Measurement Range [RANGE] *
+                      </label>
+                      <select
+                        value={formData.range || "010BAR"}
+                        onChange={(e) => updateSpecAndSku("range", e.target.value)}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                      >
+                        {(masterData.INSTRUMENTATION?.RANGE || DEFAULT_MASTER_DATA.INSTRUMENTATION.RANGE).map(r => (
+                          <option key={r.code} value={r.code}>{r.label}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                        Process Connection [CONNECTION] *
+                      </label>
+                      <select
+                        value={formData.connection || "THD"}
+                        onChange={(e) => updateSpecAndSku("connection", e.target.value)}
+                        style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                      >
+                        {(masterData.INSTRUMENTATION?.CONNECTION || DEFAULT_MASTER_DATA.INSTRUMENTATION.CONNECTION).map(c => (
+                          <option key={c.code} value={c.code}>{c.label}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </>
+                )}
 
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
@@ -390,7 +741,7 @@ const PipingInstrumentation = ({ screenPerm }) => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Trunnion-Mounted High-Pressure Ball Valve (2-Inch Class 600)"
+                    placeholder="e.g. 90° Long Radius Seamless Carbon Steel Pipe Elbow (2-Inch ANSI 150#)"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -404,7 +755,7 @@ const PipingInstrumentation = ({ screenPerm }) => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. HDPE PE100 / Forged A105 / SS 316L"
+                    placeholder="e.g. Carbon Steel ASTM A106 Gr. B / SS 316L"
                     value={formData.material}
                     onChange={(e) => setFormData({ ...formData, material: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -418,7 +769,7 @@ const PipingInstrumentation = ({ screenPerm }) => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. 2-Inch Class 600 (100 Bar)"
+                    placeholder="e.g. DN50 (2-Inch) ANSI 150# RF"
                     value={formData.sizeRating}
                     onChange={(e) => setFormData({ ...formData, sizeRating: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -432,7 +783,7 @@ const PipingInstrumentation = ({ screenPerm }) => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Flanged ANSI 600# RTJ or Butt Fusion"
+                    placeholder="e.g. Flanged ANSI 150# RF or 1/2-Inch NPT Threaded"
                     value={formData.endConnection}
                     onChange={(e) => setFormData({ ...formData, endConnection: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -445,7 +796,7 @@ const PipingInstrumentation = ({ screenPerm }) => {
                   </label>
                   <input
                     type="text"
-                    placeholder="e.g. -20°C to +120°C"
+                    placeholder="e.g. -20°C to +150°C"
                     value={formData.operatingTemp}
                     onChange={(e) => setFormData({ ...formData, operatingTemp: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}

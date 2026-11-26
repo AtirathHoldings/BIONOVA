@@ -139,6 +139,51 @@ export const generateNextIncidentTicket = (incidentsList = []) => {
   return `INC-${currentYear}-${String(maxSeq + 1).padStart(4, "0")}`;
 };
 
+// Utility: Generate sequential Service Log Code in format [PREFIX]-[ASSET/TYPE]-[YYYYMM]-[SEQ]
+export const generateNextServiceLogCode = (costLogsList = [], selectedAssetName = "") => {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const yyyymm = `${year}${month}`;
+
+  // Determine [ASSET/TYPE] based on selected asset name/category
+  let assetType = "AST";
+  const nameLower = (selectedAssetName || "").toLowerCase();
+  if (nameLower.includes("tractor") || nameLower.includes("harvest") || nameLower.includes("vehicle")) {
+    assetType = "TRC";
+  } else if (nameLower.includes("digester") || nameLower.includes("cstr") || nameLower.includes("agitator")) {
+    assetType = "DIG";
+  } else if (nameLower.includes("gas") || nameLower.includes("upgradation") || nameLower.includes("compressor") || nameLower.includes("dispenser")) {
+    assetType = "GAS";
+  } else if (nameLower.includes("cold") || nameLower.includes("storage") || nameLower.includes("chiller") || nameLower.includes("refrigeration")) {
+    assetType = "CLD";
+  } else if (nameLower.includes("pump")) {
+    assetType = "PMP";
+  } else if (nameLower.includes("boiler") || nameLower.includes("heater")) {
+    assetType = "BLR";
+  } else if (nameLower.includes("scrubber") || nameLower.includes("filter")) {
+    assetType = "FLT";
+  } else if (nameLower.includes("turbine") || nameLower.includes("generator")) {
+    assetType = "GEN";
+  }
+
+  // Find max sequence from DB / existing logs (handles both legacy CST-2026-0004 and SRV-TRC-202611-0005)
+  let maxSeq = 0;
+  costLogsList.forEach((item) => {
+    const code = item.logNumber || item.log_number || "";
+    const match = code.match(/(\d+)$/);
+    if (match) {
+      const num = parseInt(match[1], 10);
+      if (!isNaN(num) && num > maxSeq) {
+        maxSeq = num;
+      }
+    }
+  });
+
+  const nextSeq = String(maxSeq + 1).padStart(4, "0");
+  return `SRV-${assetType}-${yyyymm}-${nextSeq}`;
+};
+
 // Utility: Convert DD-MM-YYYY to YYYY-MM-DD for native HTML5 date picker sync
 export const parseDDMMYYYYToISO = (val) => {
   if (!val) return "";
@@ -962,6 +1007,11 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
       errors.nextDueDate = "Next Scheduled Due Date is required";
     }
 
+    // 5. Mandatory Checklist Steps (SOP)
+    if (!scheduleForm.checklistItems || !scheduleForm.checklistItems.trim()) {
+      errors.checklistItems = "Mandatory Checklist Steps (SOP) are required";
+    }
+
     if (Object.keys(errors).length > 0) {
       setScheduleErrors(errors);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1088,12 +1138,13 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
 
   // --- Cost Log Operations ---
   const handleOpenCreateCost = () => {
-    const nextSeq = String(costLogs.length + 1).padStart(4, "0");
+    const initialAsset = assets[0]?.name || "Heavy-Duty Harvesting Biomass Tractor";
+    const nextCode = generateNextServiceLogCode(costLogs, initialAsset);
     setCostForm({
-      logNumber: `CST-2026-${nextSeq}`,
-      assetName: assets[0]?.name || "Heavy-Duty Harvesting Biomass Tractor",
+      logNumber: nextCode,
+      assetName: initialAsset,
       facility: plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant",
-      serviceDate: new Date().toISOString().split("T")[0],
+      serviceDate: formatToDDMMYYYY(new Date()),
       serviceNature: "Emergency Breakdown Repair",
       sparesConsumed: "High-Pressure Hydraulic Hose & Coupling O-Rings",
       sparesCost: 18500,
@@ -1108,17 +1159,45 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
+  const handleOpenEditCost = (costLog) => {
+    setEditingItem(costLog);
+    setCostForm({
+      logNumber: costLog.logNumber || costLog.log_number || "",
+      assetName: costLog.assetName || costLog.asset_name || "",
+      facility: costLog.facility || plants[0]?.pltNm || plants[0]?.plantNm || "20 TPD CBG Plant",
+      serviceDate: formatToDDMMYYYY(costLog.serviceDate || costLog.service_date || new Date()),
+      serviceNature: costLog.serviceNature || costLog.service_nature || "Emergency Breakdown Repair",
+      sparesConsumed: costLog.sparesConsumed || costLog.spares_consumed || "",
+      sparesCost: parseFloat(costLog.sparesCost ?? costLog.spares_cost ?? 0) || 0,
+      laborCost: parseFloat(costLog.laborCost ?? costLog.labor_cost ?? 0) || 0,
+      externalVendorFee: parseFloat(costLog.externalVendorFee ?? costLog.external_vendor_fee ?? 0) || 0,
+      servicingVendor: costLog.servicingVendor || costLog.servicing_vendor || "",
+      invoiceRef: costLog.invoiceRef || costLog.invoice_ref || "",
+      warrantyCovered: Boolean(costLog.warrantyCovered ?? costLog.warranty_covered ?? false)
+    });
+    setFormMode("create_cost");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
   const handleSaveCost = async (e) => {
     e.preventDefault();
-    const totalCost = Number(costForm.sparesCost || 0) + Number(costForm.laborCost || 0) + Number(costForm.externalVendorFee || 0);
+    const spares = Number(costForm.sparesCost || 0);
+    const labor = Number(costForm.laborCost || 0);
+    const vendorFee = Number(costForm.externalVendorFee || 0);
+    const totalCost = spares + labor + vendorFee;
     const payload = {
       ...costForm,
       id: editingItem ? editingItem.id : undefined,
-      totalCost
+      sparesCost: spares,
+      laborCost: labor,
+      externalVendorFee: vendorFee,
+      totalCost,
+      serviceDate: formatToDDMMYYYY(costForm.serviceDate)
     };
     await saveServicingCostLog(payload);
     await loadAllData();
     setFormMode(null);
+    setEditingItem(null);
     window.scrollTo({ top: 0, behavior: "smooth" });
   };
 
@@ -1145,7 +1224,17 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
   const totalAssetsCount = assets.length;
   const activeBreakdownsCount = incidents.filter(i => i.status !== "Closed" && i.status !== "Resolved").length;
   const upcomingPmCount = schedules.filter(s => s.status === "Upcoming" || s.status === "Due").length;
-  const totalMaintenanceCost = costLogs.reduce((acc, c) => acc + Number(c.totalCost || 0), 0);
+  const totalMaintenanceCost = costLogs.reduce((acc, c) => {
+    const spares = Number(c.sparesCost ?? c.spares_cost ?? 0);
+    const labor = Number(c.laborCost ?? c.labor_cost ?? 0);
+    const vendorFee = Number(c.externalVendorFee ?? c.external_vendor_fee ?? 0);
+    const tc = Number(
+      c.totalCost !== undefined && c.totalCost !== null && Number(c.totalCost) > 0
+        ? c.totalCost
+        : spares + labor + vendorFee
+    );
+    return acc + tc;
+  }, 0);
 
   if (!screenPerm.canView) {
     return (
@@ -1615,13 +1704,23 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                   </div>
 
                   <div className="sco-form-group col-span-full">
-                    <label>Mandatory Checklist Steps (SOP)</label>
+                    <label>Mandatory Checklist Steps (SOP) <span className="required">*</span></label>
                     <textarea
                       rows="3"
+                      required
                       value={scheduleForm.checklistItems}
-                      onChange={(e) => setScheduleForm({ ...scheduleForm, checklistItems: e.target.value })}
+                      onChange={(e) => {
+                        setScheduleForm({ ...scheduleForm, checklistItems: e.target.value });
+                        if (scheduleErrors.checklistItems) setScheduleErrors({ ...scheduleErrors, checklistItems: null });
+                      }}
+                      style={scheduleErrors.checklistItems ? { borderColor: "#dc2626" } : {}}
                       placeholder="1. Inspect oil seals & lubricant levels&#10;2. Calibrate pressure transducer transmitters&#10;3. Check gas sensor alarms & valves"
                     ></textarea>
+                    {scheduleErrors.checklistItems && (
+                      <span style={{ color: "#dc2626", fontSize: "11.5px", marginTop: "3px", display: "block" }}>
+                        {scheduleErrors.checklistItems}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -1832,8 +1931,16 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
           {formMode === "create_cost" && (
             <div className="sco-form-card">
               <div className="sco-form-title">
-                <span>Record Servicing Cost & Consumed Spares</span>
-                <button onClick={() => setFormMode(null)} className="sco-btn-icon"><X size={18} /></button>
+                <span>{editingItem ? "Edit Servicing Cost & Consumed Spares" : "Record Servicing Cost & Consumed Spares"}</span>
+                <button
+                  onClick={() => {
+                    setFormMode(null);
+                    setEditingItem(null);
+                  }}
+                  className="sco-btn-icon"
+                >
+                  <X size={18} />
+                </button>
               </div>
 
               <form onSubmit={handleSaveCost}>
@@ -1843,8 +1950,9 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     <input
                       type="text"
                       required
+                      readOnly
                       value={costForm.logNumber}
-                      onChange={(e) => setCostForm({ ...costForm, logNumber: e.target.value })}
+                      style={{ backgroundColor: "#f8fafc", cursor: "not-allowed", fontWeight: "600", color: "#1e293b" }}
                     />
                   </div>
 
@@ -1853,7 +1961,15 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     <select
                       required
                       value={costForm.assetName}
-                      onChange={(e) => setCostForm({ ...costForm, assetName: e.target.value })}
+                      onChange={(e) => {
+                        const newAsset = e.target.value;
+                        if (!editingItem) {
+                          const newCode = generateNextServiceLogCode(costLogs, newAsset);
+                          setCostForm({ ...costForm, assetName: newAsset, logNumber: newCode });
+                        } else {
+                          setCostForm({ ...costForm, assetName: newAsset });
+                        }
+                      }}
                     >
                       {assets.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}
                       {!assets.length && <option value="Heavy-Duty Harvesting Biomass Tractor">Heavy-Duty Harvesting Biomass Tractor</option>}
@@ -1873,11 +1989,11 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                   </div>
 
                   <div className="sco-form-group">
-                    <label>Service Date</label>
-                    <input
-                      type="date"
+                    <label>Service Date <span className="required">*</span></label>
+                    <CustomDateInput
                       value={costForm.serviceDate}
-                      onChange={(e) => setCostForm({ ...costForm, serviceDate: e.target.value })}
+                      onChange={(val) => setCostForm({ ...costForm, serviceDate: val })}
+                      required
                     />
                   </div>
 
@@ -1920,6 +2036,16 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     />
                   </div>
 
+                  <div className="sco-form-group">
+                    <label>Calculated Total Cost (₹)</label>
+                    <input
+                      type="text"
+                      readOnly
+                      value={`₹${((Number(costForm.sparesCost) || 0) + (Number(costForm.laborCost) || 0) + (Number(costForm.externalVendorFee) || 0)).toLocaleString("en-IN")}`}
+                      style={{ backgroundColor: "#f1f5f9", fontWeight: "700", color: "#047857", cursor: "not-allowed" }}
+                    />
+                  </div>
+
                   <div className="sco-form-group col-span-full">
                     <label>Spare Parts Description</label>
                     <input
@@ -1932,11 +2058,18 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                 </div>
 
                 <div className="sco-form-actions">
-                  <button type="button" onClick={() => setFormMode(null)} className="sco-btn-secondary">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFormMode(null);
+                      setEditingItem(null);
+                    }}
+                    className="sco-btn-secondary"
+                  >
                     Cancel
                   </button>
                   <button type="submit" className="sco-btn-primary">
-                    <Save size={16} /> Save Cost Ledger Entry
+                    <Save size={16} /> {editingItem ? "Update Cost Ledger Entry" : "Save Cost Ledger Entry"}
                   </button>
                 </div>
               </form>
@@ -2277,9 +2410,9 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     <table className="sco-table">
                       <thead>
                         <tr>
-                          <th>Log #</th>
-                          <th>Asset Serviced</th>
-                          <th>Service Nature</th>
+                          <th>SERVICE LOG</th>
+                          <th>SERVICE MACHINERY ASSET</th>
+                          <th>NATURE OF SERVICE</th>
                           <th>Service Date</th>
                           <th>Spares (₹)</th>
                           <th>Labor (₹)</th>
@@ -2289,39 +2422,62 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {costLogs.map((c) => (
-                          <tr key={c.id}>
-                            <td style={{ fontWeight: "700" }}>{c.logNumber}</td>
-                            <td>{c.assetName}</td>
-                            <td>{c.serviceNature}</td>
-                            <td>{c.serviceDate}</td>
-                            <td>₹{Number(c.sparesCost || 0).toLocaleString("en-IN")}</td>
-                            <td>₹{Number(c.laborCost || 0).toLocaleString("en-IN")}</td>
-                            <td style={{ fontWeight: "700", color: "#0f172a" }}>
-                              ₹{Number(c.totalCost || 0).toLocaleString("en-IN")}
-                            </td>
-                            <td>{c.servicingVendor || "In-House Team"}</td>
-                            <td style={{ textAlign: "right" }}>
-                              <button
-                                onClick={() =>
-                                  setDeleteConfirm({
-                                    isOpen: true,
-                                    title: "Delete Servicing Cost Log",
-                                    message: `Are you sure you want to delete cost ledger log "${c.logNumber}"? This action cannot be undone.`,
-                                    onConfirm: async () => {
-                                      await deleteServicingCostLog(c.id);
-                                      await loadAllData();
+                        {costLogs.map((c) => {
+                          const rowTotal = Number(
+                            c.totalCost !== undefined && c.totalCost !== null && Number(c.totalCost) > 0
+                              ? c.totalCost
+                              : (Number(c.sparesCost) || 0) + (Number(c.laborCost) || 0) + (Number(c.externalVendorFee) || 0)
+                          );
+                          return (
+                            <tr key={c.id}>
+                              <td style={{ fontWeight: "700" }}>{c.logNumber}</td>
+                              <td>{c.assetName}</td>
+                              <td>{c.serviceNature}</td>
+                              <td>{formatToDDMMYYYY(c.serviceDate)}</td>
+                              <td>₹{Number(c.sparesCost || 0).toLocaleString("en-IN")}</td>
+                              <td>₹{Number(c.laborCost || 0).toLocaleString("en-IN")}</td>
+                              <td style={{ fontWeight: "700", color: "#0f172a" }}>
+                                ₹{rowTotal.toLocaleString("en-IN")}
+                              </td>
+                              <td>{c.servicingVendor || "In-House Team"}</td>
+                              <td style={{ textAlign: "right" }}>
+                                <div className="d-flex justify-content-end gap-1">
+                                  <button
+                                    onClick={() => setViewingItem({ type: "cost", data: { ...c, totalCost: rowTotal } })}
+                                    className="sco-btn-icon"
+                                    title="View Servicing Cost Details"
+                                  >
+                                    <Eye size={15} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleOpenEditCost(c)}
+                                    className="sco-btn-icon"
+                                    title="Edit Servicing Cost Log"
+                                  >
+                                    <Edit2 size={15} />
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setDeleteConfirm({
+                                        isOpen: true,
+                                        title: "Delete Servicing Cost Log",
+                                        message: `Are you sure you want to delete cost ledger log "${c.logNumber}"? This action cannot be undone.`,
+                                        onConfirm: async () => {
+                                          await deleteServicingCostLog(c.id);
+                                          await loadAllData();
+                                        }
+                                      })
                                     }
-                                  })
-                                }
-                                className="sco-btn-icon danger"
-                                title="Delete Cost Log"
-                              >
-                                <Trash2 size={15} />
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
+                                    className="sco-btn-icon danger"
+                                    title="Delete Cost Log"
+                                  >
+                                    <Trash2 size={15} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
@@ -2742,6 +2898,143 @@ const AssetMaintenance = ({ onLogout, userRole }) => {
                     onClick={() => setViewingItem(null)}
                     className="sco-btn-primary"
                     style={{ background: "#dc2626", borderColor: "#dc2626" }}
+                  >
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ────────────────────────────────────────────────────────────── */}
+          {/* VIEW SERVICING COST DETAILS MODAL                              */}
+          {/* ────────────────────────────────────────────────────────────── */}
+          {viewingItem && viewingItem.type === "cost" && (
+            <div
+              className="sco-modal-overlay"
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                backgroundColor: "rgba(15, 23, 42, 0.65)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                zIndex: 9999,
+                padding: "20px"
+              }}
+            >
+              <div
+                className="sco-modal-content"
+                style={{
+                  background: "#fff",
+                  borderRadius: "16px",
+                  maxWidth: "680px",
+                  width: "100%",
+                  padding: "28px",
+                  boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.2)",
+                  maxHeight: "90vh",
+                  overflowY: "auto"
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", borderBottom: "1px solid #f1f5f9", paddingBottom: "14px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: "12px" }}>
+                    <div
+                      style={{
+                        width: "44px",
+                        height: "44px",
+                        borderRadius: "10px",
+                        background: "#ecfdf5",
+                        color: "#059669",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center"
+                      }}
+                    >
+                      <DollarSign size={22} />
+                    </div>
+                    <div>
+                      <h2 style={{ fontSize: "20px", fontWeight: "800", color: "#0f172a", margin: 0 }}>
+                        {viewingItem.data.logNumber}
+                      </h2>
+                      <p style={{ fontSize: "13px", color: "#64748b", margin: "2px 0 0 0" }}>
+                        Machinery Servicing Cost & Consumed Spares Ledger Details
+                      </p>
+                    </div>
+                  </div>
+                  <button onClick={() => setViewingItem(null)} className="sco-btn-icon">
+                    <X size={20} />
+                  </button>
+                </div>
+
+                <div
+                  style={{
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "14px",
+                    marginBottom: "20px"
+                  }}
+                >
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Service Machinery Asset</p>
+                    <p style={{ fontSize: "14px", fontWeight: "700", color: "#0f172a", margin: 0 }}>{viewingItem.data.assetName || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Nature of Service</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#2563eb", margin: 0 }}>{viewingItem.data.serviceNature || "—"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Service Date</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{formatToDDMMYYYY(viewingItem.data.serviceDate)}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>External Service Provider / Agency</p>
+                    <p style={{ fontSize: "13.5px", fontWeight: "600", color: "#0f172a", margin: 0 }}>{viewingItem.data.servicingVendor || "In-House Maintenance Team"}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Spares Consumed Cost</p>
+                    <p style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", margin: 0 }}>₹{Number(viewingItem.data.sparesCost || 0).toLocaleString("en-IN")}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Internal Labor Charges</p>
+                    <p style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", margin: 0 }}>₹{Number(viewingItem.data.laborCost || 0).toLocaleString("en-IN")}</p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>External Vendor Charges</p>
+                    <p style={{ fontSize: "15px", fontWeight: "700", color: "#0f172a", margin: 0 }}>₹{Number(viewingItem.data.externalVendorFee || 0).toLocaleString("en-IN")}</p>
+                  </div>
+
+                  <div style={{ background: "#ecfdf5", padding: "12px 14px", borderRadius: "8px", border: "1.5px solid #a7f3d0" }}>
+                    <p style={{ fontSize: "12px", color: "#065f46", margin: "0 0 4px 0", fontWeight: "700", textTransform: "uppercase" }}>Total Servicing Cost</p>
+                    <p style={{ fontSize: "18px", fontWeight: "800", color: "#047857", margin: 0 }}>
+                      ₹{(Number(viewingItem.data.totalCost) || (Number(viewingItem.data.sparesCost || 0) + Number(viewingItem.data.laborCost || 0) + Number(viewingItem.data.externalVendorFee || 0))).toLocaleString("en-IN")}
+                    </p>
+                  </div>
+
+                  <div style={{ background: "#f8fafc", padding: "12px 14px", borderRadius: "8px", border: "1px solid #e2e8f0", gridColumn: "span 2" }}>
+                    <p style={{ fontSize: "12px", color: "#64748b", margin: "0 0 4px 0", fontWeight: "600", textTransform: "uppercase" }}>Spare Parts Description</p>
+                    <p style={{ fontSize: "13.5px", color: "#334155", margin: 0, lineHeight: "1.6" }}>
+                      {viewingItem.data.sparesConsumed || "—"}
+                    </p>
+                  </div>
+                </div>
+
+                <div style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}>
+                  <button onClick={() => window.print()} className="sco-btn-secondary">
+                    <Printer size={16} /> Print Service Log
+                  </button>
+                  <button
+                    onClick={() => setViewingItem(null)}
+                    className="sco-btn-primary"
+                    style={{ background: "#059669", borderColor: "#059669" }}
                   >
                     Close
                   </button>

@@ -17,9 +17,22 @@ import {
   X,
   Save,
   Tag,
-  ArrowLeft
+  ArrowLeft,
+  Lock,
+  Copy,
+  Check,
+  Boxes
 } from "lucide-react";
 import { getFasteners, saveFastener, deleteFastener } from "./inventoryApi";
+import SkuPreviewCard from "./SkuPreviewCard";
+import {
+  DEFAULT_MASTER_DATA,
+  getSkuMasterDataSync,
+  fetchSkuMasterData,
+  fetchNextSerial,
+  generateLiveSkuPreview,
+  allocateBackendSku
+} from "./skuService";
 
 const STORAGE_KEY = "bionova_fasteners_hardware_v1";
 
@@ -128,6 +141,11 @@ const FastenersHardware = ({ screenPerm }) => {
   // Form State
   const [formData, setFormData] = useState({
     sku: "",
+    fastenerType: "BLT",
+    material: "SS304",
+    diameter: "M12",
+    length: "050",
+    fastenerGrade: "G8",
     name: "",
     category: "High-Tensile Bolts",
     grade: "Grade 10.9",
@@ -141,12 +159,42 @@ const FastenersHardware = ({ screenPerm }) => {
     yieldStrength: "",
     currentStock: 0,
     reorderThreshold: 0,
-    uom: "Pcs",
+    uom: "Nos",
     location: "",
     unitCost: 0,
     supplier: "",
     application: ""
   });
+
+  // Master Data & Sequence States
+  const [masterData, setMasterData] = useState(getSkuMasterDataSync());
+  const [nextSerial, setNextSerial] = useState("0004");
+  const [copiedSku, setCopiedSku] = useState(false);
+
+  useEffect(() => {
+    fetchSkuMasterData().then(d => { if (d) setMasterData(d); });
+    fetchNextSerial("FST").then(s => { if (s) setNextSerial(s); });
+  }, []);
+
+  const updateSpecAndSku = (field, val) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: val };
+      if (field === "fastenerType" && (val === "NUT" || val === "WSH")) {
+        updated.length = "000";
+      }
+      if (modalMode === "add") {
+        const preview = generateLiveSkuPreview("FASTENERS", {
+          fastenerType: updated.fastenerType,
+          material: updated.material,
+          diameter: updated.diameter,
+          length: updated.length,
+          fastenerGrade: updated.fastenerGrade
+        }, nextSerial);
+        updated.sku = preview.sku;
+      }
+      return updated;
+    });
+  };
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(fasteners));
@@ -182,28 +230,43 @@ const FastenersHardware = ({ screenPerm }) => {
     return matchesSearch && (matchesGrade !== undefined ? matchesGrade : true) && (matchesCoating !== undefined ? matchesCoating : true);
   });
 
-  const handleOpenAdd = () => {
+  const handleOpenAdd = async () => {
+    const freshSerial = await fetchNextSerial("FST");
+    setNextSerial(freshSerial);
     setModalMode("add");
+    const initialSpecs = {
+      fastenerType: "BLT",
+      material: "SS304",
+      diameter: "M12",
+      length: "050",
+      fastenerGrade: "G8"
+    };
+    const preview = generateLiveSkuPreview("FASTENERS", initialSpecs, freshSerial);
     setFormData({
-      sku: `FST-NEW-${String(Date.now()).slice(-4)}`,
-      name: "",
+      sku: preview.sku,
+      fastenerType: "BLT",
+      material: "SS304",
+      diameter: "M12",
+      length: "050",
+      fastenerGrade: "G8",
+      name: "SS 304 High-Tensile Hex Head Flange Bolt (M12 x 50mm)",
       category: "High-Tensile Bolts",
-      grade: "Grade 10.9",
-      threadSpec: "M16 x 2.0mm",
-      coating: "PTFE / Teflon",
-      batchNo: `BAT-${String(Date.now()).slice(-6)}`,
-      heatNo: `HT-${String(Date.now()).slice(-5)}`,
-      mtcCertNo: `MTC-EN10204-${String(Date.now()).slice(-4)}`,
+      grade: "Grade 8.8 (SS 304)",
+      threadSpec: "M12 x 1.75mm",
+      coating: "Passivated / Natural Finish",
+      batchNo: `BAT-${new Date().getFullYear()}-FST${Math.floor(10 + Math.random() * 90)}`,
+      heatNo: `HT-${Math.floor(10000 + Math.random() * 90000)}`,
+      mtcCertNo: `MTC-EN10204-${Math.floor(1000 + Math.random() * 9000)}`,
       mtcFileName: "Mill_Test_Certificate.pdf",
-      tensileStrength: "1040 MPa",
-      yieldStrength: "940 MPa",
+      tensileStrength: "800 MPa",
+      yieldStrength: "640 MPa",
       currentStock: 500,
       reorderThreshold: 200,
-      uom: "Pcs",
+      uom: "Nos",
       location: "Store Room B - Bin 10",
       unitCost: 85,
-      supplier: "",
-      application: ""
+      supplier: "Sundram Fasteners Ltd",
+      application: "Biogas Compressor Skid Flange Bolting"
     });
     setIsModalOpen(true);
   };
@@ -211,7 +274,20 @@ const FastenersHardware = ({ screenPerm }) => {
   const handleOpenEdit = (item) => {
     setModalMode("edit");
     setSelectedFastener(item);
-    setFormData({ ...item });
+    const parts = (item.sku || item.itemCode || "").split("-");
+    const fastenerType = parts.length >= 7 ? parts[1] : (item.fastenerType || "BLT");
+    const material = parts.length >= 7 ? parts[2] : (item.material || "SS304");
+    const diameter = parts.length >= 7 ? parts[3] : (item.diameter || "M12");
+    const length = parts.length >= 7 ? parts[4] : (item.length || "050");
+    const fastenerGrade = parts.length >= 7 ? parts[5] : (item.fastenerGrade || "G8");
+    setFormData({
+      ...item,
+      fastenerType,
+      material,
+      diameter,
+      length,
+      fastenerGrade
+    });
     setIsModalOpen(true);
   };
 
@@ -229,14 +305,28 @@ const FastenersHardware = ({ screenPerm }) => {
 
   const handleSaveForm = async (e) => {
     e.preventDefault();
-    const cleanItem = {
-      ...formData,
-      currentStock: Number(formData.currentStock) || 0,
-      reorderThreshold: Number(formData.reorderThreshold) || 0,
-      unitCost: Number(formData.unitCost) || 0
-    };
+    if (!formData.name?.trim()) {
+      alert("Please enter a fastener name.");
+      return;
+    }
 
     if (modalMode === "add") {
+      const allocatedSku = await allocateBackendSku("FASTENERS", {
+        fastenerType: formData.fastenerType,
+        material: formData.material,
+        diameter: formData.diameter,
+        length: formData.length,
+        fastenerGrade: formData.fastenerGrade
+      });
+      const finalSku = allocatedSku || formData.sku;
+      const cleanItem = {
+        ...formData,
+        sku: finalSku,
+        itemCode: finalSku,
+        currentStock: Number(formData.currentStock) || 0,
+        reorderThreshold: Number(formData.reorderThreshold) || 0,
+        unitCost: Number(formData.unitCost) || 0
+      };
       const tempId = Date.now();
       const newItem = { ...cleanItem, id: tempId };
       setFasteners(prev => [newItem, ...prev.filter(f => f.id !== tempId)]);
@@ -250,6 +340,12 @@ const FastenersHardware = ({ screenPerm }) => {
         console.warn("Backend save warning:", err);
       }
     } else {
+      const cleanItem = {
+        ...formData,
+        currentStock: Number(formData.currentStock) || 0,
+        reorderThreshold: Number(formData.reorderThreshold) || 0,
+        unitCost: Number(formData.unitCost) || 0
+      };
       const updated = { ...cleanItem, id: selectedFastener.id };
       setFasteners(prev => prev.map(f => f.id === selectedFastener.id ? updated : f));
       setIsModalOpen(false);
@@ -366,6 +462,28 @@ const FastenersHardware = ({ screenPerm }) => {
           </div>
 
           <form onSubmit={handleSaveForm} style={{ padding: "28px" }}>
+            {/* Real-Time Dynamic SKU Preview Card */}
+            {(() => {
+              const livePreview = generateLiveSkuPreview("FASTENERS", {
+                fastenerType: formData.fastenerType,
+                material: formData.material,
+                diameter: formData.diameter,
+                length: formData.length,
+                fastenerGrade: formData.fastenerGrade
+              }, nextSerial);
+
+              return (
+                <SkuPreviewCard
+                  sku={livePreview.sku}
+                  format={livePreview.format}
+                  isValid={livePreview.isValid}
+                  missingFields={livePreview.missingFields}
+                  chips={livePreview.chips}
+                  categoryName="Fasteners & Hardware"
+                />
+              );
+            })()}
+
             {/* Section 1: Item Identification & Metallurgy */}
             <div style={{
               marginBottom: "28px",
@@ -376,20 +494,143 @@ const FastenersHardware = ({ screenPerm }) => {
               boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
             }}>
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Wrench size={18} color="#1677ff" /> 1. Fastener Classification & Technical Specs
+                <Wrench size={18} color="#1677ff" /> 1. Dynamic SKU Classification & Fastener Specifications
               </h4>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
-                    SKU / Part Code *
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: "600", color: "#334155", margin: 0 }}>
+                      <Lock size={13} color="#64748b" /> SKU / Part Code (Auto-Generated) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(formData.sku);
+                        setCopiedSku(true);
+                        setTimeout(() => setCopiedSku(false), 2000);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        fontSize: "11px",
+                        color: copiedSku ? "#059669" : "#2563eb",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      {copiedSku ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedSku ? "Copied" : "Copy"}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     required
+                    readOnly
                     value={formData.sku}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "13.5px",
+                      backgroundColor: "#f8fafc",
+                      fontFamily: "monospace",
+                      fontWeight: "700",
+                      color: "#0f172a",
+                      cursor: "not-allowed",
+                      boxSizing: "border-box"
+                    }}
                   />
+                  <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", display: "block" }}>
+                    Format: FST-[TYPE]-[MATERIAL]-[DIAMETER]-[LENGTH]-[GRADE]-[SERIAL]
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Fastener Type [TYPE] *
+                  </label>
+                  <select
+                    value={formData.fastenerType || "BLT"}
+                    onChange={(e) => updateSpecAndSku("fastenerType", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.FASTENERS?.TYPE || DEFAULT_MASTER_DATA.FASTENERS.TYPE).map(t => (
+                      <option key={t.code} value={t.code}>{t.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Material Metallurgy [MATERIAL] *
+                  </label>
+                  <select
+                    value={formData.material || "SS304"}
+                    onChange={(e) => updateSpecAndSku("material", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.FASTENERS?.MATERIAL || DEFAULT_MASTER_DATA.FASTENERS.MATERIAL).map(m => (
+                      <option key={m.code} value={m.code}>{m.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Thread Diameter [DIAMETER] *
+                  </label>
+                  <select
+                    value={formData.diameter || "M12"}
+                    onChange={(e) => updateSpecAndSku("diameter", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.FASTENERS?.DIAMETER || DEFAULT_MASTER_DATA.FASTENERS.DIAMETER).map(d => (
+                      <option key={d.code} value={d.code}>{d.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Shank Length [LENGTH] *
+                  </label>
+                  <select
+                    disabled={formData.fastenerType === "NUT" || formData.fastenerType === "WSH"}
+                    value={formData.fastenerType === "NUT" || formData.fastenerType === "WSH" ? "000" : (formData.length || "050")}
+                    onChange={(e) => updateSpecAndSku("length", e.target.value)}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "13.5px",
+                      backgroundColor: formData.fastenerType === "NUT" || formData.fastenerType === "WSH" ? "#f1f5f9" : "#ffffff",
+                      boxSizing: "border-box"
+                    }}
+                  >
+                    {(masterData.FASTENERS?.LENGTH || DEFAULT_MASTER_DATA.FASTENERS.LENGTH).map(l => (
+                      <option key={l.code} value={l.code}>{l.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Property Class / Grade [GRADE] *
+                  </label>
+                  <select
+                    value={formData.fastenerGrade || "G8"}
+                    onChange={(e) => updateSpecAndSku("fastenerGrade", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.FASTENERS?.GRADE || DEFAULT_MASTER_DATA.FASTENERS.GRADE).map(g => (
+                      <option key={g.code} value={g.code}>{g.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -415,7 +656,7 @@ const FastenersHardware = ({ screenPerm }) => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Grade 10.9 Heavy Hex Flange Bolt (M20 x 90mm)"
+                    placeholder="e.g. SS 304 High-Tensile Hex Head Flange Bolt (M12 x 50mm)"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -424,12 +665,11 @@ const FastenersHardware = ({ screenPerm }) => {
 
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
-                    Grade / Metallurgy *
+                    Grade / Metallurgy Spec
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. Grade 10.9 or SS 316"
+                    placeholder="e.g. Grade 8.8 / ASTM A193 B7 / SS 316"
                     value={formData.grade}
                     onChange={(e) => setFormData({ ...formData, grade: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -438,12 +678,11 @@ const FastenersHardware = ({ screenPerm }) => {
 
                 <div>
                   <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
-                    Thread Specification & Pitch *
+                    Thread Specification & Pitch
                   </label>
                   <input
                     type="text"
-                    required
-                    placeholder="e.g. M20 x 2.5mm Coarse"
+                    placeholder="e.g. M12 x 1.75mm Coarse"
                     value={formData.threadSpec}
                     onChange={(e) => setFormData({ ...formData, threadSpec: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -463,6 +702,7 @@ const FastenersHardware = ({ screenPerm }) => {
                     <option value="PTFE / Teflon (FluoroKote#1)">PTFE / Teflon (FluoroKote#1)</option>
                     <option value="Geomet 500 (Non-Electrolytic)">Geomet 500 (Zinc Flake)</option>
                     <option value="Passivated SS 316 (ASTM A380)">Passivated SS 316 (ASTM A380)</option>
+                    <option value="Passivated / Natural Finish">Passivated / Natural Finish</option>
                     <option value="Zinc Yellow Trivalent Passivated">Zinc Yellow Trivalent Passivated</option>
                     <option value="Ruspert 1000-Hr Salt Spray">Ruspert 1000-Hr Salt Spray</option>
                   </select>

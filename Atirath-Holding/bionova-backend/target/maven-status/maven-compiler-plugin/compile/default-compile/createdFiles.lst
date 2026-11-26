@@ -12,6 +12,7 @@ com\bionova\entity\TaskDraft.class
 com\bionova\controller\MilestoneDraftController.class
 com\bionova\dto\EmployeePermissionsDto.class
 com\bionova\repository\DepartmentRepository.class
+com\bionova\service\inventory\SkuGenerationService.class
 com\bionova\repository\visitor\VisitorVehicleRepository.class
 com\bionova\controller\DispatchLogisticsController.class
 com\bionova\repository\ProjectAccessRepository.class
@@ -39,6 +40,7 @@ com\bionova\entity\executive\ExecutiveAlert.class
 com\bionova\repository\TaskStatusMasterRepository.class
 com\bionova\repository\inventory\InventoryItemRepository.class
 com\bionova\controller\EmployeeSettingsController.class
+com\bionova\entity\inventory\SkuSequenceCounter.class
 com\bionova\security\JwtUtil.class
 com\bionova\repository\visitor\VisitorMaterialInwardRepository.class
 com\bionova\repository\AssignmentRepository.class
@@ -50,8 +52,10 @@ com\bionova\entity\DepartmentMaster.class
 com\bionova\controller\TaskLiveController.class
 com\bionova\repository\PlantRepository.class
 com\bionova\dto\ProjectAccessControlResponseDto.class
+com\bionova\dto\inventory\SkuPreviewRequest$SkuPreviewRequestBuilder.class
 com\bionova\entity\Landmaster.class
 com\bionova\entity\executive\ExecutiveRevenueRecord.class
+com\bionova\entity\inventory\SkuSequenceCounter$SkuSequenceCounterBuilder.class
 com\bionova\controller\DprController.class
 com\bionova\dto\UserDashboardResponseDto.class
 com\bionova\repository\assetmaintenance\MaintenanceScheduleRepository.class
@@ -94,6 +98,7 @@ com\bionova\dto\UserDashboardResponseDto$TodoTaskDto.class
 com\bionova\controller\DesignationController.class
 com\bionova\config\DatabaseFixer.class
 com\bionova\dto\ExternalTaskViewDto$ExternalTaskViewDtoBuilder.class
+com\bionova\entity\inventory\SkuMaster.class
 com\bionova\repository\TaskLiveRepository.class
 com\bionova\dto\ProjectDashboardResponse$MilestoneStatus.class
 com\bionova\entity\CalendarMaster.class
@@ -114,6 +119,7 @@ com\bionova\dto\ProjectDashboardResponse$PortfolioProgress.class
 com\bionova\repository\MilestoneDraftRepository.class
 com\bionova\service\SupabaseStorageService.class
 com\bionova\controller\AuthController.class
+com\bionova\dto\inventory\SkuPreviewResponse.class
 com\bionova\dto\ProjectDashboardResponse.class
 com\bionova\dto\GanttTaskDto.class
 com\bionova\dto\UserDashboardResponseDto$EmployeeAvatarDto.class
@@ -154,6 +160,7 @@ com\bionova\dto\AdminDashboardResponse$ActivityDto$ActivityDtoBuilder.class
 com\bionova\dto\RoleDto.class
 com\bionova\entity\dispatchlogistics\FleetDriver.class
 com\bionova\service\RealtimePublisherService.class
+com\bionova\dto\inventory\SkuPreviewRequest.class
 com\bionova\BionovaBackendApplication.class
 com\bionova\enums\TimeStatus.class
 com\bionova\repository\inventory\InventoryVendorRepository.class
@@ -181,13 +188,16 @@ com\bionova\controller\AdminDashboardController.class
 com\bionova\controller\ExternalTaskController.class
 com\bionova\dto\TeamMemberDto.class
 com\bionova\controller\TeamMemberController.class
+com\bionova\repository\inventory\SkuMasterRepository.class
 com\bionova\repository\visitor\VisitorAppointmentRepository.class
 com\bionova\entity\inventory\InventoryAlert.class
 com\bionova\repository\inventory\InventoryWeighbridgeRepository.class
 com\bionova\repository\ExternalEmployeeRepository.class
+com\bionova\config\SqlMigrateSku.class
 com\bionova\dto\ProjectDashboardResponse$UpcomingMilestoneItem.class
 com\bionova\dto\ExternalTaskViewDto$ChecklistItemDto$ChecklistItemDtoBuilder.class
 com\bionova\controller\RbacController.class
+com\bionova\dto\inventory\SkuAllocateRequest.class
 com\bionova\dto\ProjectDashboardResponse$HighPriorityTaskItem.class
 com\bionova\controller\ExternalEmployeeController.class
 com\bionova\repository\visitor\VisitorRecordRepository.class
@@ -205,7 +215,9 @@ com\bionova\config\WebSocketConfig.class
 com\bionova\service\MasterDataService.class
 com\bionova\security\RbacGuardFilter.class
 com\bionova\controller\MilestoneLiveController.class
+com\bionova\controller\SkuController.class
 com\bionova\entity\harvesting\HarvestBatch.class
+com\bionova\dto\inventory\SkuAllocateRequest$SkuAllocateRequestBuilder.class
 com\bionova\repository\AttachmentMasterRepository.class
 com\bionova\repository\executive\ExecutiveEscrowAccountRepository.class
 com\bionova\dto\SaveRoleRequest.class
@@ -214,6 +226,7 @@ com\bionova\controller\TaskDraftController.class
 com\bionova\repository\ProcessConfigRepository.class
 com\bionova\entity\ProcessConfig.class
 com\bionova\dto\UpdateEmployeePermissionsRequest.class
+com\bionova\repository\inventory\SkuSequenceCounterRepository.class
 com\bionova\repository\procurement\ProcurementSupplierRepository.class
 com\bionova\controller\ProjectAccessController.class
 com\bionova\dto\AdminDashboardResponse$ProjectProgressDto$ProjectProgressDtoBuilder.class
@@ -262,10 +275,12 @@ com\bionova\dto\ProjectDashboardResponse$ForecastSummary.class
 com\bionova\service\ExternalTaskAccessService.class
 com\bionova\entity\visitor\VisitorSafetyClearance.class
 com\bionova\entity\TaskStatusMaster.class
+com\bionova\dto\inventory\SkuPreviewResponse$SkuPreviewResponseBuilder.class
 com\bionova\entity\TaskLive.class
 com\bionova\service\ProjectPromotionService.class
 com\bionova\dto\AdminDashboardResponse$DeadlineDto$DeadlineDtoBuilder.class
 com\bionova\repository\ProjectTaskExternalTokenRepository.class
+com\bionova\entity\inventory\SkuMaster$SkuMasterBuilder.class
 com\bionova\entity\visitor\VisitorMaterialOutward.class
 com\bionova\entity\CompanyMaster.class
 com\bionova\config\GlobalExceptionHandler.class

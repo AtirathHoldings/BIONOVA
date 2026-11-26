@@ -17,7 +17,7 @@ public class InventoryFastener {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "item_code", length = 50)
+    @Column(name = "item_code", length = 100)
     private String itemCode;
 
     @JsonProperty("sku")

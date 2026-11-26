@@ -17,7 +17,7 @@ public class InventoryCivilBom {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "spec_code", length = 50)
+    @Column(name = "spec_code", length = 100)
     private String specCode;
 
     @JsonProperty("code")
@@ -26,6 +26,15 @@ public class InventoryCivilBom {
     }
     @JsonProperty("code")
     public String getCode() {
+        return this.specCode;
+    }
+
+    @JsonProperty("sku")
+    public void setSku(String sku) {
+        if (sku != null) this.specCode = sku;
+    }
+    @JsonProperty("sku")
+    public String getSku() {
         return this.specCode;
     }
 

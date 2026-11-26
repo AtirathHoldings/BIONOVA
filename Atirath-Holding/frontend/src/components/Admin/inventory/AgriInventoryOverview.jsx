@@ -21,8 +21,20 @@ import {
   X,
   Save,
   ArrowUpDown,
-  ArrowLeft
+  ArrowLeft,
+  Copy,
+  Check,
+  Lock,
+  Sparkles
 } from "lucide-react";
+import SkuPreviewCard from "./SkuPreviewCard";
+import {
+  getSkuMasterDataSync,
+  fetchSkuMasterData,
+  fetchNextSerial,
+  generateLiveSkuPreview,
+  allocateBackendSku
+} from "./skuService";
 import { getInventoryItems, saveInventoryItem, deleteInventoryItem } from "./inventoryApi";
 
 const STORAGE_KEY = "bionova_inventory_items_v1";
@@ -126,8 +138,11 @@ const AgriInventoryOverview = ({ screenPerm }) => {
   // Add/Edit Form State
   const [formData, setFormData] = useState({
     sku: "",
+    itemType: "MZE",
+    grade: "A1",
+    packSize: "050",
     name: "",
-    category: "Seeds",
+    category: "Feedstock",
     batchNo: "",
     currentStock: 0,
     reorderThreshold: 10,
@@ -138,6 +153,31 @@ const AgriInventoryOverview = ({ screenPerm }) => {
     supplier: "",
     notes: ""
   });
+
+  // Master Data & Sequence States
+  const [masterData, setMasterData] = useState(getSkuMasterDataSync());
+  const [nextSerial, setNextSerial] = useState("0005");
+  const [copiedSku, setCopiedSku] = useState(false);
+
+  useEffect(() => {
+    fetchSkuMasterData().then(data => { if (data) setMasterData(data); });
+    fetchNextSerial("AGR").then(s => { if (s) setNextSerial(s); });
+  }, []);
+
+  const updateSpecAndSku = (field, val) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: val };
+      if (modalMode === "add") {
+        const preview = generateLiveSkuPreview("AGRI", {
+          itemType: updated.itemType,
+          grade: updated.grade,
+          packSize: updated.packSize
+        }, nextSerial);
+        updated.sku = preview.sku;
+      }
+      return updated;
+    });
+  };
 
   // Persist items
   useEffect(() => {
@@ -189,21 +229,32 @@ const AgriInventoryOverview = ({ screenPerm }) => {
   });
 
   // Open Add Modal
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = async () => {
+    const freshSerial = await fetchNextSerial("AGR");
+    setNextSerial(freshSerial);
     setModalMode("add");
+    const initialSpecs = {
+      itemType: "MZE",
+      grade: "A1",
+      packSize: "050"
+    };
+    const preview = generateLiveSkuPreview("AGRI", initialSpecs, freshSerial);
     setFormData({
-      sku: `INV-${Date.now().toString().slice(-6)}`,
-      name: "",
-      category: "Seeds",
+      sku: preview.sku,
+      itemType: "MZE",
+      grade: "A1",
+      packSize: "050",
+      name: "Maize Grain & High-Energy Silage",
+      category: "Feedstock",
       batchNo: `BN-LOT-${new Date().getFullYear()}-${Math.floor(100 + Math.random() * 900)}`,
       currentStock: 100,
       reorderThreshold: 20,
       uom: "Kg",
       plantLocation: "Plant 1 - Hyderabad East CBG",
-      unitCost: 50,
+      unitCost: 22,
       expiryDate: "",
-      supplier: "",
-      notes: ""
+      supplier: "Telangana State Agro Federation",
+      notes: "Primary anaerobic digester feedstock buffer."
     });
     setIsModalOpen(true);
   };
@@ -212,7 +263,16 @@ const AgriInventoryOverview = ({ screenPerm }) => {
   const handleOpenEditModal = (item) => {
     setModalMode("edit");
     setSelectedItem(item);
-    setFormData({ ...item });
+    const parts = (item.sku || "").split("-");
+    const itemType = parts.length >= 5 ? parts[1] : (item.itemType || "MZE");
+    const grade = parts.length >= 5 ? parts[2] : (item.grade || "A1");
+    const packSize = parts.length >= 5 ? parts[3] : (item.packSize || "050");
+    setFormData({
+      ...item,
+      itemType,
+      grade,
+      packSize
+    });
     setIsModalOpen(true);
   };
 
@@ -240,10 +300,17 @@ const AgriInventoryOverview = ({ screenPerm }) => {
     }
 
     if (modalMode === "add") {
+      const allocatedSku = await allocateBackendSku("AGRI", {
+        itemType: formData.itemType,
+        grade: formData.grade,
+        packSize: formData.packSize
+      });
       const tempId = Date.now();
+      const finalSku = allocatedSku || formData.sku;
       const newItem = {
         ...formData,
         id: tempId,
+        sku: finalSku,
         currentStock: Number(formData.currentStock) || 0,
         reorderThreshold: Number(formData.reorderThreshold) || 0,
         unitCost: Number(formData.unitCost) || 0
@@ -355,6 +422,12 @@ const AgriInventoryOverview = ({ screenPerm }) => {
     return "inv-badge-category inv-badge-equipment";
   };
 
+  const livePreview = generateLiveSkuPreview("AGRI", {
+    itemType: formData.itemType,
+    grade: formData.grade,
+    packSize: formData.packSize
+  }, nextSerial);
+
   return (
     <div className="submod-wrapper">
       {/* Header Title Section */}
@@ -427,6 +500,16 @@ const AgriInventoryOverview = ({ screenPerm }) => {
           </div>
 
           <form onSubmit={handleSaveItem} style={{ padding: "28px" }}>
+            {/* Real-Time Dynamic SKU Preview Card */}
+            <SkuPreviewCard
+              sku={livePreview.sku}
+              format={livePreview.format}
+              isValid={livePreview.isValid}
+              missingFields={livePreview.missingFields}
+              chips={livePreview.chips}
+              categoryName="Agri & Feedstock Stock"
+            />
+
             {/* Section 1: Item Identification & Category */}
             <div style={{
               marginBottom: "28px",
@@ -437,20 +520,104 @@ const AgriInventoryOverview = ({ screenPerm }) => {
               boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
             }}>
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
-                <Boxes size={18} color="#1677ff" /> 1. Item Identification & SKU Classification
+                <Boxes size={18} color="#1677ff" /> 1. Dynamic SKU Classification & Feedstock Specifications
               </h4>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
-                    SKU Code *
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: "600", color: "#334155", margin: 0 }}>
+                      <Lock size={13} color="#64748b" /> SKU Code (Auto-Generated) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(formData.sku);
+                        setCopiedSku(true);
+                        setTimeout(() => setCopiedSku(false), 2000);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        fontSize: "11px",
+                        color: copiedSku ? "#059669" : "#2563eb",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      {copiedSku ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedSku ? "Copied" : "Copy"}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     required
+                    readOnly
                     value={formData.sku}
-                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "13.5px",
+                      backgroundColor: "#f8fafc",
+                      fontFamily: "monospace",
+                      fontWeight: "700",
+                      color: "#0f172a",
+                      cursor: "not-allowed",
+                      boxSizing: "border-box"
+                    }}
                   />
+                  <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", display: "block" }}>
+                    Format: AGR-[ITEM]-[GRADE]-[PACK_SIZE]-[SERIAL]
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Feedstock / Item Type [ITEM] *
+                  </label>
+                  <select
+                    value={formData.itemType || "MZE"}
+                    onChange={(e) => updateSpecAndSku("itemType", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.AGRI?.ITEM_TYPE || DEFAULT_MASTER_DATA.AGRI.ITEM_TYPE).map(it => (
+                      <option key={it.code} value={it.code}>{it.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Quality Grade [GRADE] *
+                  </label>
+                  <select
+                    value={formData.grade || "A1"}
+                    onChange={(e) => updateSpecAndSku("grade", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.AGRI?.GRADE || DEFAULT_MASTER_DATA.AGRI.GRADE).map(gr => (
+                      <option key={gr.code} value={gr.code}>{gr.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Pack Size / Packaging [PACK_SIZE] *
+                  </label>
+                  <select
+                    value={formData.packSize || "050"}
+                    onChange={(e) => updateSpecAndSku("packSize", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.AGRI?.PACK_SIZE || DEFAULT_MASTER_DATA.AGRI.PACK_SIZE).map(pk => (
+                      <option key={pk.code} value={pk.code}>{pk.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -462,9 +629,10 @@ const AgriInventoryOverview = ({ screenPerm }) => {
                     onChange={(e) => setFormData({ ...formData, category: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
                   >
+                    <option value="Feedstock">Agri Feedstock</option>
                     <option value="Seeds">Seeds</option>
                     <option value="Agrochemicals">Agrochemicals</option>
-                    <option value="Equipment">Equipment</option>
+                    <option value="Equipment">Equipment & Spares</option>
                   </select>
                 </div>
 

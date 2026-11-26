@@ -17,8 +17,17 @@ public class InventoryPiping {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "tag_no", length = 50)
+    @Column(name = "tag_no", length = 100)
     private String tagNo;
+
+    @JsonProperty("sku")
+    public void setSku(String sku) {
+        if (sku != null) this.tagNo = sku;
+    }
+    @JsonProperty("sku")
+    public String getSku() {
+        return this.tagNo;
+    }
 
     @Column(name = "component_name", nullable = false, length = 150)
     private String componentName;

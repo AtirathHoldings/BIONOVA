@@ -1,6 +1,7 @@
 package com.bionova.entity.assetmaintenance;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Getter;
 import lombok.Setter;
@@ -51,4 +52,13 @@ public class ServicingCostLog {
 
     @Column(name = "warranty_covered")
     private Boolean warrantyCovered;
+
+    @Transient
+    @JsonProperty("totalCost")
+    public Double getTotalCost() {
+        double spares = sparesCost != null ? sparesCost : 0.0;
+        double labor = laborCost != null ? laborCost : 0.0;
+        double vendor = externalVendorFee != null ? externalVendorFee : 0.0;
+        return spares + labor + vendor;
+    }
 }

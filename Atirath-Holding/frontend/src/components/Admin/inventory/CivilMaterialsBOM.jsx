@@ -18,9 +18,23 @@ import {
   ArrowUpDown,
   Calendar,
   Building,
-  ArrowLeft
+  ArrowLeft,
+  Lock,
+  Copy,
+  Check,
+  Boxes,
+  Tag
 } from "lucide-react";
 import { getCivilMaterials, saveCivilMaterial, deleteCivilMaterial } from "./inventoryApi";
+import SkuPreviewCard from "./SkuPreviewCard";
+import {
+  DEFAULT_MASTER_DATA,
+  getSkuMasterDataSync,
+  fetchSkuMasterData,
+  fetchNextSerial,
+  generateLiveSkuPreview,
+  allocateBackendSku
+} from "./skuService";
 
 const STORAGE_KEY = "bionova_civil_materials_bom_v1";
 
@@ -115,6 +129,9 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
   // Form State
   const [formData, setFormData] = useState({
     code: "",
+    discipline: "CIV",
+    item: "CON",
+    specification: "001",
     name: "",
     category: "Concrete Grades",
     gradeSpec: "",
@@ -130,6 +147,31 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
     status: "Adequate",
     notes: ""
   });
+
+  // Master Data & Sequence States
+  const [masterData, setMasterData] = useState(getSkuMasterDataSync());
+  const [nextSerial, setNextSerial] = useState("0004");
+  const [copiedSku, setCopiedSku] = useState(false);
+
+  useEffect(() => {
+    fetchSkuMasterData().then(d => { if (d) setMasterData(d); });
+    fetchNextSerial("PCB").then(s => { if (s) setNextSerial(s); });
+  }, []);
+
+  const updateSpecAndSku = (field, val) => {
+    setFormData(prev => {
+      const updated = { ...prev, [field]: val };
+      if (modalMode === "add") {
+        const preview = generateLiveSkuPreview("CIVIL_BOM", {
+          discipline: updated.discipline,
+          item: updated.item,
+          specification: updated.specification
+        }, nextSerial);
+        updated.code = preview.sku;
+      }
+      return updated;
+    });
+  };
 
   // Usage allocation state
   const [usageQty, setUsageQty] = useState("");
@@ -149,7 +191,7 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
   // Filter
   const filteredMaterials = materials.filter(item => {
     const s = (searchTerm || "").toLowerCase();
-    const code = item.code || item.specCode || "";
+    const code = item.code || item.specCode || item.sku || "";
     const name = item.name || item.materialName || "";
     const grade = item.gradeSpec || "";
     const struct = item.allocatedStructure || item.targetStructure || item.stage || "";
@@ -170,14 +212,25 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
     return matchesSearch && matchesCategory && matchesStatus;
   });
 
-  const handleOpenAddModal = () => {
+  const handleOpenAddModal = async () => {
+    const freshSerial = await fetchNextSerial("PCB");
+    setNextSerial(freshSerial);
     setModalMode("add");
+    const initialSpecs = {
+      discipline: "CIV",
+      item: "CON",
+      specification: "001"
+    };
+    const preview = generateLiveSkuPreview("CIVIL_BOM", initialSpecs, freshSerial);
     setFormData({
-      code: `CIV-MAT-${String(Date.now()).slice(-4)}`,
-      name: "",
+      code: preview.sku,
+      discipline: "CIV",
+      item: "CON",
+      specification: "001",
+      name: "Ready Mix Concrete M35 Sulfate-Resistant",
       category: "Concrete Grades",
-      gradeSpec: "",
-      uom: "MT",
+      gradeSpec: "M35 High Durability",
+      uom: "Cu.m",
       bomRequiredQty: 100,
       procuredQty: 80,
       currentStock: 20,
@@ -185,7 +238,7 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
       allocatedStructure: "Plant Foundation",
       yardLocation: "Main Yard Area",
       unitCost: 5000,
-      supplier: "",
+      supplier: "UltraTech Concrete Solutions",
       status: "Adequate",
       notes: ""
     });
@@ -195,7 +248,16 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
   const handleOpenEditModal = (item) => {
     setModalMode("edit");
     setSelectedMaterial(item);
-    setFormData({ ...item });
+    const parts = (item.code || item.sku || "").split("-");
+    const discipline = parts.length >= 5 ? parts[1] : (item.discipline || "CIV");
+    const itemCode = parts.length >= 5 ? parts[2] : (item.item || "CON");
+    const specification = parts.length >= 5 ? parts[3] : (item.specification || "001");
+    setFormData({
+      ...item,
+      discipline,
+      item: itemCode,
+      specification
+    });
     setIsModalOpen(true);
   };
 
@@ -220,16 +282,28 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
 
   const handleSaveForm = async (e) => {
     e.preventDefault();
-    const cleanItem = {
-      ...formData,
-      bomRequiredQty: Number(formData.bomRequiredQty) || 0,
-      procuredQty: Number(formData.procuredQty) || 0,
-      currentStock: Number(formData.currentStock) || 0,
-      allocatedQty: Number(formData.allocatedQty) || 0,
-      unitCost: Number(formData.unitCost) || 0
-    };
+    if (!formData.name?.trim()) {
+      alert("Please enter a material name.");
+      return;
+    }
 
     if (modalMode === "add") {
+      const allocatedSku = await allocateBackendSku("CIVIL_BOM", {
+        discipline: formData.discipline,
+        item: formData.item,
+        specification: formData.specification
+      });
+      const finalCode = allocatedSku || formData.code;
+      const cleanItem = {
+        ...formData,
+        code: finalCode,
+        sku: finalCode,
+        bomRequiredQty: Number(formData.bomRequiredQty) || 0,
+        procuredQty: Number(formData.procuredQty) || 0,
+        currentStock: Number(formData.currentStock) || 0,
+        allocatedQty: Number(formData.allocatedQty) || 0,
+        unitCost: Number(formData.unitCost) || 0
+      };
       const tempId = Date.now();
       const newItem = { ...cleanItem, id: tempId };
       setMaterials(prev => [newItem, ...prev.filter(m => m.id !== tempId)]);
@@ -243,6 +317,14 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
         console.warn("Backend save warning:", err);
       }
     } else {
+      const cleanItem = {
+        ...formData,
+        bomRequiredQty: Number(formData.bomRequiredQty) || 0,
+        procuredQty: Number(formData.procuredQty) || 0,
+        currentStock: Number(formData.currentStock) || 0,
+        allocatedQty: Number(formData.allocatedQty) || 0,
+        unitCost: Number(formData.unitCost) || 0
+      };
       const updated = { ...cleanItem, id: selectedMaterial.id };
       setMaterials(prev => prev.map(m => m.id === selectedMaterial.id ? updated : m));
       setIsModalOpen(false);
@@ -388,6 +470,26 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
           </div>
 
           <form onSubmit={handleSaveForm} style={{ padding: "28px" }}>
+            {/* Real-Time Dynamic SKU Preview Card */}
+            {(() => {
+              const livePreview = generateLiveSkuPreview("CIVIL_BOM", {
+                discipline: formData.discipline,
+                item: formData.item,
+                specification: formData.specification
+              }, nextSerial);
+
+              return (
+                <SkuPreviewCard
+                  sku={livePreview.sku}
+                  format={livePreview.format}
+                  isValid={livePreview.isValid}
+                  missingFields={livePreview.missingFields}
+                  chips={livePreview.chips}
+                  categoryName="Plant Construction BOM"
+                />
+              );
+            })()}
+
             {/* Section 1: Material Identification & Engineering Grade */}
             <div style={{
               marginBottom: "28px",
@@ -398,20 +500,104 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
               boxShadow: "0 1px 2px rgba(0,0,0,0.03)"
             }}>
               <h4 style={{ fontSize: "14px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", letterSpacing: "0.5px", margin: "0 0 18px 0", display: "flex", alignItems: "center", gap: "8px" }}>
-                <HardHat size={18} color="#1677ff" /> 1. Material Identification & Technical Specifications
+                <HardHat size={18} color="#1677ff" /> 1. Dynamic SKU Classification & BOM Specifications
               </h4>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))", gap: "18px" }}>
                 <div>
-                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
-                    Material Code *
-                  </label>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px" }}>
+                    <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12.5px", fontWeight: "600", color: "#334155", margin: 0 }}>
+                      <Lock size={13} color="#64748b" /> SKU / Material Code (Auto-Generated) *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(formData.code);
+                        setCopiedSku(true);
+                        setTimeout(() => setCopiedSku(false), 2000);
+                      }}
+                      style={{
+                        background: "none",
+                        border: "none",
+                        fontSize: "11px",
+                        color: copiedSku ? "#059669" : "#2563eb",
+                        cursor: "pointer",
+                        fontWeight: "600",
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "4px"
+                      }}
+                    >
+                      {copiedSku ? <Check size={12} /> : <Copy size={12} />}
+                      {copiedSku ? "Copied" : "Copy"}
+                    </button>
+                  </div>
                   <input
                     type="text"
                     required
+                    readOnly
                     value={formData.code}
-                    onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                    style={{
+                      width: "100%",
+                      padding: "9px 12px",
+                      borderRadius: "8px",
+                      border: "1px solid #cbd5e1",
+                      fontSize: "13.5px",
+                      backgroundColor: "#f8fafc",
+                      fontFamily: "monospace",
+                      fontWeight: "700",
+                      color: "#0f172a",
+                      cursor: "not-allowed",
+                      boxSizing: "border-box"
+                    }}
                   />
+                  <span style={{ fontSize: "11px", color: "#64748b", marginTop: "4px", display: "block" }}>
+                    Format: PCB-[DISCIPLINE]-[ITEM]-[SPECIFICATION]-[SERIAL]
+                  </span>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Engineering Discipline [DISCIPLINE] *
+                  </label>
+                  <select
+                    value={formData.discipline || "CIV"}
+                    onChange={(e) => updateSpecAndSku("discipline", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.CIVIL_BOM?.DISCIPLINE || DEFAULT_MASTER_DATA.CIVIL_BOM.DISCIPLINE).map(d => (
+                      <option key={d.code} value={d.code}>{d.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Item Code / Equipment [ITEM] *
+                  </label>
+                  <select
+                    value={formData.item || "CON"}
+                    onChange={(e) => updateSpecAndSku("item", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.CIVIL_BOM?.ITEM || DEFAULT_MASTER_DATA.CIVIL_BOM.ITEM).map(it => (
+                      <option key={it.code} value={it.code}>{it.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label style={{ display: "block", fontSize: "12.5px", fontWeight: "600", color: "#334155", marginBottom: "6px" }}>
+                    Engineering Specification [SPECIFICATION] *
+                  </label>
+                  <select
+                    value={formData.specification || "001"}
+                    onChange={(e) => updateSpecAndSku("specification", e.target.value)}
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
+                  >
+                    {(masterData.CIVIL_BOM?.SPECIFICATION || DEFAULT_MASTER_DATA.CIVIL_BOM.SPECIFICATION).map(sp => (
+                      <option key={sp.code} value={sp.code}>{sp.label}</option>
+                    ))}
+                  </select>
                 </div>
 
                 <div>
@@ -427,6 +613,8 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
                     <option value="TMT Rebars">TMT Rebars</option>
                     <option value="Structural Steel">Structural Steel</option>
                     <option value="Cement & Aggregates">Cement & Aggregates</option>
+                    <option value="Mechanical Equipment">Mechanical Equipment</option>
+                    <option value="Electrical & Power">Electrical & Power</option>
                   </select>
                 </div>
 
@@ -437,7 +625,7 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. Ready-Mix Concrete M30 Grade (Pumpable)"
+                    placeholder="e.g. Ready Mix Concrete M35 Sulfate-Resistant"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -451,7 +639,7 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
                   <input
                     type="text"
                     required
-                    placeholder="e.g. M30 / IS 456 or Fe 500D / IS 1786"
+                    placeholder="e.g. M35 High Durability or Fe550D IS 1786"
                     value={formData.gradeSpec}
                     onChange={(e) => setFormData({ ...formData, gradeSpec: e.target.value })}
                     style={{ width: "100%", padding: "9px 12px", borderRadius: "8px", border: "1px solid #cbd5e1", fontSize: "13.5px", backgroundColor: "#ffffff", boxSizing: "border-box" }}
@@ -472,6 +660,7 @@ const CivilMaterialsBOM = ({ screenPerm }) => {
                     <option value="Bags (50Kg)">Bags (50Kg)</option>
                     <option value="Lengths">Lengths (12m Standard)</option>
                     <option value="Kg">Kg</option>
+                    <option value="Nos">Nos</option>
                   </select>
                 </div>
               </div>

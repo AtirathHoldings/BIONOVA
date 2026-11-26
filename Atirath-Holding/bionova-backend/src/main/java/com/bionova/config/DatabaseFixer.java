@@ -66,6 +66,37 @@ public class DatabaseFixer implements CommandLineRunner {
                 );
                 System.out.println("SUCCESS: Cleaned up duplicate process_config rows");
             } catch (Exception e) {}
+
+            try {
+                jdbcTemplate.execute(
+                    "CREATE TABLE IF NOT EXISTS inventory_sku_master (" +
+                    "id BIGSERIAL PRIMARY KEY, " +
+                    "category VARCHAR(50) NOT NULL, " +
+                    "option_type VARCHAR(50) NOT NULL, " +
+                    "code VARCHAR(50) NOT NULL, " +
+                    "label VARCHAR(150) NOT NULL, " +
+                    "metadata VARCHAR(255), " +
+                    "sort_order INT, " +
+                    "is_active BOOLEAN NOT NULL DEFAULT TRUE" +
+                    ")"
+                );
+                jdbcTemplate.execute(
+                    "CREATE TABLE IF NOT EXISTS sku_sequence_counter (" +
+                    "id BIGSERIAL PRIMARY KEY, " +
+                    "category_prefix VARCHAR(20) NOT NULL UNIQUE, " +
+                    "current_sequence BIGINT NOT NULL DEFAULT 0, " +
+                    "last_assigned_sku VARCHAR(100), " +
+                    "updated_at TIMESTAMP" +
+                    ")"
+                );
+                jdbcTemplate.execute("ALTER TABLE inventory_items ADD COLUMN IF NOT EXISTS sku VARCHAR(100)");
+                jdbcTemplate.execute("ALTER TABLE inventory_civil_bom ADD COLUMN IF NOT EXISTS sku VARCHAR(100)");
+                jdbcTemplate.execute("ALTER TABLE inventory_fasteners ADD COLUMN IF NOT EXISTS sku VARCHAR(100)");
+                jdbcTemplate.execute("ALTER TABLE inventory_piping ADD COLUMN IF NOT EXISTS sku VARCHAR(100)");
+                System.out.println("SUCCESS: Verified & created SKU tables and columns in Supabase Postgres");
+            } catch (Exception e) {
+                System.err.println("Notice on SKU tables creation: " + e.getMessage());
+            }
             
         } catch (Exception e) {
             System.err.println("Error running database fixer: " + e.getMessage());

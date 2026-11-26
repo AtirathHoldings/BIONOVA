@@ -269,28 +269,64 @@ export async function deleteBreakdownIncident(id) {
 }
 
 export async function getServicingCostLogs() {
+  let list = [];
   try {
     const res = await apiGet("/api/asset-maintenance/servicing-costs");
-    if (res && Array.isArray(res)) return res;
+    if (res && Array.isArray(res)) list = res;
   } catch (e) {}
-  return getLocal("bionova_cmms_costs", []);
+  if (!list || !list.length) {
+    list = getLocal("bionova_cmms_costs", []);
+  }
+  return list.map(l => {
+    const spares = Number(l.sparesCost ?? l.spares_cost ?? 0);
+    const labor = Number(l.laborCost ?? l.labor_cost ?? 0);
+    const vendorFee = Number(l.externalVendorFee ?? l.external_vendor_fee ?? 0);
+    const total = Number(
+      l.totalCost !== undefined && l.totalCost !== null && Number(l.totalCost) > 0
+        ? l.totalCost
+        : spares + labor + vendorFee
+    );
+    return {
+      ...l,
+      sparesCost: spares,
+      laborCost: labor,
+      externalVendorFee: vendorFee,
+      totalCost: total
+    };
+  });
 }
 
 export async function saveServicingCostLog(log) {
+  const spares = Number(log.sparesCost ?? log.spares_cost ?? 0);
+  const labor = Number(log.laborCost ?? log.labor_cost ?? 0);
+  const vendorFee = Number(log.externalVendorFee ?? log.external_vendor_fee ?? 0);
+  const totalCost = Number(
+    log.totalCost !== undefined && log.totalCost !== null && Number(log.totalCost) > 0
+      ? log.totalCost
+      : spares + labor + vendorFee
+  );
+  const fullLog = {
+    ...log,
+    sparesCost: spares,
+    laborCost: labor,
+    externalVendorFee: vendorFee,
+    totalCost
+  };
+
   const current = getLocal("bionova_cmms_costs", []);
   let updated;
-  if (log.id) {
-    updated = current.map(l => (l.id === log.id ? { ...l, ...log } : l));
+  if (fullLog.id) {
+    updated = current.map(l => (l.id === fullLog.id ? { ...l, ...fullLog } : l));
   } else {
     const newId = Date.now();
-    updated = [{ ...log, id: newId }, ...current];
+    updated = [{ ...fullLog, id: newId }, ...current];
   }
   setLocal("bionova_cmms_costs", updated);
   try {
-    if (log.id) await apiPut(`/api/asset-maintenance/servicing-costs/${log.id}`, log);
-    else await apiPost("/api/asset-maintenance/servicing-costs", log);
+    if (fullLog.id) await apiPut(`/api/asset-maintenance/servicing-costs/${fullLog.id}`, fullLog);
+    else await apiPost("/api/asset-maintenance/servicing-costs", fullLog);
   } catch (e) {}
-  return log;
+  return fullLog;
 }
 
 export async function deleteServicingCostLog(id) {

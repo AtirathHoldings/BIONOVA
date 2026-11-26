@@ -36,6 +36,9 @@ public class InventoryController {
     @Autowired
     private InventoryVendorRepository vendorRepository;
 
+    @Autowired
+    private com.bionova.service.inventory.SkuGenerationService skuService;
+
     // --- 1. Agri & Core Stock Items ---
     @GetMapping("/items")
     public List<InventoryItem> getAllItems() {
@@ -45,6 +48,14 @@ public class InventoryController {
     @PostMapping("/items")
     public ResponseEntity<InventoryItem> createItem(@RequestBody InventoryItem item) {
         item.setId(null);
+        if (item.getSku() == null || item.getSku().isBlank()) {
+            item.setSku(skuService.allocateNextSku(com.bionova.dto.inventory.SkuAllocateRequest.builder()
+                    .category("AGRI")
+                    .itemType("MZE")
+                    .grade("A1")
+                    .packSize("050")
+                    .build()));
+        }
         return ResponseEntity.ok(itemRepository.save(item));
     }
 
@@ -72,6 +83,14 @@ public class InventoryController {
     @PostMapping("/civil-bom")
     public ResponseEntity<InventoryCivilBom> createCivilBom(@RequestBody InventoryCivilBom bom) {
         bom.setId(null);
+        if (bom.getSpecCode() == null || bom.getSpecCode().isBlank()) {
+            bom.setSpecCode(skuService.allocateNextSku(com.bionova.dto.inventory.SkuAllocateRequest.builder()
+                    .category("CIVIL_BOM")
+                    .discipline("CIV")
+                    .item("CON")
+                    .specification("001")
+                    .build()));
+        }
         return ResponseEntity.ok(civilBomRepository.save(bom));
     }
 
@@ -99,6 +118,16 @@ public class InventoryController {
     @PostMapping("/fasteners")
     public ResponseEntity<InventoryFastener> createFastener(@RequestBody InventoryFastener fastener) {
         fastener.setId(null);
+        if (fastener.getItemCode() == null || fastener.getItemCode().isBlank()) {
+            fastener.setItemCode(skuService.allocateNextSku(com.bionova.dto.inventory.SkuAllocateRequest.builder()
+                    .category("FASTENERS")
+                    .fastenerType("BLT")
+                    .material("SS304")
+                    .diameter("M12")
+                    .length("050")
+                    .fastenerGrade("G8")
+                    .build()));
+        }
         return ResponseEntity.ok(fastenerRepository.save(fastener));
     }
 
@@ -126,6 +155,15 @@ public class InventoryController {
     @PostMapping("/piping")
     public ResponseEntity<InventoryPiping> createPiping(@RequestBody InventoryPiping piping) {
         piping.setId(null);
+        if (piping.getTagNo() == null || piping.getTagNo().isBlank()) {
+            piping.setTagNo(skuService.allocateNextSku(com.bionova.dto.inventory.SkuAllocateRequest.builder()
+                    .category("PIPING")
+                    .pipingType("ELB")
+                    .pipingMaterial("CS")
+                    .pipingSize("050")
+                    .pressureClass("150")
+                    .build()));
+        }
         return ResponseEntity.ok(pipingRepository.save(piping));
     }
 

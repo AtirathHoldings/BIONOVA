@@ -9,6 +9,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\config\GlobalExceptionHandle
 D:\sample\bionova-backend\src\main\java\com\bionova\config\ModuleDataInitializer.java
 D:\sample\bionova-backend\src\main\java\com\bionova\config\SecurityConfig.java
 D:\sample\bionova-backend\src\main\java\com\bionova\config\SpringContext.java
+D:\sample\bionova-backend\src\main\java\com\bionova\config\SqlMigrateSku.java
 D:\sample\bionova-backend\src\main\java\com\bionova\config\SQLParenCheck.java
 D:\sample\bionova-backend\src\main\java\com\bionova\config\SQLPrinter.java
 D:\sample\bionova-backend\src\main\java\com\bionova\config\SQLRunner.java
@@ -53,6 +54,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\controller\ProjectForecastin
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\ProjectLiveController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\RbacController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\ReviewerMasterController.java
+D:\sample\bionova-backend\src\main\java\com\bionova\controller\SkuController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\StorageController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\TaskDraftController.java
 D:\sample\bionova-backend\src\main\java\com\bionova\controller\TaskLiveController.java
@@ -69,6 +71,9 @@ D:\sample\bionova-backend\src\main\java\com\bionova\dto\ExternalTaskUpdateDto.ja
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\ExternalTaskViewDto.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\ForgotPasswordRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\GanttTaskDto.java
+D:\sample\bionova-backend\src\main\java\com\bionova\dto\inventory\SkuAllocateRequest.java
+D:\sample\bionova-backend\src\main\java\com\bionova\dto\inventory\SkuPreviewRequest.java
+D:\sample\bionova-backend\src\main\java\com\bionova\dto\inventory\SkuPreviewResponse.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\LoginRequest.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\LoginResponse.java
 D:\sample\bionova-backend\src\main\java\com\bionova\dto\PacEmployeeDto.java
@@ -123,6 +128,8 @@ D:\sample\bionova-backend\src\main\java\com\bionova\entity\inventory\InventoryPi
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\inventory\InventoryVendor.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\inventory\InventoryWarranty.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\inventory\InventoryWeighbridge.java
+D:\sample\bionova-backend\src\main\java\com\bionova\entity\inventory\SkuMaster.java
+D:\sample\bionova-backend\src\main\java\com\bionova\entity\inventory\SkuSequenceCounter.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\Landmaster.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\MilestoneDraft.java
 D:\sample\bionova-backend\src\main\java\com\bionova\entity\MilestoneLive.java
@@ -198,6 +205,8 @@ D:\sample\bionova-backend\src\main\java\com\bionova\repository\inventory\Invento
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\inventory\InventoryVendorRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\inventory\InventoryWarrantyRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\inventory\InventoryWeighbridgeRepository.java
+D:\sample\bionova-backend\src\main\java\com\bionova\repository\inventory\SkuMasterRepository.java
+D:\sample\bionova-backend\src\main\java\com\bionova\repository\inventory\SkuSequenceCounterRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\LandmasterRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\MilestoneDraftRepository.java
 D:\sample\bionova-backend\src\main\java\com\bionova\repository\MilestoneLiveRepository.java
@@ -241,6 +250,7 @@ D:\sample\bionova-backend\src\main\java\com\bionova\service\CalendarService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\EmailService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\EmployeeSettingsService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\ExternalTaskAccessService.java
+D:\sample\bionova-backend\src\main\java\com\bionova\service\inventory\SkuGenerationService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\MasterDataService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\NotificationService.java
 D:\sample\bionova-backend\src\main\java\com\bionova\service\PasswordResetService.java
